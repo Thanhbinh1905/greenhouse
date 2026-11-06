@@ -75,6 +75,19 @@ func parsePack(b []byte) (*RulePack, error) {
 	if err := uniqueJSON(json.NewDecoder(bytes.NewReader(b))); err != nil {
 		return nil, err
 	}
+	fields, err := exactFields(b, "version", "id", "criteria")
+	if err != nil {
+		return nil, err
+	}
+	var criteria []json.RawMessage
+	if err := json.Unmarshal(fields["criteria"], &criteria); err != nil {
+		return nil, err
+	}
+	for _, criterion := range criteria {
+		if _, err := exactFields(criterion, "id", "classification", "text", "repair_guidance"); err != nil {
+			return nil, err
+		}
+	}
 	var p RulePack
 	d := json.NewDecoder(bytes.NewReader(b))
 	d.DisallowUnknownFields()
@@ -96,6 +109,25 @@ func parsePack(b []byte) (*RulePack, error) {
 		seen[c.ID] = true
 	}
 	return &p, nil
+}
+func exactFields(b []byte, allowed ...string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return nil, err
+	}
+	for name := range fields {
+		found := false
+		for _, key := range allowed {
+			if name == key {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return nil, fmt.Errorf("unknown schema field %q; field names are case-sensitive", name)
+		}
+	}
+	return fields, nil
 }
 func selectedRules(s Settings) []RuleEvidence {
 	out := []RuleEvidence{}

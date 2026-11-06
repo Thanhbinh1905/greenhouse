@@ -27,7 +27,7 @@ Each snapshot contains common scope and exceptions, candidate, configuration ID 
 }
 ```
 
-Unknown fields, duplicate JSON keys, trailing data, unsupported versions, duplicate criterion IDs, and duplicate pack IDs in one resolution fail validation. IDs match `[a-z][a-z0-9-]{0,63}`. Packs contain 1 through 64 criteria and at most 65,536 UTF-8 bytes. Each text field is nonblank, at most 8,192 bytes, and contains no control characters except newline and tab. Classification is `required` or `advisory`. Content is rejected, never truncated. Optional load status and criterion classification are separate: an optional pack may contain required criteria if it loads successfully.
+Field names are case-sensitive and must match the schema exactly, including inside criteria. Case variants and Unicode case-fold aliases are unknown fields, not overrides. Unknown fields, duplicate JSON keys, trailing data, unsupported versions, duplicate criterion IDs, and duplicate pack IDs in one resolution fail validation. IDs match `[a-z][a-z0-9-]{0,63}`. Packs contain 1 through 64 criteria and at most 65,536 UTF-8 bytes. Each text field is nonblank, at most 8,192 bytes, and contains no control characters except newline and tab. Classification is `required` or `advisory`. Content is rejected, never truncated. Optional load status and criterion classification are separate: an optional pack may contain required criteria if it loads successfully.
 
 The built-ins are deterministic JSON constants in `rules.go`. `unslop/plain-prose` is advisory. `no-comments/necessary-comments` is required. AXI exposes their exact bytes, parsed contents, and digests after resolution. The TUI Criteria view shows common criteria and repair guidance.
 
