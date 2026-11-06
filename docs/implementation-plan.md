@@ -12,11 +12,13 @@ The implementation uses a single serialized daemon and atomic whole-store replac
 
 Still unsupported within these areas: live event subscriptions, finding/log views, executor cancellation, explicit recovery, repository overrides/trust enrollment, migration, and an embedding contract. Terminal clients refresh through Inspect rather than receive live events. Settings cannot start work.
 
-## 2. Rule snapshots and independent review
+## 2. Rule snapshots: delivered for review; execution deferred
 
 Areas B, C, D review, and F: declarative pack schema, local-file loading with digests and provenance, required-pack failure, separate reviewer criteria and repair guidance, exact emitted-input capture, backend support matrix, read-only fresh reviewer contexts, finding identity/coverage, independent verdicts, and review-budget consumption.
 
-Test prompt delivery deterministically. Assess model compliance separately with recorded provider-backed development evaluations. Do not count selecting a pack as loading it or a backend's claimed read-only mode as OS confinement.
+Task t4 implements version-1 declarative built-ins and explicit absolute-file selections, token-bound resolution, immutable exact-byte snapshots, required-load eligibility, AXI inspection, and terminal resolution and criteria views. Version-1 lifecycle stores remain readable through additive optional fields without resetting counters. The fixture-only input writer captures reviewer and fixer content identities with shared criteria and role-specific guidance. See [the rule contract](rules.md).
+
+Independent live review, finding identity and coverage, backend dispatch, durable production delivery receipts, and review-budget consumption remain deferred. Tests cover emitted instructions, not provider compliance. Assess model compliance separately with recorded provider-backed development evaluations. Do not count selecting a pack as loading it or a backend's claimed read-only mode as OS confinement.
 
 ## 3. Private-worktree one-pass repair and guarded handback
 
@@ -39,8 +41,8 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 ## Unsupported spec behavior in this slice
 
 - Area A: actual execution/cancellation, process identity reconciliation, and authorized recovery.
-- Area B: findings/details/log views, actual loaded-rule content, repository trust/overrides, and in-flight instruction changes.
-- Area C: pack resolution/delivery, agent adapters, reviewer isolation, finding ledger, verdicts, and behavioral evaluations.
+- Area B: finding and log views, repository trust and overrides, and in-flight execution. Criteria inspection is available.
+- Area C: production pack delivery, agent adapters, enforced reviewer isolation, finding ledger, verdicts, and behavioral evaluations. Resolution and fixture input delivery are implemented.
 - Area D: all nine executable pipeline stages; operational ask/auto/YOLO decisions; reviewer/repair/retry accounting beyond persisted counters; acceptance, final-fix, rethink, discard, and one-pass execution.
 - Area E and D2: private candidates, ref leases, repair commits, guarded handback, publication, forge and CI, and executor recovery.
 - Area F: finding responses, logs, event subscriptions, cancellation/recovery, and the Posse adapter. There is no fake successful gate or dummy approval.

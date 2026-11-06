@@ -95,8 +95,21 @@ try:
     assert next_state["run"]["configs"][0]["settings"]["mode"] == "ask"
     assert "Mode: ask" in wide
     session(56, ["q"], "-reattach")
+    for width in [56, 100]:
+        rules = session(width, ["r", "c", "q"], "-rules")
+        resolved = axi()
+        assert resolved["rules_ready"]
+        assert resolved["rules"][0]["status"] == "resolved"
+        assert "Digest:" in rules and "[advisory]" in rules
+        assert "Flag inflated prose" in rules
+        failures = session(width, ["s", "ask one-pass 7", "missing,?optional", "a", "r", "c", "q"], "-failures")
+        failed = axi()
+        assert not failed["rules_ready"]
+        assert all(rule["status"] == "failed" for rule in failed["rules"])
+        assert "Load error:" in failures
+        session(width, ["s", "ask one-pass 7", "unslop", "a", "q"], "-restore")
     assert axi()["run_id"] == next_state["run_id"]
-    print(f"PASS: 56- and 100-column PTY Settings, Apply, Save, New run, detach, and AXI parity; fixture {root}")
+    print(f"PASS: 56- and 100-column PTY Settings, Apply, Save, New run, rule resolution, criteria, load failures, detach, and AXI parity; fixture {root}")
 finally:
     pidfile = root / "state" / "pid"
     if pidfile.exists():

@@ -47,18 +47,19 @@ type Event struct {
 	After  int    `json:"after"`
 }
 type Run struct {
-	ID         string     `json:"id"`
-	Input      string     `json:"input"`
-	Token      string     `json:"token"`
-	Submitted  Identity   `json:"submitted"`
-	Target     string     `json:"target"`
-	Candidate  string     `json:"candidate"`
-	Stage      string     `json:"stage"`
-	Status     string     `json:"status"`
-	Configs    []Snapshot `json:"configs"`
-	ReviewUsed int        `json:"review_used"`
-	RepairUsed int        `json:"repair_used"`
-	Events     []Event    `json:"events"`
+	RuleSnapshots []RuleSnapshot `json:"rule_snapshots,omitempty"`
+	ID            string         `json:"id"`
+	Input         string         `json:"input"`
+	Token         string         `json:"token"`
+	Submitted     Identity       `json:"submitted"`
+	Target        string         `json:"target"`
+	Candidate     string         `json:"candidate"`
+	Stage         string         `json:"stage"`
+	Status        string         `json:"status"`
+	Configs       []Snapshot     `json:"configs"`
+	ReviewUsed    int            `json:"review_used"`
+	RepairUsed    int            `json:"repair_used"`
+	Events        []Event        `json:"events"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -73,17 +74,20 @@ type Request struct {
 	Reason   string    `json:"reason"`
 }
 type Response struct {
-	Version  int      `json:"version"`
-	Outcome  string   `json:"outcome"`
-	Error    string   `json:"error,omitempty"`
-	RunID    string   `json:"run_id,omitempty"`
-	Input    string   `json:"input_id,omitempty"`
-	Gate     string   `json:"gate_id,omitempty"`
-	Token    string   `json:"token,omitempty"`
-	Run      *Run     `json:"run,omitempty"`
-	Defaults Settings `json:"defaults"`
-	Blocked  []string `json:"blocked"`
-	Actions  []string `json:"actions"`
+	RuleScope  string         `json:"rule_scope,omitempty"`
+	Rules      []RuleEvidence `json:"rules,omitempty"`
+	RulesReady bool           `json:"rules_ready"`
+	Version    int            `json:"version"`
+	Outcome    string         `json:"outcome"`
+	Error      string         `json:"error,omitempty"`
+	RunID      string         `json:"run_id,omitempty"`
+	Input      string         `json:"input_id,omitempty"`
+	Gate       string         `json:"gate_id,omitempty"`
+	Token      string         `json:"token,omitempty"`
+	Run        *Run           `json:"run,omitempty"`
+	Defaults   Settings       `json:"defaults"`
+	Blocked    []string       `json:"blocked"`
+	Actions    []string       `json:"actions"`
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -218,6 +222,9 @@ func load(h string) (*Store, error) {
 		if r == nil || key != r.ID || r.Input == "" || r.Token == "" || r.Candidate == "" || len(r.Configs) == 0 || r.ReviewUsed < 0 || r.RepairUsed < 0 {
 			return nil, errors.New("invalid durable run")
 		}
+		if err := validateRuleSnapshots(r); err != nil {
+			return nil, err
+		}
 		for _, snapshot := range r.Configs {
 			if snapshot.ID == "" || !valid(snapshot.Settings) {
 				return nil, errors.New("invalid configuration snapshot")
@@ -240,8 +247,13 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"intent, target and trusted commands unconfigured", "review, repair, tests, docs, lint, push, PR and CI unsupported", "rules selected only; loader and backends unconfigured", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"intent, target and trusted commands unconfigured", "review, repair, tests, docs, lint, push, PR and CI unsupported", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
 	if r != nil {
+		v.RuleScope = effectiveRuleScope(r)
+		v.Rules, v.RulesReady = effectiveRules(r)
+		if !v.RulesReady {
+			v.Blocked = append(v.Blocked, "required rules unresolved or failed; use resolve-rules and inspect errors")
+		}
 		v.Run = r
 		v.RunID = r.ID
 		v.Input = r.Input
@@ -251,7 +263,7 @@ func view(s *Store, r *Run) Response {
 		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "writing" && r.Status != "recovery-required"
 		if safe {
 			if id == r.Submitted {
-				v.Actions = append(v.Actions, "apply", "save")
+				v.Actions = append(v.Actions, "apply", "save", "resolve-rules")
 			}
 			v.Actions = append(v.Actions, "new")
 		}
@@ -286,7 +298,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -308,7 +320,10 @@ func handle(s *Store, q Request) Response {
 	if r.Status == "running" || r.Status == "writing" || r.Status == "recovery-required" {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
-	if q.Op == "apply" || q.Op == "save" {
+	if q.Op == "resolve-rules" {
+		r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
+		r.Token = opaque()
+	} else if q.Op == "apply" || q.Op == "save" {
 		if q.Settings == nil || !valid(*q.Settings) {
 			return fail("invalid settings", r)
 		}
@@ -478,6 +493,7 @@ func terminal(h, path string) error {
 	}
 	reader := bufio.NewScanner(os.Stdin)
 	message := ""
+	details := false
 	for {
 		var page strings.Builder
 		fmt.Fprintln(&page, "Greenhouse | lifecycle preview")
@@ -486,11 +502,23 @@ func terminal(h, path string) error {
 		}
 		r := v.Run
 		s := r.Configs[len(r.Configs)-1]
-		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nBudget: review %d + repair %d\nRules: %s (not loaded)\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, r.ReviewUsed, r.RepairUsed, strings.Join(s.Settings.Rules, ", "), s.Source)
+		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nBudget: review %d + repair %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, r.ReviewUsed, r.RepairUsed, strings.Join(s.Settings.Rules, ", "), s.Source)
+		for _, rule := range v.Rules {
+			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
+			if rule.Error != "" {
+				fmt.Fprintln(&page, "Load error: "+rule.Error)
+			}
+			if details && rule.Pack != nil {
+				fmt.Fprintln(&page, v.RuleScope)
+				for _, c := range rule.Pack.Criteria {
+					fmt.Fprintf(&page, "%s/%s [%s]: %s\nRepair: %s\n", rule.Pack.ID, c.ID, c.Classification, c.Text, c.Repair)
+				}
+			}
+		}
 		for _, b := range v.Blocked {
 			fmt.Fprintln(&page, "Blocked: "+b)
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [s] Settings  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria  [r] Resolve rules  [s] Settings  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		fmt.Print("> ")
@@ -502,6 +530,12 @@ func terminal(h, path string) error {
 			return nil
 		}
 		q = Request{Version: 1, Op: "inspect", Path: path}
+		if op == "c" {
+			details = !details
+		}
+		if op == "r" {
+			q.Op = "resolve-rules"
+		}
 		if op == "s" {
 			fmt.Printf("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
 			if !reader.Scan() {
@@ -512,7 +546,7 @@ func terminal(h, path string) error {
 				message = "Invalid draft"
 				continue
 			}
-			fmt.Print("Selected rules (comma-separated; not loaded):\n> ")
+			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
 			if !reader.Scan() {
 				return nil
 			}
