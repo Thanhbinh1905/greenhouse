@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -47,19 +48,24 @@ type Event struct {
 	After  int    `json:"after"`
 }
 type Run struct {
-	RuleSnapshots []RuleSnapshot `json:"rule_snapshots,omitempty"`
-	ID            string         `json:"id"`
-	Input         string         `json:"input"`
-	Token         string         `json:"token"`
-	Submitted     Identity       `json:"submitted"`
-	Target        string         `json:"target"`
-	Candidate     string         `json:"candidate"`
-	Stage         string         `json:"stage"`
-	Status        string         `json:"status"`
-	Configs       []Snapshot     `json:"configs"`
-	ReviewUsed    int            `json:"review_used"`
-	RepairUsed    int            `json:"repair_used"`
-	Events        []Event        `json:"events"`
+	Intent        string          `json:"intent,omitempty"`
+	Reviewer      *ReviewerConfig `json:"reviewer,omitempty"`
+	SelectedDiff  string          `json:"selected_diff,omitempty"`
+	Findings      []Finding       `json:"findings,omitempty"`
+	Review        *Execution      `json:"review,omitempty"`
+	RuleSnapshots []RuleSnapshot  `json:"rule_snapshots,omitempty"`
+	ID            string          `json:"id"`
+	Input         string          `json:"input"`
+	Token         string          `json:"token"`
+	Submitted     Identity        `json:"submitted"`
+	Target        string          `json:"target"`
+	Candidate     string          `json:"candidate"`
+	Stage         string          `json:"stage"`
+	Status        string          `json:"status"`
+	Configs       []Snapshot      `json:"configs"`
+	ReviewUsed    int             `json:"review_used"`
+	RepairUsed    int             `json:"repair_used"`
+	Events        []Event         `json:"events"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -71,6 +77,8 @@ type Request struct {
 	Gate     string    `json:"gate_id"`
 	Action   string    `json:"action_id"`
 	Settings *Settings `json:"settings,omitempty"`
+	Intent   string    `json:"intent,omitempty"`
+	Target   string    `json:"target,omitempty"`
 	Reason   string    `json:"reason"`
 }
 type Response struct {
@@ -222,6 +230,12 @@ func load(h string) (*Store, error) {
 		if r == nil || key != r.ID || r.Input == "" || r.Token == "" || r.Candidate == "" || len(r.Configs) == 0 || r.ReviewUsed < 0 || r.RepairUsed < 0 {
 			return nil, errors.New("invalid durable run")
 		}
+		if r.Review != nil {
+			x := r.Review
+			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || x.Rules.Candidate != r.Candidate || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
+				return nil, errors.New("invalid durable review evidence")
+			}
+		}
 		if err := validateRuleSnapshots(r); err != nil {
 			return nil, err
 		}
@@ -230,8 +244,11 @@ func load(h string) (*Store, error) {
 				return nil, errors.New("invalid configuration snapshot")
 			}
 		}
-		if r.Status == "running" || r.Status == "writing" {
+		if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" {
 			r.Status = "recovery-required"
+			if r.Review != nil {
+				r.Review.Status = "unknown-outcome"
+			}
 			r.Token = opaque()
 			r.Events = append(r.Events, Event{Kind: "interrupted", Actor: "daemon", Reason: "unknown execution outcome; no retry"})
 		}
@@ -247,12 +264,15 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"intent, target and trusted commands unconfigured", "review, repair, tests, docs, lint, push, PR and CI unsupported", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"repair, full pipeline, tests, docs, lint, push, PR and CI unsupported", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
 	if r != nil {
 		v.RuleScope = effectiveRuleScope(r)
 		v.Rules, v.RulesReady = effectiveRules(r)
 		if !v.RulesReady {
 			v.Blocked = append(v.Blocked, "required rules unresolved or failed; use resolve-rules and inspect errors")
+		}
+		if r.Intent == "" || r.Target == "" || r.Reviewer == nil {
+			v.Blocked = append(v.Blocked, "prepare requires explicit intent, exact target commit and private reviewer.json")
 		}
 		v.Run = r
 		v.RunID = r.ID
@@ -260,15 +280,38 @@ func view(s *Store, r *Run) Response {
 		v.Token = r.Token
 		v.Gate = "none"
 		id, e := resolve(r.Submitted.Worktree)
-		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "writing" && r.Status != "recovery-required"
+		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "cancelling" && r.Status != "writing" && r.Status != "recovery-required"
 		if safe {
 			if id == r.Submitted {
 				v.Actions = append(v.Actions, "apply", "save", "resolve-rules")
+				if r.ReviewUsed == 0 {
+					v.Actions = append(v.Actions, "prepare")
+					if r.Intent != "" && r.Target != "" && r.Reviewer != nil && v.RulesReady && r.Configs[len(r.Configs)-1].Settings.Preset == "one-pass" {
+						v.Actions = append(v.Actions, "review")
+					}
+				}
 			}
 			v.Actions = append(v.Actions, "new")
 		}
 		if e != nil || id != r.Submitted {
+			if r.Status == "clean-review" || r.Status == "outstanding-findings" {
+				snapshot := *r
+				snapshot.Status = "stale"
+				v.Run = &snapshot
+			}
 			v.Blocked = append(v.Blocked, "source head or branch moved; old-run advancement blocked")
+		}
+		if r.Status == "running" {
+			v.Actions = append(v.Actions, "cancel")
+		}
+		if r.ReviewUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
+			v.Blocked = append(v.Blocked, "review budget exhausted")
+		}
+		if r.ReviewUsed > 0 {
+			v.Blocked = append(v.Blocked, "one-pass invocation consumed; no automatic retry or repair")
+		}
+		if r.Review != nil && r.Review.Status == "clean-review" && (e != nil || id != r.Submitted) {
+			v.Blocked = append(v.Blocked, "historical clean review only; source moved")
 		}
 		if r.Status == "recovery-required" {
 			v.Blocked = append(v.Blocked, "unknown execution or writer outcome; recovery unsupported")
@@ -298,7 +341,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -314,13 +357,47 @@ func handle(s *Store, q Request) Response {
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != "none" {
 		return fail("stale run/input/gate/token", r)
 	}
-	if q.Op != "new" && id != r.Submitted {
+	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted {
 		return fail("source head or branch moved", r)
 	}
-	if r.Status == "running" || r.Status == "writing" || r.Status == "recovery-required" {
+	if q.Op == "cancel" && r.Status == "running" {
+		r.Status = "cancelling"
+		r.Token = opaque()
+	} else if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required" {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
-	if q.Op == "resolve-rules" {
+	if q.Op == "cancel" {
+		if r.Status != "cancelling" {
+			return fail("no live review", r)
+		}
+	} else if q.Op == "prepare" {
+		if r.ReviewUsed != 0 || !validText(q.Intent) {
+			return fail("immutable review intent required before dispatch", r)
+		}
+		target, err := committedTarget(r.Submitted.Worktree, q.Target)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		diff, err := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", target, r.Candidate, "--")
+		if err != nil {
+			return fail("cannot capture complete bounded diff", r)
+		}
+		cfg, err := trustedReviewer()
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		r.Reviewer = &cfg
+		r.SelectedDiff = string(diff)
+		r.Intent, r.Target = q.Intent, target
+		r.Token = opaque()
+	} else if q.Op == "review" {
+		if err := admitReview(r); err != nil {
+			return fail(err.Error(), r)
+		}
+	} else if q.Op == "resolve-rules" {
+		if r.Review != nil {
+			r.Status = "stale"
+		}
 		r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 		r.Token = opaque()
 	} else if q.Op == "apply" || q.Op == "save" {
@@ -334,6 +411,9 @@ func handle(s *Store, q Request) Response {
 			return fail("reason required", r)
 		}
 		if q.Op == "apply" {
+			if r.Review != nil {
+				r.Status = "stale"
+			}
 			old := r.Configs[len(r.Configs)-1].Settings
 			r.Configs = append(r.Configs, Snapshot{opaque(), *q.Settings, "run-local"})
 			r.Events = append(r.Events, Event{q.Op, "client", q.Reason, r.ReviewUsed + r.RepairUsed, old.Limit, q.Settings.Limit})
@@ -344,7 +424,8 @@ func handle(s *Store, q Request) Response {
 		r.Token = opaque()
 	} else {
 		prior := r.ID
-		r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		findings := append([]Finding(nil), r.Findings...)
+		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
@@ -393,10 +474,79 @@ func daemon(h string) error {
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
 	go func() { <-signals; l.Close() }()
+	type completion struct {
+		run, execution, status, log string
+		result                      *Verdict
+	}
+	completed := make(chan completion)
+	connections := make(chan net.Conn)
+	stopped := make(chan struct{})
+	defer close(stopped)
+	active := map[string]context.CancelFunc{}
+	defer func() {
+		for _, cancel := range active {
+			cancel()
+		}
+	}()
+	go func() {
+		for {
+			c, err := l.Accept()
+			if err != nil {
+				close(connections)
+				return
+			}
+			select {
+			case connections <- c:
+			case <-stopped:
+				c.Close()
+				return
+			}
+		}
+	}()
 	for {
-		c, e := l.Accept()
-		if e != nil {
-			return nil
+		var c net.Conn
+		select {
+		case done := <-completed:
+			r := s.Runs[done.run]
+			if r == nil || r.Review == nil || r.Review.ID != done.execution {
+				return errors.New("execution identity mismatch")
+			}
+			delete(active, r.ID)
+			status := done.status
+			if r.Status == "cancelling" {
+				status = "cancelled"
+			}
+			id, err := resolve(r.Submitted.Worktree)
+			if err != nil || id != r.Submitted {
+				status = "stale"
+			}
+			r.Status, r.Review.Status, r.Review.Log = status, status, done.log
+			r.Review.Result = done.result
+			if done.result != nil {
+				seen := map[string]bool{}
+				for _, f := range r.Findings {
+					seen[f.ID] = true
+				}
+				for _, f := range done.result.Findings {
+					if !seen[f.ID] {
+						r.Findings = append(r.Findings, f)
+						seen[f.ID] = true
+					}
+				}
+				if status == "clean-review" && len(r.Findings) > 0 {
+					r.Status = "outstanding-findings"
+				}
+			}
+			r.Token = opaque()
+			if err = persist(h, s); err != nil {
+				return err
+			}
+			continue
+		case conn, ok := <-connections:
+			if !ok {
+				return nil
+			}
+			c = conn
 		}
 		c.SetDeadline(time.Now().Add(5 * time.Second))
 		var q Request
@@ -418,6 +568,28 @@ func daemon(h string) error {
 				return e
 			}
 			s = &next
+			for _, r := range s.Runs {
+				if r.Status == "cancelling" {
+					if cancel := active[r.ID]; cancel != nil {
+						cancel()
+					}
+					continue
+				}
+				if r.Status != "running" || r.Review == nil || active[r.ID] != nil {
+					continue
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				active[r.ID] = cancel
+				runID, x := r.ID, *r.Review
+				go func() {
+					status, result, log := executeReview(ctx, &x)
+					cancel()
+					select {
+					case completed <- completion{runID, x.ID, status, log, result}:
+					case <-stopped:
+					}
+				}()
+			}
 		}
 		json.NewEncoder(c).Encode(v)
 		c.Close()
@@ -496,7 +668,7 @@ func terminal(h, path string) error {
 	details := false
 	for {
 		var page strings.Builder
-		fmt.Fprintln(&page, "Greenhouse | lifecycle preview")
+		fmt.Fprintln(&page, "Greenhouse | independent review")
 		if v.Run == nil {
 			return errors.New(v.Error)
 		}
@@ -518,7 +690,26 @@ func terminal(h, path string) error {
 		for _, b := range v.Blocked {
 			fmt.Fprintln(&page, "Blocked: "+b)
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria  [r] Resolve rules  [s] Settings  [n] New run  [q] Detach")
+		if details && r.SelectedDiff != "" {
+			fmt.Fprintln(&page, "Selected committed diff:", r.SelectedDiff)
+		}
+		for _, f := range r.Findings {
+			fmt.Fprintf(&page, "Outstanding %s %s:%d %s | reviewed %s\n", f.Priority, f.File, f.Start, f.Explanation, f.Head)
+		}
+		if r.Review != nil {
+			x := r.Review
+			fmt.Fprintf(&page, "Review: %s | %s | %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", x.Status, x.Backend, x.Config.Model, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
+			if details {
+				fmt.Fprintf(&page, "Executor: %s\nArgs: %s\n", x.Config.Executable, strings.Join(x.Args, " "))
+			}
+			if x.Result != nil {
+				fmt.Fprintf(&page, "Reported model: %s/%s\nCoverage: %s\n", x.Result.ReportedProvider, x.Result.ReportedModel, strings.Join(x.Result.Coverage, ", "))
+				for _, f := range x.Result.Findings {
+					fmt.Fprintf(&page, "%s %s %s:%d-%d %s\nAction: %s\nRule: %s | ID: %s\n", f.Priority, f.Origin, f.File, f.Start, f.End, f.Explanation, f.Action, f.Rule, f.ID)
+				}
+			}
+		}
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		fmt.Print("> ")
@@ -532,6 +723,25 @@ func terminal(h, path string) error {
 		q = Request{Version: 1, Op: "inspect", Path: path}
 		if op == "c" {
 			details = !details
+		}
+		if op == "v" {
+			q.Op = "review"
+		}
+		if op == "x" {
+			q.Op = "cancel"
+		}
+		if op == "p" {
+			fmt.Print("Intent:\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			q.Intent = reader.Text()
+			fmt.Print("Exact target commit ID:\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			q.Target = reader.Text()
+			q.Op = "prepare"
 		}
 		if op == "r" {
 			q.Op = "resolve-rules"

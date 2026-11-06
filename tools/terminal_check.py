@@ -109,6 +109,33 @@ try:
         assert "Load error:" in failures
         session(width, ["s", "ask one-pass 7", "unslop", "a", "q"], "-restore")
     assert axi()["run_id"] == next_state["run_id"]
+    target = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
+    (repo / "sample.txt").write_text("candidate\n")
+    for args in [["add", "sample.txt"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate"]]:
+        subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+    fake = root / "fake-pi"
+    fake.write_text('''#!/usr/bin/python3
+import json,sys
+b=json.load(sys.stdin)
+f={"id":"fixture","priority":"P2","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Fixture finding","action":"Inspect fixture","rule":"","head":b["Head"]}
+v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"],"findings":[f]}
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
+print(json.dumps({"type":"agent_settled","aborted":False}))
+''')
+    fake.chmod(0o700)
+    config = root / "state" / "reviewer.json"
+    config.write_text(json.dumps({"executable":str(fake),"model":"fixture/model"}))
+    config.chmod(0o600)
+    for width in [56, 100]:
+        session(width, ["n", "new", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and axi()["run"]["status"] == "running":
+            time.sleep(0.02)
+        reviewed = axi()
+        assert reviewed["run"]["status"] == "outstanding-findings", reviewed
+        findings = session(width, ["i", "v", "q"], "-findings")
+        assert "Fixture finding" in findings and "one-pass" in findings
+        assert axi()["run"]["review_used"] == 1
     print(f"PASS: 56- and 100-column PTY Settings, Apply, Save, New run, rule resolution, criteria, load failures, detach, and AXI parity; fixture {root}")
 finally:
     pidfile = root / "state" / "pid"

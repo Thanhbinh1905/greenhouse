@@ -10,7 +10,7 @@ Runs remain at intent/unconfigured. Target is an empty unconfigured identity, no
 
 The implementation uses a single serialized daemon and atomic whole-store replacement rather than a database or generic workflow engine. Limits and compatibility assumptions are in README.md. No dependency on an orchestrator is required.
 
-Still unsupported within these areas: live event subscriptions, finding/log views, executor cancellation, explicit recovery, repository overrides/trust enrollment, migration, and an embedding contract. Terminal clients refresh through Inspect rather than receive live events. Settings cannot start work.
+Still unsupported within these areas: live event subscriptions, explicit recovery, repository overrides/trust enrollment, migration, and an embedding contract. Task t7 adds finding views, execution summaries, and cancellation. Terminal clients refresh through Inspect rather than receive live events. Settings cannot start work.
 
 ## 2. Rule snapshots: delivered for review; execution deferred
 
@@ -18,7 +18,7 @@ Areas B, C, D review, and F: declarative pack schema, local-file loading with di
 
 Task t4 implements version-1 declarative built-ins and explicit absolute-file selections, token-bound resolution, immutable exact-byte snapshots, required-load eligibility, AXI inspection, and terminal resolution and criteria views. Version-1 lifecycle stores remain readable through additive optional fields without resetting counters. The fixture-only input writer captures reviewer and fixer content identities with shared criteria and role-specific guidance. See [the rule contract](rules.md).
 
-Independent live review, finding identity and coverage, backend dispatch, durable production delivery receipts, and review-budget consumption remain deferred. Tests cover emitted instructions, not provider compliance. Assess model compliance separately with recorded provider-backed development evaluations. Do not count selecting a pack as loading it or a backend's claimed read-only mode as OS confinement.
+Task t7 adds explicit intent and target preparation, trusted per-user Pi configuration, asynchronous one-pass dispatch, strict structured coverage and findings, retained finding identity, exact emitted-input provenance, cancellation, and admission-time review usage. The daemon persists execution intent before launch and parks unknown outcomes after restart. Executable fake-Pi fixtures establish invocation and delivery, not live provider compliance. Tests cover emitted instructions, not provider compliance. Assess model compliance separately with recorded provider-backed development evaluations. Do not count selecting a pack as loading it or a backend's claimed read-only mode as OS confinement.
 
 ## 3. Private-worktree one-pass repair and guarded handback
 
@@ -40,9 +40,9 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 
 ## Unsupported spec behavior in this slice
 
-- Area A: actual execution/cancellation, process identity reconciliation, and authorized recovery.
-- Area B: finding and log views, repository trust and overrides, and in-flight execution. Criteria inspection is available.
-- Area C: production pack delivery, agent adapters, enforced reviewer isolation, finding ledger, verdicts, and behavioral evaluations. Resolution and fixture input delivery are implemented.
-- Area D: all nine executable pipeline stages; operational ask/auto/YOLO decisions; reviewer/repair/retry accounting beyond persisted counters; acceptance, final-fix, rethink, discard, and one-pass execution.
+- Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
+- Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
+- Area C: provider-backed behavioral evaluations, full-tree review snapshots, explicit finding resolution, and OS confinement. Pi review is patch-based with fresh context and read-only tools.
+- Area D: all pipeline stages except independent review; operational ask/auto/YOLO decisions; repairs and retries; acceptance, final-fix, rethink, and discard. One-pass dispatch consumes review usage durably.
 - Area E and D2: private candidates, ref leases, repair commits, guarded handback, publication, forge and CI, and executor recovery.
-- Area F: finding responses, logs, event subscriptions, cancellation/recovery, and the Posse adapter. There is no fake successful gate or dummy approval.
+- Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
