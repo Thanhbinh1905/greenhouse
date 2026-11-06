@@ -14,7 +14,7 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 	for _, scenario := range []string{"movement", "restart"} {
 		t.Run(scenario, func(t *testing.T) {
 			bin, repo, home, v := prepareFixture(t)
-			invocation := installFake(t, home, "time.sleep(1)")
+			invocation := installFake(t, home, "while not os.path.exists(root+'/release'): time.sleep(0.01)\nwith open(root+'/released','w') as f: f.write('released')")
 			v = mutate(t, bin, repo, home, v, "review", "start", nil)
 			deadline := time.Now().Add(10 * time.Second)
 			for {
@@ -28,6 +28,7 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 			}
 			if scenario == "movement" {
 				git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "moving source")
+				os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600)
 				v = waitReview(t, bin, repo, home)
 				if runOf(t, v)["status"] != "stale" {
 					t.Fatal(v)
@@ -63,6 +64,16 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 				if mutate(t, bin, repo, home, v, "review", "retry", nil)["outcome"] != "refused" {
 					t.Fatal("unknown outcome retried")
 				}
+			}
+			os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600)
+			for {
+				if _, err := os.Stat(filepath.Join(filepath.Dir(home), "released")); err == nil {
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatal("fixture executor did not release")
+				}
+				time.Sleep(time.Millisecond)
 			}
 			count, _ := os.ReadFile(invocation)
 			if strings.Count(string(count), "invoked") != 1 {

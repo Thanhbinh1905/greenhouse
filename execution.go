@@ -281,7 +281,7 @@ func parseReview(b []byte, x *Execution) (*Verdict, error) {
 	for scanner.Scan() {
 		var ev struct {
 			Type    string `json:"type"`
-			Aborted bool   `json:"aborted"`
+			Aborted *bool  `json:"aborted"`
 			Message struct {
 				Role     string `json:"role"`
 				Provider string `json:"provider"`
@@ -293,14 +293,21 @@ func parseReview(b []byte, x *Execution) (*Verdict, error) {
 				} `json:"content"`
 			} `json:"message"`
 		}
-		if json.Unmarshal(scanner.Bytes(), &ev) != nil {
+		if err := uniqueJSON(json.NewDecoder(bytes.NewReader(scanner.Bytes()))); err != nil {
+			return nil, errors.New("ambiguous JSON event")
+		}
+		if json.Unmarshal(scanner.Bytes(), &ev) != nil || ev.Type == "" {
 			return nil, errors.New("malformed JSON event")
 		}
 		if ev.Type == "agent_settled" {
-			settled = !ev.Aborted
+			if ev.Aborted == nil {
+				return nil, errors.New("missing settled outcome")
+			}
+			settled = !*ev.Aborted
 		}
 		if ev.Type == "message_end" && ev.Message.Role == "assistant" {
 			text = ""
+			settled = false
 			provider, model = ev.Message.Provider, ev.Message.Model
 			if ev.Message.Stop != "stop" {
 				continue

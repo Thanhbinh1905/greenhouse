@@ -23,6 +23,18 @@ func TestIncompleteCoverageAndUnsettledResponse(t *testing.T) {
 		t.Fatal("aborted response accepted")
 	}
 }
+func TestCleanReviewAndMissingSettledOutcome(t *testing.T) {
+	x := &Execution{Config: ReviewerConfig{Model: "fixture/model"}, Rules: InputIdentity{Candidate: "head"}, Paths: []string{"f"}}
+	events := verdictEvents(t, `{"head":"head","verdict":"clean","coverage":["f"],"findings":[]}`)
+	v, err := parseReview(events, x)
+	if err != nil || v.Verdict != "clean" {
+		t.Fatal(v, err)
+	}
+	events = []byte(strings.Replace(string(events), `,"aborted":false`, "", 1))
+	if _, err := parseReview(events, x); err == nil {
+		t.Fatal("missing settled outcome accepted")
+	}
+}
 func TestChangedHunkRanges(t *testing.T) {
 	spans := changedRanges("--- a/sample\n+++ b/sample\n@@ -1,2 +1,3 @@\n context\n+changed\n context\n")
 	if len(spans["sample"]) != 1 || spans["sample"][0] != [2]int{1, 3} {

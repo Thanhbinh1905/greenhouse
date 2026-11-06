@@ -7,7 +7,7 @@ import (
 
 func verdictEvents(t *testing.T, text string) []byte {
 	t.Helper()
-	b, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "stopReason": "stop", "content": []any{map[string]any{"type": "text", "text": text}}}})
+	b, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "provider": "fixture", "model": "model", "stopReason": "stop", "content": []any{map[string]any{"type": "text", "text": text}}}})
 	return append(b, []byte("\n{\"type\":\"agent_settled\",\"aborted\":false}\n")...)
 }
 func TestVerdictRejectsDuplicateAndCaseFoldedFields(t *testing.T) {
