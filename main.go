@@ -65,6 +65,7 @@ type Run struct {
 	Configs       []Snapshot      `json:"configs"`
 	ReviewUsed    int             `json:"review_used"`
 	RepairUsed    int             `json:"repair_used"`
+	Repair        *Repair         `json:"repair,omitempty"`
 	Events        []Event         `json:"events"`
 }
 type Request struct {
@@ -80,6 +81,7 @@ type Request struct {
 	Intent   string    `json:"intent,omitempty"`
 	Target   string    `json:"target,omitempty"`
 	Reason   string    `json:"reason"`
+	Selected []string  `json:"selected,omitempty"`
 }
 type Response struct {
 	RuleScope  string         `json:"rule_scope,omitempty"`
@@ -232,7 +234,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || x.Rules.Candidate != r.Candidate || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
+			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -249,6 +251,10 @@ func load(h string) (*Store, error) {
 			if r.Review != nil {
 				r.Review.Status = "unknown-outcome"
 			}
+			if r.Repair != nil && r.Repair.Status != "fixed-not-independently-rereviewed" {
+				r.Repair.Status = "unknown-outcome"
+				r.Repair.Writer = "unknown"
+			}
 			r.Token = opaque()
 			r.Events = append(r.Events, Event{Kind: "interrupted", Actor: "daemon", Reason: "unknown execution outcome; no retry"})
 		}
@@ -264,7 +270,7 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"repair, full pipeline, tests, docs, lint, push, PR and CI unsupported", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"full pipeline, push, PR and CI unsupported", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
 	if r != nil {
 		v.RuleScope = effectiveRuleScope(r)
 		v.Rules, v.RulesReady = effectiveRules(r)
@@ -284,6 +290,12 @@ func view(s *Store, r *Run) Response {
 		if safe {
 			if id == r.Submitted {
 				v.Actions = append(v.Actions, "apply", "save", "resolve-rules")
+				if r.Status == "outstanding-findings" && r.Repair == nil && r.RepairUsed == 0 && r.ReviewUsed+r.RepairUsed < r.Configs[len(r.Configs)-1].Settings.Limit && repairable(r) {
+					v.Actions = append(v.Actions, "repair")
+				}
+				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && r.Repair.Handback != "handed-back" {
+					v.Actions = append(v.Actions, "handback")
+				}
 				if r.ReviewUsed == 0 {
 					v.Actions = append(v.Actions, "prepare")
 					if r.Intent != "" && r.Target != "" && r.Reviewer != nil && v.RulesReady && r.Configs[len(r.Configs)-1].Settings.Preset == "one-pass" {
@@ -304,11 +316,17 @@ func view(s *Store, r *Run) Response {
 		if r.Status == "running" {
 			v.Actions = append(v.Actions, "cancel")
 		}
-		if r.ReviewUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
-			v.Blocked = append(v.Blocked, "review budget exhausted")
+		if r.ReviewUsed+r.RepairUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
+			v.Blocked = append(v.Blocked, "combined review and repair budget exhausted")
 		}
-		if r.ReviewUsed > 0 {
-			v.Blocked = append(v.Blocked, "one-pass invocation consumed; no automatic retry or repair")
+		if r.Status == "outstanding-findings" && r.Repair == nil && !repairable(r) {
+			v.Blocked = append(v.Blocked, "selected repair unavailable: actionable findings and private trusted fixer/check configuration are required")
+		}
+		if r.RepairUsed > 0 {
+			v.Blocked = append(v.Blocked, "optional repair admission consumed; no second repair")
+		}
+		if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" {
+			v.Blocked = append(v.Blocked, "fixed but not independently rereviewed")
 		}
 		if r.Review != nil && r.Review.Status == "clean-review" && (e != nil || id != r.Submitted) {
 			v.Blocked = append(v.Blocked, "historical clean review only; source moved")
@@ -341,7 +359,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -356,6 +374,9 @@ func handle(s *Store, q Request) Response {
 	}
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != "none" {
 		return fail("stale run/input/gate/token", r)
+	}
+	if q.Op == "new" && r.Repair != nil && r.Repair.Handback != "handed-back" {
+		return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 	}
 	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted {
 		return fail("source head or branch moved", r)
@@ -394,7 +415,19 @@ func handle(s *Store, q Request) Response {
 		if err := admitReview(r); err != nil {
 			return fail(err.Error(), r)
 		}
+	} else if q.Op == "repair" {
+		if err := admitRepair(s, r, q); err != nil {
+			return fail(err.Error(), r)
+		}
+	} else if q.Op == "handback" {
+		if err := handback(r); err != nil {
+			return fail(err.Error(), r)
+		}
+		r.Token = opaque()
 	} else if q.Op == "resolve-rules" {
+		if r.Repair != nil {
+			return fail("repair inputs are immutable after authorization", r)
+		}
 		if r.Review != nil {
 			r.Status = "stale"
 		}
@@ -411,6 +444,9 @@ func handle(s *Store, q Request) Response {
 			return fail("reason required", r)
 		}
 		if q.Op == "apply" {
+			if r.Repair != nil {
+				return fail("repair inputs and authority are immutable after authorization", r)
+			}
 			if r.Review != nil {
 				r.Status = "stale"
 			}
@@ -477,8 +513,16 @@ func daemon(h string) error {
 	type completion struct {
 		run, execution, status, log string
 		result                      *Verdict
+		repair                      *Repair
 	}
-	completed := make(chan completion)
+	type repairProgress struct {
+		run, id string
+		value   Repair
+		ack     chan bool
+	}
+	completed := make(chan completion, 16)
+	repairCompleted := make(chan completion)
+	repairProgresses := make(chan repairProgress)
 	connections := make(chan net.Conn)
 	stopped := make(chan struct{})
 	defer close(stopped)
@@ -506,9 +550,46 @@ func daemon(h string) error {
 	for {
 		var c net.Conn
 		select {
+		case progress := <-repairProgresses:
+			r := s.Runs[progress.run]
+			ok := r != nil && r.Repair != nil && r.Repair.ID == progress.id
+			if ok {
+				r.Repair = &progress.value
+				if err := persist(h, s); err != nil {
+					progress.ack <- false
+					return err
+				}
+			}
+			progress.ack <- ok
+			continue
+		case done := <-repairCompleted:
+			select {
+			case completed <- done:
+			case <-stopped:
+			}
+			continue
 		case done := <-completed:
 			r := s.Runs[done.run]
-			if r == nil || r.Review == nil || r.Review.ID != done.execution {
+			if r == nil {
+				return errors.New("execution identity mismatch")
+			}
+			if done.repair != nil {
+				delete(active, r.ID)
+				if r.Repair == nil || r.Repair.ID != done.execution {
+					return errors.New("repair identity mismatch")
+				}
+				r.Repair = done.repair
+				r.Status = done.repair.Status
+				if done.repair.Head != "" {
+					r.Candidate = done.repair.Head
+				}
+				r.Token = opaque()
+				if err := persist(h, s); err != nil {
+					return err
+				}
+				continue
+			}
+			if r.Review == nil || r.Review.ID != done.execution {
 				return errors.New("execution identity mismatch")
 			}
 			delete(active, r.ID)
@@ -575,6 +656,37 @@ func daemon(h string) error {
 					}
 					continue
 				}
+				if r.Status == "writing" && r.Repair != nil && r.Repair.Status == "admitted" {
+					x := *r.Repair
+					r.Repair.Status = "running"
+					if err := persist(h, s); err != nil {
+						return err
+					}
+					ctx, cancel := context.WithCancel(context.Background())
+					active[r.ID] = cancel
+					go func(runID string, repair Repair, source Identity, ctx context.Context, cancel context.CancelFunc) {
+						defer cancel()
+						executeRepair(ctx, &repair, source, func(value *Repair) bool {
+							ack := make(chan bool, 1)
+							select {
+							case repairProgresses <- repairProgress{run: runID, id: repair.ID, value: *value, ack: ack}:
+							case <-stopped:
+								return false
+							}
+							select {
+							case ok := <-ack:
+								return ok
+							case <-stopped:
+								return false
+							}
+						})
+						select {
+						case repairCompleted <- completion{run: runID, execution: repair.ID, repair: &repair}:
+						case <-stopped:
+						}
+					}(r.ID, x, r.Submitted, ctx, cancel)
+					continue
+				}
 				if r.Status != "running" || r.Review == nil || active[r.ID] != nil {
 					continue
 				}
@@ -585,7 +697,7 @@ func daemon(h string) error {
 					status, result, log := executeReview(ctx, &x)
 					cancel()
 					select {
-					case completed <- completion{runID, x.ID, status, log, result}:
+					case completed <- completion{run: runID, execution: x.ID, status: status, log: log, result: result}:
 					case <-stopped:
 					}
 				}()
@@ -696,6 +808,17 @@ func terminal(h, path string) error {
 		for _, f := range r.Findings {
 			fmt.Fprintf(&page, "Outstanding %s %s:%d %s | reviewed %s\n", f.Priority, f.File, f.Start, f.Explanation, f.Head)
 		}
+		if r.Repair != nil {
+			fix := r.Repair
+			fmt.Fprintf(&page, "Repair: %s | handback: %s | actor: %s\nWriter: %s | base: %s | commit: %s\n", fix.Status, fix.Handback, fix.Actor, fix.Writer, fix.Base, fix.Head)
+			fmt.Fprintf(&page, "Selected: %d | fixer input: %s | rules: %s | config: %s\n", len(fix.Selected), fix.InputDigest, fix.Rules.Digest, fix.ConfigDigest)
+			for _, check := range fix.Checks {
+				fmt.Fprintf(&page, "Check %s exit=%d: %s\n", strings.Join(check.Args, " "), check.Exit, check.Status)
+			}
+			if fix.Log != "" {
+				fmt.Fprintln(&page, fix.Log)
+			}
+		}
 		if r.Review != nil {
 			x := r.Review
 			fmt.Fprintf(&page, "Review: %s | %s | %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", x.Status, x.Backend, x.Config.Model, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
@@ -709,7 +832,7 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [x] Cancel  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [f] Selected repair  [h] Handback  [x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		fmt.Print("> ")
@@ -729,6 +852,21 @@ func terminal(h, path string) error {
 		}
 		if op == "x" {
 			q.Op = "cancel"
+		}
+		if op == "f" {
+			fmt.Print("Selected finding IDs (comma-separated):\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			for _, id := range strings.Split(reader.Text(), ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					q.Selected = append(q.Selected, id)
+				}
+			}
+			q.Op = "repair"
+		}
+		if op == "h" {
+			q.Op = "handback"
 		}
 		if op == "p" {
 			fmt.Print("Intent:\n> ")

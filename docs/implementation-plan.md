@@ -20,11 +20,13 @@ Task t4 implements version-1 declarative built-ins and explicit absolute-file se
 
 Task t7 adds explicit intent and target preparation, trusted per-user Pi configuration, asynchronous one-pass dispatch, strict structured coverage and findings, retained finding identity, exact emitted-input provenance, cancellation, and admission-time review usage. The daemon persists execution intent before launch and parks unknown outcomes after restart. Executable fake-Pi fixtures establish invocation and delivery, not live provider compliance. Assess model compliance separately with recorded provider-backed development evaluations. Do not count selecting a pack as loading it or a backend's claimed read-only mode as OS confinement.
 
-## 3. Private-worktree one-pass repair and guarded handback
+## 3. Private-worktree one-pass repair and guarded handback: initial slice
 
-Areas D one-pass, E, and D2: managed candidate worktrees, writer exclusion, one selected authorized repair, checks and local commit, explicit unreviewed-after-repair state, divergence/dirty-state refusal, and recovery refs. Add unknown-process/custody reconciliation with explicit recovery instead of retrying on attach.
+Area D one-pass, E, and D2: AXI and terminal expose explicit selected-finding repair and separate handback actions. Admission consumes one durable optional repair budget, binds the exact review/intent/candidate/rules/selection and trusted fixer/check configuration, creates a private candidate worktree, and invokes a fresh restricted Pi tool set. The controller runs configured argv checks, validates candidate scope, commits only selected paths, and records the candidate head as fixed but not independently rereviewed. Handback fast-forwards only an unchanged, clean source worktree after verifying exact candidate lineage and stopped writer identity. Dirty source work blocks handback. Unpublished custody blocks New run.
 
-Keep source worktrees and unpublished commits intact. Verify crash-after-commit, writer replacement, and handback refusal through the executable with instrumented fake backends.
+The red-before executable test rejected `repair` as `json: unknown field "selected"`. The green executable/real-Git fixtures now prove one selected repair, immutable rule delivery, a passing and a failing configured check, local commit identity, retained failed candidate and budget, source dirty preservation, dirty-handback refusal, safe fast-forward handback, replay idempotency, no second review, and restart evidence retention.
+
+The slice rejects missing trusted checks and unsupported Git hooks, filters, signing, binary/submodule changes, and non-clean source handback. Progress and execution evidence persist in shared AXI/terminal state. Recovery after interruption parks unknown writer outcomes without retry or cleanup. The existing 56/100-column PTY exercise verifies lifecycle/settings and AXI parity, not repair interaction. Crash injection at each repair boundary, live fixer cancellation/descendant tests, linked-worktree concurrent execution tests, stale selected-action matrix, and repair interactions in real PTYs remain unverified. This is not complete acceptance of SPEC.md.
 
 ## 4. Bounded full pipeline and forge fixture
 
@@ -43,6 +45,6 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
 - Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
 - Area C: provider-backed behavioral evaluations, full-tree review snapshots, explicit finding resolution, and OS confinement. Pi review is patch-based with fresh context and read-only tools.
-- Area D: all pipeline stages except independent review; operational ask/auto/YOLO decisions; repairs and retries; acceptance, final-fix, rethink, and discard. One-pass dispatch consumes review usage durably.
-- Area E and D2: private candidates, ref leases, repair commits, guarded handback, publication, forge and CI, and executor recovery.
+- Area D: pipeline stages other than independent review and explicitly authorized one-pass repair/check/commit; operational ask/auto/YOLO decisions; automatic retries; acceptance, final-fix, rethink, and discard.
+- Area E and D2: publication, forge and CI, explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, cancellation of a live fixer, and independently exact-head review.
 - Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
