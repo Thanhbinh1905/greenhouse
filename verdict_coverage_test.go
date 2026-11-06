@@ -36,8 +36,8 @@ func TestCleanReviewAndMissingSettledOutcome(t *testing.T) {
 	}
 }
 func TestChangedHunkRanges(t *testing.T) {
-	spans := changedRanges("--- a/sample\n+++ b/sample\n@@ -1,2 +1,3 @@\n context\n+changed\n context\n")
-	if len(spans["sample"]) != 1 || spans["sample"][0] != [2]int{1, 3} {
+	spans := changedRanges("--- a/sample\n+++ b/sample\n@@ -1,2 +1,3 @@\n context\n+++ misleading\n context\n@@ -10 +11 @@\n-old\n+new\n")
+	if len(spans["sample"]) != 2 || spans["sample"][0] != [2]int{1, 3} || spans["sample"][1] != [2]int{11, 11} {
 		t.Fatal(spans)
 	}
 }
