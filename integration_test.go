@@ -48,11 +48,12 @@ func fixture(t *testing.T) (string, string, string) {
 	})
 	return bin, repo, home
 }
-func axi(t *testing.T, bin, repo, home, request string) map[string]any {
+func axi(t *testing.T, bin, repo, home, request string, env ...string) map[string]any {
 	t.Helper()
 	c := exec.Command(bin, "axi")
 	c.Dir = repo
 	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+	c.Env = append(c.Env, env...)
 	c.Stdin = strings.NewReader(request)
 	b, e := c.CombinedOutput()
 	if e != nil {

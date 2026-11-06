@@ -1,7 +1,7 @@
 [2J[HGreenhouse | lifecycle preview
-Run 9c6a79216b873ca6b504a62ef64815ae
+Run 3ee3a036774da4745aaa6b9b80b2b523
 Stage: intent | unconfigured
-Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Candidate: 20987c04df3d766417df98a6769f13025573efca
 Mode: ask | one-pass | limit 7
 Budget: review 0 + repair 0
 Rules: unslop (not loaded)
@@ -15,9 +15,9 @@ Blocked: repository overrides unsupported; repository configuration is untrusted
 
 > i
 [2J[HGreenhouse | lifecycle preview
-Run 9c6a79216b873ca6b504a62ef64815ae
+Run 3ee3a036774da4745aaa6b9b80b2b523
 Stage: intent | unconfigured
-Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Candidate: 20987c04df3d766417df98a6769f13025573efca
 Mode: ask | one-pass | limit 7
 Budget: review 0 + repair 0
 Rules: unslop (not loaded)
@@ -38,9 +38,9 @@ Selected rules (comma-separated; not loaded):
 [a] Apply to run  [d] Save user defaults  [c] Cancel
 > d
 [2J[HGreenhouse | lifecycle preview
-Run 9c6a79216b873ca6b504a62ef64815ae
+Run 3ee3a036774da4745aaa6b9b80b2b523
 Stage: intent | unconfigured
-Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Candidate: 20987c04df3d766417df98a6769f13025573efca
 Mode: ask | one-pass | limit 7
 Budget: review 0 + repair 0
 Rules: unslop (not loaded)
@@ -52,13 +52,30 @@ Blocked: repository overrides unsupported; repository configuration is untrusted
 
 [i] Inspect  [s] Settings  [n] New run  [q] Detach
 ok
+> i
+[2J[HGreenhouse | lifecycle preview
+Run 3ee3a036774da4745aaa6b9b80b2b523
+Stage: intent | unconfigured
+Candidate: 20987c04df3d766417df98a6769f13025573efca
+Mode: ask | one-pass | limit 7
+Budget: review 0 + repair 0
+Rules: unslop (not loaded)
+Settings source: run-local
+Blocked: intent, target and trusted commands unconfigured
+Blocked: review, repair, tests, docs, lint, push, PR and CI unsupported
+Blocked: rules selected only; loader and backends unconfigured
+Blocked: repository overrides unsupported; repository configuration is untrusted
+Blocked: source head or branch moved; old-run advancement blocked
+
+[i] Inspect  [s] Settings  [n] New run  [q] Detach
+ok
 > n
 Retain evidence and start New run? Type new:
 > new
 [2J[HGreenhouse | lifecycle preview
-Run 30701da0f4d9456df7677965a17d0151
+Run c9e7d4f056594e3e65ceb231aaabb60d
 Stage: intent | unconfigured
-Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Candidate: a3347f88c5aaa6a5e542b6df1ef1b688f17acb28
 Mode: ask | one-pass | limit 7
 Budget: review 0 + repair 0
 Rules: unslop (not loaded)

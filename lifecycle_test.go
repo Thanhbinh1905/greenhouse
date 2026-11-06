@@ -191,6 +191,8 @@ func TestRestartAndUnknownWriter(t *testing.T) {
 			t.Fatal("unsafe action advertised")
 		}
 	}
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "moved while parked")
+	recovered = axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	if mutate(t, bin, repo, home, recovered, "new", "unsafe", nil)["outcome"] != "refused" {
 		t.Fatal("unknown writer replaced")
 	}

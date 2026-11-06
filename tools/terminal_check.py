@@ -56,6 +56,11 @@ def session(width, commands, label=""):
     try:
         until_prompt()
         for command in commands:
+            if command == ":commit":
+                subprocess.run(["git", "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                                "commit", "--allow-empty", "-m", "new source head"],
+                               cwd=repo, env=env, check=True, capture_output=True)
+                continue
             os.write(master, command.encode() + b"\n")
             if command != "q":
                 until_prompt()
@@ -83,9 +88,10 @@ try:
     assert state["run"]["configs"][-1]["settings"]["mode"] == "ask"
     assert state["defaults"]["mode"] == "auto"
     assert state["run"]["configs"][-1]["settings"]["rules"] == ["unslop"]
-    wide = session(100, ["i", "s", "ask one-pass 7", "unslop", "d", "n", "new", "q"])
+    wide = session(100, ["i", "s", "ask one-pass 7", "unslop", "d", ":commit", "i", "n", "new", "q"])
     next_state = axi()
     assert state["run_id"] != next_state["run_id"]
+    assert state["run"]["candidate"] != next_state["run"]["candidate"]
     assert next_state["run"]["configs"][0]["settings"]["mode"] == "ask"
     assert "Mode: ask" in wide
     session(56, ["q"], "-reattach")

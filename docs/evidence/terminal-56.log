@@ -1,7 +1,7 @@
 [2J[HGreenhouse | lifecycle preview
-Run 9c6a79216b873ca6b504a62ef64815ae
+Run 3ee3a036774da4745aaa6b9b80b2b523
 Stage: intent | unconfigured
-Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Candidate: 20987c04df3d766417df98a6769f13025573efca
 Mode: auto | one-pass | limit 4
 Budget: review 0 + repair 0
 Rules: unslop, no-comments (not loaded)
@@ -26,9 +26,9 @@ Selected rules (comma-separated; not loaded):
 [a] Apply to run  [d] Save user defaults  [c] Cancel
 > a
 [2J[HGreenhouse | lifecycle preview
-Run 9c6a79216b873ca6b504a62ef64815ae
+Run 3ee3a036774da4745aaa6b9b80b2b523
 Stage: intent | unconfigured
-Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Candidate: 20987c04df3d766417df98a6769f13025573efca
 Mode: ask | one-pass | limit 7
 Budget: review 0 + repair 0
 Rules: unslop (not loaded)

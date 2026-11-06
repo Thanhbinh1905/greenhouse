@@ -22,6 +22,8 @@ Send one request on stdin to `greenhouse axi`. The invoking directory identifies
 printf '%s\n' '{"version":1,"op":"attach"}' | /path/to/greenhouse axi
 ```
 
+Git identity commands discard inherited `GIT_*` variables so the daemon cannot reuse the first client's repository selection for later clients. The invoking path determines identity, including linked worktrees.
+
 `attach` creates a run only when its canonical context has no active slot. `inspect` never creates a run. Reopening retained work does not consume budget, change snapshots, or execute a stage.
 
 Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutation. Use `token` as `expected`:
@@ -45,7 +47,7 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
 }
 ```
 
-Supported mutations are `apply`, `save`, and `new`. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks mutations; there is no recovery override in this slice. Unknown executor or writer outcomes block replacement as well.
+Supported mutations are `apply`, `save`, and `new`. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
 
 Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. There are no approval, acceptance, review, repair, cancellation, publication, or recovery commands.
 

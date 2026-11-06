@@ -112,7 +112,12 @@ func digest(v any) string {
 func resolve(path string) (Identity, error) {
 	run := func(args ...string) (string, error) {
 		c := exec.Command("git", append([]string{"-C", path}, args...)...)
-		c.Env = append(os.Environ(), "GIT_OPTIONAL_LOCKS=0")
+		for _, variable := range os.Environ() {
+			if !strings.HasPrefix(variable, "GIT_") {
+				c.Env = append(c.Env, variable)
+			}
+		}
+		c.Env = append(c.Env, "GIT_OPTIONAL_LOCKS=0")
 		b, e := c.Output()
 		return strings.TrimSpace(string(b)), e
 	}
@@ -243,12 +248,15 @@ func view(s *Store, r *Run) Response {
 		v.Token = r.Token
 		v.Gate = "none"
 		id, e := resolve(r.Submitted.Worktree)
-		safe := e == nil && id == r.Submitted && r.Status != "running" && r.Status != "writing" && r.Status != "recovery-required"
+		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "writing" && r.Status != "recovery-required"
 		if safe {
-			v.Actions = append(v.Actions, "apply", "save", "new")
+			if id == r.Submitted {
+				v.Actions = append(v.Actions, "apply", "save")
+			}
+			v.Actions = append(v.Actions, "new")
 		}
 		if e != nil || id != r.Submitted {
-			v.Blocked = append(v.Blocked, "source head or branch moved; mutations blocked")
+			v.Blocked = append(v.Blocked, "source head or branch moved; old-run advancement blocked")
 		}
 		if r.Status == "recovery-required" {
 			v.Blocked = append(v.Blocked, "unknown execution or writer outcome; recovery unsupported")
@@ -294,7 +302,7 @@ func handle(s *Store, q Request) Response {
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != "none" {
 		return fail("stale run/input/gate/token", r)
 	}
-	if id != r.Submitted {
+	if q.Op != "new" && id != r.Submitted {
 		return fail("source head or branch moved", r)
 	}
 	if r.Status == "running" || r.Status == "writing" || r.Status == "recovery-required" {

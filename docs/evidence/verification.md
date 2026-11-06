@@ -27,7 +27,16 @@ All Git fixtures and state homes are isolated beneath the Task scratch directory
 
 Source observations use read-only Git commands. No product command creates a worktree, changes refs, edits source files, or invokes a backend. This Task creates local commits only; SPEC.md and LEAD_BRIEF.md remain unchanged. No remote, installed tool, Posse configuration, or other Project was changed.
 
-Independent exact-head Review is still required through the configured Posse review loop before admission. This document records author verification, not an independent verdict.
+Independent Review round 1 requested changes at `17a2b6c95a455976d7f615e03d30b45db4fe099a`. The follow-up below addresses both findings and requires exact-head rereview before admission. This document records author verification, not an independent verdict.
+
+## Review round 1 fixes
+
+- Git context leakage reproduced through the built executable: `TestDaemonGitEnvironmentDoesNotSelectOtherRepository` failed with `repository B attached to A's run`. The daemon inherited A's `GIT_DIR`, `GIT_WORK_TREE`, `GIT_COMMON_DIR`, namespace, and injected configuration. Git identity commands now discard inherited `GIT_*` variables before resolving the invoking path. The same test passes for A, B, a linked worktree, and daemon restart with the polluted environment.
+- Explicit replacement after a commit reproduced through AXI: `TestNewRunAfterSourceMovement` failed with `safe New refused after source movement` and `source head or branch moved`. New now captures the current source identity when its run/input/gate/token is current and no writer or unknown-outcome hazard exists. Apply and Save remain blocked on the old run. Tests prove stale-token refusal, unchanged old evidence, saved-default inheritance, duplicate New replay, branch movement, and durable replacement across restart. Unknown-writer replacement still refuses even after source movement.
+- The real 100-column PTY flow now creates a source commit between Save and Inspect/New. The terminal displays blocked old-run advancement, then creates a new run at the changed head. Narrow reattachment and AXI confirm that identity. The regenerated terminal logs capture this interaction.
+- After both fixes: `go test ./...` passed in 51.570s; `go test -race ./...` passed in 52.639s; vet, formatting, and the executable PTY check passed.
+
+The review's referenced scratch reproduction script was unavailable at `/home/thanhbinh/.posse/scratch/greenhouse/t2/repro.py` (ENOENT). The executable regressions above reconstructed both reproductions from the review report. No reviewer artifact was modified.
 
 ## Risks and rollback
 
