@@ -1,0 +1,73 @@
+[2J[HGreenhouse | lifecycle preview
+Run 9c6a79216b873ca6b504a62ef64815ae
+Stage: intent | unconfigured
+Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Mode: ask | one-pass | limit 7
+Budget: review 0 + repair 0
+Rules: unslop (not loaded)
+Settings source: run-local
+Blocked: intent, target and trusted commands unconfigured
+Blocked: review, repair, tests, docs, lint, push, PR and CI unsupported
+Blocked: rules selected only; loader and backends unconfigured
+Blocked: repository overrides unsupported; repository configuration is untrusted
+
+[i] Inspect  [s] Settings  [n] New run  [q] Detach
+
+> i
+[2J[HGreenhouse | lifecycle preview
+Run 9c6a79216b873ca6b504a62ef64815ae
+Stage: intent | unconfigured
+Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Mode: ask | one-pass | limit 7
+Budget: review 0 + repair 0
+Rules: unslop (not loaded)
+Settings source: run-local
+Blocked: intent, target and trusted commands unconfigured
+Blocked: review, repair, tests, docs, lint, push, PR and CI unsupported
+Blocked: rules selected only; loader and backends unconfigured
+Blocked: repository overrides unsupported; repository configuration is untrusted
+
+[i] Inspect  [s] Settings  [n] New run  [q] Detach
+ok
+> s
+Settings draft (current ask one-pass 7)
+Enter mode preset limit, e.g. ask one-pass 6:
+> ask one-pass 7
+Selected rules (comma-separated; not loaded):
+> unslop
+[a] Apply to run  [d] Save user defaults  [c] Cancel
+> d
+[2J[HGreenhouse | lifecycle preview
+Run 9c6a79216b873ca6b504a62ef64815ae
+Stage: intent | unconfigured
+Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Mode: ask | one-pass | limit 7
+Budget: review 0 + repair 0
+Rules: unslop (not loaded)
+Settings source: run-local
+Blocked: intent, target and trusted commands unconfigured
+Blocked: review, repair, tests, docs, lint, push, PR and CI unsupported
+Blocked: rules selected only; loader and backends unconfigured
+Blocked: repository overrides unsupported; repository configuration is untrusted
+
+[i] Inspect  [s] Settings  [n] New run  [q] Detach
+ok
+> n
+Retain evidence and start New run? Type new:
+> new
+[2J[HGreenhouse | lifecycle preview
+Run 30701da0f4d9456df7677965a17d0151
+Stage: intent | unconfigured
+Candidate: bf9543f0f62711fb5c24c66978d7e5b82533d869
+Mode: ask | one-pass | limit 7
+Budget: review 0 + repair 0
+Rules: unslop (not loaded)
+Settings source: user defaults
+Blocked: intent, target and trusted commands unconfigured
+Blocked: review, repair, tests, docs, lint, push, PR and CI unsupported
+Blocked: rules selected only; loader and backends unconfigured
+Blocked: repository overrides unsupported; repository configuration is untrusted
+
+[i] Inspect  [s] Settings  [n] New run  [q] Detach
+ok
+>
