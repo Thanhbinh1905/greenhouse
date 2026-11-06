@@ -15,6 +15,11 @@ The finding ID hashes origin, path, range, rule, and normalized explanation. New
 - `go test ./...`, `go test -race ./...`, `go vet ./...`, and `gofmt` checks pass.
 - `tools/terminal_check.py` drives real 56- and 100-column PTYs through Settings, Apply, Save, New, rule resolution/failure, fake-backed review launch, finding inspection, and one-pass refusal. AXI confirms the same durable state. Logs remain in Task scratch, not the repository.
 
+## Review round 1 corrections
+
+- The executable space-path regression failed with `finding range outside changed hunks` for line 3 in `has space.txt`. Git appends a tab delimiter to this unquoted patch header. The parser now removes that delimiter before decoding paths; filename spaces and quoted filename tabs remain intact. The same CLI fixture now retains the finding and its consumed invocation.
+- The executable inherited-pipe regression failed with `status=cancelled elapsed=5.275639465s`. The reviewer had spawned a five-second descendant holding stdout and stderr. `exec.Cmd.WaitDelay` now bounds inherited-pipe waiting to a 250 ms grace period after exit or cancellation. CLI fixtures require cancellation and normal-exit completion within three seconds, before the descendant exits. Normal exit with forced pipe closure remains inconclusive; usage remains consumed. Fixture cleanup waits for the descendant without signalling unverified PIDs.
+
 ## Limits
 
 No paid model or live provider compliance evaluation ran. The adapter targets Pi 1.5.0 flags and JSON events observed locally. Credentials must already be available through provider environment variables. Raw transcripts and stderr are bounded in memory and withheld from durable logs; execution summaries expose byte counts and status. Orphan execution after a daemon crash remains unknown and blocks replacement; the controller never signals a stored PID or relaunches it.

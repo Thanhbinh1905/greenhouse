@@ -242,6 +242,7 @@ func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string)
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, x.Config.Executable, x.Args...)
+	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Dir = dir
 	cmd.Env = append(reviewerEnv(), "PI_CODING_AGENT_DIR="+filepath.Join(dir, "agent"))
 	cmd.Stdin = bytes.NewReader(x.Input)
@@ -444,6 +445,7 @@ func changedRanges(diff string) map[string][][2]int {
 	return ranges
 }
 func diffPath(path string) string {
+	path = strings.TrimSuffix(path, "\t")
 	if strings.HasPrefix(path, "\"") {
 		if unquoted, err := strconv.Unquote(path); err == nil {
 			path = unquoted
