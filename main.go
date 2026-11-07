@@ -473,6 +473,18 @@ func handle(s *Store, q Request) Response {
 	s.Receipts[q.Action] = Receipt{d, frozen}
 	return v
 }
+func acceptRepairProgress(r *Run, id string, value Repair) bool {
+	if r == nil || r.Repair == nil || r.Repair.ID != id || r.Status == "cancelling" && value.Status == "committing" {
+		return false
+	}
+	r.Repair = &value
+	if r.Status == "cancelling" && value.Status == "cancelled" {
+		r.Status = "cancelled"
+		r.Token = opaque()
+	}
+	return true
+}
+
 func daemon(h string) error {
 	f, e := os.OpenFile(filepath.Join(h, "lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if e != nil {
@@ -564,9 +576,8 @@ func daemon(h string) error {
 		select {
 		case progress := <-repairProgresses:
 			r := s.Runs[progress.run]
-			ok := r != nil && r.Repair != nil && r.Repair.ID == progress.id
+			ok := acceptRepairProgress(r, progress.id, progress.value)
 			if ok {
-				r.Repair = &progress.value
 				if err := persist(h, s); err != nil {
 					progress.ack <- false
 					return err

@@ -365,6 +365,57 @@ func TestDaemonCrashDuringFixParksUnknownWriter(t *testing.T) {
 	t.Fatal("interrupted writer fixture did not finish its candidate edit")
 }
 
+func TestAcceptedCancellationAtCommitAdmissionPreventsCommit(t *testing.T) {
+	_, repo, home, v := repairFixture(t)
+	stopDaemon(t, home)
+	t.Setenv("GREENHOUSE_HOME", home)
+	store, err := load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	q := Request{Version: 1, Op: "repair", Path: repo, RunID: v["run_id"].(string), Input: v["input_id"].(string), Gate: "none", Expected: v["token"].(string), Action: "repair-before-commit", Selected: selectedID(t, v)}
+	admitted := handle(store, q)
+	if admitted.Outcome != "ok" {
+		t.Fatal(admitted)
+	}
+	r := store.Runs[q.RunID]
+	repair := *r.Repair
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	executeRepair(ctx, &repair, r.Submitted, func(value *Repair) bool {
+		if value.Status == "committing" {
+			cancelRequest := Request{Version: 1, Op: "cancel", Path: repo, RunID: r.ID, Input: r.Input, Gate: "none", Expected: r.Token, Action: "cancel-before-commit"}
+			if response := handle(store, cancelRequest); response.Outcome != "ok" {
+				t.Errorf("cancellation was not accepted before commit admission: run=%s repair=%s response=%v", r.Status, r.Repair.Status, response)
+				return false
+			}
+			cancel()
+		}
+		return acceptRepairProgress(r, value.ID, *value)
+	})
+	candidate := &repair
+	if candidate.Status != "cancelled" || r.Status != "cancelled" {
+		t.Fatalf("accepted cancellation did not settle before commit: run=%s repair=%s", r.Status, candidate.Status)
+	}
+	if strings.TrimSpace(git(t, candidate.Worktree, "rev-parse", "HEAD")) != candidate.Base {
+		t.Fatal("accepted pre-commit cancellation created a local commit")
+	}
+	committing := *r
+	committing.Status = "writing"
+	committing.Repair = &Repair{ID: candidate.ID, Status: "committing"}
+	store.Runs[r.ID] = &committing
+	lateCancel := Request{Version: 1, Op: "cancel", Path: repo, RunID: r.ID, Input: r.Input, Gate: "none", Expected: r.Token, Action: "cancel-after-commit-admission"}
+	if response := handle(store, lateCancel); response.Outcome != "refused" {
+		t.Fatalf("cancellation remained available after commit admission: %v", response)
+	}
+	if git(t, candidate.Worktree, "status", "--porcelain") == "" {
+		t.Fatal("cancelled candidate edits were discarded")
+	}
+	if strings.TrimSpace(git(t, repo, "rev-parse", "HEAD")) != r.Submitted.Head {
+		t.Fatal("cancellation changed the source branch")
+	}
+}
+
 func TestRepairFailurePreservesCandidateAndBudget(t *testing.T) {
 	bin, repo, home, v := repairFixture(t)
 	configPath := filepath.Join(home, "fixer.json")

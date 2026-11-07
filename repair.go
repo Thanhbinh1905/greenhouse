@@ -614,7 +614,22 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	x.Status = "committing"
+	if ctx.Err() != nil {
+		x.Status = "cancelled"
+		save()
+		return
+	}
 	if !save() {
+		if ctx.Err() != nil {
+			x.Status = "cancelled"
+			x.Log = "cancelled before commit admission"
+			save()
+		}
+		return
+	}
+	if ctx.Err() != nil {
+		x.Status = "cancelled"
+		save()
 		return
 	}
 	if _, e = controllerGit(x.Worktree, append([]string{"--literal-pathspecs", "add", "--"}, x.Paths...)...); e != nil {
