@@ -293,7 +293,7 @@ func view(s *Store, r *Run) Response {
 				if r.Status == "outstanding-findings" && r.Repair == nil && r.RepairUsed == 0 && r.ReviewUsed+r.RepairUsed < r.Configs[len(r.Configs)-1].Settings.Limit && repairable(r) {
 					v.Actions = append(v.Actions, "repair")
 				}
-				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && r.Repair.Handback != "handed-back" {
+				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && (r.Repair.Handback == "awaiting-handback" || r.Repair.Handback == "handback-in-progress") {
 					v.Actions = append(v.Actions, "handback")
 				}
 				if r.ReviewUsed == 0 {
@@ -378,7 +378,8 @@ func handle(s *Store, q Request) Response {
 	if q.Op == "new" && r.Repair != nil && r.Repair.Handback != "handed-back" {
 		return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 	}
-	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted {
+	handbackReconcile := q.Op == "handback" && r.Repair != nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == r.Repair.Head
+	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted && !handbackReconcile {
 		return fail("source head or branch moved", r)
 	}
 	if q.Op == "cancel" && r.Status == "running" {
@@ -420,7 +421,7 @@ func handle(s *Store, q Request) Response {
 			return fail(err.Error(), r)
 		}
 	} else if q.Op == "handback" {
-		if err := handback(r); err != nil {
+		if err := authorizeHandback(r); err != nil {
 			return fail(err.Error(), r)
 		}
 		r.Token = opaque()
@@ -527,6 +528,17 @@ func daemon(h string) error {
 	stopped := make(chan struct{})
 	defer close(stopped)
 	active := map[string]context.CancelFunc{}
+	for _, r := range s.Runs {
+		if r.Repair != nil && r.Repair.Handback == "handback-in-progress" {
+			if err := handback(r); err != nil {
+				r.Repair.Handback = "awaiting-handback"
+				r.Repair.Log = err.Error()
+			}
+		}
+	}
+	if err := persist(h, s); err != nil {
+		return err
+	}
 	defer func() {
 		for _, cancel := range active {
 			cancel()
@@ -649,6 +661,29 @@ func daemon(h string) error {
 				return e
 			}
 			s = &next
+			for _, r := range s.Runs {
+				if r.Repair != nil && r.Repair.Handback == "handback-in-progress" {
+					if err := handback(r); err != nil {
+						r.Repair.Handback = "awaiting-handback"
+						r.Repair.Log = err.Error()
+					}
+				}
+			}
+			if q.Op == "handback" && v.Outcome == "ok" {
+				r := s.Runs[q.RunID]
+				v = view(s, r)
+				if r != nil && r.Repair != nil && r.Repair.Handback == "awaiting-handback" {
+					v.Outcome = "refused"
+					v.Error = r.Repair.Log
+				}
+				b, _ := json.Marshal(v)
+				var frozen Response
+				json.Unmarshal(b, &frozen)
+				s.Receipts[q.Action] = Receipt{Digest: digest(q), Result: frozen}
+			}
+			if e = persist(h, s); e != nil {
+				return e
+			}
 			for _, r := range s.Runs {
 				if r.Status == "cancelling" {
 					if cancel := active[r.ID]; cancel != nil {

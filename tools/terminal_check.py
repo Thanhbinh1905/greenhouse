@@ -13,7 +13,7 @@ import termios
 import time
 
 binary = str(Path(sys.argv[1]).resolve())
-root = Path(tempfile.mkdtemp(prefix="gh-pty-"))
+root = Path(tempfile.mkdtemp(prefix="gh-pty-", dir=os.environ["TMPDIR"]))
 repo = root / "repo"
 repo.mkdir()
 env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
@@ -115,7 +115,8 @@ try:
         subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
     fake = root / "fake-pi"
     fake.write_text('''#!/usr/bin/python3
-import json,sys
+import json,sys,os
+with open(os.path.join(os.path.dirname(__file__), "review-calls"), "a") as calls: calls.write("review\\n")
 b=json.load(sys.stdin)
 f={"id":"fixture","priority":"P2","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Fixture finding","action":"Inspect fixture","rule":"","head":b["Head"]}
 v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"],"findings":[f]}
@@ -126,17 +127,50 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
     config = root / "state" / "reviewer.json"
     config.write_text(json.dumps({"executable":str(fake),"model":"fixture/model"}))
     config.chmod(0o600)
-    for width in [56, 100]:
-        session(width, ["n", "new", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
-        deadline = time.monotonic() + 10
-        while time.monotonic() < deadline and axi()["run"]["status"] == "running":
-            time.sleep(0.02)
-        reviewed = axi()
-        assert reviewed["run"]["status"] == "outstanding-findings", reviewed
-        findings = session(width, ["i", "v", "q"], "-findings")
-        assert "Fixture finding" in findings and "one-pass" in findings
-        assert axi()["run"]["review_used"] == 1
-    print(f"PASS: 56- and 100-column PTY Settings, Apply, Save, New run, rule resolution, criteria, load failures, detach, and AXI parity; fixture {root}")
+    fixer = root / "fake-fixer"
+    fixer.write_text('''#!/usr/bin/python3
+import json,sys
+b=json.load(sys.stdin)
+with open("sample.txt", "w") as f: f.write("repaired\\n")
+''')
+    fixer.chmod(0o700)
+    fixer_config = root / "state" / "fixer.json"
+    fixer_config.write_text(json.dumps({"executable":str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
+    fixer_config.chmod(0o600)
+    session(56, ["n", "new", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
+    deadline = time.monotonic() + 10
+    while time.monotonic() < deadline and axi()["run"]["status"] == "running":
+        time.sleep(0.02)
+    reviewed = axi()
+    assert reviewed["run"]["status"] == "outstanding-findings", reviewed
+    findings = session(56, ["i", "q"], "-findings")
+    assert "Fixture finding" in findings and "one-pass" in findings
+    assert reviewed["run"]["review_used"] == 1
+    finding_id = reviewed["run"]["findings"][0]["id"]
+    (repo / "dirty-user-file").write_text("preserve")
+    repair_flow = session(56, ["f", finding_id, "i", "q"], "-repair")
+    deadline = time.monotonic() + 20
+    while time.monotonic() < deadline and axi()["run"]["status"] == "writing": time.sleep(0.02)
+    fixed = axi()
+    assert fixed["run"]["status"] == "fixed-not-independently-rereviewed", fixed
+    repair = fixed["run"]["repair"]
+    assert repair["checks"][0]["status"] == "passed" and repair["head"]
+    repair_result = session(100, ["i", "q"], "-repair-result")
+    assert "Check" in repair_result and "fixed-not-independently-rereviewed" in repair_result
+    refused = session(56, ["h", "q"], "-handback-refused")
+    blocked = axi()
+    assert blocked["run"]["repair"]["handback"] == "awaiting-handback"
+    assert "dirty state" in " ".join(blocked["blocked"]) or "dirty state" in refused
+    refused_wide = session(100, ["h", "q"], "-handback-refused-wide")
+    assert "dirty state" in refused_wide
+    assert (repo / "dirty-user-file").read_text() == "preserve"
+    (repo / "dirty-user-file").unlink()
+    handed = session(100, ["h", "q"], "-handback")
+    final = axi()
+    assert final["run"]["repair"]["handback"] == "handed-back"
+    assert "handed-back" in handed
+    assert (root / "review-calls").read_text().count("review") == 1
+    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, and AXI parity; fixture {root}")
 finally:
     pidfile = root / "state" / "pid"
     if pidfile.exists():

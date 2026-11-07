@@ -11,7 +11,9 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -346,12 +348,99 @@ func repairScope(x *Repair) (string, error) {
 	}
 	return string(diff), nil
 }
+
+var ErrWriterTreeUnknown = errors.New("writer descendant cleanup could not be verified")
+
+func init() {
+	if len(os.Args) > 2 && os.Args[1] == "_run-child" {
+		os.Exit(runChild(os.Args[2:]))
+	}
+}
+
+func runChild(args []string) int {
+	if len(args) == 0 {
+		return 127
+	}
+	if _, _, errno := syscall.RawSyscall6(syscall.SYS_PRCTL, 36, 1, 0, 0, 0, 0); errno != 0 {
+		return 254
+	}
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	defer signal.Stop(signals)
+	child := exec.Command(args[0], args[1:]...)
+	child.Stdin, child.Stdout, child.Stderr = os.Stdin, os.Stdout, os.Stderr
+	child.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if err := child.Start(); err != nil {
+		return 127
+	}
+	done := make(chan error, 1)
+	go func() { done <- child.Wait() }()
+	var childErr error
+	select {
+	case childErr = <-done:
+	case <-signals:
+		syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
+		childErr = <-done
+	}
+	syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
+	if !reapChildTree() {
+		return 254
+	}
+	if childErr == nil {
+		return 0
+	}
+	var exitErr *exec.ExitError
+	if errors.As(childErr, &exitErr) {
+		return exitErr.ExitCode()
+	}
+	return 127
+}
+
+func reapChildTree() bool {
+	children := filepath.Join("/proc/self/task", fmt.Sprint(os.Getpid()), "children")
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		data, err := os.ReadFile(children)
+		if err != nil {
+			return false
+		}
+		pids := strings.Fields(string(data))
+		if len(pids) == 0 {
+			return true
+		}
+		for _, child := range pids {
+			if pid, err := strconv.Atoi(child); err == nil {
+				syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+		var status syscall.WaitStatus
+		for {
+			pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+			if err != nil || pid <= 0 {
+				break
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	return false
+}
+
 func runBounded(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, args...)
+	self, err := os.Executable()
+	if err != nil {
+		return -1, "writer runner unavailable", err
+	}
+	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", exe}, args...)...)
 	cmd.Dir = dir
-	cmd.WaitDelay = 250 * time.Millisecond
+	cmd.WaitDelay = 5 * time.Second
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return os.ErrProcessDone
+		}
+		return cmd.Process.Signal(syscall.SIGTERM)
+	}
 	cmd.Env = reviewerEnv()
 	if agentDir != "" {
 		cmd.Env = append(cmd.Env, "PI_CODING_AGENT_DIR="+agentDir)
@@ -366,6 +455,9 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 		code = cmd.ProcessState.ExitCode()
 	}
 	log := fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
+	if code == 254 || errors.Is(e, exec.ErrWaitDelay) {
+		return code, log, ErrWriterTreeUnknown
+	}
 	if ctx.Err() != nil {
 		return code, log, ctx.Err()
 	}
@@ -437,7 +529,17 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	}
 	_, log, e := runBounded(ctx, x.Worktree, x.Config.Executable, x.Args, x.Input, filepath.Join(agentDir, "agent"))
 	x.Log = log
+	if errors.Is(e, ErrWriterTreeUnknown) {
+		x.Writer = "unknown"
+		fail("unknown-outcome", e)
+		return
+	}
 	x.Writer = "stopped"
+	if errors.Is(e, context.Canceled) {
+		x.Status = "cancelled"
+		save()
+		return
+	}
 	if e != nil {
 		fail("fixer-failed", e)
 		return
@@ -528,6 +630,21 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	x.Handback = "awaiting-handback"
 	save()
 }
+func authorizeHandback(r *Run) error {
+	x := r.Repair
+	if x == nil {
+		return errors.New("no repair candidate")
+	}
+	if x.Handback == "handed-back" || x.Handback == "handback-in-progress" {
+		return nil
+	}
+	if x.Handback != "awaiting-handback" || x.Status != "fixed-not-independently-rereviewed" || x.Writer != "stopped" {
+		return errors.New("candidate is not eligible for handback")
+	}
+	x.Handback = "handback-in-progress"
+	return nil
+}
+
 func handback(r *Run) error {
 	x := r.Repair
 	if x == nil {
@@ -535,10 +652,22 @@ func handback(r *Run) error {
 	}
 	if x.Handback == "handed-back" {
 		id, e := resolve(r.Submitted.Worktree)
-		if e == nil && id.Head == x.Head {
+		if e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == x.Head {
 			return nil
 		}
 		return errors.New("recorded handback outcome does not match source; preserve recovery evidence")
+	}
+	sourceNow, sourceErr := resolve(r.Submitted.Worktree)
+	if sourceErr == nil && sourceNow.Repository == r.Submitted.Repository && sourceNow.Worktree == r.Submitted.Worktree && sourceNow.Branch == r.Submitted.Branch && sourceNow.Head == x.Head {
+		candidateNow, err := resolve(x.Worktree)
+		parent, parentErr := gitRead(x.Worktree, "rev-parse", "HEAD^")
+		if err == nil && candidateNow.Head == x.Head && candidateNow.Branch == x.Ref && parentErr == nil && strings.TrimSpace(string(parent)) == x.Base {
+			x.Handback = "handed-back"
+			r.Candidate = x.Head
+			r.Status = "fixed-not-independently-rereviewed"
+			return nil
+		}
+		return errors.New("source contains candidate commit but candidate evidence differs; preserve recovery evidence")
 	}
 	if x.Status != "fixed-not-independently-rereviewed" || x.Writer != "stopped" || x.Head == "" || x.Parent != r.Submitted.Head {
 		return errors.New("candidate is not eligible for handback")
@@ -562,6 +691,10 @@ func handback(r *Run) error {
 	candidate, e := resolve(x.Worktree)
 	if e != nil || candidate.Head != x.Head || candidate.Branch != x.Ref {
 		return errors.New("candidate identity changed; preserve recovery evidence")
+	}
+	candidateStatus, e := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if e != nil || len(candidateStatus) != 0 {
+		return errors.New("candidate dirty state is ambiguous; preserve recovery evidence")
 	}
 	parent, e := gitRead(x.Worktree, "rev-parse", "HEAD^")
 	if e != nil || strings.TrimSpace(string(parent)) != x.Base {
