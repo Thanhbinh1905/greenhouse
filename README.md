@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo/greenhouse-mark-dark.svg">
+  <img src="docs/assets/logo/greenhouse-mark.svg" alt="Greenhouse logo" width="120">
+</picture>
+
 # Greenhouse
 
 Greenhouse is a standalone terminal and JSON client for a per-user local run store. This slice implements lifecycle, settings, immutable rule resolution, and an explicitly configured independent Pi review. Review success is not test, lint, or delivery success.
