@@ -1,6 +1,6 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo/greenhouse-mark-dark.svg">
-  <img src="docs/assets/logo/greenhouse-mark.svg" alt="Greenhouse logo">
+  <img src="docs/assets/logo/greenhouse-mark.svg" alt="Greenhouse logo" width="120">
 </picture>
 
 # Greenhouse
