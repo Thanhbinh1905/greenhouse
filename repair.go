@@ -458,6 +458,11 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 	if code == 254 || errors.Is(e, exec.ErrWaitDelay) {
 		return code, log, ErrWriterTreeUnknown
 	}
+	if cmd.ProcessState != nil {
+		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
+			return code, log, ErrWriterTreeUnknown
+		}
+	}
 	if ctx.Err() != nil {
 		return code, log, ctx.Err()
 	}
@@ -571,6 +576,21 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		res.Exit = code
 		res.Log = log
 		res.Status = "passed"
+		if errors.Is(err, ErrWriterTreeUnknown) {
+			res.Status = "unknown-outcome"
+			x.Status = "unknown-outcome"
+			x.Writer = "unknown"
+			x.Log = log
+			save()
+			return
+		}
+		if errors.Is(err, context.Canceled) {
+			res.Status = "cancelled"
+			x.Status = "cancelled"
+			x.Log = log
+			save()
+			return
+		}
 		if err != nil || code != 0 {
 			res.Status = "failed"
 			x.Status = "failed-check"

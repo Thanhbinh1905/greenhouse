@@ -313,7 +313,7 @@ func view(s *Store, r *Run) Response {
 			}
 			v.Blocked = append(v.Blocked, "source head or branch moved; old-run advancement blocked")
 		}
-		if r.Status == "running" {
+		if r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking") {
 			v.Actions = append(v.Actions, "cancel")
 		}
 		if r.ReviewUsed+r.RepairUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
@@ -382,7 +382,7 @@ func handle(s *Store, q Request) Response {
 	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted && !handbackReconcile {
 		return fail("source head or branch moved", r)
 	}
-	if q.Op == "cancel" && r.Status == "running" {
+	if q.Op == "cancel" && (r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking")) {
 		r.Status = "cancelling"
 		r.Token = opaque()
 	} else if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required" {
@@ -390,7 +390,7 @@ func handle(s *Store, q Request) Response {
 	}
 	if q.Op == "cancel" {
 		if r.Status != "cancelling" {
-			return fail("no live review", r)
+			return fail("no live execution", r)
 		}
 	} else if q.Op == "prepare" {
 		if r.ReviewUsed != 0 || !validText(q.Intent) {
