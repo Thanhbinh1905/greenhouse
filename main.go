@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -46,6 +47,8 @@ type Event struct {
 	Used   int    `json:"used"`
 	Before int    `json:"before"`
 	After  int    `json:"after"`
+	Review int    `json:"review,omitempty"`
+	Repair int    `json:"repair,omitempty"`
 }
 type Run struct {
 	Intent        string          `json:"intent,omitempty"`
@@ -68,6 +71,8 @@ type Run struct {
 	Repair        *Repair         `json:"repair,omitempty"`
 	Pipeline      *Pipeline       `json:"pipeline,omitempty"`
 	Events        []Event         `json:"events"`
+	Predecessor   string          `json:"predecessor,omitempty"`
+	Successor     string          `json:"successor,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -83,6 +88,9 @@ type Request struct {
 	Target   string    `json:"target,omitempty"`
 	Reason   string    `json:"reason"`
 	Selected []string  `json:"selected,omitempty"`
+	Choice   string    `json:"choice,omitempty"`
+	Limit    int       `json:"limit,omitempty"`
+	Client   string    `json:"client,omitempty"`
 }
 type Response struct {
 	RuleScope  string         `json:"rule_scope,omitempty"`
@@ -99,6 +107,8 @@ type Response struct {
 	Defaults   Settings       `json:"defaults"`
 	Blocked    []string       `json:"blocked"`
 	Actions    []string       `json:"actions"`
+	Decision   *Decision      `json:"decision,omitempty"`
+	Budget     *Budget        `json:"budget,omitempty"`
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -247,11 +257,13 @@ func load(h string) (*Store, error) {
 				return nil, errors.New("invalid configuration snapshot")
 			}
 		}
-		if p := r.Pipeline; p != nil && p.Status == "locally-ready" {
+		if p := r.Pipeline; p != nil && p.Status == "locally-ready" && !localOnlyPipeline(p) {
 			p.Status, p.Failed, p.Reason = "needs-decision", "push", "delivery stages require revalidation"
 			r.Status, r.Stage = "needs-decision", "push"
 			for _, name := range []string{"push", "pr", "ci"} {
-				if stage := p.stage(name); stage != nil && stage.Status == "unsupported" {
+				if stage := p.stage(name); stage == nil {
+					p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending", Reason: "delivery evidence must be collected"})
+				} else if stage.Status == "unsupported" {
 					stage.Status, stage.Reason = "pending", "delivery evidence must be collected"
 				}
 			}
@@ -315,6 +327,7 @@ func view(s *Store, r *Run) Response {
 			v.Blocked = append(v.Blocked, "prepare requires explicit intent, exact target commit and private reviewer.json")
 		}
 		v.Run = r
+		v.Budget = budgetOf(r)
 		v.RunID = r.ID
 		v.Input = r.Input
 		v.Token = r.Token
@@ -334,13 +347,16 @@ func view(s *Store, r *Run) Response {
 				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && (r.Repair.Handback == "awaiting-handback" || r.Repair.Handback == "handback-in-progress") {
 					v.Actions = append(v.Actions, "handback")
 				}
-				if p := r.Pipeline; !held && p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "ci-ready" {
+				if p := r.Pipeline; !held && p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "ci-ready" && p.Status != "locally-ready" && !released(p) && p.open() == nil {
 					v.Actions = append(v.Actions, "pipeline")
+				}
+				if p := r.Pipeline; !held && p != nil && p.open() != nil {
+					v.Actions = append(v.Actions, "decide")
 				}
 				if p := r.Pipeline; !held && p != nil && p.Gate != "" {
 					v.Actions = append(v.Actions, "resolve-conflict")
 				}
-				if p := r.Pipeline; p != nil && p.Status == "ci-ready" && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
+				if p := r.Pipeline; p != nil && (p.Status == "ci-ready" || p.Status == "locally-ready" && localOnlyPipeline(p)) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
 					v.Actions = append(v.Actions, "handback")
 				}
 				if r.ReviewUsed == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
@@ -369,7 +385,7 @@ func view(s *Store, r *Run) Response {
 		if r.Status == "outstanding-findings" && r.Repair == nil && !repairable(r) {
 			v.Blocked = append(v.Blocked, "selected repair unavailable: actionable findings and private trusted fixer/check configuration are required")
 		}
-		if r.RepairUsed > 0 {
+		if r.RepairUsed > 0 && r.Pipeline == nil {
 			v.Blocked = append(v.Blocked, "optional repair admission consumed; no second repair")
 		}
 		if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" {
@@ -381,8 +397,12 @@ func view(s *Store, r *Run) Response {
 		if r.Status == "recovery-required" {
 			v.Blocked = append(v.Blocked, "unknown execution or writer outcome; recovery unsupported")
 		}
-		if p := r.Pipeline; p != nil && p.Failed != "" && p.Status != "running" {
+		if p := r.Pipeline; p != nil && p.Failed != "" && p.Status != "running" && p.open() == nil {
 			v.Blocked = append(v.Blocked, "pipeline stopped at "+p.Failed+": "+p.Reason)
+		}
+		if p := r.Pipeline; p != nil && p.open() != nil {
+			v.Decision = p.open()
+			v.Blocked = append(v.Blocked, "decision required: "+v.Decision.Kind+" ("+strings.Join(v.Decision.Options, ", ")+")")
 		}
 	}
 	return v
@@ -395,7 +415,7 @@ func currentGate(r *Run) string {
 }
 func pipelineCustody(r *Run) bool {
 	p := r.Pipeline
-	return p != nil && p.Worktree != "" && r.Candidate != r.Submitted.Head && p.Handback != "handed-back"
+	return p != nil && p.Worktree != "" && !released(p) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back"
 }
 func valid(s Settings) bool {
 	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32
@@ -411,6 +431,17 @@ func handle(s *Store, q Request) Response {
 	}
 	slot := digest([]string{id.Repository, id.Worktree})
 	r := s.Runs[s.Slots[slot]]
+	if q.Op == "inspect" && q.RunID != "" {
+		other := s.Runs[q.RunID]
+		if other == nil || other.Submitted.Repository != id.Repository {
+			return fail("unknown run for this repository", r)
+		}
+		v := view(s, other)
+		if other != r {
+			v.Actions = []string{"attach", "inspect"}
+		}
+		return v
+	}
 	if q.Op == "attach" || q.Op == "inspect" {
 		if r == nil && q.Op == "attach" {
 			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "created", Actor: "client"}}}
@@ -419,7 +450,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -506,6 +537,26 @@ func handle(s *Store, q Request) Response {
 		}
 		r.Events = append(r.Events, Event{Kind: "resolve-conflict", Actor: "client", Reason: "authorized fixer for target conflict"})
 		r.Token = opaque()
+	} else if q.Op == "decide" {
+		var d *Decision
+		if r.Pipeline != nil {
+			d = r.Pipeline.open()
+		}
+		if d == nil || d.ID != q.Gate {
+			return fail("no open decision for this gate", r)
+		}
+		if custodyHeld(s, r) {
+			return fail("repository candidate custody is already held", r)
+		}
+		actor := q.Client
+		if actor != "terminal" {
+			actor = "axi"
+		}
+		next, err := applyChoice(s, r, d, Answer{Choice: q.Choice, Actor: actor, Reason: q.Reason, Action: q.Action, Selected: q.Selected, Limit: q.Limit})
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		r = next
 	} else if q.Op == "handback" {
 		authorize := authorizeHandback
 		if r.Repair == nil && r.Pipeline != nil {
@@ -524,6 +575,7 @@ func handle(s *Store, q Request) Response {
 		}
 		r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 		invalidate(r, "")
+		supersede(r)
 		r.Token = opaque()
 	} else if q.Op == "apply" || q.Op == "save" {
 		if q.Settings == nil || !valid(*q.Settings) {
@@ -545,7 +597,8 @@ func handle(s *Store, q Request) Response {
 			old := r.Configs[len(r.Configs)-1].Settings
 			r.Configs = append(r.Configs, Snapshot{opaque(), *q.Settings, "run-local"})
 			invalidate(r, "")
-			r.Events = append(r.Events, Event{q.Op, "client", q.Reason, r.ReviewUsed + r.RepairUsed, old.Limit, q.Settings.Limit})
+			supersede(r)
+			r.Events = append(r.Events, Event{Kind: q.Op, Actor: "client", Reason: q.Reason, Used: r.ReviewUsed + r.RepairUsed, Before: old.Limit, After: q.Settings.Limit, Review: r.ReviewUsed, Repair: r.RepairUsed})
 		} else {
 			s.Defaults = *q.Settings
 			r.Events = append(r.Events, Event{Kind: "save", Actor: "client", Reason: q.Reason})
@@ -822,14 +875,16 @@ func daemon(h string) error {
 			r.Status, r.Review.Status, r.Review.Log = status, status, done.log
 			r.Review.Result = done.result
 			if done.result != nil {
-				seen := map[string]bool{}
-				for _, f := range r.Findings {
-					seen[f.ID] = true
+				index := map[string]int{}
+				for i, f := range r.Findings {
+					index[f.ID] = i
 				}
 				for _, f := range done.result.Findings {
-					if !seen[f.ID] {
+					if i, ok := index[f.ID]; ok {
+						r.Findings[i] = f
+					} else {
+						index[f.ID] = len(r.Findings)
 						r.Findings = append(r.Findings, f)
-						seen[f.ID] = true
 					}
 				}
 				if status == "clean-review" && len(r.Findings) > 0 {
@@ -1031,7 +1086,7 @@ func terminal(h, path string) error {
 		} else {
 			fmt.Fprintln(&page, "Greenhouse | independent review")
 		}
-		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nBudget: review %d + repair %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, r.ReviewUsed, r.RepairUsed, strings.Join(s.Settings.Rules, ", "), s.Source)
+		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), s.Source)
 		for _, rule := range v.Rules {
 			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
 			if rule.Error != "" {
@@ -1053,8 +1108,20 @@ func terminal(h, path string) error {
 		if details && r.SelectedDiff != "" {
 			fmt.Fprintln(&page, "Selected committed diff:", r.SelectedDiff)
 		}
+		actionable, informational := outstanding(r)
+		label := map[string]string{}
+		for _, f := range actionable {
+			label[f.ID] = "Outstanding"
+		}
+		for _, f := range informational {
+			label[f.ID] = "Informational"
+		}
 		for _, f := range r.Findings {
-			fmt.Fprintf(&page, "Outstanding %s %s:%d %s | reviewed %s\n", f.Priority, f.File, f.Start, f.Explanation, f.Head)
+			state := label[f.ID]
+			if state == "" {
+				state = "Resolved"
+			}
+			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, f.ID)
 		}
 		if r.Repair != nil {
 			fix := r.Repair
@@ -1080,14 +1147,14 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [m] Resolve conflict\n[f] Selected repair  [h] Handback  [x] Cancel  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		fmt.Print("> ")
 		if !reader.Scan() {
 			return reader.Err()
 		}
-		op := strings.TrimSpace(reader.Text())
+		op := reader.Text()
 		if op == "q" {
 			return nil
 		}
@@ -1102,19 +1169,70 @@ func terminal(h, path string) error {
 			q.Op = "cancel"
 		}
 		if op == "f" {
-			fmt.Print("Selected finding IDs (comma-separated):\n> ")
+			fmt.Print("Full finding IDs (separated by commas or spaces):\n> ")
 			if !reader.Scan() {
 				return nil
 			}
-			for _, id := range strings.Split(reader.Text(), ",") {
-				if id = strings.TrimSpace(id); id != "" {
-					q.Selected = append(q.Selected, id)
-				}
+			var reviewed []string
+			if r.Review != nil && r.Review.Result != nil {
+				reviewed = findingIDs(r.Review.Result.Findings)
 			}
+			selected, whole, err := parseSelection(reader.Text(), reviewed)
+			if whole {
+				err = errors.New("no finding ID entered")
+			}
+			if err != nil {
+				message = err.Error() + "; nothing submitted"
+				continue
+			}
+			q.Selected = selected
 			q.Op = "repair"
 		}
 		if op == "h" {
 			q.Op = "handback"
+		}
+		if op == "d" {
+			if v.Decision == nil {
+				message = "No open decision"
+				continue
+			}
+			fmt.Printf("Choice (%s):\n> ", strings.Join(v.Decision.Options, ", "))
+			if !reader.Scan() {
+				return nil
+			}
+			q.Choice = reader.Text()
+			if !has(v.Decision.Options, q.Choice) {
+				message = "unknown choice " + strconv.Quote(q.Choice) + "; enter an option exactly as listed; nothing submitted"
+				continue
+			}
+			if q.Choice == "repair" && v.Decision.Kind == "findings" {
+				fmt.Print("Full finding IDs (separated by commas or spaces; an empty line selects the whole group):\n> ")
+				if !reader.Scan() {
+					return nil
+				}
+				selected, _, err := parseSelection(reader.Text(), v.Decision.Findings)
+				if err != nil {
+					message = err.Error() + "; nothing submitted"
+					continue
+				}
+				q.Selected = selected
+			}
+			if q.Choice == "increase-cap" {
+				fmt.Print("New limit:\n> ")
+				if !reader.Scan() {
+					return nil
+				}
+				if q.Limit, e = parseCount(reader.Text()); e != nil {
+					message = e.Error() + "; nothing submitted"
+					continue
+				}
+			}
+			fmt.Print("Reason:\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			q.Reason = reader.Text()
+			q.Op = "decide"
 		}
 		if op == "g" {
 			q.Op = "pipeline"
@@ -1144,8 +1262,8 @@ func terminal(h, path string) error {
 				return nil
 			}
 			draft := s.Settings
-			if _, e = fmt.Sscan(reader.Text(), &draft.Mode, &draft.Preset, &draft.Limit); e != nil {
-				message = "Invalid draft"
+			if draft.Mode, draft.Preset, draft.Limit, e = parseDraft(reader.Text()); e != nil {
+				message = "Invalid draft: " + e.Error()
 				continue
 			}
 			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
@@ -1162,7 +1280,7 @@ func terminal(h, path string) error {
 			if !reader.Scan() {
 				return nil
 			}
-			switch strings.TrimSpace(reader.Text()) {
+			switch reader.Text() {
 			case "a":
 				q.Op = "apply"
 			case "d":
@@ -1184,6 +1302,7 @@ func terminal(h, path string) error {
 		}
 		if q.Op != "inspect" {
 			q.Action = opaque()
+			q.Client = "terminal"
 			q.Expected = v.Token
 			q.RunID = v.RunID
 			q.Input = v.Input
@@ -1212,6 +1331,7 @@ func main() {
 			e = d.Decode(&q)
 			if e == nil {
 				q.Path = path
+				q.Client = "axi"
 				var v Response
 				v, e = call(h, q)
 				if e == nil {

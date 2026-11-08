@@ -245,6 +245,8 @@ root=os.path.dirname(__file__)
 json.load(sys.stdin)
 if os.path.exists(root+"/fix-then-review"):
     open(root+"/full-review-mode","w").write("findings")
+if os.path.exists(root+"/fix-cleans"):
+    open(root+"/full-review-mode","w").write("clean")
 open("sample.txt","w").write("repaired\\n")
 ''')
     full_fixer.chmod(0o700)
@@ -275,7 +277,8 @@ open("sample.txt","w").write("repaired\\n")
         return axi()
 
     markers = {"passed": "[pass]", "repaired-unreviewed": "[REPAIRED, NOT REVIEWED]", "failed": "[FAIL]",
-               "not-applicable": "[n/a]", "needs-decision": "[DECISION]", "pending": "[ ]", "unsupported": "[unsupported]", "unconfigured": "[UNCONFIGURED]"}
+               "not-applicable": "[n/a]", "needs-decision": "[DECISION]", "pending": "[ ]", "unsupported": "[unsupported]", "unconfigured": "[UNCONFIGURED]",
+               "accepted-risk": "[ACCEPTED RISK]"}
 
     def parity(state, text):
         for stage in state["run"]["pipeline"]["stages"]:
@@ -294,7 +297,8 @@ open("sample.txt","w").write("repaired\\n")
             (root / "fix-then-review").write_text("1")
         target = full_repo(name, dict(commands, **extra))
         width = widths[name]
-        session(width, ["s", "auto full 6", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        limit = 3 if name == "full-unreviewed" else 6
+        session(width, ["s", f"auto full {limit}", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
         state = settle()
         other = 100 if width == 56 else 56
         text = session(width, ["i", "q"], f"-{name}-result")
@@ -320,8 +324,65 @@ open("sample.txt","w").write("repaired\\n")
         if name == "full-unreviewed":
             assert stages["test"]["status"] == "repaired-unreviewed", stages
             assert "[REPAIRED, NOT REVIEWED] test" in text and "[DECISION] review" in text
+    decision_flows = [
+        ("full-cap-final-fix", 56, "auto full 1", True, ["d", "final-fix", "final repair after cap"]),
+        ("full-ask", 100, "ask full 6", True, ["d", "repair", "", "authorize grouped findings"]),
+        ("full-accept", 56, "auto full 1", False, ["d", "accept-head", "accept this exact head"]),
+        ("full-accept-wide", 100, "auto full 1", False, ["d", "accept-head", "accept this exact head"]),
+    ]
+    for name, width, settings, cleans, answer in decision_flows:
+        (root / "full-review-mode").write_text("findings")
+        (root / "fix-then-review").unlink(missing_ok=True)
+        (root / "fix-cleans").unlink(missing_ok=True)
+        if cleans:
+            (root / "fix-cleans").write_text("1")
+        target = full_repo(name, commands)
+        session(width, ["s", settings, "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        parked = settle()
+        decision = parked["decision"]
+        asked = session(width, ["i", "q"], f"-{name}-decision")
+        assert f"DECISION REQUIRED: {decision['kind']}" in asked and "[d] answers this decision" in asked
+        assert "Options: " + ", ".join(decision["options"]) in asked.replace("\n", "")
+        if name == "full-ask":
+            assert decision["kind"] == "findings" and "Grouped findings:" in asked
+            known = decision["findings"][0]
+            assert f"Grouped findings: {known}" in asked.replace("\n", "")
+            for label, entry, refusal in [("unknown", "zzz", "unknown finding ID: zzz"),
+                                          ("whitespace", "   ", "no finding ID entered"),
+                                          ("truncated", known[:12], f"unknown finding ID: {known[:12]}"),
+                                          ("commas", ",", "no finding ID entered"),
+                                          ("separators", " , ", "no finding ID entered"),
+                                          ("duplicate", f"{known} {known}", f"duplicate finding ID: {known}")]:
+                refused = session(width, ["d", "repair", entry, "i", "q"], f"-{name}-selection-{label}")
+                unchanged = axi()
+                assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["status"] == "needs-decision", (label, unchanged["run"]["pipeline"])
+                assert refusal in refused.replace("\n", "") and "nothing submitted" in refused.replace("\n", ""), label
+        else:
+            assert decision["kind"] == "cap" and "review cap reached" in asked
+            for label, steps, refusal in [("padded-choice", ["d", "final-fix "], 'unknown choice "final-fix "'),
+                                          ("limit", ["d", "increase-cap", "7x"], "digits only"),
+                                          ("settings", ["s", "auto full 9 x"], "Invalid draft")]:
+                refused = session(width, steps + ["i", "q"], f"-{name}-{label}")
+                unchanged = axi()
+                assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["configs"][-1]["settings"]["limit"] == 1, (label, unchanged["run"]["pipeline"])
+                assert refusal in refused.replace("\n", ""), label
+        session(width, answer + ["q"], f"-{name}-answer")
+        state = settle()
+        text = session(width, ["i", "q"], f"-{name}-result")
+        parity(state, text)
+        answered = state["run"]["pipeline"]["decisions"][0]["answer"]
+        assert answered["actor"] == "terminal" and answered["reason"] == answer[-1], answered
+        assert f"Decided {decision['kind']}: {answer[1]} by terminal: {answer[-1]}" in text.replace("\n", "")
+        if name in ("full-cap-final-fix", "full-ask"):
+            assert state["run"]["status"] == "ci-ready", state["run"]["pipeline"]
+            assert "Outcome: REPAIRED PASS" in text and "CLEAN PASS" not in text
+        else:
+            assert "[ACCEPTED RISK] review" in text and "[FAIL] test" in text
+            assert state["run"]["status"] != "ci-ready" and "Outcome:" not in text
+        if name == "full-cap-final-fix":
+            assert "Final-fix by terminal: repair 1/1, final review 1/1" in text
     forge.shutdown()
-    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full delivery to CI-ready, pipeline repair, failure diagnostics and AXI parity; fixture {root}")
+    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
     pidfile = root / "state" / "pid"
     if pidfile.exists():
