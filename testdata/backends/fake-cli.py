@@ -13,7 +13,7 @@ except OSError:
 if os.path.exists(root+'/probe-'+backend):
     home=os.environ['HOME']
     probe={}
-    for name,path in [('credentials',home+'/.claude/.credentials.json'),('state',home+'/.claude.json'),('settings',home+'/.claude/settings.json'),('codex-config',home+'/.codex/config.toml')]:
+    for name,path in [('credentials',home+'/.claude/.credentials.json'),('state',home+'/.claude.json'),('settings',home+'/.claude/settings.json'),('hooks',home+'/.claude/hooks/probe'),('codex-config',home+'/.codex/config.toml')]:
         try:
             open(path,'a').close()
             probe[name]='allowed'

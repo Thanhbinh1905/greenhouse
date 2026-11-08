@@ -293,7 +293,7 @@ open(cwd+'/sample.txt','w').write('tampered\n')`)
 	}
 }
 
-func TestVendorReviewersWriteOnlyTheirTokenFiles(t *testing.T) {
+func TestVendorReviewersCannotWriteBackendConfig(t *testing.T) {
 	t.Parallel()
 	if _, err := landlockABI(); err != nil {
 		t.Skip("Landlock unavailable:", err)
@@ -303,10 +303,10 @@ func TestVendorReviewersWriteOnlyTheirTokenFiles(t *testing.T) {
 			bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
 			probe := filepath.Join(root, "probe")
 			os.Mkdir(probe, 0700)
-			for _, dir := range []string{".claude", ".codex"} {
-				os.Mkdir(filepath.Join(root, dir), 0700)
+			for _, dir := range []string{".claude", ".claude/hooks", ".codex"} {
+				os.MkdirAll(filepath.Join(root, dir), 0700)
 			}
-			for _, file := range []string{".claude/.credentials.json", ".claude.json", ".codex/auth.json"} {
+			for _, file := range []string{".claude/.credentials.json", ".claude.json", ".claude/settings.json", ".codex/auth.json", ".codex/config.toml"} {
 				os.WriteFile(filepath.Join(root, file), []byte("{}"), 0600)
 			}
 			os.WriteFile(filepath.Join(root, "probe-"+c.backend), []byte(probe), 0600)
@@ -324,20 +324,23 @@ func TestVendorReviewersWriteOnlyTheirTokenFiles(t *testing.T) {
 				t.Fatalf("the real Claude config directory is writable: %v", conf)
 			}
 			if c.backend == "claude" {
-				want := map[string]string{"credentials": "allowed", "state": "allowed", "settings": "denied", "codex-config": "denied"}
+				want := map[string]string{"credentials": "denied", "state": "denied", "settings": "denied", "hooks": "denied", "codex-config": "denied"}
 				for k, w := range want {
 					if got[k] != w {
 						t.Fatalf("claude reviewer access %s = %q, want %q (all: %v)", k, got[k], w, got)
 					}
 				}
 				files := jsonText(conf["writable_files"])
-				if conf["status"] != "enforced" || !strings.Contains(files, ".credentials.json") || !strings.Contains(files, ".claude.json") {
+				if conf["status"] != "degraded" || !strings.Contains(conf["reason"].(string), "Claude") || strings.Contains(files, ".credentials.json") || strings.Contains(files, ".claude.json") {
 					t.Fatalf("claude confinement record = %v", conf)
+				}
+				if screen := terminalOutput(t, bin, repo, home, "q\n"); !strings.Contains(screen, "Confinement: reviewer DEGRADED") {
+					t.Fatalf("terminal must show the degraded Claude reviewer:\n%s", screen)
 				}
 				return
 			}
-			if got["settings"] != "denied" || conf["status"] != "degraded" || !strings.Contains(conf["reason"].(string), "CODEX_HOME") || !strings.Contains(jsonText(conf["writable"]), filepath.Join(root, ".codex")) {
-				t.Fatalf("codex must be recorded as degraded while CODEX_HOME stays writable: probe %v record %v", got, conf)
+			if got["codex-config"] != "denied" || conf["status"] != "degraded" || !strings.Contains(conf["reason"].(string), "Codex") || strings.Contains(jsonText(conf["writable"]), filepath.Join(root, ".codex")) {
+				t.Fatalf("codex config must stay read-only and be recorded as degraded: probe %v record %v", got, conf)
 			}
 			if screen := terminalOutput(t, bin, repo, home, "q\n"); !strings.Contains(screen, "Confinement: reviewer DEGRADED") {
 				t.Fatalf("terminal must show the degraded Codex reviewer:\n%s", screen)

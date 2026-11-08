@@ -96,6 +96,12 @@ func snapshotOf(worktree, commit string) (*TreeSnapshot, error) {
 // materialize writes the exact snapshot listing to root from the object store,
 // so attributes such as export-ignore or smudge filters cannot alter it.
 func materialize(worktree string, s *TreeSnapshot, root string) error {
+	return materializeWithOpen(worktree, s, root, func(path string, flags int, mode os.FileMode) (io.WriteCloser, error) {
+		return os.OpenFile(path, flags, mode)
+	})
+}
+
+func materializeWithOpen(worktree string, s *TreeSnapshot, root string, openFile func(string, int, os.FileMode) (io.WriteCloser, error)) (retErr error) {
 	listing, entries, err := treeListing(worktree, s.Commit)
 	if err != nil {
 		return err
@@ -119,7 +125,12 @@ func materialize(worktree string, s *TreeSnapshot, root string) error {
 	if err = c.Start(); err != nil {
 		return err
 	}
-	defer c.Wait()
+	defer func() {
+		if retErr != nil {
+			c.Process.Kill()
+		}
+		c.Wait()
+	}()
 	defer stdin.Close()
 	reader := bufio.NewReader(stdout)
 	var dirs []string
@@ -161,7 +172,7 @@ func materialize(worktree string, s *TreeSnapshot, root string) error {
 			if e.mode == "100755" {
 				perm = 0555
 			}
-			f, err := os.OpenFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+			f, err := openFile(target, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
 			if err != nil {
 				return err
 			}

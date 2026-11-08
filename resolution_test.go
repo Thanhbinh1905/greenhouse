@@ -29,6 +29,20 @@ func capturedReviewInput(t *testing.T, root string) map[string]json.RawMessage {
 	return input
 }
 
+func TestPendingResponsesSurviveCandidateAdvanceUntilRereview(t *testing.T) {
+	t.Parallel()
+	repair := Repair{ID: "repair-1", Stage: "review", Head: "candidate-before-sync", Responses: []ResolutionResponse{{Finding: "finding-1", Response: "fixed"}}}
+	run := &Run{Candidate: "candidate-after-sync", Pipeline: &Pipeline{Repairs: []Repair{repair}}}
+	got, responses := pendingResponses(run)
+	if got == nil || got.ID != repair.ID || len(responses) != 1 {
+		t.Fatalf("responses were dropped after candidate advance: repair=%v responses=%v", got, responses)
+	}
+	run.Pipeline.Reviews = []Execution{{Responses: repair.Responses, Result: &Verdict{Resolutions: []ResolutionCheck{{Finding: "finding-1", Check: "confirmed", Reason: "verified"}}}}}
+	if got, _ := pendingResponses(run); got != nil {
+		t.Fatalf("already checked responses remained pending: %v", got)
+	}
+}
+
 func TestFixedResponseIsCheckedByTheNextIndependentReview(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := resolutionPipeline(t, "auto")

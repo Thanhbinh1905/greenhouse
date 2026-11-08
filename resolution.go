@@ -121,13 +121,32 @@ func pendingResponses(r *Run) (*Repair, []ResolutionResponse) {
 		if x.Stage != "review" {
 			continue
 		}
-		current := x.Head != "" && x.Head == r.Candidate || x.Status == "responded-no-change" && x.Base == r.Candidate
-		if len(x.Responses) == 0 || !current {
+		if len(x.Responses) == 0 || responsesChecked(r.Pipeline, x) {
 			return nil, nil
 		}
 		return x, x.Responses
 	}
 	return nil, nil
+}
+
+func responsesChecked(p *Pipeline, repair *Repair) bool {
+	for _, review := range p.Reviews {
+		if review.Result == nil || len(review.Responses) != len(repair.Responses) {
+			continue
+		}
+		checked := map[string]bool{}
+		for _, c := range review.Result.Resolutions {
+			checked[c.Finding] = true
+		}
+		allChecked := true
+		for _, response := range repair.Responses {
+			allChecked = allChecked && checked[response.Finding]
+		}
+		if allChecked {
+			return true
+		}
+	}
+	return false
 }
 
 type reviewResponse struct {

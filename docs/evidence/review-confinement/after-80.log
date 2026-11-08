@@ -1,14 +1,14 @@
 [2J[HGreenhouse | full pipeline
-Run edddad76e589d6105a2d00b95eca7518
+Run c70c984a2e3c3d09aa22642c535a1205
 Stage: locally-ready | locally-ready
-Candidate: 6d95f5750b0f299ef504bb1d1bc060dba737c03a
+Candidate: 42907520de7cc1a573e656b6b696b98ccd1d737b
 Mode: auto | full | limit 6
 Reviewer: pi / fixture/model
 Fixer: pi / fixture/model
 Budget: review 2 + repair 1 = 3 of 6
 Rules: unslop
-Sources: built-in default: mode, reviewer_backend, fixer_backend, auto_resume |
-run-local: preset, limit, rules, reviewer_model, fixer_model
+Sources: run-local: mode, preset, limit, reviewer_model, fixer_model |
+per-user: rules, reviewer_backend, fixer_backend, auto_resume
 Repository override: none (no .greenhouse.json)
 Rule unslop | resolved | required=true
 Source: builtin:unslop
@@ -17,56 +17,56 @@ Auto-resume: on (default in auto mode)
 Pipeline: locally-ready
 Gate repairs: 0/0 (counted apart from the review cap)
 Outcome: REPAIRED PASS (rereviewed after repair)
-Candidate ref: greenhouse/edddad76e589d6105a2d00b95eca7518
+Candidate ref: greenhouse/c70c984a2e3c3d09aa22642c535a1205
 Confinement: fixer landlock enforced (ABI 8)
   Writable:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7/state/candidates/edddad76e589d6105a2d00b95eca7518
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-e3ihw1v4/state/candidates/c70c984a2e3c3d09aa22642c535a1205
   Writable:
-  /home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-2186172368
-  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
-  Network: TCP connect only to port 36933
+  /home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-405913374
+  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-e3ihw1v4
+  Network: TCP connect only to port 43351
 [pass] intent
   intent, exact target and command plan loaded
-  in 89171fb7 runs 1 fixes 0
+  in 4603e72c runs 1 fixes 0
 [pass] sync
   candidate already contains target
-  in c7280d40 cand 6d95f575 runs 2 fixes 0
-  $ git merge-base --is-ancestor 3cca6bb0be28 HEAD
+  in 94bec527 cand 42907520 runs 2 fixes 0
+  $ git merge-base --is-ancestor 5735809af65a HEAD
     exit=0 passed
 [pass after repair, rereviewed] review
   independent review clean with complete coverage
-  in 78193d67 cand 6d95f575 runs 2 fixes 1
+  in 6cf86e29 cand 42907520 runs 2 fixes 1
 [pass] test
   all configured commands exited 0
-  in f4edf142 cand 6d95f575 runs 1 fixes 0
+  in 2bbccadf cand 42907520 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] docs
   fixture
-  in 69256b85 cand 6d95f575 runs 0 fixes 0
+  in 6b5b170d cand 42907520 runs 0 fixes 0
 [pass] lint
   all configured commands exited 0
-  in 26072591 cand 6d95f575 runs 1 fixes 0
+  in 3425911a cand 42907520 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] push
   local fixture
-  in ba2755fd cand 6d95f575 runs 0 fixes 0
+  in 49c132a2 cand 42907520 runs 0 fixes 0
 [n/a] pr
   local fixture
-  in adf7f08e cand 6d95f575 runs 0 fixes 0
+  in dac10aeb cand 42907520 runs 0 fixes 0
 [n/a] ci
   local fixture
-  in 6581b053 cand 6d95f575 runs 0 fixes 0
+  in fd0a4aa0 cand 42907520 runs 0 fixes 0
 Resolved (fixed) P1 sample.txt:1 Sample text is wrong | reviewed
-1a2399fa25837b58c21d15f43f8d58abdb8aa13f | ID
+bfd1af4d7ea1be0428042b7fb95359b0b7d4d5f0 | ID
 3c4b8c568b26cd65a920a3f202da64be1052e0a539cf1863350f148064642d08
   Response fixed: rewrote the selected line
   Review check confirmed: the line now reads repaired
 Review: clean-review | pi-json-v1 | fixture/model
-Input: 662c0a799482d817a12f42faf03740f21e7f93d51addae2030b8d29ace40d058
-Criteria: 8dee9a866c9ae78ac9f6a1c2e1cc9ce4ada1557e45a013b84eb508b76af9855c
-Config: a36400460b92e2c43abe140dd820b426e6e19cbd4e4da4d7fbc7b3e9d3e2e8ed
+Input: 7a4afb1094ead0f96ad7f583297d0ed93d1d4096e8028c54ace914fee31f2e17
+Criteria: b229964a43d73949e89c64481fd2a454fe6e0e0157a6e78a40b7081e90ca1c5f
+Config: 4031659b5a5efbcb5bcd770229230858c18ef39425e9d7ecb9851b86b8d3ffba
 process completed; exit=0 stdout bytes=614 stderr bytes=0 overflow=false; raw
 diagnostics withheld to avoid credential disclosure
 Snapshot: unchanged | 1 file | tree e2f5c8c3543e993864b8baa296868ca08bd2c5c6
@@ -74,9 +74,9 @@ Snapshot digest:
 2843478be52ed343d8a233e8b6f56f2f5ce1803fd53957fa90bc45cfa6b3e02f
 Confinement: reviewer landlock enforced (ABI 8)
   Writable:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-3239545001/agent
-  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
-  Network: TCP connect only to port 36933
+/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-1671050496/agent
+  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-e3ihw1v4
+  Network: TCP connect only to port 43351
 Reported model: fixture/model
 Coverage: sample.txt
 
@@ -85,20 +85,20 @@ Coverage: sample.txt
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
 [t] Trust repository  [u] Migrate config  [o] Logs
-[x] Cancel  [n] New run  [q] Detach
+[x] Cancel  [n] New run  [e] Recover  [q] Detach
 
 > i
 [2J[HGreenhouse | full pipeline
-Run edddad76e589d6105a2d00b95eca7518
+Run c70c984a2e3c3d09aa22642c535a1205
 Stage: locally-ready | locally-ready
-Candidate: 6d95f5750b0f299ef504bb1d1bc060dba737c03a
+Candidate: 42907520de7cc1a573e656b6b696b98ccd1d737b
 Mode: auto | full | limit 6
 Reviewer: pi / fixture/model
 Fixer: pi / fixture/model
 Budget: review 2 + repair 1 = 3 of 6
 Rules: unslop
-Sources: built-in default: mode, reviewer_backend, fixer_backend, auto_resume |
-run-local: preset, limit, rules, reviewer_model, fixer_model
+Sources: run-local: mode, preset, limit, reviewer_model, fixer_model |
+per-user: rules, reviewer_backend, fixer_backend, auto_resume
 Repository override: none (no .greenhouse.json)
 Rule unslop | resolved | required=true
 Source: builtin:unslop
@@ -107,56 +107,56 @@ Auto-resume: on (default in auto mode)
 Pipeline: locally-ready
 Gate repairs: 0/0 (counted apart from the review cap)
 Outcome: REPAIRED PASS (rereviewed after repair)
-Candidate ref: greenhouse/edddad76e589d6105a2d00b95eca7518
+Candidate ref: greenhouse/c70c984a2e3c3d09aa22642c535a1205
 Confinement: fixer landlock enforced (ABI 8)
   Writable:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7/state/candidates/edddad76e589d6105a2d00b95eca7518
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-e3ihw1v4/state/candidates/c70c984a2e3c3d09aa22642c535a1205
   Writable:
-  /home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-2186172368
-  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
-  Network: TCP connect only to port 36933
+  /home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-405913374
+  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-e3ihw1v4
+  Network: TCP connect only to port 43351
 [pass] intent
   intent, exact target and command plan loaded
-  in 89171fb7 runs 1 fixes 0
+  in 4603e72c runs 1 fixes 0
 [pass] sync
   candidate already contains target
-  in c7280d40 cand 6d95f575 runs 2 fixes 0
-  $ git merge-base --is-ancestor 3cca6bb0be28 HEAD
+  in 94bec527 cand 42907520 runs 2 fixes 0
+  $ git merge-base --is-ancestor 5735809af65a HEAD
     exit=0 passed
 [pass after repair, rereviewed] review
   independent review clean with complete coverage
-  in 78193d67 cand 6d95f575 runs 2 fixes 1
+  in 6cf86e29 cand 42907520 runs 2 fixes 1
 [pass] test
   all configured commands exited 0
-  in f4edf142 cand 6d95f575 runs 1 fixes 0
+  in 2bbccadf cand 42907520 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] docs
   fixture
-  in 69256b85 cand 6d95f575 runs 0 fixes 0
+  in 6b5b170d cand 42907520 runs 0 fixes 0
 [pass] lint
   all configured commands exited 0
-  in 26072591 cand 6d95f575 runs 1 fixes 0
+  in 3425911a cand 42907520 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] push
   local fixture
-  in ba2755fd cand 6d95f575 runs 0 fixes 0
+  in 49c132a2 cand 42907520 runs 0 fixes 0
 [n/a] pr
   local fixture
-  in adf7f08e cand 6d95f575 runs 0 fixes 0
+  in dac10aeb cand 42907520 runs 0 fixes 0
 [n/a] ci
   local fixture
-  in 6581b053 cand 6d95f575 runs 0 fixes 0
+  in fd0a4aa0 cand 42907520 runs 0 fixes 0
 Resolved (fixed) P1 sample.txt:1 Sample text is wrong | reviewed
-1a2399fa25837b58c21d15f43f8d58abdb8aa13f | ID
+bfd1af4d7ea1be0428042b7fb95359b0b7d4d5f0 | ID
 3c4b8c568b26cd65a920a3f202da64be1052e0a539cf1863350f148064642d08
   Response fixed: rewrote the selected line
   Review check confirmed: the line now reads repaired
 Review: clean-review | pi-json-v1 | fixture/model
-Input: 662c0a799482d817a12f42faf03740f21e7f93d51addae2030b8d29ace40d058
-Criteria: 8dee9a866c9ae78ac9f6a1c2e1cc9ce4ada1557e45a013b84eb508b76af9855c
-Config: a36400460b92e2c43abe140dd820b426e6e19cbd4e4da4d7fbc7b3e9d3e2e8ed
+Input: 7a4afb1094ead0f96ad7f583297d0ed93d1d4096e8028c54ace914fee31f2e17
+Criteria: b229964a43d73949e89c64481fd2a454fe6e0e0157a6e78a40b7081e90ca1c5f
+Config: 4031659b5a5efbcb5bcd770229230858c18ef39425e9d7ecb9851b86b8d3ffba
 process completed; exit=0 stdout bytes=614 stderr bytes=0 overflow=false; raw
 diagnostics withheld to avoid credential disclosure
 Snapshot: unchanged | 1 file | tree e2f5c8c3543e993864b8baa296868ca08bd2c5c6
@@ -164,9 +164,9 @@ Snapshot digest:
 2843478be52ed343d8a233e8b6f56f2f5ce1803fd53957fa90bc45cfa6b3e02f
 Confinement: reviewer landlock enforced (ABI 8)
   Writable:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-3239545001/agent
-  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
-  Network: TCP connect only to port 36933
+/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-1671050496/agent
+  Writable: /home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-e3ihw1v4
+  Network: TCP connect only to port 43351
 Reported model: fixture/model
 Coverage: sample.txt
 
@@ -175,6 +175,6 @@ Coverage: sample.txt
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
 [t] Trust repository  [u] Migrate config  [o] Logs
-[x] Cancel  [n] New run  [q] Detach
+[x] Cancel  [n] New run  [e] Recover  [q] Detach
 ok
 >

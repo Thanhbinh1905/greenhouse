@@ -2,11 +2,49 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
+
+type failingSnapshotWriter struct{}
+
+func (failingSnapshotWriter) Write([]byte) (int, error) { return 0, os.ErrPermission }
+func (failingSnapshotWriter) Close() error              { return nil }
+
+func TestMaterializeStopsCatFileAfterBlobWriteFailure(t *testing.T) {
+	t.Parallel()
+	_, repo, _ := fixture(t)
+	large := make([]byte, 8<<20)
+	if err := os.WriteFile(filepath.Join(repo, "large.bin"), large, 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "large.bin")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "large blob")
+	commit := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	snapshot, err := snapshotOf(repo, commit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		result <- materializeWithOpen(repo, snapshot, filepath.Join(filepath.Dir(repo), "failed-snapshot"), func(string, int, os.FileMode) (io.WriteCloser, error) {
+			return failingSnapshotWriter{}, nil
+		})
+	}()
+	select {
+	case err := <-result:
+		if !errors.Is(err, os.ErrPermission) {
+			t.Fatalf("materialize error = %v, want write failure", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("materialize hung after a blob write failure")
+	}
+}
 
 func TestReviewerReceivesReadOnlyFullTreeSnapshot(t *testing.T) {
 	t.Parallel()

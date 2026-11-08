@@ -105,43 +105,27 @@ func agentPorts(config ReviewerConfig) []int {
 	return ports
 }
 
-// backendGrants returns what a vendor CLI must write: Claude Code refreshes
-// only its token files, while Codex keeps login, databases and temporary files
-// throughout CODEX_HOME, so granting it makes the role degraded.
-func backendGrants(backend string) (files, dirs []string, degraded string) {
-	h, _ := os.UserHomeDir()
+func backendDegradedReason(backend string) string {
 	switch backend {
 	case backendClaude:
-		files = []string{filepath.Join(h, ".claude", ".credentials.json"), filepath.Join(h, ".claude.json")}
-		if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-			files = []string{filepath.Join(dir, ".credentials.json"), filepath.Join(dir, ".claude.json")}
-		}
+		return "Claude Code may require writable session state in its config directory; credentials and config remain read-only"
 	case backendCodex:
-		dir := os.Getenv("CODEX_HOME")
-		if dir == "" {
-			dir = filepath.Join(h, ".codex")
-		}
-		dirs = []string{dir}
-		degraded = "Codex keeps its login, state databases and temporary files in CODEX_HOME (" + dir + "), which stays writable; edits there can change later Codex sessions"
+		return "Codex requires writable session state in CODEX_HOME; config and credentials remain read-only"
+	default:
+		return ""
 	}
-	return files, dirs, degraded
 }
 
 func confinementFor(role string, config ReviewerConfig, writable []string) (*confinePolicy, Confinement) {
 	c := Confinement{Mechanism: "landlock", Role: role, Writable: []string{}}
-	files, dirs, degraded := backendGrants(backendOf(config))
-	paths := append(append([]string{}, writable...), dirs...)
+	degraded := backendDegradedReason(backendOf(config))
+	paths := append([]string{}, writable...)
 	if trusted, err := trustedBackends(); err == nil {
 		paths = append(paths, trusted.Writable[role]...)
 	}
 	for _, p := range paths {
 		if info, err := os.Stat(p); err == nil && info.IsDir() && filepath.IsAbs(p) {
 			c.Writable = append(c.Writable, filepath.Clean(p))
-		}
-	}
-	for _, f := range files {
-		if info, err := os.Stat(f); err == nil && info.Mode().IsRegular() && filepath.IsAbs(f) {
-			c.Files = append(c.Files, filepath.Clean(f))
 		}
 	}
 	abi, err := landlockABI()
