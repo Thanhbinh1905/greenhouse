@@ -357,12 +357,12 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 		}
 		settings := old.Settings
 		settings.Limit = a.Limit
-		r.Configs = append(r.Configs, Snapshot{ID: opaque(), Settings: settings, Source: "cap-increase"})
+		r.Configs = append(r.Configs, nextSnapshot(old, settings, "cap-increase"))
 		r.Events = append(r.Events, Event{Kind: "cap-increase", Actor: a.Actor, Reason: a.Reason, Used: r.ReviewUsed + r.RepairUsed, Before: old.Settings.Limit, After: a.Limit, Review: r.ReviewUsed, Repair: r.RepairUsed})
 	case "rethink":
 		resume = false
 		p.Status, r.Status = "rethought", "rethought"
-		next = &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: r.Submitted, Candidate: r.Submitted.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: r.Configs[len(r.Configs)-1].Settings, Source: "rethink of " + r.ID}}, Events: []Event{{Kind: "rethink", Actor: a.Actor, Reason: "successor of " + r.ID + ": " + a.Reason, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed}}}
+		next = &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: r.Submitted, Candidate: r.Submitted.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], r.Configs[len(r.Configs)-1].Settings, "rethink of "+r.ID)}, Events: []Event{{Kind: "rethink", Actor: a.Actor, Reason: "successor of " + r.ID + ": " + a.Reason, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed}}}
 		r.Successor = next.ID
 		s.Runs[next.ID] = next
 		s.Slots[digest([]string{r.Submitted.Repository, r.Submitted.Worktree})] = next.ID

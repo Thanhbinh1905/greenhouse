@@ -382,7 +382,7 @@ func switchBackend(r *Run, role string, to BackendChoice, actor, reason string) 
 			r.Reviewer = &cfg
 		}
 	}
-	r.Configs = append(r.Configs, Snapshot{ID: opaque(), Settings: settings, Source: "fallback"})
+	r.Configs = append(r.Configs, nextSnapshot(r.Configs[len(r.Configs)-1], settings, "fallback"))
 	r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 	invalidate(r, "")
 	supersede(r)
@@ -460,7 +460,7 @@ func rerunStage(s *Store, r *Run, actor string) error {
 
 func restartRun(s *Store, r *Run, source Identity, actor string) *Run {
 	settings := r.Configs[len(r.Configs)-1].Settings
-	next := &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: settings, Source: "rerun from start of " + r.ID}}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}}
+	next := &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}}
 	if r.Intent != "" && r.Target != "" {
 		if err := prepareRun(next, r.Intent, r.Target); err != nil {
 			next.Events = append(next.Events, Event{Kind: "prepare-needed", Actor: "daemon", Reason: err.Error()})
