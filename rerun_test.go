@@ -11,7 +11,7 @@ import (
 func TestRerunFailedGateKeepsEarlierStagesAndBudget(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
-		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation"}, "repair_limit": 0}
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}, "repair_limit": 0}
 	})
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
@@ -38,7 +38,7 @@ func TestRerunFailedGateKeepsEarlierStagesAndBudget(t *testing.T) {
 
 func TestRerunAfterCancelAndRefusalWhileLive(t *testing.T) {
 	t.Parallel()
-	bin, repo, home, v := pipelineFixture(t, repairPlan)
+	bin, repo, home, v := pipelineFixture(t, localPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600)
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
@@ -68,7 +68,7 @@ func TestRerunAfterCancelAndRefusalWhileLive(t *testing.T) {
 func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
-		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation"}, "repair_limit": 0}
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}, "repair_limit": 0}
 	})
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)

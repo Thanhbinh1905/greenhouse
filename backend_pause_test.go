@@ -64,7 +64,7 @@ func TestQuotaPausesOnePassReviewWithoutSpendingBudgetAndResumes(t *testing.T) {
 
 func pipelineWith(t *testing.T, reviewer, reviewerModel, fixer, fixerModel string) (string, string, string, string, map[string]any) {
 	t.Helper()
-	bin, repo, home, v := pipelineFixture(t, repairPlan)
+	bin, repo, home, v := pipelineFixture(t, localPlan)
 	root := installAgentCLIs(t, home)
 	v = mutate(t, bin, repo, home, v, "apply", "backends", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": reviewer, "reviewer_model": reviewerModel, "fixer_backend": fixer, "fixer_model": fixerModel})
 	if v["outcome"] != "ok" {
@@ -152,4 +152,10 @@ func TestFailedAndPausedAttemptsKeepReportedUsage(t *testing.T) {
 	if last["outcome"] != "inconclusive" || last["cost_usd"].(float64) != 6.0519999999999997e-05 || last["tokens"].(float64) != 55 {
 		t.Fatalf("an inconclusive attempt must keep its reported usage: %v", last)
 	}
+}
+
+func localPlan(root string) map[string]any {
+	plan := repairPlan(root)
+	plan["not_applicable"] = map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}
+	return plan
 }

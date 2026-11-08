@@ -7,28 +7,39 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type CommandPlan struct {
-	Name          string            `json:"name"`
-	Email         string            `json:"email"`
-	Test          [][]string        `json:"test,omitempty"`
-	Lint          [][]string        `json:"lint,omitempty"`
-	Docs          [][]string        `json:"docs,omitempty"`
-	DocsPaths     []string          `json:"docs_paths,omitempty"`
-	NotApplicable map[string]string `json:"not_applicable,omitempty"`
-	Repairs       []string          `json:"repairs,omitempty"`
-	RepairLimit   int               `json:"repair_limit"`
-	Yolo          *YoloPolicy       `json:"yolo,omitempty"`
+	Name           string            `json:"name"`
+	Remote         string            `json:"remote"`
+	GitHubOwner    string            `json:"github_owner"`
+	GitHubRepo     string            `json:"github_repo"`
+	PullBase       string            `json:"pull_base"`
+	PullTitle      string            `json:"pull_title"`
+	RequiredChecks []string          `json:"required_checks,omitempty"`
+	Email          string            `json:"email"`
+	Test           [][]string        `json:"test,omitempty"`
+	Lint           [][]string        `json:"lint,omitempty"`
+	Docs           [][]string        `json:"docs,omitempty"`
+	DocsPaths      []string          `json:"docs_paths,omitempty"`
+	NotApplicable  map[string]string `json:"not_applicable,omitempty"`
+	Repairs        []string          `json:"repairs,omitempty"`
+	RepairLimit    int               `json:"repair_limit"`
+	Yolo           *YoloPolicy       `json:"yolo,omitempty"`
 }
 type StageResult struct {
 	Name      string        `json:"name"`
+	URL       string        `json:"url,omitempty"`
+	Head      string        `json:"head,omitempty"`
+	Number    int           `json:"number,omitempty"`
 	Status    string        `json:"status"`
 	Inputs    string        `json:"inputs,omitempty"`
 	Candidate string        `json:"candidate,omitempty"`
@@ -69,6 +80,7 @@ type Pipeline struct {
 }
 type stepOutcome struct {
 	Run, Step string
+	URL       string
 	Stage     StageResult
 	Head      string
 	Status    string
@@ -81,7 +93,7 @@ type stepOutcome struct {
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
-var gateStages = map[string]bool{"test": true, "lint": true, "docs": true}
+var gateStages = map[string]bool{"test": true, "lint": true, "docs": true, "ci": true}
 
 func trustedPlan() (CommandPlan, map[string]string, error) {
 	var plan CommandPlan
@@ -125,9 +137,31 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 			}
 		}
 	}
-	for stage := range plan.NotApplicable {
-		if !gateStages[stage] {
-			return plan, nil, errors.New("only test, lint and docs may be not applicable")
+	if plan.Remote != "" && (!safeRemote(plan.Remote) || plan.GitHubOwner == "" || plan.GitHubRepo == "" || plan.PullBase == "") {
+		return plan, nil, errors.New("delivery requires a safe remote, GitHub owner, repository and pull base")
+	}
+	if plan.Remote != "" && plan.NotApplicable["ci"] == "" && len(plan.RequiredChecks) == 0 {
+		return plan, nil, errors.New("delivery requires trusted required_checks, or ci must be explicitly not applicable")
+	}
+	seenChecks := map[string]bool{}
+	for _, name := range plan.RequiredChecks {
+		if !validText(name) || seenChecks[name] {
+			return plan, nil, errors.New("required_checks must contain unique non-empty names")
+		}
+		seenChecks[name] = true
+	}
+	if plan.Remote == "" && (plan.GitHubOwner != "" || plan.GitHubRepo != "" || plan.PullBase != "") {
+		return plan, nil, errors.New("delivery settings must be configured together")
+	}
+	if plan.Remote != "" && (plan.NotApplicable["push"] != "" || plan.NotApplicable["pr"] != "") {
+		return plan, nil, errors.New("configured delivery cannot mark push or pr not applicable")
+	}
+	for stage, reason := range plan.NotApplicable {
+		if stage != "test" && stage != "lint" && stage != "docs" && stage != "push" && stage != "pr" && stage != "ci" {
+			return plan, nil, errors.New("only pipeline stages may be not applicable")
+		}
+		if !validText(reason) {
+			return plan, nil, errors.New("not-applicable stages need a reason: " + stage)
 		}
 	}
 	if y := plan.Yolo; y != nil && (!validText(y.Actor) || len(y.Actor) > 64 || y.Cap != "" && y.Cap != "final-fix" && y.Cap != "accept-head") {
@@ -135,7 +169,7 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	}
 	for _, stage := range plan.Repairs {
 		if !gateStages[stage] {
-			return plan, nil, errors.New("only test, lint and docs repairs may be authorized")
+			return plan, nil, errors.New("only test, lint, docs and ci repairs may be authorized")
 		}
 	}
 	for _, name := range plan.DocsPaths {
@@ -153,15 +187,21 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	return plan, digests, nil
 }
 
+func safeRemote(remote string) bool {
+	if remote == "" || strings.ContainsAny(remote, "\x00\n\r") || strings.HasPrefix(remote, "-") || !strings.ContainsAny(remote, "/:") {
+		return false
+	}
+	if strings.Contains(remote, "://") {
+		parsed, err := url.Parse(remote)
+		return err == nil && parsed.Host != "" && parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
+	}
+	return true
+}
+
 func newPipeline(plan CommandPlan, digests map[string]string) *Pipeline {
 	p := &Pipeline{Status: "prepared", Plan: plan, CommandDigests: digests, PlanDigest: digest([]any{plan, digests}), RepairLimit: plan.RepairLimit}
 	for _, name := range pipelineStages {
-		status := "pending"
-		reason := ""
-		if name == "push" || name == "pr" || name == "ci" {
-			status, reason = "unsupported", "not yet supported; stops at local readiness"
-		}
-		p.Stages = append(p.Stages, StageResult{Name: name, Status: status, Reason: reason})
+		p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending"})
 	}
 	return p
 }
@@ -211,6 +251,12 @@ func stageInputs(r *Run, name string) string {
 			review = r.Review.InputDigest
 		}
 		return digest([]any{name, r.Candidate, p.PlanDigest, review})
+	case "ci":
+		pr := p.stage("pr")
+		if pr == nil {
+			return digest([]any{name, r.Candidate, p.PlanDigest, 0, ""})
+		}
+		return digest([]any{name, r.Candidate, p.PlanDigest, pr.Number, pr.Head})
 	}
 	return digest([]any{name, r.Candidate, p.PlanDigest})
 }
@@ -224,12 +270,19 @@ func invalidate(r *Run, repaired string) {
 		if st.Inputs == "" || st.Status == "unsupported" || st.Inputs == stageInputs(r, st.Name) {
 			continue
 		}
+		if st.Name == "push" || st.Name == "pr" || st.Name == "ci" {
+			st.Runs = 0
+			st.Commands = nil
+			if st.Name == "pr" {
+				st.Number, st.URL = 0, ""
+			}
+		}
 		if st.Name == repaired {
 			st.Status = "repaired-unreviewed"
 		} else if st.Status != "repaired-unreviewed" {
 			st.Status = "stale"
 		}
-		if r.Pipeline.Status == "locally-ready" {
+		if r.Pipeline.Status == "ci-ready" || r.Pipeline.Status == "locally-ready" {
 			r.Pipeline.Status = "stale"
 		}
 	}
@@ -237,6 +290,18 @@ func invalidate(r *Run, repaired string) {
 
 func released(p *Pipeline) bool {
 	return p.Status == "discarded" || p.Status == "rethought" || p.Status == "restarted"
+}
+
+func localOnlyPipeline(p *Pipeline) bool {
+	if p == nil || p.Plan.Remote != "" {
+		return false
+	}
+	for _, name := range []string{"push", "pr", "ci"} {
+		if p.Plan.NotApplicable[name] == "" {
+			return false
+		}
+	}
+	return true
 }
 
 func custodyHeld(s *Store, r *Run) bool {
@@ -259,7 +324,10 @@ func admitPipeline(s *Store, r *Run) error {
 	if p == nil || r.Configs[len(r.Configs)-1].Settings.Preset != "full" {
 		return errors.New("prepare under the full preset first")
 	}
-	if p.Status == "locally-ready" || p.Handback == "handed-back" {
+	if p.Status == "ci-ready" || p.Handback == "handed-back" {
+		return errors.New("pipeline already reached CI readiness")
+	}
+	if p.Status == "locally-ready" {
 		return errors.New("pipeline already reached local readiness")
 	}
 	if released(p) {
@@ -306,6 +374,14 @@ func repairBlocker(r *Run, stage string) string {
 	return ""
 }
 
+func deliveryRetry(st *StageResult) (retry, exhausted bool) {
+	transportFailure := strings.HasPrefix(st.Reason, "push failed:") || strings.HasPrefix(st.Reason, "remote ref probe failed:") || strings.HasPrefix(st.Reason, "pull request reconciliation failed:") || strings.HasPrefix(st.Reason, "check inspection failed:")
+	if !transportFailure || st.Status != "failed" && st.Status != "needs-decision" {
+		return false, false
+	}
+	return st.Runs < 3, st.Runs >= 3
+}
+
 func advancePipeline(s *Store, r *Run) *Step {
 	p := r.Pipeline
 	if id, e := resolve(r.Submitted.Worktree); e != nil || id != r.Submitted {
@@ -314,14 +390,17 @@ func advancePipeline(s *Store, r *Run) *Step {
 	}
 	for i := 0; i < len(p.Stages); i++ {
 		st := &p.Stages[i]
-		if st.Status == "unsupported" {
-			continue
-		}
 		if st.Name == "review" && effectiveRuleSnapshot(r) == nil {
 			r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 		}
 		in := stageInputs(r, st.Name)
-		if st.Inputs == in {
+		retryCI := st.Name == "ci" && st.Status == "needs-decision" && (strings.HasPrefix(st.Reason, "CI checks did not become ready") || strings.HasPrefix(st.Reason, "missing required check:"))
+		retryDelivery, deliveryExhausted := deliveryRetry(st)
+		if st.Inputs == in && deliveryExhausted {
+			park(r, st, "needs-decision", st.Reason+"; transport retry limit exhausted; no fixer dispatched")
+			return nil
+		}
+		if st.Inputs == in && !retryCI && !retryDelivery {
 			switch st.Status {
 			case "passed", "not-applicable":
 				continue
@@ -399,6 +478,16 @@ func advancePipeline(s *Store, r *Run) *Step {
 				x.Budget = "review"
 			}
 			step.ID, step.Kind = x.ID, "review"
+		case "push", "pr", "ci":
+			if reason, ok := p.Plan.NotApplicable[st.Name]; ok {
+				st.Status, st.Inputs, st.Candidate, st.Reason = "not-applicable", in, r.Candidate, reason
+				continue
+			}
+			if p.Plan.Remote == "" {
+				park(r, st, "unconfigured", "trusted GitHub delivery settings are required; missing delivery configuration never passes")
+				return nil
+			}
+			step.Kind = "delivery"
 		default:
 			if st.Name == "docs" {
 				if doc := r.Review.Result.Documentation; doc.Status == "missing" {
@@ -419,14 +508,21 @@ func advancePipeline(s *Store, r *Run) *Step {
 			}
 			step.Kind = "commands"
 		}
-		st.Status, st.Inputs, st.Candidate, st.Reason, st.Commands = "running", in, r.Candidate, "", nil
+		st.Status, st.Inputs, st.Candidate, st.Reason = "running", in, r.Candidate, ""
+		if step.Kind != "delivery" {
+			st.Commands = nil
+		}
 		st.Runs++
 		p.Active = step
 		r.Stage = st.Name
 		r.Token = opaque()
 		return step
 	}
-	p.Status, r.Status, r.Stage = "locally-ready", "locally-ready", "locally-ready"
+	readyStatus := "ci-ready"
+	if p.stage("push").Status == "not-applicable" && p.stage("pr").Status == "not-applicable" && p.stage("ci").Status == "not-applicable" {
+		readyStatus = "locally-ready"
+	}
+	p.Status, r.Status, r.Stage = readyStatus, readyStatus, readyStatus
 	p.Outcome = "clean-pass"
 	for _, x := range p.Repairs {
 		if x.Head != "" {
@@ -437,7 +533,11 @@ func advancePipeline(s *Store, r *Run) *Step {
 		p.Outcome = "accepted-risk"
 	}
 	r.Token = opaque()
-	r.Events = append(r.Events, Event{Kind: "locally-ready", Actor: "daemon", Reason: "all local stages current for candidate " + r.Candidate})
+	event := Event{Kind: readyStatus, Actor: "daemon", Reason: "all configured stages passed for candidate " + r.Candidate}
+	if readyStatus == "ci-ready" {
+		event.Reason = "all required checks passed for candidate " + r.Candidate
+	}
+	r.Events = append(r.Events, event)
 	return nil
 }
 
@@ -593,6 +693,27 @@ func completeStep(r *Run, o stepOutcome) error {
 			p.Conflict = o.Conflict
 			p.Gate = opaque()
 		}
+	case "delivery":
+		st.Status, st.Reason, st.Head, st.URL, st.Number = o.Status, o.Log, o.Head, o.URL, o.Stage.Number
+		st.Commands = append(st.Commands, o.Stage.Commands...)
+		if o.Status == "unknown-outcome" {
+			holdRecovery(r, st.Name, o.Log)
+			return nil
+		}
+		if retry, exhausted := deliveryRetry(st); retry {
+			r.Status, r.Stage, p.Status = "running", st.Name, "running"
+			return nil
+		} else if exhausted {
+			park(r, st, "needs-decision", st.Reason+"; transport retry limit exhausted; no fixer dispatched")
+			return nil
+		}
+		if o.Status == "failed" && gateStages[st.Name] {
+			return nil
+		}
+		if o.Status != "passed" {
+			park(r, st, o.Status, o.Log)
+			return nil
+		}
 	case "review":
 		x := r.Review
 		if x == nil || x.ID != o.Step {
@@ -708,6 +829,142 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 		res.Status = "passed"
 	}
 	return res, nil
+}
+
+func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) (StageResult, string, string) {
+	out := StageResult{Name: stage, Status: "failed", Head: candidate}
+	if p.Plan.Remote == "" {
+		out.Status, out.Reason = "unconfigured", "trusted GitHub delivery settings are required"
+		return out, candidate, ""
+	}
+	if err := worktreeClean(p.Worktree, candidate); err != nil {
+		out.Status, out.Reason = "needs-decision", err.Error()
+		return out, candidate, ""
+	}
+	if stageResult := p.stage(stage); stageResult != nil && stageResult.Runs > 1 {
+		delay := 250 * time.Millisecond * time.Duration(1<<(stageResult.Runs-2))
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			out.Status, out.Reason = "cancelled", "delivery retry backoff cancelled"
+			return out, candidate, ""
+		case <-timer.C:
+		}
+	}
+	identity, err := resolve(p.Worktree)
+	if err != nil || identity.Head != candidate || identity.Branch != p.Ref {
+		out.Status, out.Reason = "needs-decision", "candidate ref identity changed; delivery refused"
+		return out, candidate, ""
+	}
+	switch stage {
+	case "push":
+		ref := strings.TrimPrefix(p.Ref, "refs/heads/")
+		probe, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "ls-remote", p.Plan.Remote, p.Ref), p.CommandDigests)
+		out.Commands = append(out.Commands, probe)
+		if err != nil || probe.Status == "unknown-outcome" {
+			out.Status, out.Reason = "unknown-outcome", "remote ref reconciliation outcome is unknown"
+			return out, candidate, ""
+		}
+		if probe.Status != "passed" {
+			out.Status, out.Reason = "failed", "remote ref probe failed: "+probe.Log
+			return out, candidate, ""
+		}
+		fields := strings.Fields(probe.Output)
+		if len(fields) >= 2 {
+			if fields[1] != p.Ref {
+				out.Status, out.Reason = "needs-decision", "remote candidate ref response was ambiguous"
+				return out, candidate, ""
+			}
+			if fields[0] == candidate {
+				out.Status, out.Reason = "passed", "remote ref already points to exact candidate; push reconciled without replay"
+				return out, candidate, ""
+			}
+			ancestor, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge-base", "--is-ancestor", fields[0], candidate), p.CommandDigests)
+			out.Commands = append(out.Commands, ancestor)
+			if err != nil || ancestor.Status != "passed" {
+				out.Status, out.Reason = "needs-decision", "remote candidate ref is not an ancestor of the authorized candidate"
+				return out, candidate, ""
+			}
+		}
+		args := gitArgv(p.Plan, "push", p.Plan.Remote, candidate+":refs/heads/"+ref)
+		res, err := runGateCommand(ctx, p.Worktree, args, p.CommandDigests)
+		out.Commands = append(out.Commands, res)
+		if err != nil || res.Status == "unknown-outcome" {
+			out.Status, out.Reason = "unknown-outcome", "push outcome is unknown; reconcile remote ref before retry"
+			return out, candidate, ""
+		}
+		if res.Status != "passed" {
+			out.Status, out.Reason = res.Status, "push failed: "+res.Log
+			return out, candidate, ""
+		}
+		out.Status, out.Reason = "passed", "authorized candidate pushed to configured remote"
+	case "pr":
+		forge, err := configuredForge()
+		if err != nil {
+			out.Status, out.Reason = "failed", err.Error()
+			return out, candidate, ""
+		}
+		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
+		title := p.Plan.PullTitle
+		if title == "" {
+			title = "Greenhouse: " + strings.TrimSpace(strings.ReplaceAll(p.Plan.Name, "\n", " "))
+		}
+		pr, err := forge.EnsurePullRequest(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, branch, p.Plan.PullBase, candidate, title, "Validated candidate: `"+candidate+"`. Greenhouse will not merge this pull request.")
+		if err != nil {
+			out.Status, out.Reason = "failed", "pull request reconciliation failed: "+err.Error()
+			return out, candidate, ""
+		}
+		if pr.Head != candidate {
+			out.Status, out.Reason = "needs-decision", "pull request head is missing or differs from the authorized candidate"
+			return out, candidate, pr.URL
+		}
+		out.Status, out.URL, out.Number, out.Reason = "passed", pr.URL, pr.Number, "pull request created or reconciled for exact candidate"
+	case "ci":
+		forge, err := configuredForge()
+		if err != nil {
+			out.Status, out.Reason = "failed", err.Error()
+			return out, candidate, ""
+		}
+		pr := p.stage("pr")
+		if pr == nil || pr.Number <= 0 || pr.Head != candidate {
+			out.Status, out.Reason = "needs-decision", "persisted pull request identity is missing or stale"
+			return out, candidate, ""
+		}
+		deadline := time.NewTimer(10 * time.Minute)
+		defer deadline.Stop()
+		for {
+			passed, reason, err := forge.Checks(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, candidate, pr.Number, p.Plan.RequiredChecks)
+			if err != nil {
+				out.Status, out.Reason = "failed", "check inspection failed: "+err.Error()
+				return out, candidate, ""
+			}
+			if passed {
+				out.Status, out.Reason = "passed", reason
+				return out, candidate, ""
+			}
+			if reason != "checks pending" && reason != "missing checks" && reason != "checks incomplete: additional pages remain" && !strings.HasPrefix(reason, "checks pending:") && !strings.HasPrefix(reason, "missing required check:") {
+				out.Status, out.Reason = "needs-decision", reason
+				if strings.HasPrefix(reason, "check failed:") {
+					out.Status = "failed"
+				}
+				return out, candidate, ""
+			}
+			poll := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				poll.Stop()
+				out.Status, out.Reason = "cancelled", "CI polling cancelled"
+				return out, candidate, ""
+			case <-deadline.C:
+				poll.Stop()
+				out.Status, out.Reason = "needs-decision", "CI checks did not become ready within 10 minutes: "+reason
+				return out, candidate, ""
+			case <-poll.C:
+			}
+		}
+	}
+	return out, candidate, out.URL
 }
 
 func worktreeClean(dir, head string) error {
@@ -1044,8 +1301,8 @@ func authorizePipelineHandback(r *Run) error {
 	if p.Handback == "handed-back" || p.Handback == "handback-in-progress" {
 		return nil
 	}
-	if p.Status != "locally-ready" || r.Candidate == r.Submitted.Head {
-		return errors.New("only a locally ready candidate with new commits can be handed back")
+	if p.Status != "ci-ready" && !(p.Status == "locally-ready" && localOnlyPipeline(p)) || r.Candidate == r.Submitted.Head {
+		return errors.New("only a CI-ready or explicitly local-only ready candidate with new commits can be handed back")
 	}
 	p.Handback = "handback-in-progress"
 	return nil
@@ -1202,7 +1459,7 @@ func renderPipeline(w io.Writer, r *Run, details bool) {
 		fmt.Fprintf(w, " | stopped at %s", p.Failed)
 	}
 	fmt.Fprintf(w, "\nGate repairs: %d/%d (counted apart from the review cap)\n", p.RepairUsed, p.RepairLimit)
-	if outcome := outcomeLabels[p.Outcome]; outcome != "" && p.Status == "locally-ready" {
+	if outcome := outcomeLabels[p.Outcome]; outcome != "" && (p.Status == "locally-ready" || p.Status == "ci-ready") {
 		fmt.Fprintln(w, "Outcome: "+outcome)
 	}
 	if g := p.FinalFix; g != nil {
@@ -1245,6 +1502,12 @@ func renderPipeline(w io.Writer, r *Run, details bool) {
 			marker = "[pass after repair, rereviewed]"
 		}
 		fmt.Fprintf(w, "%s %s\n", marker, st.Name)
+		if st.Head != "" {
+			fmt.Fprintf(w, "  head %s\n", st.Head)
+		}
+		if st.URL != "" {
+			fmt.Fprintf(w, "  PR %s\n", st.URL)
+		}
 		if st.Reason != "" {
 			fmt.Fprintln(w, "  "+st.Reason)
 		}

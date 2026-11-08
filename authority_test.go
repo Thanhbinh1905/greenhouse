@@ -11,7 +11,17 @@ import (
 
 func authorityFixture(t *testing.T, mode string, limit int, plan func(root string) map[string]any) (string, string, string, string, map[string]any) {
 	t.Helper()
-	bin, repo, home, v := pipelineFixture(t, plan)
+	localPlan := func(root string) map[string]any {
+		p := plan(root)
+		notApplicable, _ := p["not_applicable"].(map[string]string)
+		if notApplicable == nil {
+			notApplicable = map[string]string{}
+		}
+		notApplicable["push"], notApplicable["pr"], notApplicable["ci"] = "authority test is local only", "authority test is local only", "authority test is local only"
+		p["not_applicable"] = notApplicable
+		return p
+	}
+	bin, repo, home, v := pipelineFixture(t, localPlan)
 	v = mutate(t, bin, repo, home, v, "apply", "mode-"+mode, map[string]any{"mode": mode, "preset": "full", "limit": limit, "rules": []string{"unslop"}})
 	if v["outcome"] != "ok" {
 		t.Fatal(v)

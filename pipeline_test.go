@@ -200,10 +200,10 @@ func TestFullPipelineCommandStagesDispatchNoAgent(t *testing.T) {
 	}
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
-	if run["status"] != "locally-ready" {
-		t.Fatalf("pipeline did not reach local readiness: %v", run["pipeline"])
+	if run["status"] != "needs-decision" || stageOf(t, done, "push")["status"] != "unconfigured" {
+		t.Fatalf("pipeline passed without trusted delivery settings: %v", run["pipeline"])
 	}
-	want := map[string]string{"intent": "passed", "sync": "passed", "review": "passed", "test": "passed", "docs": "not-applicable", "lint": "passed", "push": "unsupported", "pr": "unsupported", "ci": "unsupported"}
+	want := map[string]string{"intent": "passed", "sync": "passed", "review": "passed", "test": "passed", "docs": "not-applicable", "lint": "passed", "push": "unconfigured", "pr": "pending", "ci": "pending"}
 	for name, status := range want {
 		if got := stageOf(t, done, name)["status"]; got != status {
 			t.Fatalf("stage %s = %v, want %s", name, got, status)
@@ -309,8 +309,8 @@ func TestGateRepairRerunsReviewAndGates(t *testing.T) {
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
 	p := run["pipeline"].(map[string]any)
-	if run["status"] != "locally-ready" {
-		t.Fatalf("repair did not converge: %v", p)
+	if run["status"] != "needs-decision" || stageOf(t, done, "push")["status"] != "unconfigured" {
+		t.Fatalf("repair did not stop at unconfigured delivery: %v", p)
 	}
 	if run["candidate"] == submitted || p["repair_used"] != float64(1) || run["review_used"] != float64(2) || run["repair_used"] != float64(0) {
 		t.Fatalf("budgets or candidate identity wrong: %v", run)
@@ -348,17 +348,14 @@ func TestGateRepairRerunsReviewAndGates(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600)
 	refused := mutate(t, bin, repo, home, done, "handback", "dirty-handback", nil)
-	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "dirty") {
+	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "CI-ready") {
 		t.Fatal(refused)
 	}
 	if b, _ := os.ReadFile(filepath.Join(repo, "dirty")); string(b) != "preserved" {
 		t.Fatal("dirty source work changed")
 	}
-	os.Remove(filepath.Join(repo, "dirty"))
-	current := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
-	handed := mutate(t, bin, repo, home, current, "handback", "handback", nil)
-	if handed["outcome"] != "ok" || strings.TrimSpace(git(t, repo, "rev-parse", "HEAD")) != run["candidate"] {
-		t.Fatal(handed)
+	if strings.TrimSpace(git(t, repo, "rev-parse", "HEAD")) != submitted {
+		t.Fatal("blocked delivery changed the source branch")
 	}
 }
 
@@ -531,7 +528,7 @@ func TestTargetConflictBecomesGatedFixerAction(t *testing.T) {
 	}
 	done := waitPipeline(t, bin, repo, home)
 	run = runOf(t, done)
-	if run["status"] != "locally-ready" || run["pipeline"].(map[string]any)["repair_used"] != float64(1) {
+	if run["status"] != "needs-decision" || stageOf(t, done, "push")["status"] != "unconfigured" || run["pipeline"].(map[string]any)["repair_used"] != float64(1) {
 		t.Fatalf("resolved conflict did not converge: %v", run["pipeline"])
 	}
 	worktree := run["pipeline"].(map[string]any)["worktree"].(string)
@@ -550,23 +547,23 @@ func TestChangedInputsInvalidateOnlyAffectedEvidence(t *testing.T) {
 	root := filepath.Dir(home)
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	ready := waitPipeline(t, bin, repo, home)
-	if runOf(t, ready)["status"] != "locally-ready" {
+	if runOf(t, ready)["status"] != "needs-decision" {
 		t.Fatal(runOf(t, ready)["pipeline"])
 	}
 	raised := mutate(t, bin, repo, home, ready, "apply", "raise-limit", map[string]any{"mode": "ask", "preset": "full", "limit": 7, "rules": []string{"unslop"}})
-	if raised["outcome"] != "ok" || stageOf(t, raised, "review")["status"] != "passed" || runOf(t, raised)["pipeline"].(map[string]any)["status"] != "locally-ready" {
+	if raised["outcome"] != "ok" || stageOf(t, raised, "review")["status"] != "passed" || runOf(t, raised)["pipeline"].(map[string]any)["status"] == "ci-ready" {
 		t.Fatalf("a mode or limit change invalidated review evidence: %v", runOf(t, raised)["pipeline"])
 	}
 	changed := mutate(t, bin, repo, home, raised, "apply", "change-rules", map[string]any{"mode": "auto", "preset": "full", "limit": 7, "rules": []string{"unslop", "no-comments"}})
-	if changed["outcome"] != "ok" || runOf(t, changed)["status"] == "locally-ready" || runOf(t, changed)["pipeline"].(map[string]any)["status"] == "locally-ready" {
-		t.Fatalf("configuration change kept local readiness: %v", runOf(t, changed)["pipeline"])
+	if changed["outcome"] != "ok" || runOf(t, changed)["status"] == "ci-ready" || runOf(t, changed)["pipeline"].(map[string]any)["status"] == "ci-ready" {
+		t.Fatalf("configuration change kept CI readiness: %v", runOf(t, changed)["pipeline"])
 	}
 	if stageOf(t, changed, "review")["status"] != "stale" || stageOf(t, changed, "test")["status"] != "passed" {
 		t.Fatalf("invalidation not limited to declared inputs: %v", runOf(t, changed)["pipeline"])
 	}
 	mutate(t, bin, repo, home, changed, "pipeline", "continue", nil)
 	done := waitPipeline(t, bin, repo, home)
-	if runOf(t, done)["status"] != "locally-ready" {
+	if runOf(t, done)["status"] != "needs-decision" {
 		t.Fatal(runOf(t, done)["pipeline"])
 	}
 	if got := countLines(t, filepath.Join(root, "review-invocations")); got["review"] != 2 {
@@ -603,7 +600,7 @@ func TestPipelineCancellationStopsCommandAndKeepsBudget(t *testing.T) {
 	}
 	os.Remove(filepath.Join(root, "sleep-test"))
 	mutate(t, bin, repo, home, done, "pipeline", "continue", nil)
-	if runOf(t, waitPipeline(t, bin, repo, home))["status"] != "locally-ready" {
+	if runOf(t, waitPipeline(t, bin, repo, home))["status"] != "needs-decision" {
 		t.Fatal("explicit continue after cancellation did not finish")
 	}
 	if got := countLines(t, filepath.Join(root, "review-invocations")); got["review"] != 1 {
@@ -681,7 +678,7 @@ func TestRetainedFindingsBlockCleanFullReview(t *testing.T) {
 	if got := countLines(t, filepath.Join(root, "review-invocations")); got["review"] != 2 {
 		t.Fatalf("review not rerun: %v", got)
 	}
-	if runOf(t, done)["status"] == "locally-ready" || stageOf(t, done, "review")["status"] != "needs-decision" || len(runOf(t, done)["findings"].([]any)) != 1 {
+	if runOf(t, done)["status"] == "ci-ready" || stageOf(t, done, "review")["status"] != "needs-decision" || len(runOf(t, done)["findings"].([]any)) != 1 {
 		t.Fatalf("omitted retained finding was treated as resolved: %v", runOf(t, done)["pipeline"])
 	}
 	if got := countLines(t, filepath.Join(root, "commands.log")); got["test"] != 0 {

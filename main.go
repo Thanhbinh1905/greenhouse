@@ -315,7 +315,29 @@ func load(h string) (*Store, error) {
 				return nil, errors.New("invalid configuration snapshot")
 			}
 		}
+		if p := r.Pipeline; p != nil && p.Status == "locally-ready" && !localOnlyPipeline(p) {
+			p.Status, p.Failed, p.Reason = "needs-decision", "push", "delivery stages require revalidation"
+			r.Status, r.Stage = "needs-decision", "push"
+			for _, name := range []string{"push", "pr", "ci"} {
+				if stage := p.stage(name); stage == nil {
+					p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending", Reason: "delivery evidence must be collected"})
+				} else if stage.Status == "unsupported" {
+					stage.Status, stage.Reason = "pending", "delivery evidence must be collected"
+				}
+			}
+		}
 		if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" {
+			if p := r.Pipeline; p != nil && p.Active != nil && p.Active.Kind == "delivery" && r.Status == "running" {
+				st := p.stage(p.Active.Stage)
+				if st == nil {
+					return nil, errors.New("interrupted delivery stage is missing")
+				}
+				st.Status, st.Inputs, st.Reason = "pending", "", "interrupted delivery reconciled from durable stage identity"
+				p.Active, p.Status = nil, "running"
+				r.Status, r.Stage, r.Token = "running", "pipeline", opaque()
+				r.Events = append(r.Events, Event{Kind: "delivery-reconcile", Actor: "daemon", Reason: "resume idempotent forge step without agent dispatch"})
+				continue
+			}
 			r.Status = "recovery-required"
 			if p := r.Pipeline; p != nil {
 				stage := ""
@@ -352,7 +374,7 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"push, PR and CI unsupported; the full pipeline stops at local readiness", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
 	if r != nil {
 		v.RuleScope = effectiveRuleScope(r)
 		v.Rules, v.RulesReady = effectiveRules(r)
@@ -383,7 +405,7 @@ func view(s *Store, r *Run) Response {
 				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && (r.Repair.Handback == "awaiting-handback" || r.Repair.Handback == "handback-in-progress") {
 					v.Actions = append(v.Actions, "handback")
 				}
-				if p := r.Pipeline; !held && p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "locally-ready" && !released(p) && p.open() == nil {
+				if p := r.Pipeline; !held && p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "ci-ready" && p.Status != "locally-ready" && !released(p) && p.open() == nil {
 					v.Actions = append(v.Actions, "pipeline")
 				}
 				if p := r.Pipeline; !held && p != nil && p.open() != nil {
@@ -392,7 +414,7 @@ func view(s *Store, r *Run) Response {
 				if p := r.Pipeline; !held && p != nil && p.Gate != "" {
 					v.Actions = append(v.Actions, "resolve-conflict")
 				}
-				if p := r.Pipeline; p != nil && p.Status == "locally-ready" && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
+				if p := r.Pipeline; p != nil && (p.Status == "ci-ready" || p.Status == "locally-ready" && localOnlyPipeline(p)) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
 					v.Actions = append(v.Actions, "handback")
 				}
 				if r.ReviewUsed == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
@@ -894,6 +916,9 @@ func daemon(h string) error {
 					o.Stage, o.Head, o.Conflict = syncTarget(ctx, pc, target, candidate)
 				case "commands":
 					o.Stage = runStageCommands(ctx, pc, step.Stage, candidate)
+				case "delivery":
+					o.Stage, o.Head, o.URL = runDeliveryStage(ctx, pc, step.Stage, candidate)
+					o.Status, o.Log = o.Stage.Status, o.Stage.Reason
 				case "review":
 					reviewed := executeReview(ctx, &review)
 					o.Status, o.Result, o.Log, o.Failure, o.Answer = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer
