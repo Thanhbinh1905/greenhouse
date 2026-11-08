@@ -1,0 +1,172 @@
+[2J[HGreenhouse | full pipeline
+Run c62299b6bdd1172d43bfa2d9ef60c335
+Stage: review | needs-decision
+Candidate: 044b1b7d78b1c8c9ae283e40287533a7af95d109
+Mode: ask | full | limit 8
+Reviewer: claude / claude-sonnet-5-5 (run-local)
+Fixer: pi / openai/gpt-5.6-luna (run-local)
+Budget: review 1 + repair 0 = 1 of 8
+Rules: unslop, no-comments
+Settings source: run-local
+Rule unslop | resolved | required=true
+Source: builtin:unslop
+Digest: d8fdae77a603fad9c32418612583b40b74235dc4e0945c5
+a276a961505d42df1
+Rule no-comments | resolved | required=true
+Source: builtin:no-comments
+Digest: c2102719ef9d634f3c9145492822e0491eeb395e6abc8c4
+b59c78c1a4385d9ca
+Auto-resume: off (always off in ask mode)
+Blocked: repository overrides unsupported; repository c
+onfiguration is untrusted
+Blocked: decision required: findings (repair, rethink,
+discard)
+Pipeline: needs-decision | stopped at review
+Gate repairs: 0/2 (counted apart from the review cap)
+DECISION REQUIRED: findings | gate 084360653627
+1 actionable findings await authorization
+Grouped findings: 7671b55b7c0ca3ec33a1b530f372463b88c8e
+5d81dc58b6c48ab9d07854afb5c
+Options: repair, rethink, discard
+[d] answers this decision
+Candidate ref: greenhouse/c62299b6bdd1172d43bfa2d9ef60c
+335
+[pass] intent
+  intent, exact target and command plan loaded
+  in 7b5fe07b runs 1 fixes 0
+[pass] sync
+  candidate already contains target
+  in 9cbaf5f3 cand 044b1b7d runs 1 fixes 0
+  $ git merge-base --is-ancestor 784f3ef51013 HEAD
+    exit=0 passed
+[DECISION] review
+  1 actionable findings await authorization
+  in f06f1f9c cand 044b1b7d runs 1 fixes 0
+[ ] test
+[ ] docs
+[ ] lint
+[ ] push
+[ ] pr
+[ ] ci
+Outstanding P1 stats.py:3 The empty-sequence guard was
+removed. average([]) now raises ZeroDivisionError inste
+ad of returning 0. This breaks the stated contract and
+the docstring on line 2. | reviewed 044b1b7d78b1c8c9ae2
+83e40287533a7af95d109 | ID 7671b55b7c0ca3ec33a1b530f372
+463b88c8e5d81dc58b6c48ab9d07854afb5c
+Review: outstanding-findings | claude-stream-json-v1 |
+claude-sonnet-5-5
+Input: 528bc4d980f1383265a017a67a8ff8ae363b442ae5a44dd2
+3206d4441ab99ca3
+Criteria: 9b693383bf70382d0052b2c730e5088bd803f0464b04e
+16815c0d4e80ce9f9ce
+Config: e46662ebb13a38325b6d03345fbf9b3ff3280672ef9fd4b
+f95ee32b060294c3a
+process completed; exit=0 stdout bytes=8965 stderr byte
+s=0 overflow=false; raw diagnostics withheld to avoid c
+redential disclosure
+Reported model: claude/claude-sonnet-5-5
+Coverage: stats.py
+P1 correctness stats.py:3-3 The empty-sequence guard wa
+s removed. average([]) now raises ZeroDivisionError ins
+tead of returning 0. This breaks the stated contract an
+d the docstring on line 2.
+Action: Restore the empty-sequence check so an empty in
+put returns 0.
+Rule:  | ID: 7671b55b7c0ca3ec33a1b530f372463b88c8e5d81d
+c58b6c48ab9d07854afb5c
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Set
+tings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+
+> i
+[2J[HGreenhouse | full pipeline
+Run c62299b6bdd1172d43bfa2d9ef60c335
+Stage: review | needs-decision
+Candidate: 044b1b7d78b1c8c9ae283e40287533a7af95d109
+Mode: ask | full | limit 8
+Reviewer: claude / claude-sonnet-5-5 (run-local)
+Fixer: pi / openai/gpt-5.6-luna (run-local)
+Budget: review 1 + repair 0 = 1 of 8
+Rules: unslop, no-comments
+Settings source: run-local
+Rule unslop | resolved | required=true
+Source: builtin:unslop
+Digest: d8fdae77a603fad9c32418612583b40b74235dc4e0945c5
+a276a961505d42df1
+Rule no-comments | resolved | required=true
+Source: builtin:no-comments
+Digest: c2102719ef9d634f3c9145492822e0491eeb395e6abc8c4
+b59c78c1a4385d9ca
+Auto-resume: off (always off in ask mode)
+Blocked: repository overrides unsupported; repository c
+onfiguration is untrusted
+Blocked: decision required: findings (repair, rethink,
+discard)
+Pipeline: needs-decision | stopped at review
+Gate repairs: 0/2 (counted apart from the review cap)
+DECISION REQUIRED: findings | gate 084360653627
+1 actionable findings await authorization
+Grouped findings: 7671b55b7c0ca3ec33a1b530f372463b88c8e
+5d81dc58b6c48ab9d07854afb5c
+Options: repair, rethink, discard
+[d] answers this decision
+Candidate ref: greenhouse/c62299b6bdd1172d43bfa2d9ef60c
+335
+[pass] intent
+  intent, exact target and command plan loaded
+  in 7b5fe07b runs 1 fixes 0
+[pass] sync
+  candidate already contains target
+  in 9cbaf5f3 cand 044b1b7d runs 1 fixes 0
+  $ git merge-base --is-ancestor 784f3ef51013 HEAD
+    exit=0 passed
+[DECISION] review
+  1 actionable findings await authorization
+  in f06f1f9c cand 044b1b7d runs 1 fixes 0
+[ ] test
+[ ] docs
+[ ] lint
+[ ] push
+[ ] pr
+[ ] ci
+Outstanding P1 stats.py:3 The empty-sequence guard was
+removed. average([]) now raises ZeroDivisionError inste
+ad of returning 0. This breaks the stated contract and
+the docstring on line 2. | reviewed 044b1b7d78b1c8c9ae2
+83e40287533a7af95d109 | ID 7671b55b7c0ca3ec33a1b530f372
+463b88c8e5d81dc58b6c48ab9d07854afb5c
+Review: outstanding-findings | claude-stream-json-v1 |
+claude-sonnet-5-5
+Input: 528bc4d980f1383265a017a67a8ff8ae363b442ae5a44dd2
+3206d4441ab99ca3
+Criteria: 9b693383bf70382d0052b2c730e5088bd803f0464b04e
+16815c0d4e80ce9f9ce
+Config: e46662ebb13a38325b6d03345fbf9b3ff3280672ef9fd4b
+f95ee32b060294c3a
+process completed; exit=0 stdout bytes=8965 stderr byte
+s=0 overflow=false; raw diagnostics withheld to avoid c
+redential disclosure
+Reported model: claude/claude-sonnet-5-5
+Coverage: stats.py
+P1 correctness stats.py:3-3 The empty-sequence guard wa
+s removed. average([]) now raises ZeroDivisionError ins
+tead of returning 0. This breaks the stated contract an
+d the docstring on line 2.
+Action: Restore the empty-sequence check so an empty in
+put returns 0.
+Rule:  | ID: 7671b55b7c0ca3ec33a1b530f372463b88c8e5d81d
+c58b6c48ab9d07854afb5c
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Set
+tings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+>

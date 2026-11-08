@@ -779,10 +779,6 @@ func acceptRepairProgress(r *Run, id string, value Repair) bool {
 		return false
 	}
 	r.Repair = &value
-	if r.Status == "cancelling" && value.Status == "cancelled" {
-		r.Status = "cancelled"
-		r.Token = opaque()
-	}
 	return true
 }
 
@@ -1239,40 +1235,58 @@ func terminalWidth() int {
 	return 80
 }
 func wrapWords(text string, width int) string {
+	indent := text[:len(text)-len(strings.TrimLeft(text, " "))]
+	if len(indent) >= width-1 {
+		indent = ""
+	}
+	available := width - len(indent)
 	var lines []string
-	line, count := "", 0
+	line := indent
+	count := 0
+	rest := strings.TrimLeft(text, " ")
 	for _, word := range strings.Fields(text) {
+		at := strings.Index(rest, word)
+		gap := rest[:at]
+		rest = rest[at+len(word):]
+		runes := []rune(word)
+		if len(runes) > available {
+			left := (available - 1) / 2
+			word = string(runes[:left]) + "…" + string(runes[len(runes)-(available-1-left):])
+		}
 		n := len([]rune(word))
-		if count > 0 && count+1+n > width {
-			lines, line, count = append(lines, line), "", 0
+		if count > 0 && count+len([]rune(gap))+n > available {
+			lines, line, count = append(lines, line), indent, 0
 		}
 		if count > 0 {
-			line, count = line+" ", count+1
+			line, count = line+gap, count+len([]rune(gap))
 		}
 		line, count = line+word, count+n
 	}
 	return strings.Join(append(lines, line), "\n")
 }
-func screen(text string) {
+func terminalText(text string) string {
 	width := terminalWidth()
-	fmt.Print("\033[2J\033[H")
-	for _, line := range strings.Split(text, "\n") {
+	lines := strings.Split(text, "\n")
+	for i, line := range lines {
 		clean := strings.Map(func(r rune) rune {
 			if unicode.IsControl(r) {
 				return ' '
 			}
 			return r
 		}, line)
-		count := 0
-		for _, r := range clean {
-			if count == width {
-				fmt.Println()
-				count = 0
-			}
-			fmt.Print(string(r))
-			count++
-		}
-		fmt.Println()
+		lines[i] = wrapWords(clean, width)
+	}
+	return strings.Join(lines, "\n")
+}
+func screen(text string) {
+	fmt.Print("\033[2J\033[H")
+	fmt.Println(terminalText(text))
+}
+func terminalPrompt(format string, args ...any) {
+	text := fmt.Sprintf(format, args...)
+	fmt.Print(terminalText(text))
+	if strings.HasSuffix(text, " ") {
+		fmt.Print(" ")
 	}
 }
 func terminal(h, path string) error {
@@ -1372,7 +1386,7 @@ func terminal(h, path string) error {
 		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
-		fmt.Print("> ")
+		terminalPrompt("> ")
 		if !reader.Scan() {
 			return reader.Err()
 		}
@@ -1391,7 +1405,7 @@ func terminal(h, path string) error {
 			q.Op = "cancel"
 		}
 		if op == "f" {
-			fmt.Print("Full finding IDs (separated by commas or spaces):\n> ")
+			terminalPrompt("Finding IDs as shown (separated by commas or spaces):\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1418,7 +1432,7 @@ func terminal(h, path string) error {
 				message = "No open decision"
 				continue
 			}
-			fmt.Printf("Choice (%s):\n> ", strings.Join(v.Decision.Options, ", "))
+			terminalPrompt("Choice (%s):\n> ", strings.Join(v.Decision.Options, ", "))
 			if !reader.Scan() {
 				return nil
 			}
@@ -1428,7 +1442,7 @@ func terminal(h, path string) error {
 				continue
 			}
 			if q.Choice == "repair" && v.Decision.Kind == "findings" {
-				fmt.Print("Full finding IDs (separated by commas or spaces; an empty line selects the whole group):\n> ")
+				terminalPrompt("Finding IDs as shown (separated by commas or spaces; an empty line selects the whole group):\n> ")
 				if !reader.Scan() {
 					return nil
 				}
@@ -1440,7 +1454,7 @@ func terminal(h, path string) error {
 				q.Selected = selected
 			}
 			if q.Choice == "increase-cap" {
-				fmt.Print("New limit:\n> ")
+				terminalPrompt("New limit:\n> ")
 				if !reader.Scan() {
 					return nil
 				}
@@ -1449,7 +1463,7 @@ func terminal(h, path string) error {
 					continue
 				}
 			}
-			fmt.Print("Reason:\n> ")
+			terminalPrompt("Reason:\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1463,12 +1477,12 @@ func terminal(h, path string) error {
 			q.Op = "resolve-conflict"
 		}
 		if op == "p" {
-			fmt.Print("Intent:\n> ")
+			terminalPrompt("Intent:\n> ")
 			if !reader.Scan() {
 				return nil
 			}
 			q.Intent = reader.Text()
-			fmt.Print("Exact target commit ID:\n> ")
+			terminalPrompt("Exact target commit ID:\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1490,7 +1504,7 @@ func terminal(h, path string) error {
 			if modelErr != nil {
 				modelsText = "catalog unavailable: " + modelErr.Error()
 			}
-			fmt.Printf("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
+			terminalPrompt("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
 			if !reader.Scan() {
 				return nil
 			}
@@ -1499,35 +1513,35 @@ func terminal(h, path string) error {
 				message = "Invalid draft: " + e.Error()
 				continue
 			}
-			fmt.Printf("Reviewer backend (pi, claude, codex) [%s]:\n> ", draft.ReviewerBackend)
+			terminalPrompt("Reviewer backend (pi, claude, codex) [%s]:\n> ", draft.ReviewerBackend)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.ReviewerBackend = value
 			}
-			fmt.Printf("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
+			terminalPrompt("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.ReviewerModel = value
 			}
-			fmt.Printf("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
+			terminalPrompt("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.FixerBackend = value
 			}
-			fmt.Printf("Pi models: %s\nFixer model [%s]:\n> ", modelsText, draft.FixerModel)
+			terminalPrompt("Pi models: %s\nFixer model [%s]:\n> ", modelsText, draft.FixerModel)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.FixerModel = value
 			}
-			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
+			terminalPrompt("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1537,14 +1551,14 @@ func terminal(h, path string) error {
 					draft.Rules = append(draft.Rules, name)
 				}
 			}
-			fmt.Printf("Auto-resume (on, off; empty keeps %s):\n> ", autoResumeLabel(draft))
+			terminalPrompt("Auto-resume (on, off; empty keeps %s):\n> ", autoResumeLabel(draft))
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.AutoResume = value
 			}
-			fmt.Print("[a] Apply to run  [d] Save user defaults  [c] Cancel\n> ")
+			terminalPrompt("[a] Apply to run  [d] Save user defaults  [c] Cancel\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1559,7 +1573,7 @@ func terminal(h, path string) error {
 			q.Settings = &draft
 			q.Reason = "terminal Settings"
 		} else if op == "b" {
-			fmt.Print("Keep this run and start a linked rerun from start? Type rerun:\n> ")
+			terminalPrompt("Keep this run and start a linked rerun from start? Type rerun:\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1568,7 +1582,7 @@ func terminal(h, path string) error {
 			}
 			q.Op = "rerun-from-start"
 		} else if op == "n" {
-			fmt.Print("Retain evidence and start New run? Type new:\n> ")
+			terminalPrompt("Retain evidence and start New run? Type new:\n> ")
 			if !reader.Scan() {
 				return nil
 			}

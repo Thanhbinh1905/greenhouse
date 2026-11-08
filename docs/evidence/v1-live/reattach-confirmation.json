@@ -1,0 +1,30 @@
+{
+  "operation": "inspect after restarting daemon with final binary",
+  "before_run_id": "8281036a00c4cf49a236983480517711",
+  "after_run_id": "8281036a00c4cf49a236983480517711",
+  "before_budget": {
+    "review": 2,
+    "repair": 1,
+    "total": 3,
+    "limit": 8,
+    "gate_retries": 0,
+    "gate_limit": 2,
+    "final_fix_repair": 0,
+    "final_fix_review": 0
+  },
+  "after_budget": {
+    "review": 2,
+    "repair": 1,
+    "total": 3,
+    "limit": 8,
+    "gate_retries": 0,
+    "gate_limit": 2,
+    "final_fix_repair": 0,
+    "final_fix_review": 0
+  },
+  "before_candidate": "2c6e7616ff282be4536a0c9f5c574c049acd2617",
+  "after_candidate": "2c6e7616ff282be4536a0c9f5c574c049acd2617",
+  "after_status": "ci-ready",
+  "review_id_unchanged": true,
+  "repair_ids_unchanged": true
+}

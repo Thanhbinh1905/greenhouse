@@ -7,6 +7,50 @@
 
 Greenhouse is a standalone terminal and JSON client for a per-user local run store. It implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded handback, and a full pipeline with ask, auto and YOLO authority, review-cap decisions, and GitHub delivery to CI readiness. Review success is not test, lint, or delivery success.
 
+## First review
+
+Use Linux with Git, Go 1.23 or later, Pi 1.5.0, and the GitHub CLI. Run these commands from the Greenhouse checkout:
+
+```sh
+mkdir -p "$HOME/.local/bin"
+GOBIN="$HOME/.local/bin" go install .
+export PATH="$HOME/.local/bin:$PATH"
+gh auth login
+gh auth setup-git
+```
+
+Create a private configuration directory and select Pi's executable and model:
+
+```sh
+export GREENHOUSE_HOME="$HOME/.local/state/greenhouse"
+mkdir -p "$GREENHOUSE_HOME"
+chmod 700 "$GREENHOUSE_HOME"
+python3 - <<'PYCONFIG'
+import json, os, pathlib, shutil
+state = pathlib.Path(os.environ["GREENHOUSE_HOME"])
+pi = shutil.which("pi")
+assert pi, "Install Pi 1.5.0 and put pi on PATH"
+config = state / "reviewer.json"
+config.write_text(json.dumps({"executable": pi, "model": "openai/gpt-5.6-luna"}))
+config.chmod(0o600)
+PYCONFIG
+```
+
+Set `OPENAI_API_KEY` in your environment. For an existing Pi login, `export OPENAI_API_KEY="$(pi auth print-api-key --provider openai)"` loads it without printing it. For a custom OpenAI-compatible endpoint, configure [providers.json](#independent-review-configuration) before continuing. Greenhouse does not import Pi's saved provider or credential files.
+
+From a Git worktree with a committed change, record the full target SHA with `git rev-parse main`. Then run:
+
+```sh
+cd /path/to/your/worktree
+greenhouse
+```
+
+Press `p`, enter the intended behavior and target SHA, then `l` to load rules and `v` to review. Press `i` to refresh; `q` detaches. Reopening `greenhouse` attaches to the same review. Settings (`s`) selects a different reviewer or fixer. Apply affects this run; Save changes future defaults.
+
+The first run uses one-pass review. An optional selected repair requires [fixer.json](#json-interface), passing checks, and explicit `f` authorization. It creates a local commit and stops as `fixed-not-independently-rereviewed`. Press `h` for guarded handback. Full delivery requires the [full pipeline plan](#full-pipeline) and `GH_TOKEN` in the launch environment; `export GH_TOKEN="$(gh auth token)"` uses your existing GitHub login. Configure a single CI trigger, such as `pull_request`, for each required check name. Duplicate checks block readiness.
+
+The [live validation record](docs/evidence/v1-live/README.md) includes an isolated-HOME installation, both presets, and their remaining limits.
+
 ## Build and open
 
 ```sh
@@ -17,7 +61,7 @@ cd /path/to/a/git/worktree
 
 The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `l` explicitly resolves (loads) rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, `r` reruns a paused, failed or cancelled stage, `a` cancels a scheduled automatic resume, `b` starts a linked rerun from start, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
-Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
+Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal wraps prose at word boundaries and abbreviates tokens wider than the screen. AXI retains their full values. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
 
 ## JSON interface
 
@@ -222,7 +266,7 @@ The combined cap counts review rounds and finding-repair rounds; `budget` in eve
 
 A repair that needs authority beyond the approved intent parks a user-only `authority` decision in every mode. The controller detects a deleted file (`destructive`), a changed file mode (`permissions`) and a change outside the authorized paths (`scope`). The fixer can also stop without edits and answer `{"escalate":"intent|acceptance|credentials|scope|permissions|destructive","reason":"..."}`. Nothing is committed. The only options are `rethink` and `discard`; neither a budget nor `accept-head` can answer it. Granting expanded authority to the fixer is unsupported.
 
-Answer the open decision with `decide` (terminal `d`). The terminal accepts only exact input: an option exactly as listed, a limit in digits, and full finding IDs as shown, separated by commas or spaces. Only an empty line selects the whole group; any other input is refused before anything is submitted. The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
+Answer the open decision with `decide` (terminal `d`). The terminal accepts an option exactly as listed, a limit in digits, and finding IDs as shown, separated by commas or spaces. Narrow screens abbreviate long tokens with `…`; a displayed finding ID selects only a unique matching finding. Full IDs remain available through AXI. Only an empty line selects the whole group. Other input selects the listed IDs after validation. The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
 
 ```json
 {"version":1,"op":"decide","run_id":"...","input_id":"...","gate_id":"decision id","expected":"token","action_id":"unique","choice":"final-fix","reason":"one last repair"}

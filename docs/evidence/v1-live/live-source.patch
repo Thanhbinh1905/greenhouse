@@ -1,0 +1,155 @@
+--- a/authority.go
++++ b/authority.go
+@@ -438,0 +439,14 @@
++		if left, right, abbreviated := strings.Cut(entry, "…"); abbreviated && len(left) >= 8 && len(right) >= 8 {
++			match := ""
++			for _, id := range group {
++				if len(id) > len(left)+len(right) && strings.HasPrefix(id, left) && strings.HasSuffix(id, right) {
++					if match != "" {
++						return nil, false, errors.New("ambiguous finding ID: " + entry)
++					}
++					match = id
++				}
++			}
++			if match != "" {
++				entry = match
++			}
++		}
+@@ -441 +455 @@
+-			return nil, false, errors.New("unknown finding ID: " + entry + "; enter full IDs exactly as shown")
++			return nil, false, errors.New("unknown finding ID: " + entry + "; enter IDs exactly as shown")
+--- a/execution.go
++++ b/execution.go
+@@ -204,0 +205,8 @@
++	if len(names) == 0 && full && r.Pipeline != nil && r.Review != nil {
++		for _, repair := range r.Pipeline.Repairs {
++			if repair.Status == "fixed-not-independently-rereviewed" && repair.Head == r.Candidate {
++				names = append(names, r.Review.Paths...)
++				break
++			}
++		}
++	}
+@@ -218,0 +227,3 @@
++		if len(diff) == 0 {
++			contract += " The authorized repair restored the target tree exactly. Diff is empty; Paths and Files identify the repaired files from the preceding review. Independently verify the current content against Intent. An empty diff does not establish correctness."
++		}
+--- a/main.go
++++ b/main.go
+@@ -1241,0 +1242,5 @@
++	indent := text[:len(text)-len(strings.TrimLeft(text, " "))]
++	if len(indent) >= width-1 {
++		indent = ""
++	}
++	available := width - len(indent)
+@@ -1243 +1248,2 @@
+-	line, count := "", 0
++	line := indent
++	count := 0
+@@ -1244,0 +1251,5 @@
++		runes := []rune(word)
++		if len(runes) > available {
++			left := (available - 1) / 2
++			word = string(runes[:left]) + "…" + string(runes[len(runes)-(available-1-left):])
++		}
+@@ -1246,2 +1257,2 @@
+-		if count > 0 && count+1+n > width {
+-			lines, line, count = append(lines, line), "", 0
++		if count > 0 && count+1+n > available {
++			lines, line, count = append(lines, line), indent, 0
+@@ -1256 +1267 @@
+-func screen(text string) {
++func terminalText(text string) string {
+@@ -1258,2 +1269,2 @@
+-	fmt.Print("\033[2J\033[H")
+-	for _, line := range strings.Split(text, "\n") {
++	lines := strings.Split(text, "\n")
++	for i, line := range lines {
+@@ -1266,10 +1277,13 @@
+-		count := 0
+-		for _, r := range clean {
+-			if count == width {
+-				fmt.Println()
+-				count = 0
+-			}
+-			fmt.Print(string(r))
+-			count++
+-		}
+-		fmt.Println()
++		lines[i] = wrapWords(clean, width)
++	}
++	return strings.Join(lines, "\n")
++}
++func screen(text string) {
++	fmt.Print("\033[2J\033[H")
++	fmt.Println(terminalText(text))
++}
++func terminalPrompt(format string, args ...any) {
++	text := fmt.Sprintf(format, args...)
++	fmt.Print(terminalText(text))
++	if strings.HasSuffix(text, " ") {
++		fmt.Print(" ")
+@@ -1375 +1389 @@
+-		fmt.Print("> ")
++		terminalPrompt("> ")
+@@ -1394 +1408 @@
+-			fmt.Print("Full finding IDs (separated by commas or spaces):\n> ")
++			terminalPrompt("Finding IDs as shown (separated by commas or spaces):\n> ")
+@@ -1421 +1435 @@
+-			fmt.Printf("Choice (%s):\n> ", strings.Join(v.Decision.Options, ", "))
++			terminalPrompt("Choice (%s):\n> ", strings.Join(v.Decision.Options, ", "))
+@@ -1431 +1445 @@
+-				fmt.Print("Full finding IDs (separated by commas or spaces; an empty line selects the whole group):\n> ")
++				terminalPrompt("Finding IDs as shown (separated by commas or spaces; an empty line selects the whole group):\n> ")
+@@ -1443 +1457 @@
+-				fmt.Print("New limit:\n> ")
++				terminalPrompt("New limit:\n> ")
+@@ -1452 +1466 @@
+-			fmt.Print("Reason:\n> ")
++			terminalPrompt("Reason:\n> ")
+@@ -1466 +1480 @@
+-			fmt.Print("Intent:\n> ")
++			terminalPrompt("Intent:\n> ")
+@@ -1471 +1485 @@
+-			fmt.Print("Exact target commit ID:\n> ")
++			terminalPrompt("Exact target commit ID:\n> ")
+@@ -1493 +1507 @@
+-			fmt.Printf("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
++			terminalPrompt("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
+@@ -1502 +1516 @@
+-			fmt.Printf("Reviewer backend (pi, claude, codex) [%s]:\n> ", draft.ReviewerBackend)
++			terminalPrompt("Reviewer backend (pi, claude, codex) [%s]:\n> ", draft.ReviewerBackend)
+@@ -1509 +1523 @@
+-			fmt.Printf("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
++			terminalPrompt("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
+@@ -1516 +1530 @@
+-			fmt.Printf("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
++			terminalPrompt("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
+@@ -1523 +1537 @@
+-			fmt.Printf("Pi models: %s\nFixer model [%s]:\n> ", modelsText, draft.FixerModel)
++			terminalPrompt("Pi models: %s\nFixer model [%s]:\n> ", modelsText, draft.FixerModel)
+@@ -1530 +1544 @@
+-			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
++			terminalPrompt("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
+@@ -1540 +1554 @@
+-			fmt.Printf("Auto-resume (on, off; empty keeps %s):\n> ", autoResumeLabel(draft))
++			terminalPrompt("Auto-resume (on, off; empty keeps %s):\n> ", autoResumeLabel(draft))
+@@ -1547 +1561 @@
+-			fmt.Print("[a] Apply to run  [d] Save user defaults  [c] Cancel\n> ")
++			terminalPrompt("[a] Apply to run  [d] Save user defaults  [c] Cancel\n> ")
+@@ -1562 +1576 @@
+-			fmt.Print("Keep this run and start a linked rerun from start? Type rerun:\n> ")
++			terminalPrompt("Keep this run and start a linked rerun from start? Type rerun:\n> ")
+@@ -1571 +1585 @@
+-			fmt.Print("Retain evidence and start New run? Type new:\n> ")
++			terminalPrompt("Retain evidence and start New run? Type new:\n> ")
+--- a/repair.go
++++ b/repair.go
+@@ -450,5 +449,0 @@
+-	code, log, _, e := runCaptured(ctx, dir, exe, args, input, agentDir)
+-	return code, log, e
+-}
+-
+-func runCaptured(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, []byte, error) {
+@@ -465 +460 @@
+-	return code, log, out.Bytes(), e
++	return code, log, e

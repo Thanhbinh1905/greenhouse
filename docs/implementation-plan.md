@@ -44,9 +44,19 @@ Area D and standalone E: the trusted command plan can configure a Git remote and
 
 ## 5. Reviewer and fixer model selection
 
-Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi remains the only backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Greenhouse discovers Pi models through AXI, supports trusted per-user provider endpoints in `providers.json`, reads API keys only from named environment variables, and preflights provider model access before dispatch. Pi receives only a temporary provider file that references the environment variable. A product-path smoke against the recommended default model passed through the configured proxy.
+Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi is the default backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Greenhouse discovers Pi models through AXI, supports trusted per-user provider endpoints in `providers.json`, reads API keys only from named environment variables, and preflights provider model access before dispatch. Pi receives only a temporary provider file that references the environment variable. A product-path smoke against the recommended default model passed through the configured proxy.
 
 Task t40 adds Claude Code and Codex as reviewer and fixer backends beside Pi, classifies backend quota, login and availability failures, parks the affected stage without spending budget, and adds resume, rerun, rerun from start, automatic resume, fallback and agent switching to the terminal and AXI. See README.md and `docs/evidence/backend-smoke.md`.
+
+## Live standalone validation (t59)
+
+The [recorded live runs](evidence/v1-live/README.md) prove standalone full delivery and selected one-pass repair. Claude Code `claude-sonnet-5-5` reviewed an accuracy change, Pi repaired its empty-input regression, and Claude independently rereviewed the committed candidate. Test, docs, lint, push, PR creation, and exact-head GitHub Actions passed. The full run stopped at `ci-ready` with `repaired-pass`; PR #2 remains open and unmerged in the private validation repository.
+
+A fresh isolated HOME installed Greenhouse and ran the bare-command Pi one-pass flow. One review and one selected repair produced a checked local commit. Dirty-source handback refused; clean handback succeeded. The result remained `fixed-not-independently-rereviewed`, with no push or PR.
+
+The live exercise exposed empty-diff rereview refusal when a repair restores the target tree. The fix retains the preceding paths, captures current committed contents, and invokes independent review again. Word wrapping now covers screens and prompts at 56, 80, and 100 columns. Long tokens are abbreviated; a unique displayed finding ID is selectable. Cancelled repair progress now remains `cancelling` until final completion, avoiding a stale-token window on rerun. The unused `runCaptured` stdout return is removed. The AXI test helper disables Go race-runtime exit delay so scheduled-retry snapshots do not arrive one second late.
+
+V1 is not complete against every SPEC.md item. The missing work is listed below. This validation does not implement the Posse adapter, repository trust, event subscriptions, or recovery of unknown writer outcomes.
 
 ## 6. Live backend validation and host contract
 
@@ -56,9 +66,11 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 
 ## Unsupported spec behavior in this slice
 
+- Manual acceptance: the recorded bare-command sessions use scripted real PTYs. A person has not manually repeated them.
+
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
-- Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
-- Area C: full-tree review snapshots, explicit finding resolution, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; fixer evaluation is not.
+- Area B: versioned configuration schemas and migration, raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
+- Area C: full-tree review snapshots, explicit finding-resolution responses, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
 - Area D: granting expanded fixer authority and cap decisions for embedded hosts.
-- Area E and D2: live publication and backend validation, explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, provider-backed fixer evaluation, and independently exact-head review.
+- Area E and D2: explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
 - Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

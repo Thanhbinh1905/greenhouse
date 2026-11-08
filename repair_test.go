@@ -400,8 +400,8 @@ func TestAcceptedCancellationAtCommitAdmissionPreventsCommit(t *testing.T) {
 		return acceptRepairProgress(r, value.ID, *value)
 	})
 	candidate := &repair
-	if candidate.Status != "cancelled" || r.Status != "cancelled" {
-		t.Fatalf("accepted cancellation did not settle before commit: run=%s repair=%s", r.Status, candidate.Status)
+	if candidate.Status != "cancelled" || r.Status != "cancelling" {
+		t.Fatalf("repair must stop before commit and await daemon completion: run=%s repair=%s", r.Status, candidate.Status)
 	}
 	if strings.TrimSpace(git(t, candidate.Worktree, "rev-parse", "HEAD")) != candidate.Base {
 		t.Fatal("accepted pre-commit cancellation created a local commit")
@@ -686,5 +686,15 @@ func TestExecutableSelectedRepair(t *testing.T) {
 	count, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "fix-invocations"))
 	if strings.Count(string(count), "fix\n") != 1 {
 		t.Fatal(string(count))
+	}
+}
+
+func TestCancelledRepairProgressWaitsForCompletion(t *testing.T) {
+	r := &Run{Status: "cancelling", Token: "current", Repair: &Repair{ID: "repair", Status: "fixing"}}
+	if !acceptRepairProgress(r, "repair", Repair{ID: "repair", Status: "cancelled", Writer: "stopped"}) {
+		t.Fatal("cancelled progress refused")
+	}
+	if r.Status != "cancelling" || r.Token != "current" {
+		t.Fatalf("progress exposed a terminal state before completion: status=%s token=%s", r.Status, r.Token)
 	}
 }

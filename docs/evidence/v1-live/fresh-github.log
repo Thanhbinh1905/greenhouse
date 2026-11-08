@@ -1,0 +1,5 @@
+Isolated HOME: GitHub authentication provided through GH_TOKEN from the existing login.
+gh auth setup-git: exit 0
+api_response:
+  body: Thanhbinh1905
+  truncated: false

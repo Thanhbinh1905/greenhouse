@@ -54,6 +54,8 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	c.Dir = repo
 	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret")
 	c.Env = append(c.Env, env...)
+	// Race-enabled clients otherwise delay timed snapshots by one second at exit.
+	c.Env = append(c.Env, "GORACE="+os.Getenv("GORACE")+" atexit_sleep_ms=0")
 	c.Stdin = strings.NewReader(request)
 	b, e := c.CombinedOutput()
 	if e != nil {

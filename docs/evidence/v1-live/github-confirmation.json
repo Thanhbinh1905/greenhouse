@@ -1,0 +1,28 @@
+{
+  "repository": "Thanhbinh1905/greenhouse-v1-validation-t59-20261109",
+  "visibility": "private",
+  "pull_request": {
+    "number": 2,
+    "state": "open",
+    "merged": false,
+    "head": "2c6e7616ff282be4536a0c9f5c574c049acd2617",
+    "base": "b5e7936ba587cf647feea00263511a111184b7ae",
+    "url": "https://github.com/Thanhbinh1905/greenhouse-v1-validation-t59-20261109/pull/2"
+  },
+  "checks": [
+    {
+      "name": "test",
+      "status": "completed",
+      "conclusion": "success",
+      "head_sha": "2c6e7616ff282be4536a0c9f5c574c049acd2617",
+      "app": "github-actions",
+      "details_url": "https://github.com/Thanhbinh1905/greenhouse-v1-validation-t59-20261109/actions/runs/42512174465/job/128827393531"
+    }
+  ],
+  "verification_commands": [
+    "gh-axi repo view Thanhbinh1905/greenhouse-v1-validation-t59-20261109",
+    "gh-axi pr checks 2 --repo Thanhbinh1905/greenhouse-v1-validation-t59-20261109",
+    "gh-axi api repos/Thanhbinh1905/greenhouse-v1-validation-t59-20261109/pulls/2",
+    "gh-axi api repos/Thanhbinh1905/greenhouse-v1-validation-t59-20261109/commits/2c6e7616ff282be4536a0c9f5c574c049acd2617/check-runs"
+  ]
+}

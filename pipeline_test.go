@@ -780,3 +780,38 @@ func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {
 	}
 	assertRecoveryCustody(t, bin, repo, home, done, path)
 }
+
+func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {
+	bin, repo, home, v := pipelineFixture(t, localPlan)
+	root := filepath.Dir(home)
+	target := runOf(t, v)["target"].(string)
+	git(t, repo, "checkout", "--detach", target)
+	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("original\n"), 0600)
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline sample")
+	target = strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	git(t, repo, "checkout", "-b", "restoration")
+	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("regression\n"), 0600)
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "regression")
+	v = axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	v = mutate(t, bin, repo, home, v, "new", "restoration-new", nil)
+	v = mutate(t, bin, repo, home, v, "apply", "restoration-full", Settings{Mode: "auto", Preset: "full", Limit: 6, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "fixture/model", FixerBackend: "pi", FixerModel: "fixture/model"})
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "gate_id": v["gate_id"], "expected": v["token"], "action_id": "restoration-prepare", "intent": "Preserve original sample", "target": target}
+	b, _ := json.Marshal(q)
+	v = axi(t, bin, repo, home, string(b))
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-content"), []byte("original\n"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	v = mutate(t, bin, repo, home, v, "pipeline", "restore-tree", nil)
+	v = waitPipeline(t, bin, repo, home)
+	if runOf(t, v)["status"] != "locally-ready" {
+		t.Fatalf("restored target tree did not get independent rereview and gates: %v", v)
+	}
+	if n := countLines(t, filepath.Join(root, "review-invocations"))["review"]; n != 2 {
+		t.Fatalf("want two independent reviews, got %d", n)
+	}
+}

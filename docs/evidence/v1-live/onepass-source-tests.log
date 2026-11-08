@@ -1,0 +1,8 @@
+test_accuracy (test_stats.AverageTests.test_accuracy) ... ok
+test_empty (test_stats.AverageTests.test_empty) ... ok
+test_values (test_stats.AverageTests.test_values) ... ok
+
+----------------------------------------------------------------------
+Ran 3 tests in 0.000s
+
+OK

@@ -436,9 +436,23 @@ func parseSelection(line string, group []string) ([]string, bool, error) {
 	}
 	var ids []string
 	for _, entry := range entries {
+		if left, right, abbreviated := strings.Cut(entry, "…"); abbreviated && len(left) >= 8 && len(right) >= 8 {
+			match := ""
+			for _, id := range group {
+				if len(id) > len(left)+len(right) && strings.HasPrefix(id, left) && strings.HasSuffix(id, right) {
+					if match != "" {
+						return nil, false, errors.New("ambiguous finding ID: " + entry)
+					}
+					match = id
+				}
+			}
+			if match != "" {
+				entry = match
+			}
+		}
 		switch {
 		case !has(group, entry):
-			return nil, false, errors.New("unknown finding ID: " + entry + "; enter full IDs exactly as shown")
+			return nil, false, errors.New("unknown finding ID: " + entry + "; enter IDs exactly as shown")
 		case has(ids, entry):
 			return nil, false, errors.New("duplicate finding ID: " + entry)
 		}

@@ -1,0 +1,17 @@
+TestScreenWrapsAtWordBoundaries:
+ got  "\x1b[2J\x1b[Hword word word word word word word word word word word word word word word confi\nguration is untrusted\n"
+ want "\x1b[2J\x1b[Hword word word word word word word word word word word word word word word\nconfiguration is untrusted\n"
+TestWrapWordsKeepsIndentAndFitsIdentifiers:
+ width 55: invalid indented line (128-character identifier)
+TestDisplayedFindingIDSelectsOnlyUniqueFinding:
+ displayed ID cannot select its finding: unknown finding ID
+TestSettingsPromptsWrapAndSanitize:
+ input prompt spacing lost: "Selected rules (comma-separated; ? means optional; file:/absolute/path):\n>"
+TestWrapWordsPreservesColumnSpacing:
+ column spacing changed: got "  [i] Inspect [s] Settings" want "  [i] Inspect  [s] Settings"
+TestFullPipelineRereviewsRepairThatRestoresTargetTree:
+ restored target tree did not get independent rereview and gates: review admission refused: empty committed diff
+TestCancelledRepairProgressWaitsForCompletion:
+ progress exposed a terminal state before completion: status=cancelled token=80bd9f746dcd358eebb7b6a27971ff8a
+TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters/cancel (race suite):
+ immediate rerun refused: stale run/input/gate/token

@@ -155,7 +155,7 @@ try:
     assert next_state["run"]["configs"][0]["settings"]["mode"] == "ask"
     assert "Mode: ask" in wide
     session(56, ["q"], "-reattach")
-    for width in [56, 100]:
+    for width in [56, 80, 100]:
         rules = session(width, ["l", "c", "q"], "-rules")
         resolved = axi()
         assert resolved["rules_ready"]
@@ -369,11 +369,11 @@ open("sample.txt","w").write("repaired\\n")
         decision = parked["decision"]
         asked = session(width, ["i", "q"], f"-{name}-decision")
         assert f"DECISION REQUIRED: {decision['kind']}" in asked and "[d] answers this decision" in asked
-        assert "Options: " + ", ".join(decision["options"]) in asked.replace("\n", "")
+        assert "Options: " + ", ".join(decision["options"]) in " ".join(asked.split())
         if name == "full-ask":
             assert decision["kind"] == "findings" and "Grouped findings:" in asked
             known = decision["findings"][0]
-            assert f"Grouped findings: {known}" in asked.replace("\n", "")
+            assert f"Grouped findings: {known}" in " ".join(asked.split())
             for label, entry, refusal in [("unknown", "zzz", "unknown finding ID: zzz"),
                                           ("whitespace", "   ", "no finding ID entered"),
                                           ("truncated", known[:12], f"unknown finding ID: {known[:12]}"),
@@ -383,7 +383,7 @@ open("sample.txt","w").write("repaired\\n")
                 refused = session(width, ["d", "repair", entry, "i", "q"], f"-{name}-selection-{label}")
                 unchanged = axi()
                 assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["status"] == "needs-decision", (label, unchanged["run"]["pipeline"])
-                assert refusal in refused.replace("\n", "") and "nothing submitted" in refused.replace("\n", ""), label
+                assert refusal in " ".join(refused.split()) and "nothing submitted" in " ".join(refused.split()), label
         else:
             assert decision["kind"] == "cap" and "review cap reached" in asked
             for label, steps, refusal in [("padded-choice", ["d", "final-fix "], 'unknown choice "final-fix "'),
@@ -392,14 +392,14 @@ open("sample.txt","w").write("repaired\\n")
                 refused = session(width, steps + ["i", "q"], f"-{name}-{label}")
                 unchanged = axi()
                 assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["configs"][-1]["settings"]["limit"] == 1, (label, unchanged["run"]["pipeline"])
-                assert refusal in refused.replace("\n", ""), label
+                assert refusal in " ".join(refused.split()), label
         session(width, answer + ["q"], f"-{name}-answer")
         state = settle()
         text = session(width, ["i", "q"], f"-{name}-result")
         parity(state, text)
         answered = state["run"]["pipeline"]["decisions"][0]["answer"]
         assert answered["actor"] == "terminal" and answered["reason"] == answer[-1], answered
-        assert f"Decided {decision['kind']}: {answer[1]} by terminal: {answer[-1]}" in text.replace("\n", "")
+        assert f"Decided {decision['kind']}: {answer[1]} by terminal: {answer[-1]}" in " ".join(text.split())
         if name in ("full-cap-final-fix", "full-ask"):
             assert state["run"]["status"] == "ci-ready", state["run"]["pipeline"]
             assert "Outcome: REPAIRED PASS" in text and "CLEAN PASS" not in text
@@ -417,7 +417,7 @@ open("sample.txt","w").write("repaired\\n")
     backends.write_text(json.dumps({"claude": {"executable": str(root / "fake-claude")},
                                     "codex": {"executable": str(root / "fake-codex"), "provider": {"base_url": "http://127.0.0.1:1/v1"}}}))
     backends.chmod(0o600)
-    for width in [56, 100]:
+    for width in [56, 80, 100]:
         target = full_repo(f"paused-{width}", commands)
         (root / "codex-modes").write_text("quota")
         session(width, ["s", "auto one-pass 4", "codex", "gpt-5.6-luna", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "l", "v", "q"], f"-paused-{width}")
@@ -441,9 +441,9 @@ open("sample.txt","w").write("repaired\\n")
         switch = [e for e in done["run"]["events"] if e["kind"] == "backend-switch" and e["from"] == "codex gpt-5.6-luna"]
         assert switch and switch[0]["actor"] == "terminal" and switch[0]["to"] == "claude claude-haiku-5-5", done["run"]["events"]
         result = session(width, ["i", "q"], f"-paused-{width}-result")
-        assert "Reported model: claude/claude-haiku-5-5" in result.replace("\n", ""), result
+        assert "Reported model: claude/claude-haiku-5-5" in " ".join(result.split()), result
     forge.shutdown()
-    print(f"PASS: 56- and 100-column PTY backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
+    print(f"PASS: 56-, 80-, and 100-column PTY backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
     provider.shutdown()
     pidfile = root / "state" / "pid"

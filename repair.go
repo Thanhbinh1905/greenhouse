@@ -447,11 +447,6 @@ func reapChildTree() bool {
 }
 
 func runBounded(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, error) {
-	code, log, _, e := runCaptured(ctx, dir, exe, args, input, agentDir)
-	return code, log, e
-}
-
-func runCaptured(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, []byte, error) {
 	env := reviewerEnv()
 	if agentDir != "" {
 		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
@@ -462,7 +457,7 @@ func runCaptured(ctx context.Context, dir, exe string, args []string, input []by
 	if e == nil && (out.exceeded || stderr.exceeded) {
 		e = errors.New("bounded output exceeded")
 	}
-	return code, log, out.Bytes(), e
+	return code, log, e
 }
 
 func runProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {

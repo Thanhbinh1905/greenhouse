@@ -1,0 +1,22 @@
+=== RUN   TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== PAUSE TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== CONT  TestAutoResumeWithBackoffSurvivesDaemonRestart
+--- PASS: TestAutoResumeWithBackoffSurvivesDaemonRestart (3.69s)
+=== RUN   TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== PAUSE TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== CONT  TestAutoResumeWithBackoffSurvivesDaemonRestart
+--- PASS: TestAutoResumeWithBackoffSurvivesDaemonRestart (3.72s)
+=== RUN   TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== PAUSE TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== CONT  TestAutoResumeWithBackoffSurvivesDaemonRestart
+--- PASS: TestAutoResumeWithBackoffSurvivesDaemonRestart (3.64s)
+=== RUN   TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== PAUSE TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== CONT  TestAutoResumeWithBackoffSurvivesDaemonRestart
+--- PASS: TestAutoResumeWithBackoffSurvivesDaemonRestart (3.72s)
+=== RUN   TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== PAUSE TestAutoResumeWithBackoffSurvivesDaemonRestart
+=== CONT  TestAutoResumeWithBackoffSurvivesDaemonRestart
+--- PASS: TestAutoResumeWithBackoffSurvivesDaemonRestart (3.55s)
+PASS
+ok  	greenhouse	19.329s

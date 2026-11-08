@@ -1,0 +1,6 @@
+--- FAIL: TestAutoResumeWithBackoffSurvivesDaemonRestart (42.78s)
+    backend_auto_test.go:62: run never reached [clean-review]: <nil>
+FAIL
+FAIL	greenhouse	246.671s
+ok  	greenhouse/eval	5.795s
+FAIL

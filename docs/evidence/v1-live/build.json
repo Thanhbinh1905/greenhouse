@@ -1,0 +1,17 @@
+{
+  "base_commit": "2e2e4334595f2a1b41ebdc02b4ad87ab9dac2e76",
+  "source_patch_sha256": "75469f26170d8c0158cce6a81ea9da81bfc742ecaa07b22470cf7a1181e66536",
+  "final_binary_sha256": "f996ceabf1d1817839eb77ee470362ec8c710c0f3af0fa4813d2b3a1d7b8220b",
+  "go": "go1.26.7 linux/amd64",
+  "pi": "1.5.0",
+  "claude": "2.1.319",
+  "codex": "0.166.0",
+  "build_command": "go build -o <Task scratch>/bin/greenhouse .",
+  "initial_binary": "base commit without source.patch",
+  "live_full2_binary": "base commit with live-source.patch",
+  "final_terminal_binary": "base commit with source.patch, including column spacing and cancellation completion fixes",
+  "state_protocol": 1,
+  "live_source_patch_sha256": "5c27e386ddbbd714707b3543a9eb53fecd247b76e04ed7d62de18dff2df0babd",
+  "onepass_binary": "base commit with live-source.patch",
+  "apply_patch_command": "git apply --unidiff-zero <patch>"
+}

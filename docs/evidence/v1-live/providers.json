@@ -1,0 +1,1 @@
+{"providers": {"openai": {"base_url": "http://127.0.0.1:8317/v1", "api_key_env": "OPENAI_API_KEY", "api": "openai-completions"}}, "models": []}

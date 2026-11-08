@@ -1,0 +1,1 @@
+{"claude": {"executable": "/home/thanhbinh/.local/bin/claude"}, "codex": {"executable": "/home/thanhbinh/.local/bin/codex", "provider": {"base_url": "http://127.0.0.1:8317/v1"}}}

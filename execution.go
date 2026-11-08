@@ -202,6 +202,14 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 			names = append(names, p)
 		}
 	}
+	if len(names) == 0 && full && r.Pipeline != nil && r.Review != nil {
+		for _, repair := range r.Pipeline.Repairs {
+			if repair.Status == "fixed-not-independently-rereviewed" && repair.Head == r.Candidate {
+				names = append(names, r.Review.Paths...)
+				break
+			}
+		}
+	}
 	if len(names) == 0 {
 		return nil, errors.New("empty committed diff")
 	}
@@ -216,6 +224,9 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	contract := reviewContract
 	if full {
 		contract = fullReviewContract
+		if len(diff) == 0 {
+			contract += " The authorized repair restored the target tree exactly. Diff is empty; Paths and Files identify the repaired files from the preceding review. Independently verify the current content against Intent. An empty diff does not establish correctness."
+		}
 	}
 	files, e := candidateFiles(r.Submitted.Worktree, r.Candidate, names)
 	if e != nil {
