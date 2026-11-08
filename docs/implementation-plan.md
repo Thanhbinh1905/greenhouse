@@ -76,7 +76,7 @@ A finding repair must answer every selected finding as fixed, disputed with a re
 
 On Linux, reviewers and fixers run under Landlock. Reviewers write only their backend's private state, fixers also their candidate and scratch directory, and TCP is limited to the backend's provider, HTTPS and proxy ports. Without Landlock, or below ABI 4, the confinement record is `degraded` and the terminal and AXI show it.
 
-Executable daemon, AXI and terminal tests with real Git and fake backends cover each item, including a seccomp-filtered daemon without Landlock. PTY captures at 56, 80 and 100 columns are in `evidence/review-confinement/`, with the eval rerun.
+Executable daemon, AXI and terminal tests with real Git and fake backends cover each item, including a seccomp-filtered daemon without Landlock. PTY captures at 56, 80 and 100 columns are in `evidence/review-confinement/`. The eval rerun, `evidence/review-eval/11-snapshot-confinement`, kept 100% recall and 81% precision.
 
 ## 6. Live backend validation and host contract
 
