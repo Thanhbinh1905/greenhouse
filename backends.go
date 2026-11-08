@@ -399,7 +399,7 @@ func agentArgs(config ReviewerConfig, role string, full bool, prompt string) []s
 		}
 		args = append(args, "-c", `web_search="disabled"`, "-c", "project_doc_max_bytes=0", "-c", "developer_instructions="+tomlString(prompt))
 		if role == "reviewer" {
-			args = append(args, "--output-schema", "schema.json")
+			args = append(args, "--output-schema", "../schema.json")
 		}
 		return append(args, "-")
 	}

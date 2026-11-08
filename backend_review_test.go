@@ -90,7 +90,7 @@ func TestOnePassReviewThroughClaudeAndCodex(t *testing.T) {
 			joined := strings.Join(args, " ")
 			for _, required := range map[string][]string{
 				"claude": {"-p", "--output-format stream-json", "--json-schema", "--model " + c.model, "--tools Read,Grep,Glob", "--no-session-persistence", "--safe-mode", "--strict-mcp-config", "--setting-sources", "--restricted", "--permission-mode dontAsk"},
-				"codex":  {"exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--sandbox read-only", "-m " + c.model, "--output-schema schema.json", "--disable shell_tool", "--disable hooks", "project_doc_max_bytes=0"},
+				"codex":  {"exec", "--json", "--ephemeral", "--ignore-user-config", "--ignore-rules", "--sandbox read-only", "-m " + c.model, "--output-schema ../schema.json", "--disable shell_tool", "--disable hooks", "project_doc_max_bytes=0"},
 			}[c.backend] {
 				if !strings.Contains(joined, required) {
 					t.Errorf("%s argv lacks %q: %v", c.backend, required, args)

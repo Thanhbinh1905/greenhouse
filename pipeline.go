@@ -92,6 +92,7 @@ type stepOutcome struct {
 	Conflict  []string
 	Failure   *BackendFailure
 	Answer    agentAnswer
+	Snapshot  string
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
@@ -727,6 +728,7 @@ func completeStep(r *Run, o stepOutcome) error {
 			return errors.New("review identity mismatch")
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
+		recordSnapshotCheck(x, o.Snapshot)
 		recordAttempt(r, Attempt{Execution: x.ID, Stage: st.Name, Kind: "review", Role: "reviewer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: o.Status, Reason: failureReason(o.Failure), Message: failureMessage(o.Failure), CostUSD: o.Answer.CostUSD, Tokens: o.Answer.Tokens})
 		if o.Failure != nil && !cancelling {
 			if x.Budget == "final-fix" {

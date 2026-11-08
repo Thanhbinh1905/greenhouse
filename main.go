@@ -905,6 +905,7 @@ func daemon(h string) error {
 		repair                      *Repair
 		failure                     *BackendFailure
 		answer                      agentAnswer
+		snapshot                    string
 	}
 	type repairProgress struct {
 		run, id string
@@ -996,7 +997,7 @@ func daemon(h string) error {
 					o.Status, o.Log = o.Stage.Status, o.Stage.Reason
 				case "review":
 					reviewed := executeReview(ctx, &review)
-					o.Status, o.Result, o.Log, o.Failure, o.Answer = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer
+					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot
 				case "repair":
 					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
 					o.Repair = &repair
@@ -1076,7 +1077,7 @@ func daemon(h string) error {
 				reviewed := executeReview(ctx, &x)
 				cancel()
 				select {
-				case completed <- completion{run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer}:
+				case completed <- completion{run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot}:
 				case <-stopped:
 				}
 			}()
@@ -1174,6 +1175,7 @@ func daemon(h string) error {
 			}
 			delete(active, r.ID)
 			status := done.status
+			recordSnapshotCheck(r.Review, done.snapshot)
 			recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.failure), Message: failureMessage(done.failure), CostUSD: done.answer.CostUSD, Tokens: done.answer.Tokens})
 			if done.failure != nil && r.Status != "cancelling" {
 				r.ReviewUsed--
