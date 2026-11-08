@@ -4,9 +4,12 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"net/url"
 	"os"
@@ -794,28 +797,54 @@ func fixerEscalation(x *Repair, run fixerRun) (string, string) {
 	return escalationText(run.answer.Text)
 }
 
+type evidenceWriter struct {
+	text  []byte
+	hash  hash.Hash
+	total int
+}
+
+func (w *evidenceWriter) Write(p []byte) (int, error) {
+	w.hash.Write(p)
+	w.total += len(p)
+	if room := 65536 - len(w.text); room > 0 {
+		w.text = append(w.text, p[:min(room, len(p))]...)
+	}
+	return len(p), nil
+}
+
 func capturePartial(x *Repair) {
-	text := ""
+	w := &evidenceWriter{hash: sha256.New()}
 	diff, err := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, "--")
-	untracked, untrackedErr := gitRead(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
-	switch {
-	case err != nil:
-		text = "partial diff unavailable: " + err.Error() + "\n"
-	case untrackedErr != nil:
-		text = string(diff) + "untracked files unavailable: " + untrackedErr.Error() + "\n"
-	default:
-		text = string(diff)
-		for _, name := range strings.Split(string(untracked), "\x00") {
-			if name != "" {
-				text += "untracked: " + name + "\n"
-			}
+	if err != nil {
+		fmt.Fprintf(w, "partial diff unavailable: %v\n", err)
+	}
+	w.Write(diff)
+	untracked, err := gitRead(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
+	if err != nil {
+		fmt.Fprintf(w, "untracked files unavailable: %v\n", err)
+	}
+	for _, name := range strings.Split(string(untracked), "\x00") {
+		if name == "" {
+			continue
 		}
+		path := filepath.Join(x.Worktree, name)
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() {
+			fmt.Fprintf(w, "untracked: %s (not a regular file)\n", name)
+			continue
+		}
+		fmt.Fprintf(w, "untracked: %s (%d bytes)\n", name, info.Size())
+		if f, err := os.Open(path); err == nil {
+			io.Copy(w, f)
+			f.Close()
+		}
+		w.Write([]byte("\n"))
 	}
-	x.PartialDigest, x.PartialBytes = bytesDigest([]byte(text)), len(text)
-	if len(text) > 65536 {
-		text = strings.ToValidUTF8(text[:65536], "") + "\n[truncated]\n"
+	x.PartialDigest, x.PartialBytes = hex.EncodeToString(w.hash.Sum(nil)), w.total
+	x.Partial = strings.ToValidUTF8(string(w.text), "")
+	if w.total > len(w.text) {
+		x.Partial += "\n[truncated]\n"
 	}
-	x.Partial = text
 }
 
 func pauseRepair(x *Repair, failure *BackendFailure) {

@@ -97,7 +97,7 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 	t.Helper()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
 	os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600)
-	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half\\n' if mode else 'repaired\\n')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode in ('fail','commit') else 0)\n")
+	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half '+mode+'\\n' if mode else 'repaired\\n')\nif mode=='untracked': open('notes.txt','w').write('unique-untracked-content-7f3a\\n')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode else 0)\n")
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
 	os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600)
 	mutate(t, bin, repo, home, v, "review", "review-findings", nil)
@@ -163,7 +163,54 @@ func TestRefusedRepairRerunLeavesCandidateUntouched(t *testing.T) {
 	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	run := runOf(t, v)
 	b, _ := os.ReadFile(filepath.Join(worktree, "sample.txt"))
-	if refused["outcome"] != "refused" || string(b) != "half\n" || run["repair_used"].(float64) != 1 || run["prior_repairs"] != nil || run["status"] != "fixer-failed" {
+	if refused["outcome"] != "refused" || string(b) != "half fail\n" || run["repair_used"].(float64) != 1 || run["prior_repairs"] != nil || run["status"] != "fixer-failed" {
 		t.Fatalf("a refused rerun must not clean the candidate or spend budget: %v %q %v", refused["error"], b, run)
+	}
+}
+
+func priorEvidence(t *testing.T, prior any, content string) string {
+	t.Helper()
+	kept := prior.(map[string]any)
+	partial, _ := kept["partial"].(string)
+	if !strings.Contains(partial, content) || kept["partial_digest"] != bytesDigest([]byte(partial)) || kept["partial_bytes"] != float64(len(partial)) {
+		t.Fatalf("prior repair must keep %q with its own digest and size: %v", content, kept)
+	}
+	return kept["partial_digest"].(string)
+}
+
+func TestRepeatedRerunsKeepEachFailedRepairsEvidence(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := stoppedRepairFixture(t, "fail")
+	os.WriteFile(filepath.Join(root, "fix-mode"), []byte("again"), 0600)
+	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-again", nil); v["outcome"] != "ok" {
+		t.Fatalf("second attempt: %v", v)
+	}
+	v = waitStatus(t, bin, repo, home, "fixer-failed")
+	os.Remove(filepath.Join(root, "fix-mode"))
+	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-third", nil); v["outcome"] != "ok" {
+		t.Fatalf("third attempt: %v", v)
+	}
+	v = waitStatus(t, bin, repo, home, "fixed-not-independently-rereviewed")
+	prior := runOf(t, v)["prior_repairs"].([]any)
+	if len(prior) != 2 || runOf(t, v)["repair_used"].(float64) != 3 {
+		t.Fatalf("two failed attempts must both be kept: %v", runOf(t, v))
+	}
+	if priorEvidence(t, prior[0], "+half fail") == priorEvidence(t, prior[1], "+half again") {
+		t.Fatal("each failed attempt needs its own digest")
+	}
+}
+
+func TestRerunKeepsUntrackedFileContents(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := stoppedRepairFixture(t, "untracked")
+	os.Remove(filepath.Join(root, "fix-mode"))
+	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-untracked", nil); v["outcome"] != "ok" {
+		t.Fatalf("rerun: %v", v)
+	}
+	v = waitStatus(t, bin, repo, home, "fixed-not-independently-rereviewed")
+	priorEvidence(t, runOf(t, v)["prior_repairs"].([]any)[0], "unique-untracked-content-7f3a")
+	worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string)
+	if _, err := os.Stat(filepath.Join(worktree, "notes.txt")); !os.IsNotExist(err) {
+		t.Fatal("the restored candidate must not keep the stopped attempt's new file")
 	}
 }

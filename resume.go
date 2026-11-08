@@ -283,7 +283,7 @@ func readmitRepair(r *Run, old Repair) (*Repair, error) {
 	x := old
 	x.ID, x.Config, x.ConfigDigest, x.ExecutableDigest, x.Args = opaque(), cfg, digest(cfg), fixerDigest, fixerArgsFor(cfg, prompt)
 	x.Status, x.Writer, x.Log, x.Head, x.Parent, x.Diff, x.Checks = "admitted", "not-started", "", "", "", "", nil
-	x.Failure, x.Partial, x.Resumed, x.CostUSD, x.Tokens, x.Authority = nil, "", true, 0, 0, ""
+	x.Failure, x.Partial, x.PartialDigest, x.PartialBytes, x.Resumed, x.CostUSD, x.Tokens, x.Authority = nil, "", "", 0, true, 0, 0, ""
 	switch x.Budget {
 	case "gate":
 		r.Pipeline.RepairUsed++
