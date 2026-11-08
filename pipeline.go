@@ -1177,11 +1177,7 @@ func renderPipeline(w io.Writer, r *Run, details bool) {
 		}
 		fmt.Fprintln(w, d.Reason)
 		if len(d.Findings) > 0 {
-			var ids []string
-			for _, id := range d.Findings {
-				ids = append(ids, short(id))
-			}
-			fmt.Fprintln(w, "Grouped findings: "+strings.Join(ids, ", "))
+			fmt.Fprintln(w, "Grouped findings: "+strings.Join(d.Findings, ", "))
 		}
 		fmt.Fprintf(w, "Options: %s\n[d] answers this decision\n", strings.Join(d.Options, ", "))
 	}

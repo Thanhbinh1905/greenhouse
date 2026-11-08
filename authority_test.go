@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -531,18 +532,21 @@ func TestParseSelection(t *testing.T) {
 		err   string
 	}{
 		{line: "", whole: true},
-		{line: "   ", whole: true},
+		{line: "   ", err: "no finding ID"},
+		{line: "\t", err: "no finding ID"},
 		{line: "bbbb3333", ids: []string{"bbbb3333"}},
-		{line: "aaaa1 bbbb", ids: []string{"aaaa1111", "bbbb3333"}},
-		{line: "aaaa1,bbbb", ids: []string{"aaaa1111", "bbbb3333"}},
-		{line: " aaaa2 , bbbb3333 ", ids: []string{"aaaa2222", "bbbb3333"}},
+		{line: "aaaa1111 bbbb3333", ids: []string{"aaaa1111", "bbbb3333"}},
+		{line: "aaaa1111,bbbb3333", ids: []string{"aaaa1111", "bbbb3333"}},
+		{line: " aaaa2222 , bbbb3333 ", ids: []string{"aaaa2222", "bbbb3333"}},
 		{line: ",", err: "no finding ID"},
 		{line: ",,,", err: "no finding ID"},
 		{line: " , ", err: "no finding ID"},
 		{line: "zzz", err: "unknown finding ID: zzz"},
-		{line: "aaaa", err: "ambiguous finding ID: aaaa"},
-		{line: "bbbb bbbb3333", err: "duplicate finding ID: bbbb3333"},
-		{line: "aaaa1, zzz", err: "unknown finding ID: zzz"},
+		{line: "bbbb", err: "unknown finding ID: bbbb"},
+		{line: "aaaa", err: "unknown finding ID: aaaa"},
+		{line: "BBBB3333", err: "unknown finding ID: BBBB3333"},
+		{line: "bbbb3333 bbbb3333", err: "duplicate finding ID: bbbb3333"},
+		{line: "aaaa1111, zzz", err: "unknown finding ID: zzz"},
 	} {
 		ids, whole, err := parseSelection(tc.line, group)
 		got := ""
@@ -554,6 +558,29 @@ func TestParseSelection(t *testing.T) {
 		}
 		if err != nil && ids != nil {
 			t.Errorf("parseSelection(%q) returned IDs with an error", tc.line)
+		}
+	}
+}
+
+func TestParseTerminalNumbersAndSettings(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		text string
+		want int
+		ok   bool
+	}{{"7", 7, true}, {"1000", 1000, true}, {"", 0, false}, {" 7", 0, false}, {"7 ", 0, false}, {"7x", 0, false}, {"+7", 0, false}, {"-1", 0, false}, {"07", 0, false}, {"99999999999999999999", 0, false}} {
+		got, err := parseCount(tc.text)
+		if (err == nil) != tc.ok || got != tc.want {
+			t.Errorf("parseCount(%q) = %d, %v", tc.text, got, err)
+		}
+	}
+	for _, tc := range []struct {
+		text string
+		ok   bool
+	}{{"ask one-pass 7", true}, {"auto full 6", true}, {"ask one-pass", false}, {"ask one-pass 7 extra", false}, {"ask one-pass 7x", false}, {" ask one-pass 7", false}, {"ask  one-pass 7", false}} {
+		mode, preset, limit, err := parseDraft(tc.text)
+		if (err == nil) != tc.ok || tc.ok && mode+" "+preset+" "+strconv.Itoa(limit) != tc.text {
+			t.Errorf("parseDraft(%q) = %q %q %d, %v", tc.text, mode, preset, limit, err)
 		}
 	}
 }

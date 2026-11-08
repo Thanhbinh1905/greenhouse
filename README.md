@@ -140,7 +140,7 @@ The combined cap counts review rounds and finding-repair rounds; `budget` in eve
 
 A repair that needs authority beyond the approved intent parks a user-only `authority` decision in every mode. The controller detects a deleted file (`destructive`), a changed file mode (`permissions`) and a change outside the authorized paths (`scope`). The fixer can also stop without edits and answer `{"escalate":"intent|acceptance|credentials|scope|permissions|destructive","reason":"..."}`. Nothing is committed. The only options are `rethink` and `discard`; neither a budget nor `accept-head` can answer it. Granting expanded authority to the fixer is unsupported.
 
-Answer the open decision with `decide` (terminal `d`). The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
+Answer the open decision with `decide` (terminal `d`). The terminal accepts only exact input: an option exactly as listed, a limit in digits, and full finding IDs as shown, separated by commas or spaces. Only an empty line selects the whole group; any other input is refused before anything is submitted. The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
 
 ```json
 {"version":1,"op":"decide","run_id":"...","input_id":"...","gate_id":"decision id","expected":"token","action_id":"unique","choice":"final-fix","reason":"one last repair"}

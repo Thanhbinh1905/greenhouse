@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -422,30 +423,41 @@ func escalation(stdout []byte) (string, string) {
 }
 
 func parseSelection(line string, group []string) ([]string, bool, error) {
-	if strings.TrimSpace(line) == "" {
+	if line == "" {
 		return nil, true, nil
 	}
 	entries := strings.FieldsFunc(line, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
 	if len(entries) == 0 {
-		return nil, false, errors.New("no finding ID entered; leave the line empty to select the whole group")
+		return nil, false, errors.New("no finding ID entered; only an empty line selects the whole group")
 	}
 	var ids []string
 	for _, entry := range entries {
-		var matches []string
-		for _, id := range group {
-			if strings.HasPrefix(id, entry) {
-				matches = append(matches, id)
-			}
-		}
 		switch {
-		case len(matches) == 0:
-			return nil, false, errors.New("unknown finding ID: " + entry)
-		case len(matches) > 1:
-			return nil, false, errors.New("ambiguous finding ID: " + entry)
-		case has(ids, matches[0]):
-			return nil, false, errors.New("duplicate finding ID: " + matches[0])
+		case !has(group, entry):
+			return nil, false, errors.New("unknown finding ID: " + entry + "; enter full IDs exactly as shown")
+		case has(ids, entry):
+			return nil, false, errors.New("duplicate finding ID: " + entry)
 		}
-		ids = append(ids, matches[0])
+		ids = append(ids, entry)
 	}
 	return ids, false, nil
+}
+
+func parseCount(text string) (int, error) {
+	if len(text) == 0 || len(text) > 4 || text[0] == '0' || strings.Trim(text, "0123456789") != "" {
+		return 0, errors.New("enter a whole number from 1 to 9999 with digits only")
+	}
+	return strconv.Atoi(text)
+}
+
+func parseDraft(text string) (string, string, int, error) {
+	fields := strings.Split(text, " ")
+	if len(fields) != 3 {
+		return "", "", 0, errors.New("enter exactly mode, preset and limit separated by single spaces")
+	}
+	limit, err := parseCount(fields[2])
+	if err != nil {
+		return "", "", 0, err
+	}
+	return fields[0], fields[1], limit, nil
 }

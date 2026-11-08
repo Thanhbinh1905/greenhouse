@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
@@ -1095,7 +1096,7 @@ func terminal(h, path string) error {
 			if state == "" {
 				state = "Resolved"
 			}
-			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, short(f.ID))
+			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, f.ID)
 		}
 		if r.Repair != nil {
 			fix := r.Repair
@@ -1128,7 +1129,7 @@ func terminal(h, path string) error {
 		if !reader.Scan() {
 			return reader.Err()
 		}
-		op := strings.TrimSpace(reader.Text())
+		op := reader.Text()
 		if op == "q" {
 			return nil
 		}
@@ -1143,15 +1144,23 @@ func terminal(h, path string) error {
 			q.Op = "cancel"
 		}
 		if op == "f" {
-			fmt.Print("Selected finding IDs (comma-separated):\n> ")
+			fmt.Print("Full finding IDs (separated by commas or spaces):\n> ")
 			if !reader.Scan() {
 				return nil
 			}
-			for _, id := range strings.Split(reader.Text(), ",") {
-				if id = strings.TrimSpace(id); id != "" {
-					q.Selected = append(q.Selected, id)
-				}
+			var reviewed []string
+			if r.Review != nil && r.Review.Result != nil {
+				reviewed = findingIDs(r.Review.Result.Findings)
 			}
+			selected, whole, err := parseSelection(reader.Text(), reviewed)
+			if whole {
+				err = errors.New("no finding ID entered")
+			}
+			if err != nil {
+				message = err.Error() + "; nothing submitted"
+				continue
+			}
+			q.Selected = selected
 			q.Op = "repair"
 		}
 		if op == "h" {
@@ -1166,9 +1175,13 @@ func terminal(h, path string) error {
 			if !reader.Scan() {
 				return nil
 			}
-			q.Choice = strings.TrimSpace(reader.Text())
+			q.Choice = reader.Text()
+			if !has(v.Decision.Options, q.Choice) {
+				message = "unknown choice " + strconv.Quote(q.Choice) + "; enter an option exactly as listed; nothing submitted"
+				continue
+			}
 			if q.Choice == "repair" && v.Decision.Kind == "findings" {
-				fmt.Print("Finding IDs (separated by commas or spaces; an empty line selects the whole group):\n> ")
+				fmt.Print("Full finding IDs (separated by commas or spaces; an empty line selects the whole group):\n> ")
 				if !reader.Scan() {
 					return nil
 				}
@@ -1184,7 +1197,10 @@ func terminal(h, path string) error {
 				if !reader.Scan() {
 					return nil
 				}
-				fmt.Sscan(reader.Text(), &q.Limit)
+				if q.Limit, e = parseCount(reader.Text()); e != nil {
+					message = e.Error() + "; nothing submitted"
+					continue
+				}
 			}
 			fmt.Print("Reason:\n> ")
 			if !reader.Scan() {
@@ -1221,8 +1237,8 @@ func terminal(h, path string) error {
 				return nil
 			}
 			draft := s.Settings
-			if _, e = fmt.Sscan(reader.Text(), &draft.Mode, &draft.Preset, &draft.Limit); e != nil {
-				message = "Invalid draft"
+			if draft.Mode, draft.Preset, draft.Limit, e = parseDraft(reader.Text()); e != nil {
+				message = "Invalid draft: " + e.Error()
 				continue
 			}
 			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
@@ -1239,7 +1255,7 @@ func terminal(h, path string) error {
 			if !reader.Scan() {
 				return nil
 			}
-			switch strings.TrimSpace(reader.Text()) {
+			switch reader.Text() {
 			case "a":
 				q.Op = "apply"
 			case "d":

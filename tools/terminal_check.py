@@ -294,17 +294,27 @@ open("sample.txt","w").write("repaired\\n")
         assert "Options: " + ", ".join(decision["options"]) in asked.replace("\n", "")
         if name == "full-ask":
             assert decision["kind"] == "findings" and "Grouped findings:" in asked
-            known = decision["findings"][0][:12]
+            known = decision["findings"][0]
+            assert f"Grouped findings: {known}" in asked.replace("\n", "")
             for label, entry, refusal in [("unknown", "zzz", "unknown finding ID: zzz"),
+                                          ("whitespace", "   ", "no finding ID entered"),
+                                          ("truncated", known[:12], f"unknown finding ID: {known[:12]}"),
                                           ("commas", ",", "no finding ID entered"),
                                           ("separators", " , ", "no finding ID entered"),
-                                          ("duplicate", f"{known} {known}", "duplicate finding ID: ")]:
+                                          ("duplicate", f"{known} {known}", f"duplicate finding ID: {known}")]:
                 refused = session(width, ["d", "repair", entry, "i", "q"], f"-{name}-selection-{label}")
                 unchanged = axi()
                 assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["status"] == "needs-decision", (label, unchanged["run"]["pipeline"])
                 assert refusal in refused.replace("\n", "") and "nothing submitted" in refused.replace("\n", ""), label
         else:
             assert decision["kind"] == "cap" and "review cap reached" in asked
+            for label, steps, refusal in [("padded-choice", ["d", "final-fix "], 'unknown choice "final-fix "'),
+                                          ("limit", ["d", "increase-cap", "7x"], "digits only"),
+                                          ("settings", ["s", "auto full 9 x"], "Invalid draft")]:
+                refused = session(width, steps + ["i", "q"], f"-{name}-{label}")
+                unchanged = axi()
+                assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["configs"][-1]["settings"]["limit"] == 1, (label, unchanged["run"]["pipeline"])
+                assert refusal in refused.replace("\n", ""), label
         session(width, answer + ["q"], f"-{name}-answer")
         state = settle()
         text = session(width, ["i", "q"], f"-{name}-result")
