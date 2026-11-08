@@ -982,13 +982,28 @@ func capturePartial(x *Repair) {
 }
 
 func removeUntrackedSpecialFiles(root string) error {
-	if err := walkUntrackedSpecialFiles(root, func(path, _ string, mode os.FileMode, walkErr error) error {
-		if walkErr != nil {
-			return os.Chmod(path, mode.Perm()|0700)
+	for {
+		changed := false
+		err := walkUntrackedSpecialFiles(root, func(path, _ string, mode os.FileMode, walkErr error) error {
+			if walkErr == nil {
+				return nil
+			}
+			permissions := mode.Perm() | 0700
+			if permissions == mode.Perm() {
+				return walkErr
+			}
+			if err := os.Chmod(path, permissions); err != nil {
+				return err
+			}
+			changed = true
+			return nil
+		})
+		if err != nil {
+			return err
 		}
-		return nil
-	}); err != nil {
-		return err
+		if !changed {
+			break
+		}
 	}
 	return walkUntrackedSpecialFiles(root, func(path, _ string, _ os.FileMode, walkErr error) error {
 		if walkErr != nil {
