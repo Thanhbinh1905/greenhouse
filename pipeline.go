@@ -1319,7 +1319,7 @@ func authorizePipelineHandback(r *Run) error {
 	return nil
 }
 
-func handbackPipeline(r *Run) error {
+func handbackPipeline(r *Run, trusted string) error {
 	p := r.Pipeline
 	if p.Handback == "handed-back" {
 		id, e := resolve(r.Submitted.Worktree)
@@ -1348,8 +1348,8 @@ func handbackPipeline(r *Run) error {
 		if _, e := gitRead(r.Submitted.Worktree, "merge-base", "--is-ancestor", r.Submitted.Head, r.Candidate); e != nil {
 			return errors.New("candidate does not descend from the submitted head")
 		}
-		if status, e := gitRead(r.Submitted.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); e != nil || len(status) > 0 {
-			return errors.New("source dirty state is ambiguous; candidate preserved")
+		if e := sourceClean(r.Submitted.Worktree, trusted); e != nil {
+			return e
 		}
 		if _, e := controllerGit(r.Submitted.Worktree, "merge", "--ff-only", r.Candidate); e != nil {
 			if after, err := resolve(r.Submitted.Worktree); err == nil && after == r.Submitted {
@@ -1397,14 +1397,14 @@ func acceptPipelineProgress(r *Run, id string, value Repair) bool {
 func reconcileHandbacks(s *Store) {
 	for _, r := range s.Runs {
 		if r.Repair != nil && r.Repair.Handback == "handback-in-progress" {
-			if err := handback(r); err != nil {
+			if err := handback(r, s.Trust[r.Submitted.Repository].Digest); err != nil {
 				r.Repair.Handback = "awaiting-handback"
 				r.Repair.Log = err.Error()
 			}
 		}
 		if p := r.Pipeline; p != nil && p.Handback == "handback-in-progress" {
 			p.HandbackError = ""
-			if err := handbackPipeline(r); err != nil {
+			if err := handbackPipeline(r, s.Trust[r.Submitted.Repository].Digest); err != nil {
 				p.Handback = "awaiting-handback"
 				p.HandbackError = err.Error()
 				if errors.Is(err, errHandbackUnknown) {

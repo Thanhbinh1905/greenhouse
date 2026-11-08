@@ -104,6 +104,7 @@ func TestRepositoryOverrideCannotExpandAuthority(t *testing.T) {
 	override := filepath.Join(repo, ".greenhouse.json")
 	for _, tc := range []struct{ name, content, reason string }{
 		{"yolo", `{"version":1,"mode":"yolo"}`, "expand"},
+		{"preset", `{"version":1,"preset":"full"}`, "preset full would expand"},
 		{"limit", `{"version":1,"budget_unit":"rounds","limit":9}`, "above the per-user limit"},
 		{"unit", `{"version":1,"budget_unit":"usd","limit":2}`, "budget_unit"},
 		{"executable", `{"version":1,"executable":"/bin/sh"}`, "cannot set executable"},
@@ -119,7 +120,7 @@ func TestRepositoryOverrideCannotExpandAuthority(t *testing.T) {
 		if v["outcome"] != "ok" || r["status"] != "ignored" || !strings.Contains(r["reason"].(string), tc.reason) {
 			t.Fatalf("%s: expanding override not ignored with reason: %v %v", tc.name, v["error"], r)
 		}
-		if d := v["defaults"].(map[string]any); d["mode"] != "auto" || d["limit"] != 4.0 {
+		if d := v["defaults"].(map[string]any); d["mode"] != "auto" || d["limit"] != 4.0 || d["preset"] != "one-pass" {
 			t.Fatalf("%s: expanding override changed defaults: %v", tc.name, d)
 		}
 	}
@@ -160,5 +161,34 @@ func TestSaveTargetsTrustedRepositoryOverride(t *testing.T) {
 	}
 	if s := settingsOf(saved); s["mode"] != "auto" {
 		t.Fatal("save changed the current run")
+	}
+}
+
+func TestRepositorySaveDoesNotBlockHandback(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := repairFixture(t)
+	repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v))
+	done := waitRepair(t, bin, repo, home)
+	os.Remove(filepath.Join(repo, "dirty"))
+	done = act(t, bin, repo, home, done, "trust", "trust", map[string]any{"digest": repositoryOf(t, done)["digest"]})
+	narrow := map[string]any{"mode": "ask", "preset": "one-pass", "limit": 2, "rules": []string{"unslop", "no-comments"}}
+	saved := act(t, bin, repo, home, done, "save", "save-repo", map[string]any{"target": "repository", "settings": narrow})
+	if saved["outcome"] != "ok" {
+		t.Fatalf("repository save refused: %v", saved)
+	}
+	override := filepath.Join(repo, ".greenhouse.json")
+	content, _ := os.ReadFile(override)
+	writeRaw(t, override, string(content)+" ")
+	if refused := repairRequest(t, bin, repo, home, saved, "handback", "handback-changed", nil); refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "dirty") {
+		t.Fatalf("an override changed after its trusted save did not block handback: %v", refused)
+	}
+	writeRaw(t, override, string(content))
+	refreshed := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	handed := repairRequest(t, bin, repo, home, refreshed, "handback", "handback", nil)
+	if handed["outcome"] != "ok" || runOf(t, handed)["repair"].(map[string]any)["handback"] != "handed-back" {
+		t.Fatalf("the trusted repository override blocked handback: %v", handed)
+	}
+	if b, _ := os.ReadFile(override); string(b) != string(content) {
+		t.Fatal("handback changed the saved repository override")
 	}
 }

@@ -149,6 +149,7 @@ func repositoryDefaults(s *Store, id Identity) (Settings, map[string]string, Rep
 }
 
 var modeRank = map[string]int{"ask": 0, "auto": 1, "yolo": 2}
+var presetRank = map[string]int{"one-pass": 0, "full": 1}
 
 func parseOverride(b []byte, base Settings) (Settings, []string, error) {
 	version, fields, err := configVersion(overrideName, b)
@@ -196,6 +197,9 @@ func parseOverride(b []byte, base Settings) (Settings, []string, error) {
 func narrows(s, base Settings) error {
 	if rank, ok := modeRank[s.Mode]; !ok || rank > modeRank[base.Mode] {
 		return fmt.Errorf("mode %s would expand approval authority beyond the per-user mode %s", s.Mode, base.Mode)
+	}
+	if rank, ok := presetRank[s.Preset]; !ok || rank > presetRank[base.Preset] {
+		return fmt.Errorf("preset %s would expand delivery authority beyond the per-user preset %s", s.Preset, base.Preset)
 	}
 	if s.Limit > base.Limit {
 		return fmt.Errorf("limit %d is above the per-user limit %d; an override can only narrow it", s.Limit, base.Limit)
@@ -309,4 +313,23 @@ func overrideLine(o *RepositoryStatus) string {
 		return "Repository override: " + overrideName + " applied to new runs"
 	}
 	return "Repository override: " + overrideName + " IGNORED: " + o.Reason
+}
+
+func sourceClean(worktree, trusted string) error {
+	status, err := gitRead(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	if err != nil {
+		return errors.New("source dirty state is ambiguous; candidate preserved")
+	}
+	for _, entry := range strings.Split(string(status), "\x00") {
+		if entry == "" {
+			continue
+		}
+		if len(entry) > 3 && entry[3:] == overrideName && (entry[:2] == "??" || entry[:2] == " M") {
+			if _, b, err := readOverride(worktree); err == nil && b != nil && bytesDigest(b) == trusted {
+				continue
+			}
+		}
+		return errors.New("source dirty state is ambiguous; candidate preserved")
+	}
+	return nil
 }

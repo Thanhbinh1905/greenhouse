@@ -769,7 +769,7 @@ func authorizeHandback(r *Run) error {
 	return nil
 }
 
-func handback(r *Run) error {
+func handback(r *Run, trusted string) error {
 	x := r.Repair
 	if x == nil {
 		return errors.New("no repair candidate")
@@ -824,9 +824,8 @@ func handback(r *Run) error {
 	if e != nil || strings.TrimSpace(string(parent)) != x.Base {
 		return errors.New("candidate lineage changed")
 	}
-	status, e := gitRead(r.Submitted.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-	if e != nil || len(status) > 0 {
-		return errors.New("source dirty state is ambiguous; candidate preserved")
+	if e = sourceClean(r.Submitted.Worktree, trusted); e != nil {
+		return e
 	}
 	index, e := gitRead(r.Submitted.Worktree, "rev-parse", "--path-format=absolute", "--git-path", "index.lock")
 	if e != nil {

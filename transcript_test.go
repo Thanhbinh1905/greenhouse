@@ -50,6 +50,19 @@ func TestTranscriptLogIsRedactedBoundedAndViewable(t *testing.T) {
 	}
 }
 
+func TestTranscriptNearLimitStaysBounded(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "state")
+	t.Setenv("GREENHOUSE_HOME", home)
+	os.MkdirAll(filepath.Join(home, "transcripts"), 0700)
+	path := filepath.Join(home, "transcripts", "run.log")
+	writeRaw(t, path, strings.Repeat("x", transcriptLimit-10))
+	appendTranscript("run", "reviewer exec", []byte("more output"), nil)
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) > transcriptLimit+len(transcriptOmitted) || !strings.HasSuffix(string(b), transcriptOmitted) {
+		t.Fatalf("near-limit append not bounded or unmarked: %d %v", len(b), err)
+	}
+}
+
 func TestTranscriptStopsAtPerRunLimit(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "state")
 	t.Setenv("GREENHOUSE_HOME", home)

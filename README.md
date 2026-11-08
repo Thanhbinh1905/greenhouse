@@ -304,9 +304,9 @@ A worktree may hold `.greenhouse.json`:
 
 It applies to new runs only after the User trusts the repository with `trust` (terminal `t`), which binds the exact file digest shown in `repository.digest`. An untrusted, changed, newer or invalid file is shown as ignored with the reason, and new runs use the per-user defaults. Trust is recorded per repository with its actor, reason, and action ID. Trusting never changes the current run.
 
-An override can only narrow or select among per-user choices. `mode` and `limit` cannot exceed the per-user values, with `ask` below `auto` below `yolo`. `auto_resume` cannot turn on a per-user `off`. `rules` must be built-in or already selected in the per-user defaults, and a backend must be configured in per-user files. Keys that would set an executable, command, grant, remote, or YOLO actor make the whole file ignored.
+An override can only narrow or select among per-user choices. `mode`, `preset` and `limit` cannot exceed the per-user values, with `ask` below `auto` below `yolo` and `one-pass` below `full`. `auto_resume` cannot turn on a per-user `off`. `rules` must be built-in or already selected in the per-user defaults, and a backend must be configured in per-user files. Keys that would set an executable, command, grant, remote, or YOLO actor make the whole file ignored.
 
-Responses carry `repository` (path, `status` of `absent`, `ignored` or `applied`, reason, digest and trust record), the effective `defaults` with `defaults_sources`, and `sources` on each configuration snapshot. Saving with `"target":"repository"` requires a trusted, unchanged file. It writes only the values that differ from the per-user defaults and trusts the written bytes.
+Responses carry `repository` (path, `status` of `absent`, `ignored` or `applied`, reason, digest and trust record), the effective `defaults` with `defaults_sources`, and `sources` on each configuration snapshot. Saving with `"target":"repository"` requires a trusted, unchanged file. It writes only the values that differ from the per-user defaults and trusts the written bytes. Commit the file to share it. Until then, guarded handback accepts an untracked or modified `.greenhouse.json` only while its bytes match the trusted digest; any other change still blocks handback.
 
 ## Transcript logs
 

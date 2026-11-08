@@ -78,8 +78,8 @@ func appendTranscript(run, header string, stdout, stderr []byte) {
 	section.Write(stderr)
 	section.WriteString("\n")
 	out := redact(section.Bytes())
-	if room := transcriptLimit - int(info.Size()); len(out) > room {
-		out = append(out[:room-len(transcriptOmitted)], transcriptOmitted...)
+	if room := transcriptLimit - len(transcriptOmitted) - int(info.Size()); len(out) > room {
+		out = append(out[:max(room, 0)], transcriptOmitted...)
 	}
 	f.Write(out)
 }
