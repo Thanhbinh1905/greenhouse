@@ -4,17 +4,17 @@ Final source checks:
 
 | Command | Result |
 |---|---|
-| `go test ./...` | Pass: `greenhouse` 79.105s, `greenhouse/eval` 3.198s |
-| `go test -race ./...` | Pass: `greenhouse` 89.288s, `greenhouse/eval` 6.532s |
+| `go test ./...` | Pass: `greenhouse` 55.425s, `greenhouse/eval` cached |
+| `go test -race ./...` | Pass: `greenhouse` 62.237s, `greenhouse/eval` 4.776s |
 | `go vet ./...` | Pass, no diagnostics |
 | `gofmt -l` on changed Go files | Pass, no filenames |
 | `git diff --check` | Pass |
 | `python3 tools/terminal_check.py <binary> <Task-scratch-output>` | Pass at 56, 80, and 100 columns |
 | Credential-value scan | Pass; neither the GitHub token nor the provider key appears in the changed files or evidence |
 
-[Unit output](go-test.log), [race output](go-race.log), [vet output](go-vet.log), and [PTY output](pty-check.log) preserve the results. Test executables and temporary state use Task t59 scratch; Go's build cache remains shared.
+[Unit output](go-test.log), [race output](go-race.log), [vet output](go-vet.log), and [PTY output](pty-check.log) preserve the results. These results are from Task t65, after the elided-values fix. Test executables and temporary state use Task scratch; Go's build cache remains shared.
 
-[Red-before excerpts](regression-red.log) record the failures for word wrapping, long identifiers, displayed-ID selection, prompt spacing, column spacing, empty-diff rereview, and premature cancellation completion. Each was observed before its corresponding fix. The empty-diff executable regression now invokes two independent reviews and passes every configured local gate after the repair restores the target tree.
+[Red-before excerpts](regression-red.log) record the failures for word wrapping, long identifiers, displayed-ID selection, prompt spacing, column spacing, empty-diff rereview, and premature cancellation completion. Each was observed before its corresponding fix. [Elided-value red output](actionable-values-red.log) records the 56-column unit and PTY failures for the PR URL, remote URL, and candidate ref. The empty-diff executable regression now invokes two independent reviews and passes every configured local gate after the repair restores the target tree.
 
 The cancellation checks include the existing executable rerun test and pre-commit cancellation test. [Three race-enabled repetitions](cancellation-regressions.log) pass without weakening their candidate, partial-edit, budget, or evidence assertions. The pre-commit seam now expects the run to remain `cancelling` until the daemon consumes final completion.
 

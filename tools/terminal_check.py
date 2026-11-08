@@ -39,6 +39,7 @@ state_dir.mkdir(mode=0o700)
 }, "models": []}))
 os.chmod(state_dir / "providers.json", 0o600)
 delivery = {"bare": None, "head": None}
+pr_url = "https://example.invalid/acme/garden-terminal-width-validation-fixture/pull/12"
 
 
 class ForgeHandler(BaseHTTPRequestHandler):
@@ -72,7 +73,7 @@ class ForgeHandler(BaseHTTPRequestHandler):
         request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
         branch = request["head"].removeprefix("acme:")
         delivery["head"] = subprocess.check_output(["git", "--git-dir", delivery["bare"], "rev-parse", f"refs/heads/{branch}"], text=True).strip()
-        self.send_json({"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": {"sha": delivery["head"]}})
+        self.send_json({"number": 12, "html_url": pr_url, "head": {"sha": delivery["head"]}})
 
 
 forge = ThreadingHTTPServer(("127.0.0.1", 0), ForgeHandler)
@@ -138,7 +139,7 @@ def session(width, commands, label=""):
     frames = text.split("\x1b[2J\x1b[H")[1:]
     for frame in frames:
         home = frame.split("\n> ")[0]
-        assert all(len(line) <= width for line in home.splitlines()), (width, home)
+        assert all(len(line) <= width or line.split() == [line] for line in home.splitlines()), (width, home)
     return text
 
 
@@ -333,13 +334,18 @@ open("sample.txt","w").write("repaired\\n")
         parity(state, text)
         stages = {s["name"]: s for s in state["run"]["pipeline"]["stages"]}
         if name == "full-ready":
+            push = stages["push"]["commands"]
+            actionable = [pr_url, state["run"]["pipeline"]["ref"].removeprefix("refs/heads/"), *push[0]["args"][-2:], push[-1]["args"][-1]]
+            for capture in [text, delivery_text, session(80, ["i", "q"], "-full-ready-result-80")]:
+                for value in actionable:
+                    assert any(value in line.split() for line in capture.splitlines()), (value, capture)
             assert state["run"]["status"] == "ci-ready", state["run"]["pipeline"]
             assert stages["push"]["status"] == "passed" and stages["pr"]["status"] == "passed" and stages["ci"]["status"] == "passed"
-            assert stages["pr"]["url"] == "https://example.invalid/acme/garden/pull/12"
+            assert stages["pr"]["url"] == pr_url
             assert stages["ci"]["head"] == state["run"]["candidate"]
-            assert "Pipeline: ci-ready" in text and "https://example.invalid/acme/garden/pull/12" in text
+            assert "Pipeline: ci-ready" in text
             assert state["run"]["candidate"] in text
-            assert "Pipeline: ci-ready" in delivery_text and "https://example.invalid/acme/garden/pull/12" in delivery_text
+            assert "Pipeline: ci-ready" in delivery_text
             assert state["run"]["candidate"] in delivery_text
             assert stages["test"]["repairs"] == 1 and stages["test"]["status"] == "passed"
             assert "[pass after repair, rereviewed] test" in text and "Gate repairs: 1/1" in text

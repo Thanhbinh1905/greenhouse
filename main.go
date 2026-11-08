@@ -1247,12 +1247,14 @@ func wrapWords(text string, width int) string {
 		at := strings.Index(rest, word)
 		gap := rest[:at]
 		rest = rest[at+len(word):]
-		runes := []rune(word)
-		if len(runes) > available {
-			left := (available - 1) / 2
-			word = string(runes[:left]) + "…" + string(runes[len(runes)-(available-1-left):])
-		}
 		n := len([]rune(word))
+		if n > available {
+			if count > 0 {
+				lines = append(lines, line)
+			}
+			lines, line, count = append(lines, word), indent, 0
+			continue
+		}
 		if count > 0 && count+len([]rune(gap))+n > available {
 			lines, line, count = append(lines, line), indent, 0
 		}
@@ -1261,7 +1263,19 @@ func wrapWords(text string, width int) string {
 		}
 		line, count = line+word, count+n
 	}
-	return strings.Join(append(lines, line), "\n")
+	if count > 0 || len(lines) == 0 {
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
+func displayID(id string, width int) string {
+	runes := []rune(id)
+	available := width - 1
+	if len(runes) <= available {
+		return id
+	}
+	left := (available - 1) / 2
+	return string(runes[:left]) + "…" + string(runes[len(runes)-(available-1-left):])
 }
 func terminalText(text string) string {
 	width := terminalWidth()
@@ -1357,7 +1371,7 @@ func terminal(h, path string) error {
 			if state == "" {
 				state = "Resolved"
 			}
-			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, f.ID)
+			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, displayID(f.ID, terminalWidth()))
 		}
 		if r.Repair != nil {
 			fix := r.Repair
@@ -1379,7 +1393,7 @@ func terminal(h, path string) error {
 			if x.Result != nil {
 				fmt.Fprintf(&page, "Reported model: %s/%s\nCoverage: %s\n", x.Result.ReportedProvider, x.Result.ReportedModel, strings.Join(x.Result.Coverage, ", "))
 				for _, f := range x.Result.Findings {
-					fmt.Fprintf(&page, "%s %s %s:%d-%d %s\nAction: %s\nRule: %s | ID: %s\n", f.Priority, f.Origin, f.File, f.Start, f.End, f.Explanation, f.Action, f.Rule, f.ID)
+					fmt.Fprintf(&page, "%s %s %s:%d-%d %s\nAction: %s\nRule: %s | ID: %s\n", f.Priority, f.Origin, f.File, f.Start, f.End, f.Explanation, f.Action, f.Rule, displayID(f.ID, terminalWidth()))
 				}
 			}
 		}

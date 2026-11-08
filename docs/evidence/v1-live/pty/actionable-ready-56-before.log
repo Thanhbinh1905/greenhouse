@@ -1,0 +1,180 @@
+[2J[HGreenhouse | full pipeline
+Run 5074122a2b5d304786171baf35a15a9f
+Stage: ci-ready | ci-ready
+Candidate: dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+Mode: auto | full | limit 6
+Reviewer: pi / fixture/model (run-local)
+Fixer: pi / fixture/model (run-local)
+Budget: review 2 + repair 0 = 2 of 6
+Rules: unslop
+Settings source: run-local
+Rule unslop | resolved | required=true
+Source: builtin:unslop
+Digest:
+d8fdae77a603fad9c3241861258…dc4e0945c5a276a961505d42df1
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository
+configuration is untrusted
+Pipeline: ci-ready
+Gate repairs: 1/1 (counted apart from the review cap)
+Outcome: REPAIRED PASS (rereviewed after repair)
+Candidate ref:
+greenhouse/5074122a2b5d304786171baf35a15a9f
+[pass] intent
+  intent, exact target and command plan loaded
+  in c0043c88 runs 1 fixes 0
+[pass] sync
+  candidate already contains target
+  in 8b990d1b cand dc9ffd3b runs 2 fixes 0
+  $ git merge-base --is-ancestor 84aa8b87f34a HEAD
+    exit=0 passed
+[pass] review
+  independent review clean with complete coverage
+  in 4271adc5 cand dc9ffd3b runs 2 fixes 0
+[pass after repair, rereviewed] test
+  all configured commands exited 0
+  in fd63ae2f cand dc9ffd3b runs 2 fixes 1
+  $ gate test
+    exit=0 passed
+[n/a] docs
+  fixture publishes no documentation
+  in c7af983c cand dc9ffd3b runs 0 fixes 0
+[pass] lint
+  all configured commands exited 0
+  in ce375d3d cand dc9ffd3b runs 1 fixes 0
+  $ gate lint
+    exit=0 passed
+[pass] push
+  head dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+  authorized candidate pushed to configured remote
+  in 70449597 cand dc9ffd3b runs 1 fixes 0
+  $ git ls-remote
+  /home/thanhbinh/.posse/scr…ty-12k8c9v7/full-ready.git
+  refs/heads/greenhouse/5074…2a2b5d304786171baf35a15a9f
+    exit=0 passed
+  $ git push
+  /home/thanhbinh/.posse/scr…ty-12k8c9v7/full-ready.git
+  dc9ffd3b1f9e3ef81765527caa…2a2b5d304786171baf35a15a9f
+    exit=0 passed
+[pass] pr
+  head dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+  PR
+  https://example.invalid/ac…validation-fixture/pull/12
+  pull request created or reconciled for exact
+  candidate
+  in d6b30ea6 cand dc9ffd3b runs 1 fixes 0
+[pass] ci
+  head dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+  all required checks passed for exact head
+  in d2b3234b cand dc9ffd3b runs 1 fixes 0
+Review: clean-review | pi-json-v1 | fixture/model
+Input:
+8271679358f4135be35727f6ad1…eb37a72626bcc6f39ebbaee3c97
+Criteria:
+597757657866a152545170d38b2…761732bf410f31312f2ad4f3291
+Config:
+08878d0569721f1f375da49dafb…299d9122d369d2bc60322b6a007
+process completed; exit=0 stdout bytes=439 stderr
+bytes=0 overflow=false; raw diagnostics withheld to
+avoid credential disclosure
+Reported model: fixture/model
+Coverage: sample.txt
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s]
+Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+
+> i
+[2J[HGreenhouse | full pipeline
+Run 5074122a2b5d304786171baf35a15a9f
+Stage: ci-ready | ci-ready
+Candidate: dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+Mode: auto | full | limit 6
+Reviewer: pi / fixture/model (run-local)
+Fixer: pi / fixture/model (run-local)
+Budget: review 2 + repair 0 = 2 of 6
+Rules: unslop
+Settings source: run-local
+Rule unslop | resolved | required=true
+Source: builtin:unslop
+Digest:
+d8fdae77a603fad9c3241861258…dc4e0945c5a276a961505d42df1
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository
+configuration is untrusted
+Pipeline: ci-ready
+Gate repairs: 1/1 (counted apart from the review cap)
+Outcome: REPAIRED PASS (rereviewed after repair)
+Candidate ref:
+greenhouse/5074122a2b5d304786171baf35a15a9f
+[pass] intent
+  intent, exact target and command plan loaded
+  in c0043c88 runs 1 fixes 0
+[pass] sync
+  candidate already contains target
+  in 8b990d1b cand dc9ffd3b runs 2 fixes 0
+  $ git merge-base --is-ancestor 84aa8b87f34a HEAD
+    exit=0 passed
+[pass] review
+  independent review clean with complete coverage
+  in 4271adc5 cand dc9ffd3b runs 2 fixes 0
+[pass after repair, rereviewed] test
+  all configured commands exited 0
+  in fd63ae2f cand dc9ffd3b runs 2 fixes 1
+  $ gate test
+    exit=0 passed
+[n/a] docs
+  fixture publishes no documentation
+  in c7af983c cand dc9ffd3b runs 0 fixes 0
+[pass] lint
+  all configured commands exited 0
+  in ce375d3d cand dc9ffd3b runs 1 fixes 0
+  $ gate lint
+    exit=0 passed
+[pass] push
+  head dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+  authorized candidate pushed to configured remote
+  in 70449597 cand dc9ffd3b runs 1 fixes 0
+  $ git ls-remote
+  /home/thanhbinh/.posse/scr…ty-12k8c9v7/full-ready.git
+  refs/heads/greenhouse/5074…2a2b5d304786171baf35a15a9f
+    exit=0 passed
+  $ git push
+  /home/thanhbinh/.posse/scr…ty-12k8c9v7/full-ready.git
+  dc9ffd3b1f9e3ef81765527caa…2a2b5d304786171baf35a15a9f
+    exit=0 passed
+[pass] pr
+  head dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+  PR
+  https://example.invalid/ac…validation-fixture/pull/12
+  pull request created or reconciled for exact
+  candidate
+  in d6b30ea6 cand dc9ffd3b runs 1 fixes 0
+[pass] ci
+  head dc9ffd3b1f9e3ef81765527caa1fc9e0b5d2281e
+  all required checks passed for exact head
+  in d2b3234b cand dc9ffd3b runs 1 fixes 0
+Review: clean-review | pi-json-v1 | fixture/model
+Input:
+8271679358f4135be35727f6ad1…eb37a72626bcc6f39ebbaee3c97
+Criteria:
+597757657866a152545170d38b2…761732bf410f31312f2ad4f3291
+Config:
+08878d0569721f1f375da49dafb…299d9122d369d2bc60322b6a007
+process completed; exit=0 stdout bytes=439 stderr
+bytes=0 overflow=false; raw diagnostics withheld to
+avoid credential disclosure
+Reported model: fixture/model
+Coverage: sample.txt
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s]
+Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+>
