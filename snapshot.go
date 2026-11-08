@@ -198,7 +198,6 @@ func materialize(worktree string, s *TreeSnapshot, root string) error {
 	return nil
 }
 
-// verifySnapshot reports whether root still holds exactly the admitted tree.
 func verifySnapshot(worktree string, s *TreeSnapshot, root string) error {
 	_, entries, err := treeListing(worktree, s.Commit)
 	if err != nil {

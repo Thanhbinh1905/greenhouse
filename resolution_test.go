@@ -188,8 +188,6 @@ func TestOnePassRepairShowsResponses(t *testing.T) {
 	}
 }
 
-// respondFixed is the fake Pi fixer answer that reports every selected
-// finding as fixed.
 const respondFixed = `
 import json as _json, sys as _sys
 try:

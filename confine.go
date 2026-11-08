@@ -74,8 +74,6 @@ func handledFS(abi int) uint64 {
 	return mask
 }
 
-// agentPorts lists the TCP ports an agent backend needs: its provider endpoint,
-// HTTPS for vendor CLIs, and any configured proxy.
 func agentPorts(config ReviewerConfig) []int {
 	set := map[int]bool{}
 	add := func(raw string) {
@@ -123,9 +121,6 @@ func backendState(backend string) []string {
 	return nil
 }
 
-// confinementFor builds the Landlock policy for one agent process. Reviewers
-// may write only their backend's own state, such as Pi's private per-run agent
-// directory; fixers may also write the candidate.
 func confinementFor(role string, config ReviewerConfig, writable []string) (*confinePolicy, Confinement) {
 	c := Confinement{Mechanism: "landlock", Role: role, Writable: []string{}}
 	paths := append(append([]string{}, writable...), backendState(backendOf(config))...)

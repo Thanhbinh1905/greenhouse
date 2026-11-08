@@ -35,8 +35,7 @@ const resolutionContract = ` Responses holds the fixer's answer to each prior fi
 
 var resolutionKinds = map[string]string{"fixed": "fixed", "disputed": "dispute-upheld", "deferred": "deferred"}
 
-// deferralAuthorities lists answered decisions a fixer may cite to defer a
-// finding. Automatic answers carry no authority.
+// Automatic answers carry no authority to defer a finding.
 func deferralAuthorities(r *Run) []DeferralAuthority {
 	out := []DeferralAuthority{}
 	if r.Pipeline == nil {
@@ -71,9 +70,7 @@ func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
 	var out []ResolutionResponse
 	for _, item := range raw {
 		if _, err := exactFields(item, "finding", "response", "reason", "authority"); err != nil {
-			if _, err = exactFields(item, "finding", "response", "reason"); err != nil {
-				return nil, errors.New("unknown resolution response fields")
-			}
+			return nil, errors.New("unknown resolution response fields")
 		}
 		var r ResolutionResponse
 		d := json.NewDecoder(strings.NewReader(string(item)))
@@ -115,8 +112,6 @@ func anyFixed(responses []ResolutionResponse) bool {
 	return false
 }
 
-// pendingResponses returns the latest finding repair's responses while its
-// result is the current candidate, so the next review checks them.
 func pendingResponses(r *Run) (*Repair, []ResolutionResponse) {
 	if r.Pipeline == nil {
 		return nil, nil
@@ -207,8 +202,6 @@ func resolvedKinds(r *Run) map[string]string {
 	return out
 }
 
-// responseLines renders the latest fixer responses per finding with the
-// independent review's check, or marks them unchecked.
 func responseLines(r *Run) map[string][]string {
 	out := map[string][]string{}
 	var x *Repair

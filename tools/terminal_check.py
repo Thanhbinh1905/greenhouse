@@ -550,7 +550,7 @@ open("sample.txt","w").write("repaired\\n")
         assert "Transcript log for run " + state["run_id"] in " ".join(logs.split()) and "=== reviewer " + state["run"]["review"]["id"] in logs, logs
     resolution_flows(True)
     forge.shutdown()
-    print(f"PASS: resolution responses, snapshot and confinement,  56-, 80-, and 100-column PTY configuration migration, repository trust, value sources, repository Save, transcript logs, backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
+    print(f"PASS: resolution responses, snapshot and confinement, 56-, 80-, and 100-column PTY configuration migration, repository trust, value sources, repository Save, transcript logs, backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
     provider.shutdown()
     pidfile = root / "state" / "pid"

@@ -1,7 +1,7 @@
 [2J[HGreenhouse | full pipeline
-Run 572a35545a1a0b5600cd3cefc372ffe5
+Run b3bd22699c4f4e5d7c5116d671c45899
 Stage: locally-ready | locally-ready
-Candidate: 33309492e4369a924bc9b4829c8abec2c572a18f
+Candidate: 1a9b8a229c8a65a52bc6d3e97a7ac9bbe7cda9a4
 Mode: auto | full | limit 6
 Reviewer: pi / fixture/model
 Fixer: pi / fixture/model
@@ -20,69 +20,73 @@ Pipeline: locally-ready
 Gate repairs: 0/0 (counted apart from the review cap)
 Outcome: REPAIRED PASS (rereviewed after repair)
 Candidate ref:
-greenhouse/572a35545a1a0b5600cd3cefc372ffe5
-Confinement: fixer landlock enforced (ABI 8) | writes:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-02xod752/state/candidates/572a35545a1a0b5600cd3cefc372ffe5,
-/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-3300327341,
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-02xod752
-| network: TCP connect 45799
+greenhouse/b3bd22699c4f4e5d7c5116d671c45899
+Confinement: fixer landlock enforced (ABI 8)
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7/state/candidates/b3bd22699c4f4e5d7c5116d671c45899
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-3919008981
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
+  Network: TCP connect only to port 36933
 [pass] intent
   intent, exact target and command plan loaded
-  in 63f91aea runs 1 fixes 0
+  in 9da4afa4 runs 1 fixes 0
 [pass] sync
   candidate already contains target
-  in 53531d5a cand 33309492 runs 2 fixes 0
-  $ git merge-base --is-ancestor 6908f974634b HEAD
+  in 935f1161 cand 1a9b8a22 runs 2 fixes 0
+  $ git merge-base --is-ancestor ba786739518f HEAD
     exit=0 passed
 [pass after repair, rereviewed] review
   independent review clean with complete coverage
-  in 442979bc cand 33309492 runs 2 fixes 1
+  in dc352160 cand 1a9b8a22 runs 2 fixes 1
 [pass] test
   all configured commands exited 0
-  in 546cac24 cand 33309492 runs 1 fixes 0
+  in 0eb02f3c cand 1a9b8a22 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] docs
   fixture
-  in 0a188bed cand 33309492 runs 0 fixes 0
+  in 5b594b6d cand 1a9b8a22 runs 0 fixes 0
 [pass] lint
   all configured commands exited 0
-  in 090672a9 cand 33309492 runs 1 fixes 0
+  in 60cba5a2 cand 1a9b8a22 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] push
   local fixture
-  in 85ccf315 cand 33309492 runs 0 fixes 0
+  in 0986c00d cand 1a9b8a22 runs 0 fixes 0
 [n/a] pr
   local fixture
-  in ddfdee11 cand 33309492 runs 0 fixes 0
+  in b5da8921 cand 1a9b8a22 runs 0 fixes 0
 [n/a] ci
   local fixture
-  in bfd2851b cand 33309492 runs 0 fixes 0
+  in b84853d4 cand 1a9b8a22 runs 0 fixes 0
 Resolved (fixed) P1 sample.txt:1 Sample text is wrong |
-reviewed 10f85c6827b95e7d0fcf2691b21fc40be944e2e6 | ID
+reviewed b7added187f07371a22693d9432db7d9dfd123e7 | ID
 3c4b8c568b26cd65a920a3f202…0a539cf1863350f148064642d08
   Response fixed: rewrote the selected line
   Review check confirmed: the line now reads repaired
 Review: clean-review | pi-json-v1 | fixture/model
 Input:
-9cc75ed21a9fc1195a9cc5729a845cd83931e0f1e585799b3b3961081ef81b14
+965d68f13a36787c02d0353b8d800cc1b493c10a83d2e609f65bf46f51e6b4b7
 Criteria:
-681fd8dedbea4affba72f5b0dddaf03227c8d4d6999a58e58d48a964cb3c80b7
+19873621afdb9df906afa84e84f9aadf89a0c2fef1d4ebcf6090d4cc4e8875dd
 Config:
-b8b91bd48b6e6ac059eea842e6fd04797add9da4ee450b0565967c834dbe2096
+a36400460b92e2c43abe140dd820b426e6e19cbd4e4da4d7fbc7b3e9d3e2e8ed
 process completed; exit=0 stdout bytes=614 stderr
 bytes=0 overflow=false; raw diagnostics withheld to
 avoid credential disclosure
-Snapshot: tree e2f5c8c3543e993864b8baa296868ca08bd2c5c6
-| 1 files | digest
+Snapshot: unchanged | 1 file | tree
+e2f5c8c3543e993864b8baa296868ca08bd2c5c6
+Snapshot digest:
 2843478be52ed343d8a233e8b6f56f2f5ce1803fd53957fa90bc45cfa6b3e02f
-| unchanged
-Confinement: reviewer landlock enforced (ABI 8) |
-writes:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-2067247777/agent,
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-02xod752
-| network: TCP connect 45799
+Confinement: reviewer landlock enforced (ABI 8)
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-422370546/agent
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
+  Network: TCP connect only to port 36933
 Reported model: fixture/model
 Coverage: sample.txt
 
@@ -96,9 +100,9 @@ Settings
 
 > i
 [2J[HGreenhouse | full pipeline
-Run 572a35545a1a0b5600cd3cefc372ffe5
+Run b3bd22699c4f4e5d7c5116d671c45899
 Stage: locally-ready | locally-ready
-Candidate: 33309492e4369a924bc9b4829c8abec2c572a18f
+Candidate: 1a9b8a229c8a65a52bc6d3e97a7ac9bbe7cda9a4
 Mode: auto | full | limit 6
 Reviewer: pi / fixture/model
 Fixer: pi / fixture/model
@@ -117,69 +121,73 @@ Pipeline: locally-ready
 Gate repairs: 0/0 (counted apart from the review cap)
 Outcome: REPAIRED PASS (rereviewed after repair)
 Candidate ref:
-greenhouse/572a35545a1a0b5600cd3cefc372ffe5
-Confinement: fixer landlock enforced (ABI 8) | writes:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-02xod752/state/candidates/572a35545a1a0b5600cd3cefc372ffe5,
-/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-3300327341,
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-02xod752
-| network: TCP connect 45799
+greenhouse/b3bd22699c4f4e5d7c5116d671c45899
+Confinement: fixer landlock enforced (ABI 8)
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7/state/candidates/b3bd22699c4f4e5d7c5116d671c45899
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-fixer-3919008981
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
+  Network: TCP connect only to port 36933
 [pass] intent
   intent, exact target and command plan loaded
-  in 63f91aea runs 1 fixes 0
+  in 9da4afa4 runs 1 fixes 0
 [pass] sync
   candidate already contains target
-  in 53531d5a cand 33309492 runs 2 fixes 0
-  $ git merge-base --is-ancestor 6908f974634b HEAD
+  in 935f1161 cand 1a9b8a22 runs 2 fixes 0
+  $ git merge-base --is-ancestor ba786739518f HEAD
     exit=0 passed
 [pass after repair, rereviewed] review
   independent review clean with complete coverage
-  in 442979bc cand 33309492 runs 2 fixes 1
+  in dc352160 cand 1a9b8a22 runs 2 fixes 1
 [pass] test
   all configured commands exited 0
-  in 546cac24 cand 33309492 runs 1 fixes 0
+  in 0eb02f3c cand 1a9b8a22 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] docs
   fixture
-  in 0a188bed cand 33309492 runs 0 fixes 0
+  in 5b594b6d cand 1a9b8a22 runs 0 fixes 0
 [pass] lint
   all configured commands exited 0
-  in 090672a9 cand 33309492 runs 1 fixes 0
+  in 60cba5a2 cand 1a9b8a22 runs 1 fixes 0
   $ resp-gate
     exit=0 passed
 [n/a] push
   local fixture
-  in 85ccf315 cand 33309492 runs 0 fixes 0
+  in 0986c00d cand 1a9b8a22 runs 0 fixes 0
 [n/a] pr
   local fixture
-  in ddfdee11 cand 33309492 runs 0 fixes 0
+  in b5da8921 cand 1a9b8a22 runs 0 fixes 0
 [n/a] ci
   local fixture
-  in bfd2851b cand 33309492 runs 0 fixes 0
+  in b84853d4 cand 1a9b8a22 runs 0 fixes 0
 Resolved (fixed) P1 sample.txt:1 Sample text is wrong |
-reviewed 10f85c6827b95e7d0fcf2691b21fc40be944e2e6 | ID
+reviewed b7added187f07371a22693d9432db7d9dfd123e7 | ID
 3c4b8c568b26cd65a920a3f202…0a539cf1863350f148064642d08
   Response fixed: rewrote the selected line
   Review check confirmed: the line now reads repaired
 Review: clean-review | pi-json-v1 | fixture/model
 Input:
-9cc75ed21a9fc1195a9cc5729a845cd83931e0f1e585799b3b3961081ef81b14
+965d68f13a36787c02d0353b8d800cc1b493c10a83d2e609f65bf46f51e6b4b7
 Criteria:
-681fd8dedbea4affba72f5b0dddaf03227c8d4d6999a58e58d48a964cb3c80b7
+19873621afdb9df906afa84e84f9aadf89a0c2fef1d4ebcf6090d4cc4e8875dd
 Config:
-b8b91bd48b6e6ac059eea842e6fd04797add9da4ee450b0565967c834dbe2096
+a36400460b92e2c43abe140dd820b426e6e19cbd4e4da4d7fbc7b3e9d3e2e8ed
 process completed; exit=0 stdout bytes=614 stderr
 bytes=0 overflow=false; raw diagnostics withheld to
 avoid credential disclosure
-Snapshot: tree e2f5c8c3543e993864b8baa296868ca08bd2c5c6
-| 1 files | digest
+Snapshot: unchanged | 1 file | tree
+e2f5c8c3543e993864b8baa296868ca08bd2c5c6
+Snapshot digest:
 2843478be52ed343d8a233e8b6f56f2f5ce1803fd53957fa90bc45cfa6b3e02f
-| unchanged
-Confinement: reviewer landlock enforced (ABI 8) |
-writes:
-/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-2067247777/agent,
-/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-02xod752
-| network: TCP connect 45799
+Confinement: reviewer landlock enforced (ABI 8)
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/greenhouse-review-422370546/agent
+  Writable:
+/home/thanhbinh/.posse/scratch/greenhouse/t68/gh-pty-1zqfsuw7
+  Network: TCP connect only to port 36933
 Reported model: fixture/model
 Coverage: sample.txt
 
