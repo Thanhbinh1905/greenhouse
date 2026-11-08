@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "clean-extract-helper",
+  "category": "clean",
+  "description": "Behavior-preserving extraction of Content-Type parsing.",
+  "intent": "Deduplicate Content-Type parsing in the request helpers.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [],
+  "noise": []
+}

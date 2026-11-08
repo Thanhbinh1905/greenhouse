@@ -169,3 +169,38 @@ func TestReviewCancellationAndMalformedOutput(t *testing.T) {
 		})
 	}
 }
+func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
+	bin, repo, home := fixture(t)
+	commit := func(msg string) string {
+		git(t, repo, "add", "-A")
+		git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", msg)
+		return strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	}
+	os.WriteFile(filepath.Join(repo, "old.txt"), []byte("gone\n"), 0600)
+	os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nb\n"), 0600)
+	target := commit("base")
+	os.Remove(filepath.Join(repo, "old.txt"))
+	os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nchanged\nc"), 0600)
+	commit("candidate")
+	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	installFake(t, home, "")
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Review files", "target": target}
+	b, _ := json.Marshal(q)
+	v = mutate(t, bin, repo, home, axi(t, bin, repo, home, string(b)), "resolve-rules", "rules", nil)
+	mutate(t, bin, repo, home, v, "review", "review", nil)
+	waitReview(t, bin, repo, home)
+	captured, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	var c struct {
+		Input struct {
+			Files    []map[string]string
+			Contract string
+		} `json:"input"`
+	}
+	if err := json.Unmarshal(captured, &c); err != nil {
+		t.Fatal(err)
+	}
+	want := []map[string]string{{"Path": "keep.txt", "Lines": "1: a\n2: changed\n3: c\n"}}
+	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "Files") {
+		t.Fatalf("delivered files = %v contract = %s", c.Input.Files, c.Input.Contract)
+	}
+}

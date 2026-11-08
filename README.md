@@ -84,7 +84,7 @@ Prepare (`p`, or AXI `prepare` with `intent` and `target`) captures a full commi
 
 A one-pass run permits one invocation. Admission consumes review usage even if launch fails, the process is cancelled, or its output is inconclusive. Apply cannot reset usage. Cap decisions, acceptance, forge operations, and automatic retries are unsupported. New run retains prior finding identities; omission does not resolve them. Resolution actions are not implemented.
 
-Pi receives a fresh ephemeral session, explicit read-only tools, no extensions, MCP, skills, context files, prompt templates, or project approval. Its working directory and agent directory are fresh and private. Author session routing and process-injection environment variables are removed. The adapter uses environment-based provider credentials; existing Pi auth files and custom provider files are not copied or loaded. Read-only tools are not an OS sandbox. Inspection is patch-based; no complete source-tree snapshot is provided.
+Pi receives a fresh ephemeral session, explicit read-only tools, no extensions, MCP, skills, context files, prompt templates, or project approval. Its working directory and agent directory are fresh and private. Author session routing and process-injection environment variables are removed. The adapter uses environment-based provider credentials; existing Pi auth files and custom provider files are not copied or loaded. Read-only tools are not an OS sandbox. Pi gets no repository checkout. The bundle carries the committed diff and the candidate content of each changed file, with line numbers, but no other source files.
 
 `run.review` exposes backend, requested and reported model, deterministic argv, configuration digest, exact emitted input and criteria digests, coverage, findings, status, and bounded execution summaries. Output is capped at 4 MiB, stderr at 64 KiB, and runtime at ten minutes. Review uses `exec.CommandContext` with a 250 ms pipe-wait grace; it does not verify descendant cleanup. Repair and check commands use a Linux subreaper that terminates and reaps descendants after completion or cancellation. If that runner dies or cannot verify cleanup, Greenhouse parks the writer outcome. Raw transcripts and stderr are withheld to avoid persisting credentials. The terminal displays the same findings, provenance, and summary; `c` also shows the diff. A successful verdict certifies only the bound independent-review input. Config changes and source movement mark current evidence stale; historical verdicts remain inspectable.
 
@@ -143,6 +143,34 @@ python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
 ```
 
 Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56- and 100-column PTYs through selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to local readiness, a failed gate with diagnostics, a repaired-unreviewed stage, and AXI parity, alongside lifecycle and settings flows. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
+
+## Review evaluation
+
+`eval/` is a development command that measures independent review with a real model. It is not part of the `greenhouse` executable, and `go test ./...` never calls a model.
+
+The corpus in `eval/testdata/corpus` holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, and clean changes. Each `case.json` records the change intent, the selected rules, and every expected finding by file, candidate line range, origin, rule, severity, and acceptable priorities. `noise` lists lines that must not be flagged. `corpus.json` lists the cases and a revision number; reports also record a digest of every corpus byte. Each expected finding has an `id`. After a ground-truth change, `go run ./eval rescore docs/evidence/review-eval/*/` scores the recorded findings again from their adjudication records.
+
+```sh
+go run ./eval check
+export OPENAI_API_KEY="$(pi auth print-api-key --provider openai)"
+go run ./eval run -model openai/gpt-5.6-luna -base-url http://127.0.0.1:8317/v1 \
+  -parallel 4 -label "what changed" -out docs/evidence/review-eval/NN-name
+```
+
+For each case, `run` commits the base and head trees with fixed identities and dates, starts an isolated daemon, and sends `attach`, `apply`, `resolve-rules`, `prepare`, and `review` over AXI. `reviewer.json` names the eval binary, which acts as a shim: it records the exact argv and stdin Greenhouse delivers, then runs the real Pi with the same arguments and input and records its JSON events. Greenhouse loads no custom provider file, so `-base-url` makes the shim write a `models.json` that routes the model's provider to that URL inside the reviewer's private agent directory. Credentials come from the environment, as for Greenhouse. Credential-like environment values are redacted from the output. Runs are paid model calls.
+
+`report.md` summarizes a run; `report.json` holds the configuration, every case record, and the summary. Each case directory holds `input.json` (the exact stdin bytes), `argv.json`, `events.jsonl` (Pi's events without streaming deltas), and `timing.json`. The metrics are:
+
+- A finding is eligible for an expected finding when file, origin, and rule are equal, the line ranges overlap, and the finding spans at most 15 lines. Eligibility earns no credit by itself.
+- `adjudications.json` holds one record per eligible finding: finding index and digest, expected defect ID, verdict (`detects`, `different-defect`, or `duplicate`), and a one-sentence rationale quoting the finding. `run` produces it with a separate judge call per finding (`-judge-model`, default `-model`); `go run ./eval judge -model provider/id run-dir` produces it for saved runs. The judge model and prompt are recorded. An eligible finding without a record earns no credit.
+- Recall is detected over expected findings; high-severity recall counts only planted `high` findings. Precision is matching findings over all findings.
+- Priority accuracy counts detections whose priority is in the expected list.
+- A false positive detects and duplicates nothing; a `different-defect` record makes it a wrong-defect false positive. A blocking result is a P0 or P1 false positive; an inconclusive review on a clean case also blocks.
+- The bar is high-severity recall of at least 80% and no blocking result on a clean case.
+- Inconclusive reviews score no findings. `model_answer` keeps the model's raw answer.
+- Cost uses Pi's catalog pricing; a proxy or subscription may bill differently. Latency is the wall time of the Pi process.
+
+[The recorded runs](docs/evidence/review-eval/README.md) document each reviewer change, its measured effect, and a model comparison. On this corpus, `openai/gpt-5.6-luna` measured best of the reachable models and is the recommended reviewer model. Only OpenAI models were compared: on the evaluation machine, the `openai` proxy serves only OpenAI models, `xai` answered `402` (no credits), and `anthropic`, `google`, `openrouter`, and `meta` had no credentials.
 
 See [the rule contract](docs/rules.md) for selection, validation, provenance, and fixture delivery limits.
 

@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "id": "bug-offbyone-window",
+  "category": "bug",
+  "description": "Off-by-one loop bound reads one element past the slice.",
+  "intent": "Add LastN to sum the most recent n samples for the dashboard.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "id": "inclusive-loop-bound",
+      "file": "stats/window.go",
+      "start": 19,
+      "end": 20,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "Loop condition i <= len(values) indexes values[len(values)] and panics on every call."
+    }
+  ],
+  "noise": [
+    {
+      "file": "stats/window.go",
+      "start": 12,
+      "end": 13,
+      "note": "Accurate doc comment on an exported function."
+    }
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "bug-shell-injection",
+  "category": "bug",
+  "description": "Client-supplied branch name reaches a shell command.",
+  "intent": "Expose a branch's recent commits to the web client.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "id": "branch-shell-injection",
+      "file": "tools/gitinfo.py",
+      "start": 17,
+      "end": 19,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell."
+    }
+  ],
+  "noise": []
+}

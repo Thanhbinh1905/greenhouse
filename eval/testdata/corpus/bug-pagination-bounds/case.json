@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "id": "bug-pagination-bounds",
+  "category": "bug",
+  "description": "Last partial page slices past the end.",
+  "intent": "Add Page for paginated list endpoints.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "id": "unclamped-page-end",
+      "file": "list/page.go",
+      "start": 18,
+      "end": 19,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range."
+    }
+  ],
+  "noise": [
+    {
+      "file": "list/page.go",
+      "start": 11,
+      "end": 12,
+      "note": "Doc comment describes intended behavior."
+    }
+  ]
+}

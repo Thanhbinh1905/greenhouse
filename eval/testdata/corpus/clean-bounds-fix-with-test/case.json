@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "id": "clean-bounds-fix-with-test",
+  "category": "clean",
+  "description": "Correct clamp of n with a table test.",
+  "intent": "Fix First panicking when n is negative or larger than the list.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [],
+  "noise": []
+}

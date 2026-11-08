@@ -1,0 +1,110 @@
+{
+  "schema": "greenhouse.eval.adjudications.v1",
+  "judge": {
+    "kind": "model",
+    "model": "openai/gpt-6.1-sol",
+    "backend": "pi --print --mode json --no-session --no-tools",
+    "pi_version": "1.5.0",
+    "base_url": "http://127.0.0.1:8317/v1",
+    "prompt": "system: You are an evaluation judge. Decide whether one code review finding identifies one specific planted defect. Judge only the defect named, not the location. Return only the requested JSON.\ninstructions: Input is JSON with \"expected\", the planted defects at the finding's location (id, file, start, end, defect), and \"finding\", one reviewer finding (file, start, end, priority, explanation, action).\nReturn only this JSON object: {\"expected\":\"\u003cid from expected\u003e\",\"verdict\":\"detects|different-defect\",\"rationale\":\"\u003cone sentence\u003e\"}.\nUse \"detects\" only when the finding describes the same root cause as that planted defect. A finding that shares identifiers, lines or wording but describes another root cause is \"different-defect\"; then name the closest expected id.\nThe rationale is one sentence that quotes at least 12 consecutive characters of the finding's explanation or action verbatim inside double quotes.",
+    "note": "12 eligible findings, 0 without a valid judge answer; judge cost $0.0222 at Pi catalog prices"
+  },
+  "records": [
+    {
+      "case": "bug-offbyone-window",
+      "finding": 0,
+      "finding_digest": "bb8296ca5f883c055f10ad188c53bf3f2037be0990db8968850ea465e6503743",
+      "expected": "inclusive-loop-bound",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same inclusive loop-bound error, stating \"The loop condition allows i to equal len(values)\", which causes an out-of-bounds access and panic."
+    },
+    {
+      "case": "bug-nil-before-error",
+      "finding": 0,
+      "finding_digest": "a93bf6e4fa1d1465e700f3c506bbe5371c5f6c34a807a37b69d1e8b8caf2d6dd",
+      "expected": "deref-before-error-check",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same premature nil dereference, stating \"dereferencing u.Name panics before the error can be handled.\""
+    },
+    {
+      "case": "bug-swallowed-write-error",
+      "finding": 0,
+      "finding_digest": "8d2cefe35051f7da71fdda1dc961edc42a506f7f652427e4648262d053b3e9f7",
+      "expected": "write-error-returns-nil",
+      "verdict": "detects",
+      "rationale": "The finding states \"Save returns nil, falsely reporting success\", identifying the same root cause of suppressing an os.WriteFile failure."
+    },
+    {
+      "case": "bug-race-word-count",
+      "finding": 0,
+      "finding_digest": "6f4f1248c7c50c3a33731027f5d4f210da5ea0283a46e1dbf5200e481e7c94a6",
+      "expected": "unsynchronized-total",
+      "verdict": "detects",
+      "rationale": "The finding states \"Concurrent goroutines update `total` without synchronization\", identifying the same unsynchronized shared update that causes the planted data race and lost updates."
+    },
+    {
+      "case": "bug-sql-injection",
+      "finding": 0,
+      "finding_digest": "20db0304973deb142db281747e6bebaf845ed119dcdbe2dfdaab8914fc3ad884",
+      "expected": "email-sql-injection",
+      "verdict": "detects",
+      "rationale": "The finding states \"The email is concatenated directly into the SQL statement\", identifying the same SQL injection root cause as the planted defect."
+    },
+    {
+      "case": "bug-empty-average",
+      "finding": 0,
+      "finding_digest": "4e14aa47e91be4df735de9252f0f460183e5be1857eaafee1998af9642de7597",
+      "expected": "empty-scores-division",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same empty-slice division-by-zero root cause, stating \"average divides by len(scores), which is zero\"."
+    },
+    {
+      "case": "bug-shell-injection",
+      "finding": 0,
+      "finding_digest": "92809c322adc4e59464725cca112022c2748189189eb1e1cff3881b28c366658",
+      "expected": "branch-shell-injection",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same command-injection root cause, stating \"The branch value is interpolated into a shell command and executed with shell=True.\""
+    },
+    {
+      "case": "bug-pagination-bounds",
+      "finding": 0,
+      "finding_digest": "067b367b32ec3d67283273adb411551ae2b3f5d6e9ff4bafdfc0063ee96bebcd",
+      "expected": "unclamped-page-end",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same unclamped-end defect by stating that \"end exceed len(items), causing a panic\" when the page size exceeds the remaining items."
+    },
+    {
+      "case": "bug-unlock-missing",
+      "finding": 0,
+      "finding_digest": "22fc07bf535b004d75878ab726b17738681623a2d8bfe2d1a8127bda9f724115",
+      "expected": "missing-unlock-on-miss",
+      "verdict": "detects",
+      "rationale": "The finding states \"The missing-key path returns while the mutex is still locked\", identifying the same missing unlock on a cache miss that causes subsequent calls to deadlock."
+    },
+    {
+      "case": "policy-needless-comments",
+      "finding": 0,
+      "finding_digest": "07b63f801dc02c143119409fffe932187e75747ee8482107037d42c28627cf1d",
+      "expected": "narrating-base-delay",
+      "verdict": "detects",
+      "rationale": "The finding says \"These comments narrate straightforward code operations rather than adding useful context.\", identifying the assignment-restating comment as unnecessary narration."
+    },
+    {
+      "case": "policy-needless-comments",
+      "finding": 1,
+      "finding_digest": "372222ab47900070075c09063fa0b820133660eb4f4dc48ab2f53c434a5feb6f",
+      "expected": "narrating-return",
+      "verdict": "detects",
+      "rationale": "The finding states \"This comment only narrates the obvious return statement.\", matching the planted defect of a comment that restates the return."
+    },
+    {
+      "case": "policy-unslop-readme",
+      "finding": 0,
+      "finding_digest": "3f80383fab2ae8b35cbb379ae6432a4e255459cffce45671f346315b5898dd5f",
+      "expected": "promotional-rationale",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same inflated promotional prose without concrete support, stating that the claims \"inflate the prose and make unsubstantiated performance claims.\""
+    }
+  ]
+}

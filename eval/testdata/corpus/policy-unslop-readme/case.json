@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "policy-unslop-readme",
+  "category": "policy",
+  "description": "Inflated promotional prose; a User quotation must be preserved.",
+  "intent": "Document why to use ratelimit and how burst and rate work.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "id": "promotional-rationale",
+      "file": "README.md",
+      "start": 11,
+      "end": 11,
+      "origin": "policy",
+      "rule": "unslop/plain-prose",
+      "severity": "low",
+      "priorities": [
+        "P2",
+        "P3"
+      ],
+      "defect": "Promotional, inflated claims with no concrete behavior."
+    }
+  ],
+  "noise": [
+    {
+      "file": "README.md",
+      "start": 13,
+      "end": 13,
+      "note": "User quotation; must be preserved verbatim."
+    },
+    {
+      "file": "README.md",
+      "start": 17,
+      "end": 17,
+      "note": "Plain factual prose."
+    }
+  ]
+}

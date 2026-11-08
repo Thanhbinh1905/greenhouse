@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "bug-unlock-missing",
+  "category": "bug",
+  "description": "Early return leaves the mutex locked.",
+  "intent": "Add Get so handlers can read cached values.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "id": "missing-unlock-on-miss",
+      "file": "cache/cache.go",
+      "start": 24,
+      "end": 28,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache."
+    }
+  ],
+  "noise": []
+}

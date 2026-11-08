@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "revision": 4,
+  "cases": [
+    "bug-offbyone-window",
+    "bug-nil-before-error",
+    "bug-swallowed-write-error",
+    "bug-race-word-count",
+    "bug-sql-injection",
+    "bug-empty-average",
+    "bug-shell-injection",
+    "bug-pagination-bounds",
+    "bug-unlock-missing",
+    "policy-needless-comments",
+    "policy-unslop-readme",
+    "noise-legacy-context",
+    "noise-typo-beside-injection",
+    "clean-extract-helper",
+    "clean-bounds-fix-with-test",
+    "clean-directive-and-docs"
+  ]
+}

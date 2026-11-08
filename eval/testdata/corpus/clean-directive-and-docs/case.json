@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "clean-directive-and-docs",
+  "category": "clean",
+  "description": "Adds a go:generate directive with its committed stringer output, a doc comment and a factual README line.",
+  "intent": "Generate String for Level and document regeneration.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [],
+  "noise": [
+    {
+      "file": "level/level.go",
+      "start": 3,
+      "end": 3,
+      "note": "go:generate directive; must be preserved."
+    },
+    {
+      "file": "level/level.go",
+      "start": 5,
+      "end": 5,
+      "note": "Doc comment on exported type."
+    },
+    {
+      "file": "level/level_string.go",
+      "start": 1,
+      "end": 1,
+      "note": "Generated-code marker; must be preserved."
+    },
+    {
+      "file": "level/level_string.go",
+      "start": 8,
+      "end": 9,
+      "note": "Comment inside generated code."
+    }
+  ]
+}

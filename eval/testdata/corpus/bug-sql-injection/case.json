@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "id": "bug-sql-injection",
+  "category": "bug",
+  "description": "User-supplied email is concatenated into SQL.",
+  "intent": "Add order search by email for the support search form.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "id": "email-sql-injection",
+      "file": "orders/orders.go",
+      "start": 19,
+      "end": 19,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder."
+    }
+  ],
+  "noise": [
+    {
+      "file": "orders/orders.go",
+      "start": 13,
+      "end": 13,
+      "note": "Existing parameterized query is correct."
+    }
+  ]
+}

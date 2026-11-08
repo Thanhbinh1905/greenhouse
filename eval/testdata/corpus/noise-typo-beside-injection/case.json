@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "noise-typo-beside-injection",
+  "category": "noise",
+  "description": "Log typo fix beside an unchanged SQL injection.",
+  "intent": "Fix the typo in the delete log message.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [],
+  "noise": [
+    {
+      "file": "admin/users.go",
+      "start": 11,
+      "end": 11,
+      "note": "Unchanged SQL concatenation; pre-existing, out of scope."
+    }
+  ]
+}

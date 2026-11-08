@@ -21,3 +21,11 @@ func TestVerdictRejectsDuplicateAndCaseFoldedFields(t *testing.T) {
 		}
 	}
 }
+func TestVerdictAcceptsPiSystemMessageWithStringContent(t *testing.T) {
+	x := &Execution{Rules: InputIdentity{Candidate: "head"}, Paths: []string{"f"}}
+	system := "{\"type\":\"message_start\",\"message\":{\"role\":\"system\",\"content\":\"\"}}\n{\"type\":\"message_end\",\"message\":{\"role\":\"system\",\"content\":\"\"}}\n"
+	events := append([]byte(system), verdictEvents(t, `{"head":"head","verdict":"clean","coverage":["f"],"findings":[]}`)...)
+	if v, err := parseReview(events, x); err != nil || v.Verdict != "clean" {
+		t.Fatalf("Pi 1.5.0 system message must not invalidate the review: %v %v", v, err)
+	}
+}
