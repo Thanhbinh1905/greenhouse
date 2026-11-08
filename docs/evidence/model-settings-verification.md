@@ -19,7 +19,7 @@ Before the provider fixes, the focused provider regression also ran and failed a
 
 ## Green-after
 
-- Command: `go test -p 1 ./... -run '^(TestApplyAndSaveReviewerAndFixerModels|TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials)$' -count=1`
+- Command: `go test ./... -run '^(TestApplyAndSaveReviewerAndFixerModels|TestReviewerModelChangeStalesHistoricalVerdict|TestApplyRejectsInvalidBackendAndModelIdentifiers|TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials)$' -count=1`
 - Result: `ok greenhouse`; `ok greenhouse/eval [no tests to run]`.
 - The Settings test covers separate reviewer and fixer selections, Apply without changing saved defaults, reattach between Apply and Save, and Save persistence. The other Settings tests cover invalid identifiers and stale historical review evidence.
 - The provider test covers trusted model discovery, environment-based credentials, and provider preflight.
