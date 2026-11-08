@@ -26,7 +26,7 @@ func repairFixture(t *testing.T) (string, string, string, map[string]any) {
 	if err := os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	v = mutate(t, bin, repo, home, v, "review", "review", nil)
+	mutate(t, bin, repo, home, v, "review", "review", nil)
 	v = waitReview(t, bin, repo, home)
 	p := filepath.Join(filepath.Dir(home), "fake-fixer")
 	script := `#!/usr/bin/python3

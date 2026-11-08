@@ -113,7 +113,7 @@ func TestReviewRefusesMismatchedReportedModel(t *testing.T) {
 	bin, repo, home, root, v := onePassWith(t, "claude", "claude-opus-5-5")
 	script, _ := os.ReadFile(filepath.Join(root, "fake-claude"))
 	writeExecutable(t, filepath.Join(root, "fake-claude"), strings.Replace(string(script), "model=args[args.index('--model' if '--model' in args else '-m')+1]", "model='claude-haiku-5-5'", 1))
-	v = mutate(t, bin, repo, home, v, "review", "review-mismatch", nil)
+	mutate(t, bin, repo, home, v, "review", "review-mismatch", nil)
 	v = waitReview(t, bin, repo, home)
 	review := runOf(t, v)["review"].(map[string]any)
 	if review["status"] != "inconclusive" || !strings.Contains(review["log"].(string), "model") {

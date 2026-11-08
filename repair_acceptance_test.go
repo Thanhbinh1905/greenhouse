@@ -124,7 +124,7 @@ func TestDaemonCrashAfterRepairCommitPreservesUnknownOutcome(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bin, repo, home, v := repairFixture(t)
+	bin, repo, home, _ := repairFixture(t)
 	stopDaemon(t, home)
 	t.Setenv("PATH", wrapperDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 	log := filepath.Join(filepath.Dir(home), "commit-wrapper-runs")
@@ -163,7 +163,7 @@ sys.exit(p.returncode)
 	if err := os.WriteFile(filepath.Join(wrapperDir, "git"), []byte(strings.Replace(wrapper, "real=sys.argv[1]", "real="+quotePython(realGit), 1)), 0700); err != nil {
 		t.Fatal(err)
 	}
-	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	admitted := repairRequest(t, bin, repo, home, v, "repair", "crash-after-commit", selectedID(t, v))
 	if admitted["outcome"] != "ok" {
 		t.Fatal(admitted)

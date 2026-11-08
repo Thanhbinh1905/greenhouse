@@ -1,0 +1,28 @@
+[2J[HGreenhouse | independent review
+Events: live
+Run 707888a1ff495388c0a0bcb41259762d
+Stage: intent | unconfigured
+Candidate: a8e0bb1396c6e9232a9b547780a407618e35c2ac
+Mode: ask | one-pass | limit 7
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 7
+Rules: unslop
+Sources: per-user: mode, preset, limit, rules, reviewer_backend, reviewer_model, fixer_backend,
+fixer_model, auto_resume
+Repository override: .greenhouse.json IGNORED: repository not trusted; trust it to apply this file
+to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Auto-resume: off (always off in ask mode)
+Blocked: configuration: reviewer.json uses schema version 1; migrate it to version 2
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [e] Recover  [q] Detach

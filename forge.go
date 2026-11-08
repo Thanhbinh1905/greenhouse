@@ -97,7 +97,8 @@ func (g GitHubForge) EnsurePullRequest(ctx context.Context, owner, repo, branch,
 	if len(found) > 1 {
 		return PullRequest{}, errors.New("multiple open pull requests match the configured branch")
 	}
-	for _, item := range found {
+	if len(found) == 1 {
+		item := found[0]
 		if item.Number == 0 || item.URL == "" {
 			return PullRequest{}, errors.New("existing pull request is missing identity")
 		}

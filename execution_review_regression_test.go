@@ -45,7 +45,7 @@ func TestExecutableFindingInSpacePath(t *testing.T) {
 		t.Fatal(v)
 	}
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "resolve", nil)
-	v = mutate(t, bin, repo, home, v, "review", "review", nil)
+	mutate(t, bin, repo, home, v, "review", "review", nil)
 	v = waitReview(t, bin, repo, home)
 	if runOf(t, v)["status"] != "outstanding-findings" {
 		review := runOf(t, v)["review"].(map[string]any)
@@ -108,7 +108,7 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 	}
 	started := time.Now()
 	if cancel {
-		v = mutate(t, bin, repo, home, v, "cancel", "cancel", nil)
+		mutate(t, bin, repo, home, v, "cancel", "cancel", nil)
 	}
 	v = waitReview(t, bin, repo, home)
 	elapsed := time.Since(started)

@@ -51,7 +51,7 @@ func TestAutoResumeWithBackoffSurvivesDaemonRestart(t *testing.T) {
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
 	writeBackends(t, home, map[string]any{"auto_resume": map[string]any{"max_attempts": 2, "base_seconds": 2, "max_seconds": 2}})
 	setModes(t, root, "codex", "rate-limit", "success")
-	v = mutate(t, bin, repo, home, v, "review", "review-rate-limit", nil)
+	mutate(t, bin, repo, home, v, "review", "review-rate-limit", nil)
 	v = waitStatus(t, bin, repo, home, "paused")
 	pause := pauseOf(t, v)
 	if pause["reset_at"] != nil || pause["auto_resume_at"] == nil || !strings.Contains(v["explanation"].(string), "Auto mode will resume at") || !has(strs(v["actions"]), "cancel-auto-resume") {
@@ -93,7 +93,7 @@ func TestAskModeNeverResumesAutomatically(t *testing.T) {
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "rules-ask", nil)
 	setModes(t, root, "codex", "quota", "success")
 	mutate(t, bin, repo, home, v, "review", "review-ask", nil)
-	v = waitStatus(t, bin, repo, home, "paused")
+	waitStatus(t, bin, repo, home, "paused")
 	time.Sleep(2 * time.Second)
 	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	pause := pauseOf(t, v)
@@ -131,7 +131,7 @@ func TestSwitchFromCodexToClaudeWhilePaused(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := pipelineWith(t, "codex", "gpt-5.6-luna", "pi", "fixture/model")
 	setModes(t, root, "codex", "quota")
-	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	v = waitStatus(t, bin, repo, home, "paused")
 	if pauseOf(t, v)["auto_resume_at"] == nil {
 		t.Fatalf("auto mode must schedule the known reset: %v", pauseOf(t, v))
@@ -149,7 +149,7 @@ func TestSwitchFromCodexToClaudeWhilePaused(t *testing.T) {
 	if len(switches) != 1 || switches[0]["actor"] != "axi" || switches[0]["from"] != "codex gpt-5.6-luna" || switches[0]["to"] != "claude claude-haiku-5-5" || switches[0]["reason"] != "reviewer: test adjustment" {
 		t.Fatalf("switch must record old and new backend, model, actor and reason: %v", switches)
 	}
-	v = mutate(t, bin, repo, home, v, "resume", "resume-after-switch", nil)
+	mutate(t, bin, repo, home, v, "resume", "resume-after-switch", nil)
 	v = waitStatus(t, bin, repo, home, "locally-ready")
 	run := runOf(t, v)
 	review := run["review"].(map[string]any)
@@ -188,7 +188,7 @@ func TestQuotaResetTimeDecidesAutomaticResume(t *testing.T) {
 				setModes(t, root, c.backend, "quota", "success")
 				mutate(t, bin, repo, home, v, "review", "review-reset-"+reset, nil)
 				if reset == "3600" {
-					v = waitStatus(t, bin, repo, home, "paused")
+					waitStatus(t, bin, repo, home, "paused")
 					time.Sleep(time.Second)
 					v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 					at, err := time.Parse(time.RFC3339, pauseOf(t, v)["auto_resume_at"].(string))

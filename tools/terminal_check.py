@@ -140,6 +140,9 @@ def session(width, commands, label=""):
     for frame in frames:
         home = frame.split("\n> ")[0]
         assert all(len(line) <= width or line.split() == [line] for line in home.splitlines()), (width, home)
+        menu = [line for line in home.splitlines() if "[i] Inspect" in line or line == "[s] Settings"]
+        if any("[i] Inspect" in line for line in menu):
+            assert any("[s] Settings" in line for line in menu), (width, home)
     return text
 
 

@@ -16,7 +16,7 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			bin, repo, home, v := prepareFixture(t)
 			invocation := installFake(t, home, "while not os.path.exists(root+'/release'): time.sleep(0.01)\nwith open(root+'/released','w') as f: f.write('released')")
-			v = mutate(t, bin, repo, home, v, "review", "start", nil)
+			mutate(t, bin, repo, home, v, "review", "start", nil)
 			deadline := time.Now().Add(30 * time.Second)
 			for {
 				if b, _ := os.ReadFile(invocation); len(b) > 0 {

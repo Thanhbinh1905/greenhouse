@@ -397,7 +397,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if v, err = a.mutate(v, "prepare", map[string]any{"intent": k.Intent, "target": target}); err != nil {
 		return fail(err)
 	}
-	if v, err = a.mutate(v, "review", nil); err != nil {
+	if _, err = a.mutate(v, "review", nil); err != nil {
 		return fail(err)
 	}
 	deadline := time.Now().Add(o.Settle)

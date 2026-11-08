@@ -33,7 +33,7 @@ func TestApplyAndSaveReviewerAndFixerModels(t *testing.T) {
 func TestReviewerModelChangeStalesHistoricalVerdict(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
-	v = mutate(t, bin, repo, home, v, "review", "model-review", nil)
+	mutate(t, bin, repo, home, v, "review", "model-review", nil)
 	v = waitReview(t, bin, repo, home)
 	old, _ := runOf(t, v)["review"].(map[string]any)
 	if old == nil || old["status"] != "outstanding-findings" {

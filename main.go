@@ -1416,6 +1416,24 @@ func wrapWords(text string, width int) string {
 	}
 	return strings.Join(lines, "\n")
 }
+func wrapMenuEntries(entries []string, width int) string {
+	var lines []string
+	line := ""
+	for _, entry := range entries {
+		if line != "" && len([]rune(line))+2+len([]rune(entry)) > width {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line != "" {
+			line += "  "
+		}
+		line += entry
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return strings.Join(lines, "\n")
+}
 func displayID(id string, width int) string {
 	runes := []rune(id)
 	available := width - 1
@@ -1577,7 +1595,12 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[t] Trust repository  [u] Migrate config  [o] Logs\n[x] Cancel  [n] New run  [e] Recover  [q] Detach")
+		fmt.Fprintln(&page, "\n"+wrapMenuEntries([]string{"[i] Inspect", "[c] Criteria/diff", "[l] Load rules", "[s] Settings"}, terminalWidth())+"\n"+
+			wrapMenuEntries([]string{"[p] Intent/target", "[v] Review", "[g] Pipeline", "[d] Decide"}, terminalWidth())+"\n"+
+			wrapMenuEntries([]string{"[m] Resolve conflict", "[f] Selected repair", "[h] Handback"}, terminalWidth())+"\n"+
+			wrapMenuEntries([]string{"[r] Rerun", "[a] Cancel auto-resume", "[b] Rerun from start"}, terminalWidth())+"\n"+
+			wrapMenuEntries([]string{"[t] Trust repository", "[u] Migrate config", "[o] Logs"}, terminalWidth())+"\n"+
+			wrapMenuEntries([]string{"[x] Cancel", "[n] New run", "[e] Recover", "[q] Detach"}, terminalWidth()))
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		terminalPrompt("> ")

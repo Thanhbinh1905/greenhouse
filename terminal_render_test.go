@@ -95,6 +95,23 @@ func TestWrapWordsPreservesColumnSpacing(t *testing.T) {
 	}
 }
 
+func TestMenuEntriesWrapAtomicallyAtSupportedWidths(t *testing.T) {
+	entries := []string{"[i] Inspect", "[c] Criteria/diff", "[l] Load rules", "[s] Settings"}
+	for _, width := range []int{56, 80, 100} {
+		got := wrapMenuEntries(entries, width)
+		for _, line := range strings.Split(got, "\n") {
+			if len([]rune(line)) > width {
+				t.Errorf("width %d: menu line exceeds width: %q", width, line)
+			}
+		}
+		for _, entry := range entries {
+			if !slices.Contains(strings.Split(got, "\n"), entry) && !strings.Contains(got, entry) {
+				t.Errorf("width %d: menu entry split: %q in %q", width, entry, got)
+			}
+		}
+	}
+}
+
 func TestFinalReadyScreenKeepsActionableValuesWhole(t *testing.T) {
 	remote := "https://github.com/Thanhbinh1905/greenhouse-live-validation-t59-20261109.git"
 	ref := "refs/heads/greenhouse/8281036a00c4cf49a236983480517711"

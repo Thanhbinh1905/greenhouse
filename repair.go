@@ -540,7 +540,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	}
 	scratch := os.Getenv("TMPDIR")
 	if scratch == "" {
-		fail("failed", errors.New("Task scratch TMPDIR is required"))
+		fail("failed", errors.New("task scratch TMPDIR is required"))
 		return
 	}
 	agentDir, e := os.MkdirTemp(scratch, "greenhouse-fixer-")

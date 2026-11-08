@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"testing"
@@ -213,6 +214,32 @@ sys.exit(p.returncode)
 	}
 	if got := countLines(t, filepath.Join(root, "fix-invocations")); got["test"] != 1 {
 		t.Fatalf("adoption reran the fixer: %v", got)
+	}
+}
+
+func TestRecoveryNewRunCarriesHostIdentityAndSpentGrants(t *testing.T) {
+	t.Parallel()
+	source := Identity{Repository: "/repo", Branch: "main", Head: "head"}
+	host := &Host{Name: "fake-host", ID: "task-7"}
+	r := &Run{
+		ID: "run-1", Submitted: source, Host: host, HostGrants: []string{"grant-1", "grant-2"},
+		ReviewUsed: 2, RepairUsed: 1,
+		Configs:  []Snapshot{{ID: "config", Settings: Settings{Mode: "auto", Preset: "one-pass", Limit: 4}}},
+		Recovery: &Recovery{Kind: "run", Options: []string{"new-run"}},
+	}
+	s := &Store{Runs: map[string]*Run{r.ID: r}}
+	next, err := recoverRun(s, r, source, Answer{Choice: "new-run", Reason: "resume under host ownership"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if next.Host == nil || !sameHost(next.Host, host) {
+		t.Fatalf("recovery successor lost host identity: %+v", next.Host)
+	}
+	if next.ReviewUsed != r.ReviewUsed || next.RepairUsed != r.RepairUsed {
+		t.Fatalf("recovery successor reset spent grants: review=%d repair=%d", next.ReviewUsed, next.RepairUsed)
+	}
+	if !slices.Equal(next.HostGrants, r.HostGrants) {
+		t.Fatalf("recovery successor grants = %v, want %v", next.HostGrants, r.HostGrants)
 	}
 }
 

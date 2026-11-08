@@ -15,7 +15,7 @@ func TestRerunFailedGateKeepsEarlierStagesAndBudget(t *testing.T) {
 	})
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	v = waitPipeline(t, bin, repo, home)
 	if stageOf(t, v, "test")["status"] != "failed" || !has(strs(v["actions"]), "rerun") || !has(strs(v["actions"]), "rerun-from-start") {
 		t.Fatalf("a failed stage offers rerun and rerun from start: %v %v", stageOf(t, v, "test"), v["actions"])
@@ -41,7 +41,7 @@ func TestRerunAfterCancelAndRefusalWhileLive(t *testing.T) {
 	bin, repo, home, v := pipelineFixture(t, localPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600)
-	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	v = waitStatus(t, bin, repo, home, "running")
 	for i := 0; i < 200 && stageOf(t, v, "test")["status"] != "running"; i++ {
 		v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
@@ -49,13 +49,13 @@ func TestRerunAfterCancelAndRefusalWhileLive(t *testing.T) {
 	if refused := mutate(t, bin, repo, home, v, "rerun", "rerun-live", nil); refused["outcome"] != "refused" {
 		t.Fatalf("rerun must refuse while the stage is live: %v", refused)
 	}
-	v = mutate(t, bin, repo, home, v, "cancel", "abort", nil)
+	mutate(t, bin, repo, home, v, "cancel", "abort", nil)
 	v = waitPipeline(t, bin, repo, home)
 	if runOf(t, v)["status"] != "cancelled" || !has(strs(v["actions"]), "rerun") {
 		t.Fatalf("cancel is an abort that leaves the run rerunnable: %v %v", runOf(t, v)["status"], v["actions"])
 	}
 	os.Remove(filepath.Join(root, "sleep-test"))
-	v = mutate(t, bin, repo, home, v, "rerun", "rerun-cancelled", nil)
+	mutate(t, bin, repo, home, v, "rerun", "rerun-cancelled", nil)
 	v = waitPipeline(t, bin, repo, home)
 	if runOf(t, v)["status"] != "needs-decision" && runOf(t, v)["status"] != "locally-ready" {
 		t.Fatalf("rerun after abort must continue the pipeline: %v", runOf(t, v)["pipeline"])
@@ -72,7 +72,7 @@ func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 	})
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	old := waitPipeline(t, bin, repo, home)
 	oldRun := runOf(t, old)
 	v = mutate(t, bin, repo, home, old, "rerun-from-start", "restart", nil)
@@ -111,7 +111,7 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 		for i := 0; i < 400 && (runOf(t, v)["repair"] == nil || runOf(t, v)["repair"].(map[string]any)["status"] != "fixing"); i++ {
 			v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 		}
-		v = mutate(t, bin, repo, home, v, "cancel", "abort-repair", nil)
+		mutate(t, bin, repo, home, v, "cancel", "abort-repair", nil)
 		return bin, repo, home, root, waitStatus(t, bin, repo, home, "cancelled")
 	}
 	v = waitStatus(t, bin, repo, home, "fixer-failed")

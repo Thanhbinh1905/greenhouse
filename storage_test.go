@@ -52,7 +52,7 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, "")
-	v = mutate(t, bin, repo, home, v, "review", "legacy-review", nil)
+	mutate(t, bin, repo, home, v, "review", "legacy-review", nil)
 	v = waitReview(t, bin, repo, home)
 	original := runOf(t, v)
 	originalReview := original["review"].(map[string]any)
