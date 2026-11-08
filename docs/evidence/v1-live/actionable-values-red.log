@@ -1,0 +1,8 @@
+TestFinalReadyScreenKeepsActionableValuesWhole at base 7043e86:
+    terminal_render_test.go:113: value not shown whole on its own line: https://github.com/Thanhbinh1905/greenhouse-live-validation-t59-20261109.git
+    terminal_render_test.go:113: value not shown whole on its own line: refs/heads/greenhouse/8281036a00c4cf49a236983480517711
+    terminal_render_test.go:113: value not shown whole on its own line: 2c6e7616ff282be4536a0c9f5c574c049acd2617:refs/heads/greenhouse/8281036a00c4cf49a236983480517711
+    terminal_render_test.go:113: value not shown whole on its own line: https://github.com/Thanhbinh1905/greenhouse-live-validation-t59-20261109/pull/2
+
+python3 tools/terminal_check.py <base binary> <output>:
+AssertionError: ('https://example.invalid/acme/garden-terminal-width-validation-fixture/pull/12'

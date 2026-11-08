@@ -3,6 +3,7 @@ package main
 import (
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -34,24 +35,29 @@ func TestScreenWrapsAtWordBoundaries(t *testing.T) {
 	}
 }
 
-func TestWrapWordsKeepsIndentAndFitsIdentifiers(t *testing.T) {
+func TestWrapWordsKeepsIndentAndLongValuesWhole(t *testing.T) {
+	value := strings.Repeat("a", 128)
 	for _, width := range []int{55, 79, 99} {
-		text := "  " + strings.Repeat("a", 128) + " status"
-		got := wrapWords(text, width)
-		for _, line := range strings.Split(got, "\n") {
-			if len([]rune(line)) > width || !strings.HasPrefix(line, "  ") {
-				t.Fatalf("width %d: invalid indented line %q", width, line)
-			}
+		got := wrapWords("  run "+value+" status", width)
+		if want := "  run\n" + value + "\n  status"; got != want {
+			t.Fatalf("width %d:\ngot  %q\nwant %q", width, got, want)
 		}
-		if !strings.Contains(got, "…") || !strings.HasSuffix(got, "status") {
-			t.Fatalf("identifier abbreviation or label lost: %q", got)
+	}
+}
+
+func TestDisplayIDFitsWithSeparator(t *testing.T) {
+	id := strings.Repeat("a", 32) + strings.Repeat("b", 32)
+	for _, width := range []int{55, 79, 99} {
+		got := displayID(id, width)
+		if len([]rune(got)) > width-1 || (width-1 >= len(id)) != (got == id) {
+			t.Fatalf("width %d: displayed ID %q", width, got)
 		}
 	}
 }
 
 func TestDisplayedFindingIDSelectsOnlyUniqueFinding(t *testing.T) {
 	id := strings.Repeat("a", 32) + strings.Repeat("b", 32)
-	displayed := wrapWords(id, 55)
+	displayed := displayID(id, 55)
 	ids, whole, err := parseSelection(displayed, []string{id})
 	if err != nil || whole || len(ids) != 1 || ids[0] != id {
 		t.Fatalf("displayed ID cannot select its finding: %v %t %v", ids, whole, err)
@@ -86,5 +92,30 @@ func TestWrapWordsPreservesColumnSpacing(t *testing.T) {
 	text := "  [i] Inspect  [s] Settings"
 	if got := wrapWords(text, 55); got != text {
 		t.Fatalf("column spacing changed: got %q want %q", got, text)
+	}
+}
+
+func TestFinalReadyScreenKeepsActionableValuesWhole(t *testing.T) {
+	remote := "https://github.com/Thanhbinh1905/greenhouse-live-validation-t59-20261109.git"
+	ref := "refs/heads/greenhouse/8281036a00c4cf49a236983480517711"
+	head := "2c6e7616ff282be4536a0c9f5c574c049acd2617"
+	url := "https://github.com/Thanhbinh1905/greenhouse-live-validation-t59-20261109/pull/2"
+	r := &Run{Pipeline: &Pipeline{Status: "ci-ready", Worktree: "/work", Ref: ref, Stages: []StageResult{
+		{Name: "push", Status: "passed", Head: head, Commands: []CheckResult{
+			{Args: []string{"/usr/bin/git", "ls-remote", remote, ref}, Status: "passed"},
+			{Args: []string{"/usr/bin/git", "push", remote, head + ":" + ref}, Status: "passed"},
+		}},
+		{Name: "pr", Status: "passed", Head: head, URL: url},
+	}}}
+	var page strings.Builder
+	renderPipeline(&page, r, false)
+	var lines []string
+	for _, line := range strings.Split(page.String(), "\n") {
+		lines = append(lines, strings.Split(wrapWords(line, 55), "\n")...)
+	}
+	for _, value := range []string{remote, ref, strings.TrimPrefix(ref, "refs/heads/"), head + ":" + ref, url} {
+		if !slices.ContainsFunc(lines, func(line string) bool { return strings.TrimSpace(line) == value }) {
+			t.Errorf("value not shown whole on its own line: %s\n%s", value, strings.Join(lines, "\n"))
+		}
 	}
 }
