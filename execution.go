@@ -138,6 +138,7 @@ func admitReview(r *Run) error {
 	if e != nil {
 		return e
 	}
+	cfg.Model = settings.ReviewerModel
 	if r.Reviewer == nil || cfg != *r.Reviewer {
 		return errors.New("trusted reviewer changed; prepare with a current token required")
 	}

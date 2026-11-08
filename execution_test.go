@@ -28,6 +28,8 @@ func prepareFixture(t *testing.T) (string, string, string, map[string]any) {
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	installFake(t, home, "")
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop", "no-comments"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	v = mutate(t, bin, repo, home, v, "apply", "fixture-model", settings)
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Review sample change", "target": target}
 	b, _ := json.Marshal(q)
 	v = axi(t, bin, repo, home, string(b))

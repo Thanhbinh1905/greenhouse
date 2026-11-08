@@ -83,12 +83,12 @@ def session(width, commands, label=""):
 
 
 try:
-    narrow = session(56, ["s", "ask one-pass 7", "unslop", "a", "q"])
+    narrow = session(56, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "a", "q"])
     state = axi()
     assert state["run"]["configs"][-1]["settings"]["mode"] == "ask"
     assert state["defaults"]["mode"] == "auto"
     assert state["run"]["configs"][-1]["settings"]["rules"] == ["unslop"]
-    wide = session(100, ["i", "s", "ask one-pass 7", "unslop", "d", ":commit", "i", "n", "new", "q"])
+    wide = session(100, ["i", "s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "d", ":commit", "i", "n", "new", "q"])
     next_state = axi()
     assert state["run_id"] != next_state["run_id"]
     assert state["run"]["candidate"] != next_state["run"]["candidate"]
@@ -102,12 +102,12 @@ try:
         assert resolved["rules"][0]["status"] == "resolved"
         assert "Digest:" in rules and "[advisory]" in rules
         assert "Flag inflated prose" in rules
-        failures = session(width, ["s", "ask one-pass 7", "missing,?optional", "a", "r", "c", "q"], "-failures")
+        failures = session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "missing,?optional", "a", "r", "c", "q"], "-failures")
         failed = axi()
         assert not failed["rules_ready"]
         assert all(rule["status"] == "failed" for rule in failed["rules"])
         assert "Load error:" in failures
-        session(width, ["s", "ask one-pass 7", "unslop", "a", "q"], "-restore")
+        session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "a", "q"], "-restore")
     assert axi()["run_id"] == next_state["run_id"]
     target = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
     (repo / "sample.txt").write_text("candidate\n")
@@ -137,7 +137,7 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     fixer_config = root / "state" / "fixer.json"
     fixer_config.write_text(json.dumps({"executable":str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
     fixer_config.chmod(0o600)
-    session(56, ["n", "new", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
+    session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and axi()["run"]["status"] == "running":
         time.sleep(0.02)

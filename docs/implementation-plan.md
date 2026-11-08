@@ -28,13 +28,17 @@ The red-before executable test rejected `repair` as `json: unknown field "select
 
 The slice rejects missing trusted checks and unsupported Git hooks, filters, signing, binary/submodule changes, and non-clean source handback. Executable real-Git regressions prove missing checks refuse admission without spending repair budget, changed check authority refuses before execution or commit, and hook/signing hazards refuse before fixer execution. A fake Git wrapper kills the real daemon immediately after the candidate commit; restart preserves candidate refs and consumed budget, parks the outcome as unknown, and does not rerun the fixer, check, or commit. Recovery after interruption parks unknown writer outcomes without retry or cleanup. The 56/100-column PTY exercise covers selected repair, check results, dirty handback refusal, safe handback, and AXI parity. A real linked-worktree race test verifies the shared repository lock admits only one writer. Broader stale-action coverage and interruption points outside the tested commit boundary remain unsupported. This is not complete acceptance of SPEC.md.
 
-## 4. Bounded full pipeline and forge fixture
+## 4. Reviewer and fixer model selection
+
+Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi remains the only backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Additional backends are post-v1. Provider catalog discovery, provider environment configuration, credential preflight, and product-path live validation remain required before this area is complete.
+
+## 5. Bounded full pipeline and forge fixture
 
 Area D and standalone E: trusted intent/command plan, target synchronization, deterministic tests/lint, documentation assessment, bounded repair/CI retries, changed-input invalidation, ask/auto/YOLO authority, combined cap accounting, exact-head accept-head, final-fix/final Review, rethink lineage, and discard provenance.
 
 Add guarded push, idempotent PR creation/update, and exact-head checks against a forge fixture. Stop at CI-ready without merging. Prove that command and forge work do not dispatch agents unnecessarily. No green state can substitute for missing commands or unknown checks.
 
-## 5. Live backend validation and host contract
+## 6. Live backend validation and host contract
 
 Areas C, E, and F: validate selected real agent and forge backends, capture actual rule inputs and permissions, and publish versioned configuration/AXI compatibility guarantees. Verify custody, budgets, and stale evidence at embedding boundaries.
 

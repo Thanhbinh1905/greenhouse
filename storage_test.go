@@ -45,7 +45,7 @@ func TestRetainedUsageAndLimitEdits(t *testing.T) {
 	r.RepairUsed = 1
 	persist(home, &s)
 	v = axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	settings := Settings{"auto", "one-pass", 2, []string{"unslop"}}
+	settings := Settings{Mode: "auto", Preset: "one-pass", Limit: 2, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
 	if mutate(t, bin, repo, home, v, "apply", "reduce", settings)["outcome"] != "refused" {
 		t.Fatal("consumed usage erased")
 	}

@@ -23,10 +23,14 @@ import (
 )
 
 type Settings struct {
-	Mode   string   `json:"mode"`
-	Preset string   `json:"preset"`
-	Limit  int      `json:"limit"`
-	Rules  []string `json:"rules"`
+	Mode            string   `json:"mode"`
+	Preset          string   `json:"preset"`
+	Limit           int      `json:"limit"`
+	Rules           []string `json:"rules"`
+	ReviewerBackend string   `json:"reviewer_backend"`
+	ReviewerModel   string   `json:"reviewer_model"`
+	FixerBackend    string   `json:"fixer_backend"`
+	FixerModel      string   `json:"fixer_model"`
 }
 type Identity struct {
 	Repository string `json:"repository"`
@@ -104,11 +108,12 @@ type Receipt struct {
 	Result Response `json:"result"`
 }
 type Store struct {
-	Version  int                `json:"version"`
-	Defaults Settings           `json:"defaults"`
-	Runs     map[string]*Run    `json:"runs"`
-	Slots    map[string]string  `json:"slots"`
-	Receipts map[string]Receipt `json:"receipts"`
+	Version        int                `json:"version"`
+	Defaults       Settings           `json:"defaults"`
+	DefaultsSource string             `json:"defaults_source"`
+	Runs           map[string]*Run    `json:"runs"`
+	Slots          map[string]string  `json:"slots"`
+	Receipts       map[string]Receipt `json:"receipts"`
 }
 
 func opaque() string {
@@ -214,7 +219,7 @@ func persist(h string, s *Store) error {
 	return d.Sync()
 }
 func load(h string) (*Store, error) {
-	s := &Store{Version: 1, Defaults: Settings{"auto", "one-pass", 4, []string{"unslop", "no-comments"}}, Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}}
+	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}}
 	b, e := os.ReadFile(filepath.Join(h, "state.json"))
 	if os.IsNotExist(e) {
 		return s, nil
@@ -224,6 +229,18 @@ func load(h string) (*Store, error) {
 	}
 	if e = json.Unmarshal(b, s); e != nil {
 		return nil, e
+	}
+	initial := Settings{ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
+	if s.DefaultsSource == "" {
+		s.DefaultsSource = "built-in default"
+	}
+	s.Defaults = withModelDefaults(s.Defaults, initial)
+	for _, run := range s.Runs {
+		if run != nil {
+			for i := range run.Configs {
+				run.Configs[i].Settings = withModelDefaults(run.Configs[i].Settings, initial)
+			}
+		}
 	}
 	if s.Version != 1 || s.Runs == nil || s.Slots == nil || s.Receipts == nil {
 		return nil, errors.New("unsupported or incomplete store")
@@ -337,8 +354,26 @@ func view(s *Store, r *Run) Response {
 	}
 	return v
 }
+func validModelSelection(backend, model string) bool {
+	return backend == "pi" && validText(model) && len(model) <= 256 && strings.Contains(model, "/") && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
+}
 func valid(s Settings) bool {
-	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32
+	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel)
+}
+func withModelDefaults(s Settings, defaults Settings) Settings {
+	if s.ReviewerBackend == "" {
+		s.ReviewerBackend = defaults.ReviewerBackend
+	}
+	if s.ReviewerModel == "" {
+		s.ReviewerModel = defaults.ReviewerModel
+	}
+	if s.FixerBackend == "" {
+		s.FixerBackend = defaults.FixerBackend
+	}
+	if s.FixerModel == "" {
+		s.FixerModel = defaults.FixerModel
+	}
+	return s
 }
 func handle(s *Store, q Request) Response {
 	fail := func(msg string, r *Run) Response { v := view(s, r); v.Outcome = "refused"; v.Error = msg; return v }
@@ -353,7 +388,7 @@ func handle(s *Store, q Request) Response {
 	r := s.Runs[s.Slots[slot]]
 	if q.Op == "attach" || q.Op == "inspect" {
 		if r == nil && q.Op == "attach" {
-			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "created", Actor: "client"}}}
+			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, s.DefaultsSource}}, Events: []Event{{Kind: "created", Actor: "client"}}}
 			s.Runs[r.ID] = r
 			s.Slots[slot] = r.ID
 		}
@@ -408,6 +443,7 @@ func handle(s *Store, q Request) Response {
 		if err != nil {
 			return fail(err.Error(), r)
 		}
+		cfg.Model = r.Configs[len(r.Configs)-1].Settings.ReviewerModel
 		r.Reviewer = &cfg
 		r.SelectedDiff = string(diff)
 		r.Intent, r.Target = q.Intent, target
@@ -435,6 +471,10 @@ func handle(s *Store, q Request) Response {
 		r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 		r.Token = opaque()
 	} else if q.Op == "apply" || q.Op == "save" {
+		if q.Settings != nil {
+			normalized := withModelDefaults(*q.Settings, r.Configs[len(r.Configs)-1].Settings)
+			q.Settings = &normalized
+		}
 		if q.Settings == nil || !valid(*q.Settings) {
 			return fail("invalid settings", r)
 		}
@@ -452,17 +492,24 @@ func handle(s *Store, q Request) Response {
 				r.Status = "stale"
 			}
 			old := r.Configs[len(r.Configs)-1].Settings
+			if r.Reviewer != nil && old.ReviewerModel != q.Settings.ReviewerModel {
+				r.Reviewer.Model = q.Settings.ReviewerModel
+				if r.Review != nil {
+					r.Review.Status = "stale"
+				}
+			}
 			r.Configs = append(r.Configs, Snapshot{opaque(), *q.Settings, "run-local"})
 			r.Events = append(r.Events, Event{q.Op, "client", q.Reason, r.ReviewUsed + r.RepairUsed, old.Limit, q.Settings.Limit})
 		} else {
 			s.Defaults = *q.Settings
+			s.DefaultsSource = "saved"
 			r.Events = append(r.Events, Event{Kind: "save", Actor: "client", Reason: q.Reason})
 		}
 		r.Token = opaque()
 	} else {
 		prior := r.ID
 		findings := append([]Finding(nil), r.Findings...)
-		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, s.DefaultsSource}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
@@ -832,7 +879,7 @@ func terminal(h, path string) error {
 		}
 		r := v.Run
 		s := r.Configs[len(r.Configs)-1]
-		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nBudget: review %d + repair %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, r.ReviewUsed, r.RepairUsed, strings.Join(s.Settings.Rules, ", "), s.Source)
+		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s (%s)\nFixer: %s / %s (%s)\nBudget: review %d + repair %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Source, s.Settings.FixerBackend, s.Settings.FixerModel, s.Source, r.ReviewUsed, r.RepairUsed, strings.Join(s.Settings.Rules, ", "), s.Source)
 		for _, rule := range v.Rules {
 			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
 			if rule.Error != "" {
@@ -939,6 +986,34 @@ func terminal(h, path string) error {
 			if _, e = fmt.Sscan(reader.Text(), &draft.Mode, &draft.Preset, &draft.Limit); e != nil {
 				message = "Invalid draft"
 				continue
+			}
+			fmt.Printf("Reviewer backend (pi only) [%s]:\n> ", draft.ReviewerBackend)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := strings.TrimSpace(reader.Text()); value != "" {
+				draft.ReviewerBackend = value
+			}
+			fmt.Printf("Reviewer model (provider/model) [%s]:\n> ", draft.ReviewerModel)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := strings.TrimSpace(reader.Text()); value != "" {
+				draft.ReviewerModel = value
+			}
+			fmt.Printf("Fixer backend (pi only) [%s]:\n> ", draft.FixerBackend)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := strings.TrimSpace(reader.Text()); value != "" {
+				draft.FixerBackend = value
+			}
+			fmt.Printf("Fixer model (provider/model) [%s]:\n> ", draft.FixerModel)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := strings.TrimSpace(reader.Text()); value != "" {
+				draft.FixerModel = value
 			}
 			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
 			if !reader.Scan() {

@@ -173,6 +173,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	if e != nil {
 		return e
 	}
+	cfg.Model = settings.FixerModel
 	if e = gitHazards(r.Submitted.Worktree); e != nil {
 		return e
 	}
@@ -491,6 +492,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	trusted, err := trustedFixer()
+	trusted.Model = x.Config.Model
 	fixerDigest, digestErr := executableDigest(x.Config.Executable)
 	if err != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
 		fail("refused", errors.New("trusted fixer or checks changed after authorization"))
@@ -608,6 +610,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		}
 	}
 	trusted, err = trustedFixer()
+	trusted.Model = x.Config.Model
 	fixerDigest, digestErr = executableDigest(x.Config.Executable)
 	if err != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
 		fail("authority-changed", errors.New("trusted fixer or check configuration changed before commit"))

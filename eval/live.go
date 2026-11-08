@@ -325,7 +325,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if err != nil {
 		return fail(err)
 	}
-	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": k.Rules}
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": k.Rules, "reviewer_backend": "pi", "reviewer_model": o.Model, "fixer_backend": "pi", "fixer_model": o.Model}
 	if v, err = a.mutate(v, "apply", map[string]any{"settings": settings, "reason": "evaluation case " + k.ID}); err != nil {
 		return fail(err)
 	}

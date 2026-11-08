@@ -25,6 +25,8 @@ func TestExecutableFindingInSpacePath(t *testing.T) {
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	installFake(t, home, "")
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop", "no-comments"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	v = mutate(t, bin, repo, home, v, "apply", "fixture-model", settings)
 	fake := filepath.Join(filepath.Dir(home), "fake-pi")
 	script, err := os.ReadFile(fake)
 	if err != nil {

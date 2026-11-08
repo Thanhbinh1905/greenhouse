@@ -17,7 +17,7 @@ cd /path/to/a/git/worktree
 
 The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `r` explicitly resolves rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `x` cancels a review, fixer, or check, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
-Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, and rule selection. Repository overrides are unsupported and untrusted.
+Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, and rule selection. Both roles currently use Pi; models are exact provider-qualified IDs. The default reviewer is `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json` and `fixer.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
 
 ## JSON interface
 
@@ -72,7 +72,7 @@ Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` an
 
 ## Independent review configuration
 
-Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600:
+Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600. The executable is the trusted per-user authority; Settings selects the model independently:
 
 ```json
 {"executable":"/absolute/path/to/pi","model":"provider/exact-model-id"}

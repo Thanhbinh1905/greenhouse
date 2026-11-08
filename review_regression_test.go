@@ -12,7 +12,7 @@ import (
 func TestNewRunAfterSourceMovement(t *testing.T) {
 	bin, repo, home := fixture(t)
 	initial := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	applied := mutate(t, bin, repo, home, initial, "apply", "settings", Settings{"ask", "full", 9, []string{"unslop"}})
+	applied := mutate(t, bin, repo, home, initial, "apply", "settings", Settings{Mode: "ask", Preset: "full", Limit: 9, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"})
 	old := runOf(t, applied)
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "next")
 	head := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
@@ -20,7 +20,7 @@ func TestNewRunAfterSourceMovement(t *testing.T) {
 	if attached["run_id"] != initial["run_id"] || !reflect.DeepEqual(old, runOf(t, attached)) {
 		t.Fatal("source movement changed retained run")
 	}
-	settings := Settings{"auto", "one-pass", 6, []string{"no-comments"}}
+	settings := Settings{Mode: "auto", Preset: "one-pass", Limit: 6, Rules: []string{"no-comments"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
 	for _, op := range []string{"apply", "save"} {
 		if mutate(t, bin, repo, home, attached, op, op+"-moved", settings)["outcome"] != "refused" {
 			t.Fatal("stale advancement allowed")
