@@ -1,5 +1,5 @@
 import fcntl
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -18,8 +18,26 @@ binary = str(Path(sys.argv[1]).resolve())
 root = Path(tempfile.mkdtemp(prefix="gh-pty-", dir=os.environ["TMPDIR"]))
 repo = root / "repo"
 repo.mkdir()
+class ModelHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = json.dumps({"data": [{"id": "model"}, {"id": "gpt-5.6-luna"}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *_):
+        pass
+provider = HTTPServer(("127.0.0.1", 0), ModelHandler)
+threading.Thread(target=provider.serve_forever, daemon=True).start()
 env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
-           GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null")
+           GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
+state_dir = root / "state"
+state_dir.mkdir(mode=0o700)
+(state_dir / "providers.json").write_text(json.dumps({"providers": {
+    "fixture": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY", "api": "openai-completions"},
+    "openai": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY"}
+}, "models": []}))
+os.chmod(state_dir / "providers.json", 0o600)
 delivery = {"bare": None, "head": None}
 
 
@@ -125,12 +143,12 @@ def session(width, commands, label=""):
 
 
 try:
-    narrow = session(56, ["s", "ask one-pass 7", "unslop", "a", "q"])
+    narrow = session(56, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "a", "q"])
     state = axi()
     assert state["run"]["configs"][-1]["settings"]["mode"] == "ask"
     assert state["defaults"]["mode"] == "auto"
     assert state["run"]["configs"][-1]["settings"]["rules"] == ["unslop"]
-    wide = session(100, ["i", "s", "ask one-pass 7", "unslop", "d", ":commit", "i", "n", "new", "q"])
+    wide = session(100, ["i", "s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "d", ":commit", "i", "n", "new", "q"])
     next_state = axi()
     assert state["run_id"] != next_state["run_id"]
     assert state["run"]["candidate"] != next_state["run"]["candidate"]
@@ -144,12 +162,12 @@ try:
         assert resolved["rules"][0]["status"] == "resolved"
         assert "Digest:" in rules and "[advisory]" in rules
         assert "Flag inflated prose" in rules
-        failures = session(width, ["s", "ask one-pass 7", "missing,?optional", "a", "r", "c", "q"], "-failures")
+        failures = session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "missing,?optional", "a", "r", "c", "q"], "-failures")
         failed = axi()
         assert not failed["rules_ready"]
         assert all(rule["status"] == "failed" for rule in failed["rules"])
         assert "Load error:" in failures
-        session(width, ["s", "ask one-pass 7", "unslop", "a", "q"], "-restore")
+        session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "a", "q"], "-restore")
     assert axi()["run_id"] == next_state["run_id"]
     target = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
     (repo / "sample.txt").write_text("candidate\n")
@@ -158,6 +176,10 @@ try:
     fake = root / "fake-pi"
     fake.write_text('''#!/usr/bin/python3
 import json,sys,os
+if '--list-models' in sys.argv:
+ print('provider model')
+ print('fixture model')
+ sys.exit(0)
 with open(os.path.join(os.path.dirname(__file__), "review-calls"), "a") as calls: calls.write("review\\n")
 b=json.load(sys.stdin)
 f={"id":"fixture","priority":"P2","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Fixture finding","action":"Inspect fixture","rule":"","head":b["Head"]}
@@ -179,7 +201,7 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     fixer_config = root / "state" / "fixer.json"
     fixer_config.write_text(json.dumps({"executable":str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
     fixer_config.chmod(0o600)
-    session(56, ["n", "new", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
+    session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and axi()["run"]["status"] == "running":
         time.sleep(0.02)
@@ -215,6 +237,10 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     full_reviewer = root / "full-pi"
     full_reviewer.write_text('''#!/usr/bin/python3
 import json,sys,os
+if sys.argv[1:] == ['--list-models']:
+    print('provider model context')
+    print('fixture model 128K')
+    sys.exit(0)
 root=os.path.dirname(__file__)
 b=json.load(sys.stdin)
 mode=open(root+"/full-review-mode").read() if os.path.exists(root+"/full-review-mode") else "clean"
@@ -222,7 +248,8 @@ v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[],"docum
 if mode=="findings":
     v["verdict"]="findings"
     v["findings"]=[{"id":"x","priority":"P1","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Repaired sample still wrong","action":"Fix it","rule":"","head":b["Head"]}]
-print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
+provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":provider,"model":model,"stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
 print(json.dumps({"type":"agent_settled","aborted":False}))
 ''')
     full_reviewer.chmod(0o700)
@@ -298,7 +325,7 @@ open("sample.txt","w").write("repaired\\n")
         target = full_repo(name, dict(commands, **extra))
         width = widths[name]
         limit = 3 if name == "full-unreviewed" else 6
-        session(width, ["s", f"auto full {limit}", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        session(width, ["s", f"auto full {limit}", "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
         state = settle()
         other = 100 if width == 56 else 56
         text = session(width, ["i", "q"], f"-{name}-result")
@@ -337,7 +364,7 @@ open("sample.txt","w").write("repaired\\n")
         if cleans:
             (root / "fix-cleans").write_text("1")
         target = full_repo(name, commands)
-        session(width, ["s", settings, "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        session(width, ["s", settings, "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
         parked = settle()
         decision = parked["decision"]
         asked = session(width, ["i", "q"], f"-{name}-decision")
@@ -384,6 +411,7 @@ open("sample.txt","w").write("repaired\\n")
     forge.shutdown()
     print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
+    provider.shutdown()
     pidfile = root / "state" / "pid"
     if pidfile.exists():
         os.kill(json.loads(pidfile.read_text()), signal.SIGTERM)

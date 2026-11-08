@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -12,6 +14,11 @@ import (
 
 const fullReviewer = `#!/usr/bin/python3
 import json,sys,os
+if sys.argv[1:] == ['--list-models']:
+    print('provider model context')
+    print('fixture model 128K')
+    print('openai gpt-5.6-luna 128K')
+    sys.exit(0)
 root=os.path.dirname(__file__)
 with open(root+'/review-invocations','a') as f: f.write('review\n')
 b=json.load(sys.stdin)
@@ -25,7 +32,8 @@ if mode=='findings':
 if mode=='mixed':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':p,'origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':e,'action':'Fix the sample','rule':'','head':b['Head']} for p,e in [('P1','Sample is wrong'),('P2','Sample is vague'),('P3','Sample could be shorter')]]
-print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
+provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
+print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':provider,'model':model,'stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))
 `
 
@@ -110,6 +118,15 @@ func writePrivateJSON(t *testing.T, path string, v any) {
 	}
 }
 
+func installPipelineProvider(t *testing.T, home string) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}}})
+	}))
+	t.Cleanup(server.Close)
+	writePrivateJSON(t, filepath.Join(home, "providers.json"), TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}})
+}
+
 func pipelineFixture(t *testing.T, plan func(root string) map[string]any) (string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home := fixture(t)
@@ -125,11 +142,12 @@ func pipelineFixture(t *testing.T, plan func(root string) map[string]any) (strin
 	writeExecutable(t, filepath.Join(root, "fake-pi"), fullReviewer)
 	writeExecutable(t, filepath.Join(root, "gate"), gateCommand)
 	writeExecutable(t, filepath.Join(root, "fake-fixer"), gateFixer)
-	writePrivateJSON(t, filepath.Join(home, "reviewer.json"), ReviewerConfig{filepath.Join(root, "fake-pi"), "fixture/model"})
+	writePrivateJSON(t, filepath.Join(home, "reviewer.json"), ReviewerConfig{Executable: filepath.Join(root, "fake-pi"), Model: "fixture/model"})
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "fake-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
+	installPipelineProvider(t, home)
 	writePrivateJSON(t, filepath.Join(home, "pipeline.json"), plan(root))
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	v = mutate(t, bin, repo, home, v, "apply", "full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
+	v = mutate(t, bin, repo, home, v, "apply", "full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": "prepare", "intent": "Change the sample", "target": target}
 	b, _ := json.Marshal(q)
 	v = axi(t, bin, repo, home, string(b))
@@ -465,11 +483,12 @@ func conflictFixture(t *testing.T, env ...string) (string, string, string, strin
 	writeExecutable(t, filepath.Join(root, "fake-pi"), fullReviewer)
 	writeExecutable(t, filepath.Join(root, "gate"), gateCommand)
 	writeExecutable(t, filepath.Join(root, "fake-fixer"), gateFixer)
-	writePrivateJSON(t, filepath.Join(home, "reviewer.json"), ReviewerConfig{filepath.Join(root, "fake-pi"), "fixture/model"})
+	writePrivateJSON(t, filepath.Join(home, "reviewer.json"), ReviewerConfig{Executable: filepath.Join(root, "fake-pi"), Model: "fixture/model"})
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "fake-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
+	installPipelineProvider(t, home)
 	writePrivateJSON(t, filepath.Join(home, "pipeline.json"), repairPlan(root))
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`, env...)
-	v = mutate(t, bin, repo, home, v, "apply", "full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
+	v = mutate(t, bin, repo, home, v, "apply", "full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": "prepare", "intent": "Change the sample", "target": target}
 	b, _ := json.Marshal(q)
 	v = axi(t, bin, repo, home, string(b))

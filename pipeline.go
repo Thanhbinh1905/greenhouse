@@ -561,6 +561,20 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 	if e != nil {
 		return e
 	}
+	settings := r.Configs[len(r.Configs)-1].Settings
+	providers, e := trustedProviders()
+	if e != nil {
+		return e
+	}
+	provider, _, ok := strings.Cut(settings.FixerModel, "/")
+	if !ok || providers.Providers[provider].BaseURL == "" {
+		return errors.New("fixer model provider is unconfigured")
+	}
+	cfg.Model = settings.FixerModel
+	cfg.Provider = providers.Providers[provider]
+	if e = preflightModel(settings.FixerModel); e != nil {
+		return e
+	}
 	paths := append([]string(nil), p.Conflict...)
 	if st.Name == "review" {
 		paths = nil
@@ -1136,8 +1150,12 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			return errors.New("source moved before writer start")
 		}
 		trusted, e := trustedFixer()
+		trusted.Model = x.Config.Model
+		providers, providerErr := trustedProviders()
+		provider, _, _ := strings.Cut(x.Config.Model, "/")
+		trusted.Provider = providers.Providers[provider]
 		fixerDigest, digestErr := executableDigest(x.Config.Executable)
-		if e != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
+		if e != nil || providerErr != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
 			return errors.New("trusted fixer changed after authorization")
 		}
 		if e = candidateSafe(x, x.Base); e != nil {
@@ -1173,6 +1191,13 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			return e
 		}
 		defer os.RemoveAll(agentDir)
+		_, err = trustedReviewer()
+		if err != nil {
+			return err
+		}
+		if err = writeAgentModels(filepath.Join(agentDir, "agent"), ReviewerConfig{Executable: x.Config.Executable, Model: x.Config.Model, Provider: x.Config.Provider}); err != nil {
+			return err
+		}
 		_, log, e := runBounded(ctx, x.Worktree, x.Config.Executable, x.Args, x.Input, filepath.Join(agentDir, "agent"))
 		x.Log = log
 		if errors.Is(e, ErrWriterTreeUnknown) {

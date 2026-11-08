@@ -369,6 +369,7 @@ func TestAcceptedCancellationAtCommitAdmissionPreventsCommit(t *testing.T) {
 	_, repo, home, v := repairFixture(t)
 	stopDaemon(t, home)
 	t.Setenv("GREENHOUSE_HOME", home)
+	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "fixture-secret")
 	store, err := load(home)
 	if err != nil {
 		t.Fatal(err)
@@ -458,6 +459,8 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 	otherHome := filepath.Join(filepath.Dir(home), "linked-state")
 	attached := axi(t, bin, linked, otherHome, `{"version":1,"op":"attach"}`)
 	installFake(t, otherHome, "")
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop", "no-comments"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	attached = mutate(t, bin, linked, otherHome, attached, "apply", "settings-linked", settings)
 	target := strings.TrimSpace(git(t, linked, "rev-parse", "HEAD^"))
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": attached["run_id"], "input_id": attached["input_id"], "expected": attached["token"], "gate_id": "none", "action_id": "prepare-linked", "intent": "Review linked worktree", "target": target}
 	b, _ := json.Marshal(q)

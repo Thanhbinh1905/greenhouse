@@ -14,7 +14,7 @@ func TestChangedReviewerAndStaleRuleTokenRefuse(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	var cfg ReviewerConfig
 	json.Unmarshal(b, &cfg)
-	cfg.Model = "fixture/other"
+	cfg.Executable = "/bin/true"
 	changed, _ := json.Marshal(cfg)
 	os.WriteFile(path, changed, 0600)
 	refused := mutate(t, bin, repo, home, v, "review", "changed-config", nil)

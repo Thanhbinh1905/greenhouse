@@ -20,11 +20,12 @@ import (
 )
 
 type FixerConfig struct {
-	Executable string     `json:"executable"`
-	Model      string     `json:"model"`
-	Name       string     `json:"name"`
-	Email      string     `json:"email"`
-	Checks     [][]string `json:"checks"`
+	Executable string         `json:"executable"`
+	Model      string         `json:"model"`
+	Provider   ProviderConfig `json:"provider"`
+	Name       string         `json:"name"`
+	Email      string         `json:"email"`
+	Checks     [][]string     `json:"checks"`
 }
 type CheckResult struct {
 	Args             []string `json:"args"`
@@ -172,6 +173,19 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	}
 	cfg, e := trustedFixer()
 	if e != nil {
+		return e
+	}
+	providers, e := trustedProviders()
+	if e != nil {
+		return e
+	}
+	provider, _, ok := strings.Cut(settings.FixerModel, "/")
+	if !ok || providers.Providers[provider].BaseURL == "" {
+		return errors.New("fixer model provider is unconfigured")
+	}
+	cfg.Model = settings.FixerModel
+	cfg.Provider = providers.Providers[provider]
+	if e = preflightModel(settings.FixerModel); e != nil {
 		return e
 	}
 	if e = gitHazards(r.Submitted.Worktree); e != nil {
@@ -513,8 +527,12 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	trusted, err := trustedFixer()
+	trusted.Model = x.Config.Model
+	providers, providerErr := trustedProviders()
+	provider, _, _ := strings.Cut(x.Config.Model, "/")
+	trusted.Provider = providers.Providers[provider]
 	fixerDigest, digestErr := executableDigest(x.Config.Executable)
-	if err != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
+	if err != nil || providerErr != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
 		fail("refused", errors.New("trusted fixer or checks changed after authorization"))
 		return
 	}
@@ -551,6 +569,16 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	defer os.RemoveAll(agentDir)
+	piConfig := ReviewerConfig{Executable: x.Config.Executable, Model: x.Config.Model, Provider: x.Config.Provider}
+	_, err = trustedReviewer()
+	if err != nil {
+		fail("unconfigured", errors.New("trusted Pi installation unavailable"))
+		return
+	}
+	if err := writeAgentModels(filepath.Join(agentDir, "agent"), piConfig); err != nil {
+		fail("unconfigured", errors.New("trusted fixer provider configuration unavailable"))
+		return
+	}
 	x.Writer = "unknown"
 	x.Status = "fixing"
 	if !save() {
@@ -647,8 +675,12 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		}
 	}
 	trusted, err = trustedFixer()
+	trusted.Model = x.Config.Model
+	providers, providerErr = trustedProviders()
+	provider, _, _ = strings.Cut(x.Config.Model, "/")
+	trusted.Provider = providers.Providers[provider]
 	fixerDigest, digestErr = executableDigest(x.Config.Executable)
-	if err != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
+	if err != nil || providerErr != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
 		fail("authority-changed", errors.New("trusted fixer or check configuration changed before commit"))
 		return
 	}

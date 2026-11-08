@@ -521,14 +521,20 @@ func TestOnePassReviewUpdatesRetainedFindingData(t *testing.T) {
 	first := waitReview(t, bin, repo, home)
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "moved")
 	next := mutate(t, bin, repo, home, first, "new", "next-run", nil)
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop", "no-comments"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	next = mutate(t, bin, repo, home, next, "apply", "restore-test-model", settings)
 	head := runOf(t, next)["candidate"]
 	q, _ := json.Marshal(map[string]any{"version": 1, "op": "prepare", "run_id": next["run_id"], "input_id": next["input_id"], "expected": next["token"], "gate_id": "none", "action_id": "prepare-next", "intent": "Review sample change", "target": runOf(t, first)["target"]})
 	prepared := axi(t, bin, repo, home, string(q))
 	prepared = mutate(t, bin, repo, home, prepared, "resolve-rules", "rules-next", nil)
 	mutate(t, bin, repo, home, prepared, "review", "second-review", nil)
-	findings := runOf(t, waitReview(t, bin, repo, home))["findings"].([]any)
-	if len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
-		t.Fatalf("retained finding kept data from the earlier head: %v", findings)
+	done := waitReview(t, bin, repo, home)
+	findings := runOf(t, done)["findings"].([]any)
+	if len(findings) != 1 {
+		t.Fatalf("retained finding count %d, want 1", len(findings))
+	}
+	if got := findings[0].(map[string]any)["head"]; got != head {
+		t.Fatalf("retained finding head %v, want %v", got, head)
 	}
 }
 

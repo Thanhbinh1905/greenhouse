@@ -19,8 +19,9 @@ import (
 )
 
 type ReviewerConfig struct {
-	Executable string `json:"executable"`
-	Model      string `json:"model"`
+	Executable string         `json:"executable"`
+	Model      string         `json:"model"`
+	Provider   ProviderConfig `json:"provider"`
 }
 type Finding struct {
 	ID          string `json:"id"`
@@ -163,12 +164,23 @@ const reviewContract = `Return only a JSON object: {"head":"exact candidate","ve
 const fullReviewContract = reviewContract + ` Also include "documentation":{"status":"documented|not-needed|missing","reason":"why"} assessing whether changed public behavior is documented in the diff; a passing doc build is not evidence.`
 
 func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, error) {
-	cfg, e := trustedReviewer()
+	settings := r.Configs[len(r.Configs)-1].Settings
+	cfg, e := trustedReviewerFor(settings.ReviewerModel)
 	if e != nil {
 		return nil, e
 	}
 	if r.Reviewer == nil || cfg != *r.Reviewer {
 		return nil, errors.New("trusted reviewer changed; prepare with a current token required")
+	}
+	catalog, e := providerModelCatalog(cfg.Executable)
+	if e != nil {
+		return nil, e
+	}
+	if !catalog[settings.ReviewerModel] {
+		return nil, errors.New("model is not reported by Pi; add custom models to private providers.json")
+	}
+	if e = preflightModel(settings.ReviewerModel); e != nil {
+		return nil, e
 	}
 	diff, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", r.Target, r.Candidate, "--")
 	if e != nil {
@@ -227,7 +239,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: "pi-json-v1", Config: cfg, ConfigDigest: digest(cfg), Args: reviewerArgs(cfg.Model), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
+	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: "pi-json-v1", Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: reviewerArgs(cfg.Model), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
 }
 
 type reviewFile struct {
@@ -290,6 +302,10 @@ func reviewerEnv() []string {
 	return env
 }
 func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string) {
+	trusted, trustErr := trustedReviewerFor(x.Config.Model)
+	if trustErr != nil || reviewerConfigDigest(trusted) != x.ConfigDigest {
+		return "unconfigured", nil, "trusted reviewer or provider configuration changed; prepare again"
+	}
 	current, err := resolve(x.Source.Worktree)
 	if err != nil || current != x.Source {
 		return "stale", nil, "source moved before process start"
@@ -299,12 +315,16 @@ func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string)
 		return "inconclusive", nil, "private execution directory unavailable"
 	}
 	defer os.RemoveAll(dir)
+	agentDir := filepath.Join(dir, "agent")
+	if e = writeAgentModels(agentDir, x.Config); e != nil {
+		return "inconclusive", nil, "trusted provider configuration unavailable"
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, x.Config.Executable, x.Args...)
 	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Dir = dir
-	cmd.Env = append(reviewerEnv(), "PI_CODING_AGENT_DIR="+filepath.Join(dir, "agent"))
+	cmd.Env = append(reviewerEnv(), "PI_CODING_AGENT_DIR="+agentDir)
 	cmd.Stdin = bytes.NewReader(x.Input)
 	out, stderr := &boundedBuffer{limit: 4 * 1024 * 1024}, &boundedBuffer{limit: 65536}
 	cmd.Stdout = out

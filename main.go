@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -24,10 +25,14 @@ import (
 )
 
 type Settings struct {
-	Mode   string   `json:"mode"`
-	Preset string   `json:"preset"`
-	Limit  int      `json:"limit"`
-	Rules  []string `json:"rules"`
+	Mode            string   `json:"mode"`
+	Preset          string   `json:"preset"`
+	Limit           int      `json:"limit"`
+	Rules           []string `json:"rules"`
+	ReviewerBackend string   `json:"reviewer_backend"`
+	ReviewerModel   string   `json:"reviewer_model"`
+	FixerBackend    string   `json:"fixer_backend"`
+	FixerModel      string   `json:"fixer_model"`
 }
 type Identity struct {
 	Repository string `json:"repository"`
@@ -36,9 +41,10 @@ type Identity struct {
 	Head       string `json:"head"`
 }
 type Snapshot struct {
-	ID       string   `json:"id"`
-	Settings Settings `json:"settings"`
-	Source   string   `json:"source"`
+	ID           string   `json:"id"`
+	Settings     Settings `json:"settings"`
+	Source       string   `json:"source"`
+	LegacyDigest string   `json:"legacy_digest,omitempty"`
 }
 type Event struct {
 	Kind   string `json:"kind"`
@@ -93,6 +99,7 @@ type Request struct {
 	Client   string    `json:"client,omitempty"`
 }
 type Response struct {
+	Models     []string       `json:"models,omitempty"`
 	RuleScope  string         `json:"rule_scope,omitempty"`
 	Rules      []RuleEvidence `json:"rules,omitempty"`
 	RulesReady bool           `json:"rules_ready"`
@@ -115,11 +122,12 @@ type Receipt struct {
 	Result Response `json:"result"`
 }
 type Store struct {
-	Version  int                `json:"version"`
-	Defaults Settings           `json:"defaults"`
-	Runs     map[string]*Run    `json:"runs"`
-	Slots    map[string]string  `json:"slots"`
-	Receipts map[string]Receipt `json:"receipts"`
+	Version        int                `json:"version"`
+	Defaults       Settings           `json:"defaults"`
+	DefaultsSource string             `json:"defaults_source"`
+	Runs           map[string]*Run    `json:"runs"`
+	Slots          map[string]string  `json:"slots"`
+	Receipts       map[string]Receipt `json:"receipts"`
 }
 
 func opaque() string {
@@ -133,6 +141,31 @@ func digest(v any) string {
 	b, _ := json.Marshal(v)
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:])
+}
+func legacySnapshotDigest(s Snapshot) string {
+	type settings struct {
+		Mode   string   `json:"mode"`
+		Preset string   `json:"preset"`
+		Limit  int      `json:"limit"`
+		Rules  []string `json:"rules"`
+	}
+	return digest(struct {
+		ID       string   `json:"id"`
+		Settings settings `json:"settings"`
+		Source   string   `json:"source"`
+	}{s.ID, settings{s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.Rules}, s.Source})
+}
+func snapshotDigestMatches(s Snapshot, expected string) bool {
+	return expected == digest(s) || (s.LegacyDigest != "" && s.LegacyDigest == legacySnapshotDigest(s) && expected == s.LegacyDigest)
+}
+func reviewerConfigDigest(config ReviewerConfig) string {
+	if config.Provider == (ProviderConfig{}) {
+		return digest(struct {
+			Executable string `json:"executable"`
+			Model      string `json:"model"`
+		}{config.Executable, config.Model})
+	}
+	return digest(config)
 }
 func resolve(path string) (Identity, error) {
 	run := func(args ...string) (string, error) {
@@ -225,7 +258,7 @@ func persist(h string, s *Store) error {
 	return d.Sync()
 }
 func load(h string) (*Store, error) {
-	s := &Store{Version: 1, Defaults: Settings{"auto", "one-pass", 4, []string{"unslop", "no-comments"}}, Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}}
+	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}}
 	b, e := os.ReadFile(filepath.Join(h, "state.json"))
 	if os.IsNotExist(e) {
 		return s, nil
@@ -236,6 +269,23 @@ func load(h string) (*Store, error) {
 	if e = json.Unmarshal(b, s); e != nil {
 		return nil, e
 	}
+	initial := Settings{ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
+	if s.DefaultsSource == "" {
+		s.DefaultsSource = "built-in default"
+	}
+	s.Defaults = withModelDefaults(s.Defaults, initial)
+	for _, run := range s.Runs {
+		if run != nil {
+			for i := range run.Configs {
+				snapshot := &run.Configs[i]
+				settings := snapshot.Settings
+				if settings.ReviewerBackend == "" && settings.ReviewerModel == "" && settings.FixerBackend == "" && settings.FixerModel == "" && snapshot.LegacyDigest == "" {
+					snapshot.LegacyDigest = legacySnapshotDigest(*snapshot)
+				}
+				snapshot.Settings = withModelDefaults(settings, initial)
+			}
+		}
+	}
 	if s.Version != 1 || s.Runs == nil || s.Slots == nil || s.Receipts == nil {
 		return nil, errors.New("unsupported or incomplete store")
 	}
@@ -245,7 +295,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
+			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -407,6 +457,10 @@ func view(s *Store, r *Run) Response {
 	}
 	return v
 }
+func validModelSelection(backend, model string) bool {
+	provider, modelID, qualified := strings.Cut(model, "/")
+	return backend == "pi" && validText(model) && len(model) <= 256 && qualified && provider != "" && modelID != "" && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
+}
 func currentGate(r *Run) string {
 	if r != nil && r.Pipeline != nil && r.Pipeline.Gate != "" {
 		return r.Pipeline.Gate
@@ -418,7 +472,22 @@ func pipelineCustody(r *Run) bool {
 	return p != nil && p.Worktree != "" && !released(p) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back"
 }
 func valid(s Settings) bool {
-	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32
+	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel)
+}
+func withModelDefaults(s Settings, defaults Settings) Settings {
+	if s.ReviewerBackend == "" {
+		s.ReviewerBackend = defaults.ReviewerBackend
+	}
+	if s.ReviewerModel == "" {
+		s.ReviewerModel = defaults.ReviewerModel
+	}
+	if s.FixerBackend == "" {
+		s.FixerBackend = defaults.FixerBackend
+	}
+	if s.FixerModel == "" {
+		s.FixerModel = defaults.FixerModel
+	}
+	return s
 }
 func handle(s *Store, q Request) Response {
 	fail := func(msg string, r *Run) Response { v := view(s, r); v.Outcome = "refused"; v.Error = msg; return v }
@@ -428,6 +497,22 @@ func handle(s *Store, q Request) Response {
 	id, e := resolve(q.Path)
 	if e != nil {
 		return fail(e.Error(), nil)
+	}
+	if q.Op == "models" {
+		config, err := trustedReviewer()
+		if err != nil {
+			return fail(err.Error(), nil)
+		}
+		models, err := providerModelCatalog(config.Executable)
+		if err != nil {
+			return fail(err.Error(), nil)
+		}
+		response := Response{Version: 1, Outcome: "ok", Models: make([]string, 0, len(models))}
+		for model := range models {
+			response.Models = append(response.Models, model)
+		}
+		sort.Strings(response.Models)
+		return response
 	}
 	slot := digest([]string{id.Repository, id.Worktree})
 	r := s.Runs[s.Slots[slot]]
@@ -444,7 +529,7 @@ func handle(s *Store, q Request) Response {
 	}
 	if q.Op == "attach" || q.Op == "inspect" {
 		if r == nil && q.Op == "attach" {
-			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "created", Actor: "client"}}}
+			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: s.Defaults, Source: s.DefaultsSource}}, Events: []Event{{Kind: "created", Actor: "client"}}}
 			s.Runs[r.ID] = r
 			s.Slots[slot] = r.ID
 		}
@@ -499,8 +584,19 @@ func handle(s *Store, q Request) Response {
 		if err != nil {
 			return fail("cannot capture complete bounded diff", r)
 		}
-		cfg, err := trustedReviewer()
+		model := r.Configs[len(r.Configs)-1].Settings.ReviewerModel
+		cfg, err := trustedReviewerFor(model)
 		if err != nil {
+			return fail(err.Error(), r)
+		}
+		catalog, err := providerModelCatalog(cfg.Executable)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		if !catalog[model] {
+			return fail("model is not reported by Pi; add custom models to private providers.json", r)
+		}
+		if err = preflightModel(model); err != nil {
 			return fail(err.Error(), r)
 		}
 		r.Pipeline = nil
@@ -578,6 +674,10 @@ func handle(s *Store, q Request) Response {
 		supersede(r)
 		r.Token = opaque()
 	} else if q.Op == "apply" || q.Op == "save" {
+		if q.Settings != nil {
+			normalized := withModelDefaults(*q.Settings, r.Configs[len(r.Configs)-1].Settings)
+			q.Settings = &normalized
+		}
 		if q.Settings == nil || !valid(*q.Settings) {
 			return fail("invalid settings", r)
 		}
@@ -595,19 +695,26 @@ func handle(s *Store, q Request) Response {
 				r.Status = "stale"
 			}
 			old := r.Configs[len(r.Configs)-1].Settings
-			r.Configs = append(r.Configs, Snapshot{opaque(), *q.Settings, "run-local"})
+			if r.Reviewer != nil && old.ReviewerModel != q.Settings.ReviewerModel {
+				r.Reviewer.Model = q.Settings.ReviewerModel
+				if r.Review != nil {
+					r.Review.Status = "stale"
+				}
+			}
+			r.Configs = append(r.Configs, Snapshot{ID: opaque(), Settings: *q.Settings, Source: "run-local"})
 			invalidate(r, "")
 			supersede(r)
 			r.Events = append(r.Events, Event{Kind: q.Op, Actor: "client", Reason: q.Reason, Used: r.ReviewUsed + r.RepairUsed, Before: old.Limit, After: q.Settings.Limit, Review: r.ReviewUsed, Repair: r.RepairUsed})
 		} else {
 			s.Defaults = *q.Settings
+			s.DefaultsSource = "saved"
 			r.Events = append(r.Events, Event{Kind: "save", Actor: "client", Reason: q.Reason})
 		}
 		r.Token = opaque()
 	} else {
 		prior := r.ID
 		findings := append([]Finding(nil), r.Findings...)
-		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, "user defaults"}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: s.Defaults, Source: s.DefaultsSource}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
@@ -1086,7 +1193,7 @@ func terminal(h, path string) error {
 		} else {
 			fmt.Fprintln(&page, "Greenhouse | independent review")
 		}
-		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), s.Source)
+		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s (%s)\nFixer: %s / %s (%s)\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Source, s.Settings.FixerBackend, s.Settings.FixerModel, s.Source, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), s.Source)
 		for _, rule := range v.Rules {
 			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
 			if rule.Error != "" {
@@ -1257,6 +1364,11 @@ func terminal(h, path string) error {
 			q.Op = "resolve-rules"
 		}
 		if op == "s" {
+			models, modelErr := call(h, Request{Version: 1, Op: "models", Path: path})
+			modelsText := strings.Join(models.Models, ", ")
+			if modelErr != nil {
+				modelsText = "catalog unavailable: " + modelErr.Error()
+			}
 			fmt.Printf("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
 			if !reader.Scan() {
 				return nil
@@ -1265,6 +1377,34 @@ func terminal(h, path string) error {
 			if draft.Mode, draft.Preset, draft.Limit, e = parseDraft(reader.Text()); e != nil {
 				message = "Invalid draft: " + e.Error()
 				continue
+			}
+			fmt.Printf("Reviewer backend (pi only) [%s]:\n> ", draft.ReviewerBackend)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := reader.Text(); value != "" {
+				draft.ReviewerBackend = value
+			}
+			fmt.Printf("Reviewer models reported by Pi: %s\nReviewer model (provider/model) [%s]:\n> ", modelsText, draft.ReviewerModel)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := reader.Text(); value != "" {
+				draft.ReviewerModel = value
+			}
+			fmt.Printf("Fixer backend (pi only) [%s]:\n> ", draft.FixerBackend)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := reader.Text(); value != "" {
+				draft.FixerBackend = value
+			}
+			fmt.Printf("Fixer models reported by Pi: %s\nFixer model (provider/model) [%s]:\n> ", modelsText, draft.FixerModel)
+			if !reader.Scan() {
+				return nil
+			}
+			if value := reader.Text(); value != "" {
+				draft.FixerModel = value
 			}
 			fmt.Print("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
 			if !reader.Scan() {

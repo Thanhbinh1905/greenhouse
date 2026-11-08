@@ -38,11 +38,15 @@ Task t20 adds authority modes and review-cap outcomes. Ask groups the actionable
 
 Step 4 still leaves unsupported: granting expanded fixer authority, mechanical lint autofix, gate repairs that add or delete files, and recovery of interrupted pipeline steps.
 
-Delivery scope in this task:
+Delivery scope in step 4:
 
 Area D and standalone E: the trusted command plan can configure a Git remote and GitHub repository. The controller probes and pushes the candidate ref without force, reconciles an already-pushed exact head, and creates or updates one branch PR. It checks only trusted required GitHub check identities for the exact candidate SHA. It persists the PR number and URL, verifies that PR still points to the candidate during CI polling, and rejects head movement. Missing, duplicate, pending, failed, stale and unknown required checks block readiness; ancillary green checks do not count. Transport retries use persisted stage attempts, exponential backoff and a three-attempt limit; exhaustion parks without dispatching a fixer. Push command-runner evidence remains in the stage result. Authorized CI repairs are bounded and invalidate earlier evidence. Delivery does not dispatch an agent and never merges. Local fixtures cover CI-ready, failed CI repair, check identity validation, restart reconciliation, and completed delivery in 56- and 100-column PTYs. The GitHub adapter accepts a local API base URL for isolated fixtures.
 
-## 5. Live backend validation and host contract
+## 5. Reviewer and fixer model selection
+
+Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi remains the only backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Greenhouse discovers Pi models through AXI, supports trusted per-user provider endpoints in `providers.json`, reads API keys only from named environment variables, and preflights provider model access before dispatch. Pi receives only a temporary provider file that references the environment variable. A product-path smoke against the recommended default model passed through the configured proxy. Additional backends are post-v1.
+
+## 6. Live backend validation and host contract
 
 Areas C, E, and F: validate selected real agent and forge backends, capture actual rule inputs and permissions, and publish versioned configuration/AXI compatibility guarantees. Verify custody, budgets, and stale evidence at embedding boundaries.
 

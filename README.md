@@ -17,7 +17,7 @@ cd /path/to/a/git/worktree
 
 The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `r` explicitly resolves rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
-Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, and rule selection. Repository overrides are unsupported and untrusted.
+Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, and rule selection. Both roles currently use Pi; models are exact provider-qualified IDs. The default reviewer is `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json` and `fixer.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
 
 ## JSON interface
 
@@ -47,12 +47,16 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
     "mode": "ask",
     "preset": "one-pass",
     "limit": 6,
-    "rules": ["unslop", "no-comments"]
+    "rules": ["unslop", "no-comments"],
+    "reviewer_backend": "pi",
+    "reviewer_model": "openai/gpt-5.6-luna",
+    "fixer_backend": "pi",
+    "fixer_model": "openai/gpt-5.6-luna"
   }
 }
 ```
 
-Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, and `cancel`. All mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
+Supported reads include `attach`, `inspect`, and `models`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, and `cancel`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
 
 Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json`. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. Tool restriction is not OS confinement. Checks run directly, not through an agent.
 
@@ -72,11 +76,19 @@ Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` an
 
 ## Independent review configuration
 
-Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600:
+Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600. The executable is the trusted per-user authority; Settings selects the model independently:
 
 ```json
-{"executable":"/absolute/path/to/pi","model":"provider/exact-model-id"}
+{"executable":"/absolute/path/to/pi","model":"openai/gpt-5.6-luna"}
 ```
+
+Configure custom provider endpoints in a separate private `providers.json` in `GREENHOUSE_HOME`:
+
+```json
+{"providers":{"openai":{"base_url":"http://127.0.0.1:8317/v1","api_key_env":"OPENAI_API_KEY","api":"openai-completions"}},"models":[]}
+```
+
+Set both files to mode 0600. Pi-reported models appear in Settings. Add custom provider-qualified IDs to `models` when Pi does not report them. Prepare checks the provider's `/models` endpoint and the configured key environment variable before any review. Greenhouse writes only the endpoint and `$ENV_VAR` reference into Pi's private temporary agent directory. It never reads Pi's `models.json` or stores credentials.
 
 Only per-user configuration grants executable authority. There are no arbitrary arguments, repository overrides, or session selectors. Models require an exact provider-qualified ID without a thinking suffix or wildcard. A successful response must report the same provider and model. The adapter targets the installed Pi 1.5.0 CLI; incompatible flags or event output yield an inconclusive result.
 
@@ -190,7 +202,7 @@ go run ./eval run -model openai/gpt-5.6-luna -base-url http://127.0.0.1:8317/v1 
   -parallel 4 -label "what changed" -out docs/evidence/review-eval/NN-name
 ```
 
-For each case, `run` commits the base and head trees with fixed identities and dates, starts an isolated daemon, and sends `attach`, `apply`, `resolve-rules`, `prepare`, and `review` over AXI. `reviewer.json` names the eval binary, which acts as a shim: it records the exact argv and stdin Greenhouse delivers, then runs the real Pi with the same arguments and input and records its JSON events. Greenhouse loads no custom provider file, so `-base-url` makes the shim write a `models.json` that routes the model's provider to that URL inside the reviewer's private agent directory. Credentials come from the environment, as for Greenhouse. Credential-like environment values are redacted from the output. Runs are paid model calls.
+For each case, `run` commits the base and head trees with fixed identities and dates, starts an isolated daemon, and sends `attach`, `apply`, `resolve-rules`, `prepare`, and `review` over AXI. `reviewer.json` names the eval binary, which records the exact argv and stdin Greenhouse delivers, then runs real Pi with the same arguments and input and captures its JSON events. The eval writes a trusted `providers.json` with the configured base URL and credential environment-variable name. Greenhouse creates Pi's temporary provider configuration and reads credentials only from the environment. Credential-like environment values are redacted from the output. Runs are paid model calls.
 
 `report.md` summarizes a run; `report.json` holds the configuration, every case record, and the summary. Each case directory holds `input.json` (the exact stdin bytes), `argv.json`, `events.jsonl` (Pi's events without streaming deltas), and `timing.json`. The metrics are:
 

@@ -20,10 +20,8 @@ import (
 const shimEnv = "GREENHOUSE_EVAL_SHIM"
 
 type shimConfig struct {
-	Pi       string `json:"pi"`
-	Capture  string `json:"capture"`
-	Provider string `json:"provider"`
-	BaseURL  string `json:"base_url,omitempty"`
+	Pi      string `json:"pi"`
+	Capture string `json:"capture"`
 }
 
 type shimTiming struct {
@@ -52,6 +50,15 @@ func runShim(configPath string) int {
 }
 
 func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
+	if len(args) == 1 && args[0] == "--list-models" {
+		command := exec.Command(cfg.Pi, args...)
+		command.Env = os.Environ()
+		command.Stdout, command.Stderr = stdout, stderr
+		if err := command.Run(); err != nil {
+			return 1, err
+		}
+		return 0, nil
+	}
 	input, err := io.ReadAll(stdin)
 	if err != nil {
 		return 2, err
@@ -64,27 +71,11 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		return 2, err
 	}
 	var env []string
-	agentDir := ""
 	for _, v := range os.Environ() {
 		if strings.HasPrefix(v, shimEnv+"=") {
 			continue
 		}
-		if dir, ok := strings.CutPrefix(v, "PI_CODING_AGENT_DIR="); ok {
-			agentDir = dir
-		}
 		env = append(env, v)
-	}
-	if cfg.BaseURL != "" {
-		if agentDir == "" {
-			return 2, errors.New("PI_CODING_AGENT_DIR unset; cannot route the provider")
-		}
-		models, _ := json.Marshal(map[string]any{"providers": map[string]any{cfg.Provider: map[string]string{"baseUrl": cfg.BaseURL}}})
-		if err := os.MkdirAll(agentDir, 0o700); err != nil {
-			return 2, err
-		}
-		if err := os.WriteFile(filepath.Join(agentDir, "models.json"), models, 0o600); err != nil {
-			return 2, err
-		}
 	}
 	events, err := os.OpenFile(filepath.Join(cfg.Capture, "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {

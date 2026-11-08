@@ -310,7 +310,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	}
 	rec.Target, rec.Candidate = target, head
 	provider, _, _ := strings.Cut(o.Model, "/")
-	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Provider: provider, BaseURL: o.BaseURL})
+	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture})
 	cfgPath := filepath.Join(work, "shim.json")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
@@ -319,13 +319,27 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if err := os.WriteFile(filepath.Join(home, "reviewer.json"), reviewer, 0o600); err != nil {
 		return fail(err)
 	}
+	if o.BaseURL == "" {
+		return fail(errors.New("evaluation provider base URL required"))
+	}
+	keyEnv := strings.ToUpper(provider) + "_API_KEY"
+	if provider == "fake" {
+		keyEnv = "EVAL_TEST_API_KEY"
+	}
+	providerConfig, _ := json.Marshal(map[string]any{
+		"providers": map[string]any{provider: map[string]string{"base_url": o.BaseURL, "api_key_env": keyEnv, "api": "openai-completions"}},
+		"models":    []string{o.Model},
+	})
+	if err := os.WriteFile(filepath.Join(home, "providers.json"), providerConfig, 0o600); err != nil {
+		return fail(err)
+	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath}}
 	defer stopDaemon(home)
 	v, err := a.call(map[string]any{"op": "attach"})
 	if err != nil {
 		return fail(err)
 	}
-	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": k.Rules}
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": k.Rules, "reviewer_backend": "pi", "reviewer_model": o.Model, "fixer_backend": "pi", "fixer_model": o.Model}
 	if v, err = a.mutate(v, "apply", map[string]any{"settings": settings, "reason": "evaluation case " + k.ID}); err != nil {
 		return fail(err)
 	}
