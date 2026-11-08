@@ -849,19 +849,29 @@ func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode o
 		if path == filepath.Join(root, ".git") && entry.IsDir() {
 			return filepath.SkipDir
 		}
-		if entry.IsDir() {
-			return nil
-		}
 		name, err := filepath.Rel(root, path)
 		if err != nil {
 			return err
 		}
-		if trackedNames[name] {
-			return nil
-		}
 		info, err := os.Lstat(path)
 		if err != nil {
 			return err
+		}
+		if info.IsDir() {
+			if path == root {
+				return nil
+			}
+			ignored, err := gitPathIgnored(root, name)
+			if err != nil {
+				return err
+			}
+			if ignored {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if trackedNames[name] {
+			return nil
 		}
 		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
 			return nil
