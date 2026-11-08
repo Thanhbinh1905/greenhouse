@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "bug-nil-before-error",
+  "category": "bug",
+  "description": "Dereferences the result before checking the error.",
+  "intent": "Add DisplayName so templates can show a user's name by ID.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "file": "user/store.go",
+      "start": 28,
+      "end": 32,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\"."
+    }
+  ],
+  "noise": []
+}

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "id": "bug-swallowed-write-error",
+  "category": "bug",
+  "description": "Write failure returns nil, so callers believe the save succeeded.",
+  "intent": "Add Save so the settings screen can persist the configuration.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "file": "config/config.go",
+      "start": 32,
+      "end": 34,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success."
+    }
+  ],
+  "noise": [
+    {
+      "file": "config/config.go",
+      "start": 24,
+      "end": 25,
+      "note": "Doc comment states a real constraint."
+    }
+  ]
+}

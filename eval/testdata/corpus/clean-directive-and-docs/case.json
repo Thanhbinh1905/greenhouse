@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "clean-directive-and-docs",
+  "category": "clean",
+  "description": "Adds a go:generate directive, a doc comment and a factual README line.",
+  "intent": "Generate String for Level and document regeneration.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [],
+  "noise": [
+    {
+      "file": "level/level.go",
+      "start": 3,
+      "end": 3,
+      "note": "go:generate directive; must be preserved."
+    },
+    {
+      "file": "level/level.go",
+      "start": 5,
+      "end": 5,
+      "note": "Doc comment on exported type."
+    }
+  ]
+}

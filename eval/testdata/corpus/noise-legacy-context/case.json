@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "id": "noise-legacy-context",
+  "category": "noise",
+  "description": "Clean addition next to unchanged narrating comments and a pre-existing nil dereference.",
+  "intent": "Add InStock so checkout can verify availability before reserving.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [],
+  "noise": [
+    {
+      "file": "inventory/stock.go",
+      "start": 15,
+      "end": 20,
+      "note": "Unchanged Remove has narrating comments and dereferences a missing SKU; out of scope."
+    }
+  ]
+}

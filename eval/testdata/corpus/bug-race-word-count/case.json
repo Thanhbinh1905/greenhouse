@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "bug-race-word-count",
+  "category": "bug",
+  "description": "Goroutines increment a shared counter without synchronization.",
+  "intent": "Count words across documents in parallel to speed up indexing.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "expected": [
+    {
+      "file": "text/count.go",
+      "start": 20,
+      "end": 23,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P0",
+        "P1"
+      ],
+      "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates."
+    }
+  ],
+  "noise": []
+}
