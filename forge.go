@@ -22,7 +22,7 @@ type PullRequest struct {
 
 type Forge interface {
 	EnsurePullRequest(context.Context, string, string, string, string, string, string, string) (PullRequest, error)
-	Checks(context.Context, string, string, string) (bool, string, error)
+	Checks(context.Context, string, string, string, int, []string) (bool, string, error)
 }
 
 type GitHubForge struct {
@@ -127,7 +127,7 @@ func (g GitHubForge) EnsurePullRequest(ctx context.Context, owner, repo, branch,
 	return PullRequest{Number: created.Number, URL: created.URL, Head: created.Head.SHA}, nil
 }
 
-func (g GitHubForge) Checks(ctx context.Context, owner, repo, head string) (bool, string, error) {
+func (g GitHubForge) Checks(ctx context.Context, owner, repo, head string, pullNumber int, required []string) (bool, string, error) {
 	var result struct {
 		TotalCount int `json:"total_count"`
 		CheckRuns  []struct {
@@ -141,24 +141,59 @@ func (g GitHubForge) Checks(ctx context.Context, owner, repo, head string) (bool
 	if err := g.request(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return false, "", err
 	}
+	if pullNumber <= 0 || len(required) == 0 {
+		return false, "trusted PR identity and required check names are missing", nil
+	}
+	var pr struct {
+		Number int `json:"number"`
+		Head   struct {
+			SHA string `json:"sha"`
+		} `json:"head"`
+	}
+	if err := g.request(ctx, http.MethodGet, "/repos/"+url.PathEscape(owner)+"/"+url.PathEscape(repo)+"/pulls/"+fmt.Sprint(pullNumber), nil, &pr); err != nil {
+		return false, "", err
+	}
+	if pr.Number != pullNumber || pr.Head.SHA != head {
+		return false, "pull request head moved from authorized candidate", nil
+	}
 	if len(result.CheckRuns) == 0 {
-		return false, "missing checks", nil
+		return false, "missing required check: " + required[0], nil
 	}
 	if result.TotalCount > len(result.CheckRuns) {
 		return false, "checks incomplete: additional pages remain", nil
 	}
+	byName := make(map[string][]struct {
+		Status     string
+		Conclusion *string
+		HeadSHA    string
+	}, len(result.CheckRuns))
 	for _, check := range result.CheckRuns {
+		byName[check.Name] = append(byName[check.Name], struct {
+			Status     string
+			Conclusion *string
+			HeadSHA    string
+		}{check.Status, check.Conclusion, check.HeadSHA})
+	}
+	for _, name := range required {
+		checks := byName[name]
+		if len(checks) == 0 {
+			return false, "missing required check: " + name, nil
+		}
+		if len(checks) != 1 {
+			return false, "duplicate required check: " + name, nil
+		}
+		check := checks[0]
 		if check.HeadSHA != head {
-			return false, "stale check: " + check.Name, nil
+			return false, "stale check: " + name, nil
 		}
 		if check.Status != "completed" || check.Conclusion == nil {
-			return false, "checks pending", nil
+			return false, "checks pending: " + name, nil
 		}
 		if *check.Conclusion != "success" {
-			return false, "check failed: " + check.Name + " (" + *check.Conclusion + ")", nil
+			return false, "check failed: " + name + " (" + *check.Conclusion + ")", nil
 		}
 	}
-	return true, "all checks passed for exact head", nil
+	return true, "all required checks passed for exact head", nil
 }
 
 func configuredForge() (GitHubForge, error) {

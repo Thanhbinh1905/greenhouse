@@ -28,9 +28,14 @@ func TestSafeRemoteRejectsCredentialAndAliasInputs(t *testing.T) {
 func TestGitHubForgeReusesExistingPullRequest(t *testing.T) {
 	creates, updates := 0, 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/repos/acme/garden/pulls/7" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			w.Write([]byte(`{"number":7,"head":{"sha":"head-a"}}`))
+			return
+		}
 		if r.URL.Path == "/repos/acme/garden/commits/head-a/check-runs" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"check_runs":[{"name":"ci","status":"completed","conclusion":"success","head_sha":"head-a"}]}`))
+			w.Write([]byte(`{"check_runs":[{"name":"trusted-ci","status":"completed","conclusion":"success","head_sha":"head-a"},{"name":"optional-lint","status":"completed","conclusion":"success","head_sha":"head-a"}]}`))
 			return
 		}
 		if r.URL.Path == "/repos/acme/garden/pulls/7" && r.Method == http.MethodPatch {
@@ -68,25 +73,35 @@ func TestGitHubForgeReusesExistingPullRequest(t *testing.T) {
 	if pr.Number != 7 || pr.URL != "https://example.invalid/acme/garden/pull/7" || creates != 0 || updates != 1 {
 		t.Fatalf("PR was not reconciled: %+v creates=%d", pr, creates)
 	}
-	passed, reason, err := forge.Checks(context.Background(), "acme", "garden", "head-a")
-	if err != nil || !passed || reason != "all checks passed for exact head" {
+	passed, reason, err := forge.Checks(context.Background(), "acme", "garden", "head-a", 7, []string{"trusted-ci"})
+	if err != nil || !passed || reason != "all required checks passed for exact head" {
 		t.Fatalf("exact-head checks not accepted: passed=%t reason=%q err=%v", passed, reason, err)
 	}
 }
 
 func TestGitHubForgeMissingAndStaleChecksDoNotPass(t *testing.T) {
 	for _, tc := range []struct{ name, payload, want string }{
-		{"missing", `{"check_runs":[]}`, "missing checks"},
-		{"stale", `{"check_runs":[{"name":"old","status":"completed","conclusion":"success","head_sha":"old-head"}]}`, "stale check: old"},
-		{"unknown", `{"check_runs":[{"name":"ci","status":"completed","head_sha":"head-a"}]}`, "checks pending"},
+		{"missing", `{"check_runs":[]}`, "missing required check: trusted-ci"},
+		{"stale", `{"check_runs":[{"name":"trusted-ci","status":"completed","conclusion":"success","head_sha":"old-head"}]}`, "stale check: trusted-ci"},
+		{"unknown", `{"check_runs":[{"name":"trusted-ci","status":"completed","head_sha":"head-a"}]}`, "checks pending: trusted-ci"},
+		{"ancillary-only", `{"check_runs":[{"name":"optional-ci","status":"completed","conclusion":"success","head_sha":"head-a"}]}`, "missing required check: trusted-ci"},
+		{"pr-head-moved", `{"check_runs":[{"name":"trusted-ci","status":"completed","conclusion":"success","head_sha":"head-a"}]}`, "pull request head moved from authorized candidate"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
+				if r.URL.Path == "/repos/acme/garden/pulls/4" {
+					sha := "head-a"
+					if tc.name == "pr-head-moved" {
+						sha = "head-b"
+					}
+					w.Write([]byte(`{"number":4,"head":{"sha":"` + sha + `"}}`))
+					return
+				}
 				w.Write([]byte(tc.payload))
 			}))
 			defer server.Close()
-			passed, reason, err := (GitHubForge{BaseURL: server.URL, Client: server.Client()}).Checks(context.Background(), "acme", "garden", "head-a")
+			passed, reason, err := (GitHubForge{BaseURL: server.URL, Client: server.Client()}).Checks(context.Background(), "acme", "garden", "head-a", 4, []string{"trusted-ci"})
 			if err != nil || passed || reason != tc.want {
 				t.Fatalf("unexpected result: %t %q %v", passed, reason, err)
 			}
@@ -121,13 +136,16 @@ func TestDeliveryPipelinePushesCreatesPRAndWaitsForExactChecks(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := Pipeline{Plan: CommandPlan{Name: "Test", Email: "test@example.invalid", Remote: bare, GitHubOwner: "acme", GitHubRepo: "garden", PullBase: "main"}, CommandDigests: map[string]string{gitPath: gitDigest}, Worktree: repo, Ref: "refs/heads/greenhouse/test"}
+	p := Pipeline{Plan: CommandPlan{Name: "Test", Email: "test@example.invalid", Remote: bare, GitHubOwner: "acme", GitHubRepo: "garden", PullBase: "main", RequiredChecks: []string{"ci"}}, CommandDigests: map[string]string{gitPath: gitDigest}, Worktree: repo, Ref: "refs/heads/greenhouse/test"}
+	p.Stages = newPipeline(p.Plan, p.CommandDigests).Stages
 	var prCreated int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
 			w.Write([]byte(`[]`))
+		case r.URL.Path == "/repos/acme/garden/pulls/8" && r.Method == http.MethodGet:
+			json.NewEncoder(w).Encode(map[string]any{"number": 8, "head": map[string]string{"sha": id.Head}})
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			prCreated++
 			var body map[string]string
@@ -160,6 +178,7 @@ func TestDeliveryPipelinePushesCreatesPRAndWaitsForExactChecks(t *testing.T) {
 	if pr.Status != "passed" || url != "https://example.invalid/acme/garden/pull/8" || prCreated != 1 {
 		t.Fatalf("PR stage failed: %+v creates=%d", pr, prCreated)
 	}
+	p.stage("pr").Number, p.stage("pr").Head = 8, id.Head
 	ci, _, _ := runDeliveryStage(context.Background(), p, "ci", id.Head)
 	if ci.Status != "passed" {
 		t.Fatalf("CI stage failed: %+v", ci)

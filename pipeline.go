@@ -18,25 +18,27 @@ import (
 )
 
 type CommandPlan struct {
-	Name          string            `json:"name"`
-	Remote        string            `json:"remote"`
-	GitHubOwner   string            `json:"github_owner"`
-	GitHubRepo    string            `json:"github_repo"`
-	PullBase      string            `json:"pull_base"`
-	PullTitle     string            `json:"pull_title"`
-	Email         string            `json:"email"`
-	Test          [][]string        `json:"test,omitempty"`
-	Lint          [][]string        `json:"lint,omitempty"`
-	Docs          [][]string        `json:"docs,omitempty"`
-	DocsPaths     []string          `json:"docs_paths,omitempty"`
-	NotApplicable map[string]string `json:"not_applicable,omitempty"`
-	Repairs       []string          `json:"repairs,omitempty"`
-	RepairLimit   int               `json:"repair_limit"`
+	Name           string            `json:"name"`
+	Remote         string            `json:"remote"`
+	GitHubOwner    string            `json:"github_owner"`
+	GitHubRepo     string            `json:"github_repo"`
+	PullBase       string            `json:"pull_base"`
+	PullTitle      string            `json:"pull_title"`
+	RequiredChecks []string          `json:"required_checks,omitempty"`
+	Email          string            `json:"email"`
+	Test           [][]string        `json:"test,omitempty"`
+	Lint           [][]string        `json:"lint,omitempty"`
+	Docs           [][]string        `json:"docs,omitempty"`
+	DocsPaths      []string          `json:"docs_paths,omitempty"`
+	NotApplicable  map[string]string `json:"not_applicable,omitempty"`
+	Repairs        []string          `json:"repairs,omitempty"`
+	RepairLimit    int               `json:"repair_limit"`
 }
 type StageResult struct {
 	Name      string        `json:"name"`
 	URL       string        `json:"url,omitempty"`
 	Head      string        `json:"head,omitempty"`
+	Number    int           `json:"number,omitempty"`
 	Status    string        `json:"status"`
 	Inputs    string        `json:"inputs,omitempty"`
 	Candidate string        `json:"candidate,omitempty"`
@@ -130,6 +132,16 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	if plan.Remote != "" && (!safeRemote(plan.Remote) || plan.GitHubOwner == "" || plan.GitHubRepo == "" || plan.PullBase == "") {
 		return plan, nil, errors.New("delivery requires a safe remote, GitHub owner, repository and pull base")
 	}
+	if plan.Remote != "" && plan.NotApplicable["ci"] == "" && len(plan.RequiredChecks) == 0 {
+		return plan, nil, errors.New("delivery requires trusted required_checks, or ci must be explicitly not applicable")
+	}
+	seenChecks := map[string]bool{}
+	for _, name := range plan.RequiredChecks {
+		if !validText(name) || seenChecks[name] {
+			return plan, nil, errors.New("required_checks must contain unique non-empty names")
+		}
+		seenChecks[name] = true
+	}
 	if plan.Remote == "" && (plan.GitHubOwner != "" || plan.GitHubRepo != "" || plan.PullBase != "") {
 		return plan, nil, errors.New("delivery settings must be configured together")
 	}
@@ -217,6 +229,12 @@ func stageInputs(r *Run, name string) string {
 			review = r.Review.InputDigest
 		}
 		return digest([]any{name, r.Candidate, p.PlanDigest, review})
+	case "ci":
+		pr := p.stage("pr")
+		if pr == nil {
+			return digest([]any{name, r.Candidate, p.PlanDigest, 0, ""})
+		}
+		return digest([]any{name, r.Candidate, p.PlanDigest, pr.Number, pr.Head})
 	}
 	return digest([]any{name, r.Candidate, p.PlanDigest})
 }
@@ -229,6 +247,13 @@ func invalidate(r *Run, repaired string) {
 		st := &r.Pipeline.Stages[i]
 		if st.Inputs == "" || st.Status == "unsupported" || st.Inputs == stageInputs(r, st.Name) {
 			continue
+		}
+		if st.Name == "push" || st.Name == "pr" || st.Name == "ci" {
+			st.Runs = 0
+			st.Commands = nil
+			if st.Name == "pr" {
+				st.Number, st.URL = 0, ""
+			}
 		}
 		if st.Name == repaired {
 			st.Status = "repaired-unreviewed"
@@ -306,6 +331,14 @@ func repairBlocker(r *Run, stage string) string {
 	return ""
 }
 
+func deliveryRetry(st *StageResult) (retry, exhausted bool) {
+	transportFailure := strings.HasPrefix(st.Reason, "push failed:") || strings.HasPrefix(st.Reason, "remote ref probe failed:") || strings.HasPrefix(st.Reason, "pull request reconciliation failed:") || strings.HasPrefix(st.Reason, "check inspection failed:")
+	if !transportFailure || st.Status != "failed" && st.Status != "needs-decision" {
+		return false, false
+	}
+	return st.Runs < 3, st.Runs >= 3
+}
+
 func advancePipeline(s *Store, r *Run) *Step {
 	p := r.Pipeline
 	if id, e := resolve(r.Submitted.Worktree); e != nil || id != r.Submitted {
@@ -318,8 +351,12 @@ func advancePipeline(s *Store, r *Run) *Step {
 			r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 		}
 		in := stageInputs(r, st.Name)
-		retryCI := st.Name == "ci" && st.Status == "needs-decision" && strings.HasPrefix(st.Reason, "CI checks did not become ready")
-		retryDelivery := st.Status == "failed" && ((st.Name == "push" && (strings.HasPrefix(st.Reason, "push failed:") || strings.HasPrefix(st.Reason, "remote ref probe failed:"))) || (st.Name == "pr" && strings.HasPrefix(st.Reason, "pull request reconciliation failed:")) || (st.Name == "ci" && strings.HasPrefix(st.Reason, "check inspection failed:")))
+		retryCI := st.Name == "ci" && st.Status == "needs-decision" && (strings.HasPrefix(st.Reason, "CI checks did not become ready") || strings.HasPrefix(st.Reason, "missing required check:"))
+		retryDelivery, deliveryExhausted := deliveryRetry(st)
+		if st.Inputs == in && deliveryExhausted {
+			park(r, st, "needs-decision", st.Reason+"; transport retry limit exhausted; no fixer dispatched")
+			return nil
+		}
 		if st.Inputs == in && !retryCI && !retryDelivery {
 			switch st.Status {
 			case "passed", "not-applicable":
@@ -402,7 +439,10 @@ func advancePipeline(s *Store, r *Run) *Step {
 			}
 			step.Kind = "commands"
 		}
-		st.Status, st.Inputs, st.Candidate, st.Reason, st.Commands = "running", in, r.Candidate, "", nil
+		st.Status, st.Inputs, st.Candidate, st.Reason = "running", in, r.Candidate, ""
+		if step.Kind != "delivery" {
+			st.Commands = nil
+		}
 		st.Runs++
 		p.Active = step
 		r.Stage = st.Name
@@ -552,9 +592,17 @@ func completeStep(r *Run, o stepOutcome) error {
 			p.Gate = opaque()
 		}
 	case "delivery":
-		st.Status, st.Reason, st.Head, st.URL = o.Status, o.Log, o.Head, o.URL
+		st.Status, st.Reason, st.Head, st.URL, st.Number = o.Status, o.Log, o.Head, o.URL, o.Stage.Number
+		st.Commands = append(st.Commands, o.Stage.Commands...)
 		if o.Status == "unknown-outcome" {
 			holdRecovery(r, st.Name, o.Log)
+			return nil
+		}
+		if retry, exhausted := deliveryRetry(st); retry {
+			r.Status, r.Stage, p.Status = "running", st.Name, "running"
+			return nil
+		} else if exhausted {
+			park(r, st, "needs-decision", st.Reason+"; transport retry limit exhausted; no fixer dispatched")
 			return nil
 		}
 		if o.Status == "failed" && gateStages[st.Name] {
@@ -666,6 +714,17 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 		out.Status, out.Reason = "needs-decision", err.Error()
 		return out, candidate, ""
 	}
+	if stageResult := p.stage(stage); stageResult != nil && stageResult.Runs > 1 {
+		delay := 250 * time.Millisecond * time.Duration(1<<(stageResult.Runs-2))
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			out.Status, out.Reason = "cancelled", "delivery retry backoff cancelled"
+			return out, candidate, ""
+		case <-timer.C:
+		}
+	}
 	identity, err := resolve(p.Worktree)
 	if err != nil || identity.Head != candidate || identity.Branch != p.Ref {
 		out.Status, out.Reason = "needs-decision", "candidate ref identity changed; delivery refused"
@@ -733,17 +792,22 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 			out.Status, out.Reason = "needs-decision", "pull request head is missing or differs from the authorized candidate"
 			return out, candidate, pr.URL
 		}
-		out.Status, out.URL, out.Reason = "passed", pr.URL, "pull request created or reconciled for exact candidate"
+		out.Status, out.URL, out.Number, out.Reason = "passed", pr.URL, pr.Number, "pull request created or reconciled for exact candidate"
 	case "ci":
 		forge, err := configuredForge()
 		if err != nil {
 			out.Status, out.Reason = "failed", err.Error()
 			return out, candidate, ""
 		}
+		pr := p.stage("pr")
+		if pr == nil || pr.Number <= 0 || pr.Head != candidate {
+			out.Status, out.Reason = "needs-decision", "persisted pull request identity is missing or stale"
+			return out, candidate, ""
+		}
 		deadline := time.NewTimer(10 * time.Minute)
 		defer deadline.Stop()
 		for {
-			passed, reason, err := forge.Checks(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, candidate)
+			passed, reason, err := forge.Checks(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, candidate, pr.Number, p.Plan.RequiredChecks)
 			if err != nil {
 				out.Status, out.Reason = "failed", "check inspection failed: "+err.Error()
 				return out, candidate, ""
@@ -752,7 +816,7 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 				out.Status, out.Reason = "passed", reason
 				return out, candidate, ""
 			}
-			if reason != "checks pending" && reason != "missing checks" && reason != "checks incomplete: additional pages remain" {
+			if reason != "checks pending" && reason != "missing checks" && reason != "checks incomplete: additional pages remain" && !strings.HasPrefix(reason, "checks pending:") {
 				out.Status, out.Reason = "needs-decision", reason
 				if strings.HasPrefix(reason, "check failed:") {
 					out.Status = "failed"

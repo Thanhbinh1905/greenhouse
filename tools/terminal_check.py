@@ -1,4 +1,5 @@
 import fcntl
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import subprocess
 import sys
 import tempfile
 import termios
+import threading
 import time
 
 binary = str(Path(sys.argv[1]).resolve())
@@ -18,6 +20,46 @@ repo = root / "repo"
 repo.mkdir()
 env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
            GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null")
+delivery = {"bare": None, "head": None}
+
+
+class ForgeHandler(BaseHTTPRequestHandler):
+    def log_message(self, fmt, *args):
+        pass
+
+    def send_json(self, value):
+        payload = json.dumps(value).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
+
+    def do_GET(self):
+        path = self.path.split("?", 1)[0]
+        if path == "/repos/acme/garden/pulls":
+            self.send_json([])
+        elif path == "/repos/acme/garden/pulls/12":
+            self.send_json({"number": 12, "head": {"sha": delivery["head"]}})
+        elif path.endswith("/check-runs"):
+            sha = path.split("/")[-2]
+            self.send_json({"total_count": 1, "check_runs": [{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha}]})
+        else:
+            self.send_error(404)
+
+    def do_POST(self):
+        if self.path != "/repos/acme/garden/pulls":
+            self.send_error(404)
+            return
+        request = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        branch = request["head"].removeprefix("acme:")
+        delivery["head"] = subprocess.check_output(["git", "--git-dir", delivery["bare"], "rev-parse", f"refs/heads/{branch}"], text=True).strip()
+        self.send_json({"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": {"sha": delivery["head"]}})
+
+
+forge = ThreadingHTTPServer(("127.0.0.1", 0), ForgeHandler)
+threading.Thread(target=forge.serve_forever, daemon=True).start()
+env["GREENHOUSE_GITHUB_API"] = f"http://127.0.0.1:{forge.server_port}"
 for args in [["init", "-b", "main"], ["-c", "user.name=Test", "-c",
              "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"]]:
     subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
@@ -215,11 +257,14 @@ open("sample.txt","w").write("repaired\\n")
         for args in [["init", "-b", "main"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"]]:
             subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
         base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
+        bare = root / f"{name}.git"
+        subprocess.run(["git", "init", "--bare", str(bare)], env=env, check=True, capture_output=True)
+        delivery["bare"] = str(bare)
         (repo / "sample.txt").write_text("candidate\n")
         for args in [["add", "sample.txt"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate"]]:
             subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
         plan_file = root / "state" / "pipeline.json"
-        plan_file.write_text(json.dumps(dict(plan, name="Test", email="test@example.invalid")))
+        plan_file.write_text(json.dumps(dict(plan, name="Test", email="test@example.invalid", remote=str(bare), github_owner="acme", github_repo="garden", pull_base="main", required_checks=["fixture-ci"])))
         plan_file.chmod(0o600)
         return base
 
@@ -253,13 +298,16 @@ open("sample.txt","w").write("repaired\\n")
         state = settle()
         other = 100 if width == 56 else 56
         text = session(width, ["i", "q"], f"-{name}-result")
-        session(other, ["i", "c", "q"], f"-{name}-result-wide" if other == 100 else f"-{name}-result-narrow")
+        delivery_text = session(other, ["i", "c", "q"], f"-{name}-result-wide" if other == 100 else f"-{name}-result-narrow")
         parity(state, text)
         stages = {s["name"]: s for s in state["run"]["pipeline"]["stages"]}
         if name == "full-ready":
-            assert "[UNCONFIGURED] push" in text
-            assert state["run"]["status"] == "needs-decision", state["run"]["pipeline"]
-            assert stages["push"]["status"] == "unconfigured"
+            assert state["run"]["status"] == "ci-ready", state["run"]["pipeline"]
+            assert stages["push"]["status"] == "passed" and stages["pr"]["status"] == "passed" and stages["ci"]["status"] == "passed"
+            assert stages["pr"]["url"] == "https://example.invalid/acme/garden/pull/12"
+            assert stages["ci"]["head"] == state["run"]["candidate"]
+            assert "Pipeline: ci-ready" in text and "https://example.invalid/acme/garden/pull/12" in text
+            assert "Pipeline: ci-ready" in delivery_text and "https://example.invalid/acme/garden/pull/12" in delivery_text
             assert stages["test"]["repairs"] == 1 and stages["test"]["status"] == "passed"
             assert "[pass after repair, rereviewed] test" in text and "Gate repairs: 1/1" in text
             assert "[pass] review" in text and "[n/a] docs" in text
@@ -270,7 +318,8 @@ open("sample.txt","w").write("repaired\\n")
         if name == "full-unreviewed":
             assert stages["test"]["status"] == "repaired-unreviewed", stages
             assert "[REPAIRED, NOT REVIEWED] test" in text and "[DECISION] review" in text
-    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics and AXI parity; fixture {root}")
+    forge.shutdown()
+    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full delivery to CI-ready, pipeline repair, failure diagnostics and AXI parity; fixture {root}")
 finally:
     pidfile = root / "state" / "pid"
     if pidfile.exists():
