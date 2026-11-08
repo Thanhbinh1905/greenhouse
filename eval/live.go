@@ -41,6 +41,7 @@ type RunConfig struct {
 	GreenhouseVersion string    `json:"greenhouse_version"`
 	GoVersion         string    `json:"go_version"`
 	CorpusVersion     int       `json:"corpus_version"`
+	CorpusRevision    int       `json:"corpus_revision"`
 	CorpusDigest      string    `json:"corpus_digest"`
 	Cases             []string  `json:"cases"`
 	Parallel          int       `json:"parallel"`
@@ -462,7 +463,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
@@ -526,7 +527,7 @@ func writeReport(dir string, r *Report) error {
 	s := r.Summary
 	fmt.Fprintf(&md, "# Review evaluation: %s\n\n", r.Config.Label)
 	fmt.Fprintf(&md, "- Model: `%s` through `%s`, Pi %s\n", r.Config.Model, r.Config.Backend, r.Config.PiVersion)
-	fmt.Fprintf(&md, "- Greenhouse: `%s`, corpus v%d `%s`\n", r.Config.GreenhouseVersion, r.Config.CorpusVersion, r.Config.CorpusDigest)
+	fmt.Fprintf(&md, "- Greenhouse: `%s`, corpus v%d revision %d `%s`\n", r.Config.GreenhouseVersion, r.Config.CorpusVersion, r.Config.CorpusRevision, r.Config.CorpusDigest)
 	fmt.Fprintf(&md, "- Started %s, finished %s, parallel %d\n\n", r.Config.Started.Format(time.RFC3339), r.Config.Finished.Format(time.RFC3339), r.Config.Parallel)
 	bar := "not met"
 	if s.BarMet {

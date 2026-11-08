@@ -1,5 +1,6 @@
 {
   "version": 1,
+  "revision": 2,
   "cases": [
     "bug-offbyone-window",
     "bug-nil-before-error",

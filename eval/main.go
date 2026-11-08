@@ -52,7 +52,7 @@ func dispatch(sub string, args []string) error {
 				}
 			}
 		}
-		fmt.Printf("corpus v%d %s: %d cases, bug=%d policy=%d noise=%d clean=%d, %d high-severity findings\n", c.Version, c.Digest, len(c.Cases), count["bug"], count["policy"], count["noise"], count["clean"], high)
+		fmt.Printf("corpus v%d revision %d %s: %d cases, bug=%d policy=%d noise=%d clean=%d, %d high-severity findings\n", c.Version, c.Revision, c.Digest, len(c.Cases), count["bug"], count["policy"], count["noise"], count["clean"], high)
 		return nil
 	case "run":
 		o := runOptions{Settle: 12 * time.Minute}

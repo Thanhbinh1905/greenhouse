@@ -36,13 +36,13 @@ const bugSpec = `{"version":1,"id":"bug","category":"bug","intent":"Add LastN","
 
 func TestLoadCorpusReadsManifestCasesAndTrees(t *testing.T) {
 	root := t.TempDir()
-	writeManifest(t, root, `{"version":1,"cases":["bug"]}`)
+	writeManifest(t, root, `{"version":1,"revision":3,"cases":["bug"]}`)
 	writeCase(t, root, "bug", bugSpec, map[string]string{"base/a.go": "package a\n", "head/a.go": "package a\nx\ny\n"})
 	c, err := LoadCorpus(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Version != 1 || len(c.Cases) != 1 || len(c.Digest) != 64 {
+	if c.Version != 1 || c.Revision != 3 || len(c.Cases) != 1 || len(c.Digest) != 64 {
 		t.Fatalf("corpus = %+v", c)
 	}
 	k := c.Cases[0]

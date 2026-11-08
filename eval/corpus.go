@@ -22,9 +22,10 @@ var builtinRules = map[string][]string{
 }
 
 type Corpus struct {
-	Version int    `json:"version"`
-	Digest  string `json:"digest"`
-	Cases   []Case `json:"-"`
+	Version  int    `json:"version"`
+	Revision int    `json:"revision"`
+	Digest   string `json:"digest"`
+	Cases    []Case `json:"-"`
 }
 
 type Case struct {
@@ -78,8 +79,9 @@ func LoadCorpus(root string) (*Corpus, error) {
 		return nil, err
 	}
 	var manifest struct {
-		Version int      `json:"version"`
-		Cases   []string `json:"cases"`
+		Version  int      `json:"version"`
+		Revision int      `json:"revision"`
+		Cases    []string `json:"cases"`
 	}
 	if err := strictDecode(b, &manifest); err != nil {
 		return nil, fmt.Errorf("corpus.json: %w", err)
@@ -100,7 +102,7 @@ func LoadCorpus(root string) (*Corpus, error) {
 			return nil, fmt.Errorf("case directory %s not listed in corpus.json", e.Name())
 		}
 	}
-	c := &Corpus{Version: manifest.Version}
+	c := &Corpus{Version: manifest.Version, Revision: manifest.Revision}
 	for _, id := range manifest.Cases {
 		k, err := loadCase(filepath.Join(root, id), id)
 		if err != nil {
