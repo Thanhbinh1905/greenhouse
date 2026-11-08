@@ -2,7 +2,7 @@
 
 ## Merge-base red-before
 
-I copied `settings_models_test.go` and `provider_config_test.go` to a temporary worktree at merge-base `c3572775536a1c962f96501a4ea617a979959076`, then ran their tests there. The base does not contain the reviewer/fixer model or provider implementation, so both copied test files fail compilation.
+I copied `settings_models_test.go` and `provider_config_test.go` to a temporary worktree at merge-base `c3572775536a1c962f96501a4ea617a979959076`, then ran their tests there. The base does not contain the reviewer/fixer model or provider implementation, so both copied test files fail compilation before any test body runs.
 
 - Settings command: `go test ./... -run '^(TestApplyAndSaveReviewerAndFixerModels|TestReviewerModelChangeStalesHistoricalVerdict|TestApplyRejectsInvalidBackendAndModelIdentifiers)$' -count=1`
 - Settings failure: `saved.ReviewerModel undefined (type Settings has no field or method ReviewerModel)` and `unknown field ReviewerBackend in struct literal of type Settings`.
