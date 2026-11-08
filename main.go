@@ -315,7 +315,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", x.Full, reviewerPrompt)) {
+			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -1451,12 +1451,17 @@ func terminal(h, path string) error {
 		for _, f := range informational {
 			label[f.ID] = "Informational"
 		}
+		kinds := resolvedKinds(r)
+		responses := responseLines(r)
 		for _, f := range r.Findings {
 			state := label[f.ID]
 			if state == "" {
-				state = "Resolved"
+				state = "Resolved (" + kinds[f.ID] + ")"
 			}
 			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, displayID(f.ID, terminalWidth()))
+			for _, line := range responses[f.ID] {
+				fmt.Fprintln(&page, line)
+			}
 		}
 		if r.Repair != nil {
 			fix := r.Repair

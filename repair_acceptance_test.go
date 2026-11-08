@@ -61,7 +61,7 @@ func TestSelectedRepairRefusesChangedCheckAuthority(t *testing.T) {
 		t.Fatal(err)
 	}
 	fixer := filepath.Join(filepath.Dir(home), "change-check.py")
-	program := "#!/usr/bin/python3\nimport pathlib\npathlib.Path('sample.txt').write_text('repaired\\n')\npathlib.Path(" + quotePython(check) + ").write_text('#!/usr/bin/python3\\nraise SystemExit(99)\\n')\n"
+	program := "#!/usr/bin/python3\nimport pathlib\npathlib.Path('sample.txt').write_text('repaired\\n')\npathlib.Path(" + quotePython(check) + ").write_text('#!/usr/bin/python3\\nraise SystemExit(99)\\n')\n" + respondFixed
 	if err := os.WriteFile(fixer, []byte(program), 0700); err != nil {
 		t.Fatal(err)
 	}

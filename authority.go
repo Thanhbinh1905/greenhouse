@@ -63,6 +63,7 @@ type Resolution struct {
 	Review    string `json:"review"`
 	Candidate string `json:"candidate"`
 	Reopened  string `json:"reopened,omitempty"`
+	Kind      string `json:"kind,omitempty"`
 }
 type Budget struct {
 	Review      int `json:"review"`
@@ -181,17 +182,35 @@ func recordReview(r *Run, x *Execution) {
 			res.Reopened = x.ID
 		}
 	}
+	checks := map[string]string{}
+	for _, c := range x.Result.Resolutions {
+		checks[c.Finding] = c.Check
+	}
+	responses := map[string]string{}
+	for _, resp := range x.Responses {
+		responses[resp.Finding] = resp.Response
+	}
+	responder, _ := pendingResponses(r)
 	actionable, informational := outstanding(r)
 	for _, f := range append(actionable, informational...) {
-		if repair := repairedBy(p, f); !reported[f.ID] && repair != "" {
-			p.Resolutions = append(p.Resolutions, Resolution{Finding: f.ID, Repair: repair, Review: x.ID, Candidate: r.Candidate})
+		if reported[f.ID] {
+			continue
+		}
+		if responder != nil && len(x.Responses) > 0 {
+			if kind := resolutionKinds[responses[f.ID]]; kind != "" && checks[f.ID] == "confirmed" {
+				p.Resolutions = append(p.Resolutions, Resolution{Finding: f.ID, Repair: responder.ID, Review: x.ID, Candidate: r.Candidate, Kind: kind})
+			}
+			continue
+		}
+		if repair := repairedBy(p, f); repair != "" {
+			p.Resolutions = append(p.Resolutions, Resolution{Finding: f.ID, Repair: repair, Review: x.ID, Candidate: r.Candidate, Kind: "fixed"})
 		}
 	}
 }
 
 func repairedBy(p *Pipeline, finding Finding) string {
 	for _, repair := range p.Repairs {
-		if repair.Stage != "review" || repair.Head == "" {
+		if repair.Stage != "review" || repair.Head == "" || len(repair.Responses) > 0 {
 			continue
 		}
 		for _, f := range repair.Selected {
@@ -327,7 +346,9 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 			if len(selected) == 0 || len(a.Selected) > len(selected) {
 				return nil, errors.New("select repairable finding IDs from the grouped request")
 			}
+			d.Answer = &a
 			if err := admitGateRepair(r, st, a.Actor, selected); err != nil {
+				d.Answer = nil
 				return nil, err
 			}
 		} else {

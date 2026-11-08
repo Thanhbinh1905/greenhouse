@@ -302,5 +302,9 @@ func snapshotLine(s *TreeSnapshot) string {
 	if check == "" {
 		check = "not yet checked"
 	}
-	return fmt.Sprintf("Snapshot: tree %s | %d files | digest %s | %s", s.Tree, s.Entries, s.Digest, check)
+	files := "files"
+	if s.Entries == 1 {
+		files = "file"
+	}
+	return fmt.Sprintf("Snapshot: %s | %d %s | tree %s\nSnapshot digest: %s", check, s.Entries, files, s.Tree, s.Digest)
 }

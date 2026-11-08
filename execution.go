@@ -40,34 +40,36 @@ type DocAssessment struct {
 	Reason string `json:"reason"`
 }
 type Verdict struct {
-	ReportedProvider string         `json:"reported_provider,omitempty"`
-	ReportedModel    string         `json:"reported_model,omitempty"`
-	Head             string         `json:"head"`
-	Verdict          string         `json:"verdict"`
-	Coverage         []string       `json:"coverage"`
-	Findings         []Finding      `json:"findings"`
-	Documentation    *DocAssessment `json:"documentation,omitempty"`
+	ReportedProvider string            `json:"reported_provider,omitempty"`
+	ReportedModel    string            `json:"reported_model,omitempty"`
+	Head             string            `json:"head"`
+	Verdict          string            `json:"verdict"`
+	Coverage         []string          `json:"coverage"`
+	Findings         []Finding         `json:"findings"`
+	Documentation    *DocAssessment    `json:"documentation,omitempty"`
+	Resolutions      []ResolutionCheck `json:"resolutions,omitempty"`
 }
 type Execution struct {
-	Source       Identity       `json:"source"`
-	ID           string         `json:"id"`
-	Full         bool           `json:"full,omitempty"`
-	Backend      string         `json:"backend"`
-	Config       ReviewerConfig `json:"config"`
-	ConfigDigest string         `json:"config_digest"`
-	Args         []string       `json:"args"`
-	Input        []byte         `json:"input"`
-	InputDigest  string         `json:"input_digest"`
-	Rules        InputIdentity  `json:"rules"`
-	Diff         string         `json:"diff"`
-	Paths        []string       `json:"paths"`
-	Snapshot     *TreeSnapshot  `json:"snapshot,omitempty"`
-	Confinement  *Confinement   `json:"confinement,omitempty"`
-	Status       string         `json:"status"`
-	Log          string         `json:"log"`
-	Result       *Verdict       `json:"result,omitempty"`
-	Budget       string         `json:"budget,omitempty"`
-	Run          string         `json:"run,omitempty"`
+	Source       Identity             `json:"source"`
+	ID           string               `json:"id"`
+	Full         bool                 `json:"full,omitempty"`
+	Backend      string               `json:"backend"`
+	Config       ReviewerConfig       `json:"config"`
+	ConfigDigest string               `json:"config_digest"`
+	Args         []string             `json:"args"`
+	Input        []byte               `json:"input"`
+	InputDigest  string               `json:"input_digest"`
+	Rules        InputIdentity        `json:"rules"`
+	Diff         string               `json:"diff"`
+	Paths        []string             `json:"paths"`
+	Snapshot     *TreeSnapshot        `json:"snapshot,omitempty"`
+	Responses    []ResolutionResponse `json:"responses,omitempty"`
+	Confinement  *Confinement         `json:"confinement,omitempty"`
+	Status       string               `json:"status"`
+	Log          string               `json:"log"`
+	Result       *Verdict             `json:"result,omitempty"`
+	Budget       string               `json:"budget,omitempty"`
+	Run          string               `json:"run,omitempty"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -240,14 +242,21 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
+	var responses []ResolutionResponse
+	var checked []reviewResponse
+	if responder, pending := pendingResponses(r); full && responder != nil {
+		responses, checked = pending, reviewResponses(responder)
+		contract += resolutionContract
+	}
 	bundle := struct {
 		Intent, Target, Head, Diff string
 		Paths                      []string
 		Files                      []reviewFile
 		Snapshot                   struct{ Commit, Tree, Digest string }
+		Responses                  []reviewResponse `json:",omitempty"`
 		Criteria                   json.RawMessage
 		Contract                   string
-	}{r.Intent, r.Target, r.Candidate, string(diff), names, files, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, rules.Bytes(), contract}
+	}{r.Intent, r.Target, r.Candidate, string(diff), names, files, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, rules.Bytes(), contract}
 	input, e := json.Marshal(bundle)
 	if e != nil {
 		return nil, e
@@ -259,7 +268,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", full, reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -358,7 +367,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	var state []string
 	switch x.Config.Backend {
 	case backendCodex:
-		if e = os.WriteFile(filepath.Join(dir, "schema.json"), []byte(verdictSchema(x.Full)), 0600); e != nil {
+		if e = os.WriteFile(filepath.Join(dir, "schema.json"), []byte(verdictSchema(x.Full, len(x.Responses) > 0)), 0600); e != nil {
 			return reviewOutcome{Status: "inconclusive", Log: "private execution directory unavailable"}
 		}
 	case backendClaude:
@@ -443,6 +452,9 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 	if x.Full {
 		allowed = append(allowed, "documentation")
 	}
+	if len(x.Responses) > 0 {
+		allowed = append(allowed, "resolutions")
+	}
 	fields, err := exactFields([]byte(text), allowed...)
 	if err != nil {
 		return nil, errors.New("unknown verdict fields")
@@ -511,6 +523,9 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		if _, err := exactFields(fields["documentation"], "status", "reason"); err != nil || v.Documentation == nil || (v.Documentation.Status != "documented" && v.Documentation.Status != "not-needed" && v.Documentation.Status != "missing") || !validText(v.Documentation.Reason) {
 			return nil, errors.New("missing or invalid documentation assessment")
 		}
+	}
+	if err := validateResolutions(fields, &v, x); err != nil {
+		return nil, err
 	}
 	if (v.Verdict == "clean" && len(v.Findings) != 0) || (v.Verdict == "findings" && len(v.Findings) == 0) {
 		return nil, errors.New("inconsistent verdict")

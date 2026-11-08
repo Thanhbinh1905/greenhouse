@@ -38,6 +38,9 @@ state_dir.mkdir(mode=0o700)
     "openai": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY"}
 }, "models": []}))
 os.chmod(state_dir / "providers.json", 0o600)
+fixture_writes = {"reviewer": [str(root)], "fixer": [str(root)]}
+(state_dir / "backends.json").write_text(json.dumps({"version": 2, "writable": fixture_writes}))
+os.chmod(state_dir / "backends.json", 0o600)
 delivery = {"bare": None, "head": None}
 pr_url = "https://example.invalid/acme/garden-terminal-width-validation-fixture/pull/12"
 
@@ -143,7 +146,81 @@ def session(width, commands, label=""):
     return text
 
 
+def respond_fixed(indent=""):
+    return "\n".join(indent + line for line in [
+        "if b.get('Selected'):",
+        "    answer={'responses':[{'finding':f['id'],'response':'fixed','reason':'rewrote the selected line'} for f in b['Selected']]}",
+        "    print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(answer)}]}}))",
+        "    print(json.dumps({'type':'agent_settled','aborted':False}))",
+    ]) + "\n"
+
+
+def resolution_flows(expect_new):
+    global repo
+    reviewer = root / "resp-pi"
+    reviewer.write_text('''#!/usr/bin/python3
+import json,sys
+if sys.argv[1:] == ['--list-models']:
+    print('provider model context')
+    print('fixture model 128K')
+    sys.exit(0)
+b=json.load(sys.stdin)
+v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[],"documentation":{"status":"not-needed","reason":"fixture changes no public behavior"}}
+if open("sample.txt").read()!="repaired\\n":
+    v["verdict"]="findings"
+    v["findings"]=[{"id":"x","priority":"P1","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Sample text is wrong","action":"Rewrite it","rule":"","head":b["Head"]}]
+if b.get("Responses"):
+    v["resolutions"]=[{"finding":r["finding"],"check":"confirmed","reason":"the line now reads repaired"} for r in b["Responses"]]
+provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":provider,"model":model,"stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
+print(json.dumps({"type":"agent_settled","aborted":False}))
+''')
+    reviewer.chmod(0o700)
+    fixer = root / "resp-fixer"
+    fixer.write_text("#!/usr/bin/python3\nimport json,sys\nb=json.load(sys.stdin)\nopen('sample.txt','w').write('repaired\\n')\n" + respond_fixed())
+    fixer.chmod(0o700)
+    gate = root / "resp-gate"
+    gate.write_text("#!/bin/sh\necho ok\n")
+    gate.chmod(0o700)
+    state = root / "state"
+    for name, value in [("reviewer.json", {"executable": str(reviewer), "model": "fixture/model"}),
+                        ("fixer.json", {"executable": str(fixer), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [["/usr/bin/true"]]}),
+                        ("pipeline.json", {"budget_unit": "rounds", "name": "Test", "email": "test@example.invalid", "test": [[str(gate)]], "lint": [[str(gate)]],
+                                           "not_applicable": {"docs": "fixture", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}})]:
+        (state / name).write_text(json.dumps(dict(value, version=2)))
+        (state / name).chmod(0o600)
+    for width in [56, 80, 100]:
+        repo = root / f"responses-{width}"
+        repo.mkdir()
+        for args in [["init", "-b", "main"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"]]:
+            subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+        target = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
+        (repo / "sample.txt").write_text("candidate\n")
+        for args in [["add", "sample.txt"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate"]]:
+            subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+        session(width, ["s", "auto full 6", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "g", "q"], f"-responses-{width}-start")
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and axi()["run"]["status"] in ("running", "cancelling"):
+            time.sleep(0.05)
+        done = axi()["run"]
+        text = session(width, ["i", "q"], f"-responses-{width}")
+        if not expect_new:
+            continue
+        flat = " ".join(text.split())
+        assert done["status"] == "locally-ready" and done["pipeline"]["outcome"] == "repaired-pass", done["pipeline"]
+        assert done["pipeline"]["repairs"][0]["responses"][0]["response"] == "fixed"
+        assert done["review"]["result"]["resolutions"][0]["check"] == "confirmed"
+        for want in ["Resolved (fixed)", "Response fixed: rewrote the selected line", "Review check confirmed: the line now reads repaired",
+                     "Snapshot: unchanged | 1 file | tree " + done["review"]["snapshot"]["tree"],
+                     "Confinement: reviewer landlock enforced", "Confinement: fixer landlock enforced", "Outcome: REPAIRED PASS"]:
+            assert want in flat, (want, text)
+
+
 try:
+    if sys.argv[3:4] == ["responses"]:
+        resolution_flows(sys.argv[4:5] != ["before"])
+        print(f"PASS: 56-, 80- and 100-column PTY resolution responses, snapshot and confinement; fixture {root}")
+        sys.exit(0)
     narrow = session(56, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "", "a", "q"])
     state = axi()
     assert state["run"]["configs"][-1]["settings"]["mode"] == "ask"
@@ -197,7 +274,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
 import json,sys
 b=json.load(sys.stdin)
 with open("sample.txt", "w") as f: f.write("repaired\\n")
-''')
+''' + respond_fixed())
     fixer.chmod(0o700)
     fixer_config = root / "state" / "fixer.json"
     fixer_config.write_text(json.dumps({"version": 2, "executable": str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
@@ -245,10 +322,13 @@ if sys.argv[1:] == ['--list-models']:
 root=os.path.dirname(__file__)
 b=json.load(sys.stdin)
 mode=open(root+"/full-review-mode").read() if os.path.exists(root+"/full-review-mode") else "clean"
+resolutions=[{"finding":r["finding"],"check":"confirmed","reason":"checked against the candidate"} for r in b.get("Responses") or []]
 v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[],"documentation":{"status":"not-needed","reason":"fixture changes no public behavior"}}
 if mode=="findings":
     v["verdict"]="findings"
     v["findings"]=[{"id":"x","priority":"P1","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Repaired sample still wrong","action":"Fix it","rule":"","head":b["Head"]}]
+if resolutions:
+    v["resolutions"]=resolutions
 provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
 print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":provider,"model":model,"stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
 print(json.dumps({"type":"agent_settled","aborted":False}))
@@ -270,13 +350,13 @@ print("ok "+name)
     full_fixer.write_text('''#!/usr/bin/python3
 import json,sys,os
 root=os.path.dirname(__file__)
-json.load(sys.stdin)
+b=json.load(sys.stdin)
 if os.path.exists(root+"/fix-then-review"):
     open(root+"/full-review-mode","w").write("findings")
 if os.path.exists(root+"/fix-cleans"):
     open(root+"/full-review-mode","w").write("clean")
 open("sample.txt","w").write("repaired\\n")
-''')
+''' + respond_fixed())
     full_fixer.chmod(0o700)
     fixer_config.write_text(json.dumps({"version": 2, "executable": str(full_fixer), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [["/usr/bin/true"]]}))
 
@@ -420,7 +500,7 @@ open("sample.txt","w").write("repaired\\n")
         (root / f"fake-{backend}").write_text(fake_cli)
         (root / f"fake-{backend}").chmod(0o700)
     backends = root / "state" / "backends.json"
-    backends.write_text(json.dumps({"version": 2, "claude": {"executable": str(root / "fake-claude")},
+    backends.write_text(json.dumps({"version": 2, "writable": fixture_writes, "claude": {"executable": str(root / "fake-claude")},
                                     "codex": {"executable": str(root / "fake-codex"), "provider": {"base_url": "http://127.0.0.1:1/v1"}}}))
     backends.chmod(0o600)
     for width in [56, 80, 100]:
@@ -468,8 +548,9 @@ open("sample.txt","w").write("repaired\\n")
         assert saved["version"] == 1 and saved["budget_unit"] == "rounds" and saved["limit"] == 3, saved
         logs = session(width, ["o", "", "q"], f"-trust-{width}-logs")
         assert "Transcript log for run " + state["run_id"] in " ".join(logs.split()) and "=== reviewer " + state["run"]["review"]["id"] in logs, logs
+    resolution_flows(True)
     forge.shutdown()
-    print(f"PASS: 56-, 80-, and 100-column PTY configuration migration, repository trust, value sources, repository Save, transcript logs, backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
+    print(f"PASS: resolution responses, snapshot and confinement,  56-, 80-, and 100-column PTY configuration migration, repository trust, value sources, repository Save, transcript logs, backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
     provider.shutdown()
     pidfile = root / "state" / "pid"

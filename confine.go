@@ -257,9 +257,16 @@ func confinementFailed(exit int, stderr []byte) (string, bool) {
 }
 
 func confinementLine(c *Confinement) string {
-	writes := "none"
-	if len(c.Writable) > 0 {
-		writes = strings.Join(c.Writable, ", ")
+	head := fmt.Sprintf("Confinement: %s %s enforced (ABI %d)", c.Role, c.Mechanism, c.ABI)
+	if c.Status != "enforced" {
+		head = fmt.Sprintf("Confinement: %s DEGRADED: %s", c.Role, c.Reason)
+	}
+	lines := []string{head}
+	if len(c.Writable) == 0 {
+		lines = append(lines, "  Writable: none")
+	}
+	for _, path := range c.Writable {
+		lines = append(lines, "  Writable: "+path)
 	}
 	network := c.Network
 	if len(c.Ports) > 0 {
@@ -267,10 +274,7 @@ func confinementLine(c *Confinement) string {
 		for _, p := range c.Ports {
 			ports = append(ports, strconv.Itoa(p))
 		}
-		network = "TCP connect " + strings.Join(ports, ", ")
+		network = "TCP connect only to port " + strings.Join(ports, ", ")
 	}
-	if c.Status != "enforced" {
-		return fmt.Sprintf("Confinement: %s DEGRADED: %s | writes: %s | network: %s", c.Role, c.Reason, writes, network)
-	}
-	return fmt.Sprintf("Confinement: %s %s enforced (ABI %d) | writes: %s | network: %s", c.Role, c.Mechanism, c.ABI, writes, network)
+	return strings.Join(append(lines, "  Network: "+network), "\n")
 }
