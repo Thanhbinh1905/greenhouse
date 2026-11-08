@@ -88,6 +88,7 @@ type Run struct {
 	PriorRepairs  []Repair        `json:"prior_repairs,omitempty"`
 	Recovery      *Recovery       `json:"recovery,omitempty"`
 	Recoveries    []Recovery      `json:"recoveries,omitempty"`
+	Inherited     *Inheritance    `json:"inherited,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`

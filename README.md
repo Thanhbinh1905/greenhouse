@@ -295,7 +295,7 @@ On restart, and every 250 ms while an orphaned executor still holds its lease, t
 - `inspect`: probes again and records a `recovery-inspect` event.
 - `adopt`: offered only when no executor still holds a lease and the observed candidate matches what the durable record predicted: a repair commit whose parent is the repair base and whose diff equals the checked diff, with every configured check passed; a conflict or target merge whose parents are the recorded candidate and target and, for a conflict, without markers; an intact new candidate worktree; or a source branch that is unchanged or already at the candidate after an interrupted handback. A full pipeline continues from there.
 - `discard`: keeps an advanced head at `refs/greenhouse/recovered/<recovery id>` and uncommitted changes in `run.recoveries[].partial`, resets the private candidate to the recorded head, and reruns the stage. The rerun spends new budget; when the budget refuses it, the run stays stopped at that stage with the reason. Interrupted handbacks cannot be discarded.
-- `new-run`: marks the run `superseded`, keeps its records and candidate ref, and links a successor that inherits the consumed review and repair usage.
+- `new-run`: marks the run `superseded`, keeps its records and candidate ref, and links a successor that inherits the consumed review and repair usage, the gate repair usage, and any final-fix grant. `run.inherited` records them, and a later Prepare keeps them.
 
 Each answer is stored in `run.recoveries` with its choice, actor, reason, action ID and outcome, and changes the token and gate, so a stale or repeated answer refuses or replays its receipt. No choice refunds budget.
 

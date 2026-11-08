@@ -795,7 +795,18 @@ func TestConflictMergeUnknownOutcomeLaunchesNothing(t *testing.T) {
 	if successor["outcome"] != "ok" || next["predecessor"] != old["id"] || next["review_used"] != old["review_used"] || next["repair_used"] != old["repair_used"] || !hasEvent(next, "recovery-new-run") {
 		t.Fatalf("linked new run lost budget or lineage: %v", successor)
 	}
-	previous := runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect","run_id":"`+old["id"].(string)+`"}`, path))
+	oldGate := old["pipeline"].(map[string]any)["repair_used"]
+	if nextPipe, ok := next["pipeline"].(map[string]any); oldGate != float64(1) || !ok || nextPipe["repair_used"] != oldGate {
+		t.Fatalf("linked new run reset the gate repair usage %v: %v", oldGate, next["pipeline"])
+	}
+	previousView := axi(t, bin, repo, home, `{"version":1,"op":"inspect","run_id":"`+old["id"].(string)+`"}`, path)
+	before, after := previousView["budget"].(map[string]any), successor["budget"].(map[string]any)
+	for _, counter := range []string{"review", "repair", "total", "gate_retries", "final_fix_repair", "final_fix_review"} {
+		if after[counter] != before[counter] {
+			t.Fatalf("linked new run reset budget counter %s: before %v after %v", counter, before, after)
+		}
+	}
+	previous := runOf(t, previousView)
 	pipe := previous["pipeline"].(map[string]any)
 	if previous["status"] != "superseded" || previous["successor"] != next["id"] || pipe["ref"] == "" || len(previous["recoveries"].([]any)) != 1 {
 		t.Fatalf("predecessor evidence not kept: %v", previous)

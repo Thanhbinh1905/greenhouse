@@ -451,7 +451,15 @@ func recoverRun(s *Store, r *Run, source Identity, a Answer) (*Run, error) {
 		}
 		next := restartRun(s, r, source, a.Actor)
 		next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
-		next.Events = append(next.Events, Event{Kind: "recovery-new-run", Actor: a.Actor, Reason: "inherited consumed budget from " + r.ID, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed})
+		if p := r.Pipeline; p != nil {
+			next.Inherited = &Inheritance{From: r.ID, GateRepairs: p.RepairUsed, FinalFix: p.FinalFix}
+			inherit(next)
+		}
+		reason := "inherited consumed budget from " + r.ID
+		if r.Pipeline != nil {
+			reason += fmt.Sprintf("; gate repairs %d", r.Pipeline.RepairUsed)
+		}
+		next.Events = append(next.Events, Event{Kind: "recovery-new-run", Actor: a.Actor, Reason: reason, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed})
 		r.Status = "superseded"
 		return next, nil
 	}
@@ -578,6 +586,23 @@ func rerunAfterDiscard(s *Store, r *Run, actor string) error {
 		return nil
 	}
 	return errors.New("nothing to rerun for " + rec.Kind)
+}
+
+type Inheritance struct {
+	From        string    `json:"from"`
+	GateRepairs int       `json:"gate_repairs"`
+	FinalFix    *FinalFix `json:"final_fix,omitempty"`
+}
+
+func inherit(r *Run) {
+	if r.Inherited == nil || r.Pipeline == nil {
+		return
+	}
+	r.Pipeline.RepairUsed = max(r.Pipeline.RepairUsed, r.Inherited.GateRepairs)
+	if r.Pipeline.FinalFix == nil && r.Inherited.FinalFix != nil {
+		spent := *r.Inherited.FinalFix
+		r.Pipeline.FinalFix = &spent
+	}
 }
 
 type CandidateEvidence struct {

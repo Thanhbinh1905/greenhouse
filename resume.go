@@ -414,6 +414,7 @@ func prepareRun(r *Run, intent, requested string) error {
 			return err
 		}
 		r.Pipeline = newPipeline(plan, digests)
+		inherit(r)
 	}
 	r.Reviewer = &cfg
 	r.SelectedDiff = string(diff)
