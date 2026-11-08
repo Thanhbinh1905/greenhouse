@@ -105,9 +105,10 @@ func trustedFixer() (FixerConfig, error) {
 	if e != nil {
 		return cfg, e
 	}
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if d.Decode(&cfg) != nil || d.Decode(new(any)) != io.EOF || !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
+	if e = decodeConfig("fixer.json", b, &cfg); e != nil {
+		return cfg, configFailure(e, "invalid trusted fixer configuration or missing required checks")
+	}
+	if !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
 		return cfg, errors.New("invalid trusted fixer configuration or missing required checks")
 	}
 	info, e = os.Stat(cfg.Executable)

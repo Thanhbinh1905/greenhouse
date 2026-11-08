@@ -40,7 +40,7 @@ with open('sample.txt','w') as f: f.write('repaired\n')
 	}
 	cfg := map[string]any{"executable": p, "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/python3", "-c", "from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"}}}
 	b, _ := json.Marshal(cfg)
-	os.WriteFile(filepath.Join(home, "fixer.json"), b, 0600)
+	writeConfigBytes(filepath.Join(home, "fixer.json"), b, 0600)
 	return bin, repo, home, v
 }
 func selectedID(t *testing.T, v map[string]any) []string {
@@ -172,7 +172,7 @@ func TestKilledWriterRunnerParksRepairCustody(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(configPath, data, 0600); err != nil {
+	if err = writeConfigBytes(configPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	admitted := repairRequest(t, bin, repo, home, v, "repair", "kill-runner", selectedID(t, v))
@@ -215,7 +215,7 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ = json.Marshal(cfg)
-	if err = os.WriteFile(configPath, data, 0600); err != nil {
+	if err = writeConfigBytes(configPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	admitted := repairRequest(t, bin, repo, home, v, "repair", "slow-fixer", selectedID(t, v))
@@ -277,7 +277,7 @@ time.sleep(30)
 	}
 	cfg.Checks = [][]string{{checkScript}}
 	data, _ = json.Marshal(cfg)
-	if err = os.WriteFile(configPath, data, 0600); err != nil {
+	if err = writeConfigBytes(configPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	admitted := repairRequest(t, bin, repo, home, v, "repair", "slow-check", selectedID(t, v))
@@ -334,7 +334,7 @@ func TestDaemonCrashDuringFixParksUnknownWriter(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ = json.Marshal(cfg)
-	if err = os.WriteFile(configPath, data, 0600); err != nil {
+	if err = writeConfigBytes(configPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	admitted := repairRequest(t, bin, repo, home, v, "repair", "crash-fixer", selectedID(t, v))
@@ -436,7 +436,7 @@ func TestRepairFailurePreservesCandidateAndBudget(t *testing.T) {
 	}
 	cfg.Checks = [][]string{{"/usr/bin/python3", "-c", "raise SystemExit(7)"}}
 	data, _ = json.Marshal(cfg)
-	if err = os.WriteFile(configPath, data, 0600); err != nil {
+	if err = writeConfigBytes(configPath, data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	response := repairRequest(t, bin, repo, home, v, "repair", "failing-check", selectedID(t, v))
@@ -491,7 +491,7 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(filepath.Join(otherHome, "fixer.json"), primaryConfig, 0600); err != nil {
+	if err = writeConfigBytes(filepath.Join(otherHome, "fixer.json"), primaryConfig, 0600); err != nil {
 		t.Fatal(err)
 	}
 	program := "import pathlib,time; pathlib.Path('" + writerLog + "').open('a').write('write\\n'); time.sleep(2); pathlib.Path('sample.txt').write_text('repaired\\n')"
@@ -510,7 +510,7 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 		}
 		cfg.Executable = writer
 		data, _ = json.Marshal(cfg)
-		if err = os.WriteFile(configPath, data, 0600); err != nil {
+		if err = writeConfigBytes(configPath, data, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -113,9 +113,10 @@ func trustedReviewer() (ReviewerConfig, error) {
 	if e != nil {
 		return cfg, e
 	}
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if d.Decode(&cfg) != nil || d.Decode(new(any)) != io.EOF || !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || len(cfg.Model) > 256 || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || strings.HasPrefix(cfg.Model, "-") {
+	if e = decodeConfig("reviewer.json", b, &cfg); e != nil {
+		return cfg, configFailure(e, "explicit executable and model required")
+	}
+	if !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || len(cfg.Model) > 256 || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || strings.HasPrefix(cfg.Model, "-") {
 		return cfg, errors.New("explicit executable and model required")
 	}
 	info, e = os.Stat(cfg.Executable)

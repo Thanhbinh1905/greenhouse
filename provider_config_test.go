@@ -24,7 +24,7 @@ func TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials(t *testing.T)
 	defer endpoint.Close()
 	config := TrustedProviderConfig{Providers: map[string]ProviderConfig{"openai": {BaseURL: endpoint.URL + "/v1", APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY"}}, Models: []string{"openai/gpt-5.6-luna"}}
 	data, _ := json.Marshal(config)
-	if err := os.WriteFile(filepath.Join(homeDir, "providers.json"), data, 0600); err != nil {
+	if err := writeConfigBytes(filepath.Join(homeDir, "providers.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GREENHOUSE_HOME", homeDir)
@@ -44,7 +44,7 @@ func TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials(t *testing.T)
 		t.Fatalf("Pi/provider model missing: %v, %v", catalog, err)
 	}
 	explicitConfig, _ := json.Marshal(TrustedProviderConfig{Providers: config.Providers, Models: []string{"openai/gpt-5.6-luna", "openai/not-reported"}})
-	if err := os.WriteFile(filepath.Join(homeDir, "providers.json"), explicitConfig, 0600); err != nil {
+	if err := writeConfigBytes(filepath.Join(homeDir, "providers.json"), explicitConfig, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := preflightModel("openai/not-reported"); err == nil {
@@ -53,7 +53,7 @@ func TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials(t *testing.T)
 	if catalog, err := providerModelCatalog(pi); err != nil || !catalog["openai/not-reported"] {
 		t.Fatalf("trusted explicit model was omitted from discovery: %v, %v", catalog, err)
 	}
-	if err := os.WriteFile(filepath.Join(homeDir, "providers.json"), data, 0600); err != nil {
+	if err := writeConfigBytes(filepath.Join(homeDir, "providers.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	agent := filepath.Join(homeDir, "agent")
@@ -76,13 +76,13 @@ func TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials(t *testing.T)
 	}
 	invalidAPI := TrustedProviderConfig{Providers: map[string]ProviderConfig{"openai": {BaseURL: endpoint.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "anthropic-messages"}}}
 	invalid, _ := json.Marshal(invalidAPI)
-	if err := os.WriteFile(filepath.Join(homeDir, "providers.json"), invalid, 0600); err != nil {
+	if err := writeConfigBytes(filepath.Join(homeDir, "providers.json"), invalid, 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := trustedProviders(); err == nil {
 		t.Fatal("provider accepted an API whose preflight contract is unsupported")
 	}
-	if err := os.WriteFile(filepath.Join(homeDir, "providers.json"), data, 0600); err != nil {
+	if err := writeConfigBytes(filepath.Join(homeDir, "providers.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "")

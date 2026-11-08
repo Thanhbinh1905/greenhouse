@@ -124,6 +124,8 @@ type Response struct {
 	Decision    *Decision      `json:"decision,omitempty"`
 	Budget      *Budget        `json:"budget,omitempty"`
 	Explanation string         `json:"explanation,omitempty"`
+	Config      []ConfigStatus `json:"config"`
+	Migrations  []Migration    `json:"migrations,omitempty"`
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -136,6 +138,7 @@ type Store struct {
 	Runs           map[string]*Run    `json:"runs"`
 	Slots          map[string]string  `json:"slots"`
 	Receipts       map[string]Receipt `json:"receipts"`
+	Migrations     []Migration        `json:"migrations,omitempty"`
 }
 
 func opaque() string {
@@ -374,7 +377,15 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}, Config: configStatuses(), Migrations: s.Migrations}
+	for _, c := range v.Config {
+		if c.Status == "older" || c.Status == "newer" || c.Status == "invalid" {
+			v.Blocked = append(v.Blocked, "configuration: "+c.Error)
+		}
+		if c.Status == "older" && !has(v.Actions, "migrate") {
+			v.Actions = append(v.Actions, "migrate")
+		}
+	}
 	if r != nil {
 		v.RuleScope = effectiveRuleScope(r)
 		v.Rules, v.RulesReady = effectiveRules(r)
@@ -575,7 +586,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "migrate" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -587,6 +598,24 @@ func handle(s *Store, q Request) Response {
 			return fail("action_id reused with different input", r)
 		}
 		return receipt.Result
+	}
+	actor := "axi"
+	if q.Client == "terminal" {
+		actor = "terminal"
+	}
+	if q.Op == "migrate" {
+		if !validText(q.Reason) {
+			return fail("reason required", r)
+		}
+		records, err := migrateConfig(actor, q.Reason, q.Action)
+		s.Migrations = append(s.Migrations, records...)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		v := view(s, r)
+		v.Migrations = records
+		s.Receipts[q.Action] = Receipt{d, v}
+		return v
 	}
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != currentGate(r) {
 		return fail("stale run/input/gate/token", r)
@@ -607,10 +636,6 @@ func handle(s *Store, q Request) Response {
 		r.Token = opaque()
 	} else if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required" {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
-	}
-	actor := "axi"
-	if q.Client == "terminal" {
-		actor = "terminal"
 	}
 	paused := r
 	if q.Op == "cancel" {

@@ -279,10 +279,8 @@ func trustedBackends() (BackendsConfig, error) {
 	if err != nil {
 		return config, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF {
-		return config, errors.New("invalid per-user backends.json")
+	if err = decodeConfig("backends.json", data, &config); err != nil {
+		return config, configFailure(err, "invalid per-user backends.json")
 	}
 	for name, cli := range map[string]*AgentCLI{backendClaude: config.Claude, backendCodex: config.Codex} {
 		if cli == nil {

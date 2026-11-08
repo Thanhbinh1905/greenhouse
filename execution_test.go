@@ -52,7 +52,7 @@ func installFake(t *testing.T, home, mode string) string {
 		t.Cleanup(server.Close)
 		providerConfig := TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}}
 		providerBytes, _ := json.Marshal(providerConfig)
-		if err := os.WriteFile(providerPath, providerBytes, 0600); err != nil {
+		if err := writeConfigBytes(providerPath, providerBytes, 0600); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -79,7 +79,7 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 		t.Fatal(e)
 	}
 	b, _ := json.Marshal(ReviewerConfig{Executable: p, Model: "fixture/model"})
-	if e := os.WriteFile(filepath.Join(home, "reviewer.json"), b, 0600); e != nil {
+	if e := writeConfigBytes(filepath.Join(home, "reviewer.json"), b, 0600); e != nil {
 		t.Fatal(e)
 	}
 	return filepath.Join(filepath.Dir(home), "invocations")

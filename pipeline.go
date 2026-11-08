@@ -110,9 +110,10 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	if e != nil {
 		return plan, nil, e
 	}
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if d.Decode(&plan) != nil || d.Decode(new(any)) != io.EOF || !validText(plan.Name) || !validText(plan.Email) || plan.RepairLimit < 0 || plan.RepairLimit > 20 {
+	if e = decodeConfig("pipeline.json", b, &plan); e != nil {
+		return plan, nil, configFailure(e, "invalid trusted pipeline.json")
+	}
+	if !validText(plan.Name) || !validText(plan.Email) || plan.RepairLimit < 0 || plan.RepairLimit > 20 {
 		return plan, nil, errors.New("invalid trusted pipeline.json")
 	}
 	digests := map[string]string{}

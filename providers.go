@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -61,10 +60,8 @@ func trustedProviders() (TrustedProviderConfig, error) {
 	if err != nil {
 		return config, err
 	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if decoder.Decode(&config) != nil || decoder.Decode(new(any)) != io.EOF {
-		return config, errors.New("invalid per-user providers.json")
+	if err = decodeConfig("providers.json", data, &config); err != nil {
+		return config, configFailure(err, "invalid per-user providers.json")
 	}
 	for provider, entry := range config.Providers {
 		parsed, parseErr := url.Parse(entry.BaseURL)

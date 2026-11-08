@@ -113,9 +113,25 @@ func writePrivateJSON(t *testing.T, path string, v any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(path, b, 0600); err != nil {
+	if err = writeConfigBytes(path, b, 0600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// writeConfigBytes writes per-user configuration at the current schema version.
+func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
+	if has(configFiles, filepath.Base(path)) && !strings.Contains(string(data), `"version"`) {
+		head := `{"version":2,`
+		if filepath.Base(path) == "pipeline.json" {
+			head += `"budget_unit":"rounds",`
+		}
+		body := strings.TrimPrefix(strings.TrimSpace(string(data)), "{")
+		if strings.TrimSpace(body) == "}" {
+			head = strings.TrimSuffix(head, ",")
+		}
+		data = []byte(head + body)
+	}
+	return os.WriteFile(path, data, perm)
 }
 
 func installPipelineProvider(t *testing.T, home string) {
