@@ -40,7 +40,9 @@ Step 4 still leaves unsupported: granting expanded fixer authority, mechanical l
 
 ## 5. Reviewer and fixer model selection
 
-Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi remains the only backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Greenhouse discovers Pi models through AXI, supports trusted per-user provider endpoints in `providers.json`, reads API keys only from named environment variables, and preflights provider model access before dispatch. Pi receives only a temporary provider file that references the environment variable. A product-path smoke against the recommended default model passed through the configured proxy. Additional backends are post-v1.
+Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi remains the only backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Greenhouse discovers Pi models through AXI, supports trusted per-user provider endpoints in `providers.json`, reads API keys only from named environment variables, and preflights provider model access before dispatch. Pi receives only a temporary provider file that references the environment variable. A product-path smoke against the recommended default model passed through the configured proxy.
+
+Task t40 adds Claude Code and Codex as reviewer and fixer backends beside Pi, classifies backend quota, login and availability failures, parks the affected stage without spending budget, and adds resume, rerun, rerun from start, automatic resume, fallback and agent switching to the terminal and AXI. See README.md and `docs/evidence/backend-smoke.md`.
 
 Remaining full-product scope:
 

@@ -1213,18 +1213,19 @@ func terminalWidth() int {
 	return 80
 }
 func wrapWords(text string, width int) string {
-	var out, line strings.Builder
+	var lines []string
+	line, count := "", 0
 	for _, word := range strings.Fields(text) {
-		if line.Len() > 0 && line.Len()+1+len([]rune(word)) > width {
-			out.WriteString(line.String() + "\n")
-			line.Reset()
+		n := len([]rune(word))
+		if count > 0 && count+1+n > width {
+			lines, line, count = append(lines, line), "", 0
 		}
-		if line.Len() > 0 {
-			line.WriteString(" ")
+		if count > 0 {
+			line, count = line+" ", count+1
 		}
-		line.WriteString(word)
+		line, count = line+word, count+n
 	}
-	return out.String() + line.String()
+	return strings.Join(append(lines, line), "\n")
 }
 func screen(text string) {
 	width := terminalWidth()

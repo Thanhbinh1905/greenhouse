@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"sort"
 	"strings"
@@ -265,6 +266,8 @@ func parseEvents(b []byte) piEvents {
 	return p
 }
 
+var credentialExpiry = regexp.MustCompile(`"credential_expires_at":"[^"]*"`)
+
 func parseClaudeEvents(b []byte) piEvents {
 	p := piEvents{Provider: "claude"}
 	sc := bufio.NewScanner(bytes.NewReader(b))
@@ -435,7 +438,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if o.Backend == "claude" {
 		p = parseClaudeEvents(events)
 	}
-	if err := os.WriteFile(filepath.Join(capture, "events.jsonl"), compactEvents(events), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(capture, "events.jsonl"), credentialExpiry.ReplaceAll(compactEvents(events), []byte(`"credential_expires_at":"<redacted>"`)), 0o600); err != nil {
 		return fail(err)
 	}
 	rec.ReportedProvider, rec.ReportedModel, rec.ThinkingLevel, rec.Usage = p.Provider, p.Model, p.Thinking, p.Usage

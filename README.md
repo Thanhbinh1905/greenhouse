@@ -15,9 +15,9 @@ cd /path/to/a/git/worktree
 /path/to/greenhouse
 ```
 
-The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `r` explicitly resolves rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
+The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `l` explicitly resolves (loads) rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, `r` reruns a paused, failed or cancelled stage, `a` cancels a scheduled automatic resume, `b` starts a linked rerun from start, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
-Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, and rule selection. Both roles currently use Pi; models are exact provider-qualified IDs. The default reviewer is `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json` and `fixer.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
+Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
 
 ## JSON interface
 
@@ -51,12 +51,13 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
     "reviewer_backend": "pi",
     "reviewer_model": "openai/gpt-5.6-luna",
     "fixer_backend": "pi",
-    "fixer_model": "openai/gpt-5.6-luna"
+    "fixer_model": "openai/gpt-5.6-luna",
+    "auto_resume": "on"
   }
 }
 ```
 
-Supported reads include `attach`, `inspect`, and `models`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, and `cancel`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
+Supported reads include `attach`, `inspect`, and `models`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, and `cancel-auto-resume`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
 
 Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json`. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. Tool restriction is not OS confinement. Checks run directly, not through an agent.
 
@@ -99,6 +100,71 @@ A one-pass run permits one invocation. Admission consumes review usage even if l
 Pi receives a fresh ephemeral session, explicit read-only tools, no extensions, MCP, skills, context files, prompt templates, or project approval. Its working directory and agent directory are fresh and private. Author session routing and process-injection environment variables are removed. The adapter uses environment-based provider credentials; existing Pi auth files and custom provider files are not copied or loaded. Read-only tools are not an OS sandbox. Pi gets no repository checkout. The bundle carries the committed diff and the candidate content of each changed file, with line numbers, but no other source files.
 
 `run.review` exposes backend, requested and reported model, deterministic argv, configuration digest, exact emitted input and criteria digests, coverage, findings, status, and bounded execution summaries. Output is capped at 4 MiB, stderr at 64 KiB, and runtime at ten minutes. Review uses `exec.CommandContext` with a 250 ms pipe-wait grace; it does not verify descendant cleanup. Repair and check commands use a Linux subreaper that terminates and reaps descendants after completion or cancellation. If that runner dies or cannot verify cleanup, Greenhouse parks the writer outcome. Raw transcripts and stderr are withheld to avoid persisting credentials. The terminal displays the same findings, provenance, and summary; `c` also shows the diff. A successful verdict certifies only the bound independent-review input. Config changes and source movement mark current evidence stale; historical verdicts remain inspectable.
+
+## Agent backends
+
+The reviewer and the fixer each run on one of three backends, selected per role in Settings or in the AXI `settings` object:
+
+| Backend | Invocation | Model ID | Reported model check |
+|---|---|---|---|
+| `pi` | `pi --print --mode json` | `provider/model`, for example `openai/gpt-5.6-luna` | provider and model of the final assistant message |
+| `claude` | `claude -p --output-format stream-json` with `--json-schema` for reviews | exact Claude model, for example `claude-sonnet-5-5`; aliases such as `sonnet` fail the check | the session `init` model and the single `modelUsage` model |
+| `codex` | `codex exec --json` with `--output-schema` for reviews | exact Codex model, for example `gpt-5.6-luna` | the `model` in Codex's `SessionConfiguredEvent` log line |
+
+A run whose backend reports a different model is `inconclusive` for a review and `fixer-failed` for a repair.
+
+Claude Code and Codex use the User's existing CLI logins. Greenhouse runs the installed CLI with the environment it already strips for Pi, minus author-session variables (`CLAUDECODE`, `CLAUDE_CODE_*`, `CODEX_*` except `CODEX_HOME`). It never reads, copies or stores credential files, and it stores only a redacted one-line failure message. Declare the executables in a private `backends.json` (mode 0600) in `GREENHOUSE_HOME`:
+
+```json
+{"claude": {"executable": "/home/me/.local/bin/claude"},
+ "codex": {"executable": "/home/me/.local/bin/codex",
+           "provider": {"base_url": "http://127.0.0.1:8317/v1"}},
+ "fallback": {"reviewer": [{"backend": "claude", "model": "claude-sonnet-5-5"}]},
+ "auto_resume": {"max_attempts": 3, "base_seconds": 60, "max_seconds": 3600}}
+```
+
+Codex runs with `--ignore-user-config`, so its `config.toml`, hooks and MCP servers do not load. When the Codex login works only through a custom endpoint, `provider.base_url` routes the session there and still uses the stored login; `provider.env_key` names an API-key environment variable instead. Pi keeps `reviewer.json`, `fixer.json` and `providers.json`. The fixer of every backend uses the name, email and checks of `fixer.json`.
+
+Each invocation is a fresh session with no inherited author context:
+
+- Claude: `--no-session-persistence --safe-mode --restricted --strict-mcp-config --disable-slash-commands --setting-sources ""`. Reviewers get `--tools Read,Grep,Glob --permission-mode dontAsk`; fixers get `--tools Read,Edit,Write,Grep,Glob --permission-mode acceptEdits`. Greenhouse refuses a session whose `init` event lists a tool outside that set.
+- Codex: `--ephemeral --ignore-user-config --ignore-rules`, with shell, hooks, plugins, apps, memories, multi-agent, browser, image and web-search tools disabled and `project_doc_max_bytes=0`. Reviewers run in the `read-only` sandbox, which Greenhouse checks in the session's permission profile; fixers run in `workspace-write` with only Codex's patch tool.
+- Reviewers run in an empty private directory; fixers run in the private candidate worktree. Tool restriction is still not OS confinement, and the controller checks the fixer's scope before committing.
+
+## Backend pause, resume and rerun
+
+Greenhouse classifies a failed backend run from the CLI's exit code and output:
+
+| Reason | Claude | Codex | Pi |
+|---|---|---|---|
+| `quota` | `api_error: usage_limit_reached` or status 429; the reset comes from the `rate_limit_event` `resetsAt` | "You've hit your usage limit", "Quota exceeded" or a final 429; the reset comes from "try again at ..." | `429:` error message |
+| `auth` | "Not logged in" or status 401/403 | 401 Unauthorized | "No API key found" or `401:`/`403:` |
+| `unavailable` | status 5xx or a connection failure | 5xx, connection failure, or three "waiting for network" retries | `5xx:` or "Connection error." |
+
+Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repair. The recorded outputs are in `testdata/backends/`.
+
+A `quota`, `auth` or `unavailable` outcome parks only the affected stage as `paused: backend <reason>`. Completed stages, verdicts, findings, candidate commits and counters stay as they are. The attempt does not consume a review or repair round: the round taken at admission is returned. `run.attempts` records every backend attempt with its backend, model, outcome, reason, cost and tokens. A paused repair keeps the fixer's partial edits as evidence in `attempts[].partial`, then the controller resets the private candidate to its last committed candidate.
+
+`resume` (terminal `r`) continues at the paused stage. A paused review runs again in a fresh session with the same bound input; a paused repair runs again from the restored candidate. Greenhouse never reuses a partial transcript.
+
+`rerun` (terminal `r`) works whenever the current stage is paused, failed, or cancelled. Cancelling a stage with `x` is an abort; the run stays rerunnable. Rerun starts again at that stage with the current settings and keeps every earlier stage and its evidence. It never resets budgets: a rerun review or repair counts as a new round. It refuses while an execution of the stage is live or its outcome is unknown. `rerun-from-start` (terminal `b`, confirmed by typing `rerun`) instead creates a linked New run with the same settings, intent and target, and marks the old run `restarted` with its evidence and candidate branch intact. Both actions are token-bound and replay their receipts.
+
+### Automatic resume
+
+Settings has an `auto_resume` switch (`on`, `off`, or empty for the default). The default is on in `auto` and `yolo`; `ask` never resumes automatically. When it is on:
+
+- A configured fallback for the paused role is preferred over waiting. On a quota pause, Greenhouse switches the role to the next entry of `fallback` in `backends.json` and resumes at once. The switch is recorded with the `auto` actor (or the YOLO actor).
+- Otherwise, a quota pause with a known reset resumes 5 seconds after the reset, with the same backend and model.
+- A quota or unavailable pause without a reset retries with exponential backoff from `base_seconds` up to `max_seconds`, at most `max_attempts` times (defaults 60, 3600 and 3), then stays paused.
+- An auth pause always waits for the User.
+
+The daemon stores the schedule in the run (`run.pause.auto_resume_at`), reschedules it after a restart, and records the resume as an `auto` event. Any manual action on the run, including Apply, cancels a pending automatic resume; `cancel-auto-resume` (terminal `a`) cancels it alone.
+
+The paused screen and the AXI `explanation` field show the same sentence, for example: "Codex quota exhausted; it resets at 14:30. Auto mode will resume at 14:30 with the same agent. Press r to rerun now, a to cancel auto-resume, s to change agent." AXI `actions` lists `resume`, `rerun`, `rerun-from-start` and `cancel-auto-resume` when they apply.
+
+### Switching agents
+
+While a run is paused, change the reviewer or fixer backend and model in Settings and Apply to this run, Save as default for later runs, or both; then press `r`. Each change is recorded as a `backend-switch` event with the old and new backend and model, the actor and the reason. Reviews and repairs from the old backend keep their recorded backend and model. A new reviewer changes the review stage's inputs, so review and every later gate rerun; a new fixer changes no gate input. In a one-pass run, resolve rules again (`l`) after Apply, because rule snapshots bind the applied settings.
 
 ## Full pipeline
 
@@ -160,7 +226,7 @@ Answer the open decision with `decide` (terminal `d`). The terminal accepts only
 
 Each answer records the choice, the actor (`terminal`, `axi`, `auto`, or `yolo:<actor>`), the reason as typed, and the action ID; no quote is generated. Replaying an action returns its receipt. An answered or superseded decision changes the gate, so a stale answer refuses. A rule or limit change supersedes an open decision that is not user-only. `pipeline` refuses while a decision is open.
 
-Still unsupported in step 4: granting expanded fixer authority, mechanical lint autofix, new or deleted files in gate repairs, recovery of interrupted steps, and push, PR and CI.
+Still unsupported in step 4: granting expanded fixer authority, mechanical lint autofix, new or deleted files in gate repairs, recovery of interrupted steps, and push, PR and CI. A failed or cancelled one-pass repair cannot be rerun in the same run; use `rerun-from-start`.
 
 ## State and compatibility
 
@@ -183,7 +249,7 @@ go build -o "$TMPDIR/greenhouse" .
 python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
 ```
 
-Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56- and 100-column PTYs through selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to local readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
+Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56- and 100-column PTYs through a backend quota pause with its explanation, auto-resume cancellation, an agent switch and rerun, selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to local readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
 
 ## Review evaluation
 
@@ -198,6 +264,8 @@ go run ./eval run -model openai/gpt-5.6-luna -base-url http://127.0.0.1:8317/v1 
   -parallel 4 -label "what changed" -out docs/evidence/review-eval/NN-name
 ```
 
+Add `-backend claude -model claude-sonnet-5-5` to review through the Claude backend; `-agent` names the `claude` executable (default: `claude` on `PATH`). The judge still runs on Pi with `-judge-model`.
+
 For each case, `run` commits the base and head trees with fixed identities and dates, starts an isolated daemon, and sends `attach`, `apply`, `resolve-rules`, `prepare`, and `review` over AXI. `reviewer.json` names the eval binary, which records the exact argv and stdin Greenhouse delivers, then runs real Pi with the same arguments and input and captures its JSON events. The eval writes a trusted `providers.json` with the configured base URL and credential environment-variable name. Greenhouse creates Pi's temporary provider configuration and reads credentials only from the environment. Credential-like environment values are redacted from the output. Runs are paid model calls.
 
 `report.md` summarizes a run; `report.json` holds the configuration, every case record, and the summary. Each case directory holds `input.json` (the exact stdin bytes), `argv.json`, `events.jsonl` (Pi's events without streaming deltas), and `timing.json`. The metrics are:
@@ -211,7 +279,7 @@ For each case, `run` commits the base and head trees with fixed identities and d
 - Inconclusive reviews score no findings. `model_answer` keeps the model's raw answer.
 - Cost uses Pi's catalog pricing; a proxy or subscription may bill differently. Latency is the wall time of the Pi process.
 
-[The recorded runs](docs/evidence/review-eval/README.md) document each reviewer change, its measured effect, and a model comparison. On this corpus, `openai/gpt-5.6-luna` measured best of the reachable models and is the recommended reviewer model. Only OpenAI models were compared: on the evaluation machine, the `openai` proxy serves only OpenAI models, `xai` answered `402` (no credits), and `anthropic`, `google`, `openrouter`, and `meta` had no credentials.
+[The recorded runs](docs/evidence/review-eval/README.md) document each reviewer change, its measured effect, and a model comparison. On this corpus, `openai/gpt-5.6-luna` through Pi stays the recommended default reviewer. One run of `claude-sonnet-5-5` through the Claude backend matched or beat it on recall and precision at about 20 times the cost, so it is the recommended reviewer `fallback`. `xai` answered `402` (no credits), and `google`, `openrouter`, and `meta` had no credentials.
 
 See [the rule contract](docs/rules.md) for selection, validation, provenance, and fixture delivery limits.
 

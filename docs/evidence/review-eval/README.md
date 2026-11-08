@@ -6,7 +6,7 @@ Each directory is one live run of `go run ./eval run` over the whole corpus. See
 
 All runs used the same setup:
 
-- Reviewer: Greenhouse independent review, backend `pi-json-v1`, Pi 1.5.0. Runs 01 to 05 used `openai/gpt-5.6-luna`; runs 06 to 09 compare other models. For every case, Pi reported the requested provider and model and thinking level `medium`. Medium is Pi's default, which applies because Greenhouse gives Pi an empty agent directory.
+- Reviewer: Greenhouse independent review, backend `pi-json-v1`, Pi 1.5.0. Runs 01 to 05 used `openai/gpt-5.6-luna`; runs 06 to 09 compare other models. Run 10 used the `claude-stream-json-v1` backend, Claude Code 2.1.319 with `claude-sonnet-5-5`, through the User's existing Claude login; its settings and judge match runs 04 to 09. For every case, Pi reported the requested provider and model and thinking level `medium`. Medium is Pi's default, which applies because Greenhouse gives Pi an empty agent directory.
 - Endpoint: this machine's Pi configuration routes the `openai` provider to a local proxy at `http://127.0.0.1:8317/v1`. Greenhouse loads no custom provider file, so the eval shim passed this as `-base-url`. The API key came from `pi auth print-api-key --provider openai` through `OPENAI_API_KEY`; no output file contains it.
 - Run settings: `-parallel 4`, rules `unslop` and `no-comments`, preset `one-pass`, limit 4.
 - Cost is Pi catalog pricing. The proxy may bill differently.
@@ -26,6 +26,7 @@ All runs below are scored from adjudication records against corpus revision 4 (s
 | [07-gpt-6.1-sol-r2](07-gpt-6.1-sol-r2/report.md) | same as 06, repeated | rev 2 | 100% (9/9) | 85% | 79% | 0 | 0/16 | $0.1153 | 8.7s | met |
 | [08-gpt-6-luna-r1](08-gpt-6-luna-r1/report.md) | same as 03, `openai/gpt-6-luna` | rev 2 | 100% (9/9) | 92% | 92% | 0 | 0/16 | $0.0046 | 4.6s | met |
 | [09-gpt-6-luna-r2](09-gpt-6-luna-r2/report.md) | same as 08, repeated | rev 2 | 89% (8/9) | 85% | 85% | 0 | 0/16 | $0.0045 | 4.2s | met |
+| [10-claude-sonnet-5.5-r1](10-claude-sonnet-5.5-r1/report.md) | Claude backend, `claude-sonnet-5-5` | rev 4 | 100% (9/9) | 100% | 87% | 0 | 0/16 | $0.2710 | 5.8s | met |
 
 Priority accuracy was 100% in every run that produced findings, except 06 (91%).
 
@@ -56,7 +57,23 @@ Runs 04 to 09 use the same product code, corpus revision 2, criteria and setting
 - `gpt-6-luna` is the cheapest and fastest. In run 09 it flagged negative page arguments in `bug-pagination-bounds` instead of the unclamped end index, missing a planted bug. Both runs raised the same P1 noise finding.
 - Recommendation: use `openai/gpt-5.6-luna` as the reviewer model. It had the best recall, found every planted bug, raised no clean-case false positive, and costs about $0.013 per 16-case pass. Its precision (86%) is within one finding of `gpt-6-luna` (88%). Re-measure with this corpus before changing models.
 
-This is not a cross-vendor comparison. The proxy behind the `openai` provider serves only OpenAI models. xAI has OAuth credentials, but its API answered `402 "You have run out of credits or need a Grok subscription."` Anthropic, Google, OpenRouter and Meta have no configured credentials on this machine. The nine recorded runs cost $0.33 and their adjudication $0.18 at Pi catalog prices.
+The nine Pi runs cost $0.33 and their adjudication $0.18 at Pi catalog prices.
+
+### Cross-vendor comparison
+
+Run 10 reviewed the same 16 cases through the Claude backend added in t40, with the same rules, settings and judge (`openai/gpt-6.1-sol`, 13 findings judged for $0.0244, all `detects`). Corpus revision 4 differs from revision 2 only in expected-defect IDs, so the inputs match runs 04 to 09.
+
+| Model and backend | Runs | High-severity recall | Recall | Precision | Clean / noise false positives | Cost per pass | Mean and max latency |
+|---|---|---|---|---|---|---|---|
+| `openai/gpt-5.6-luna` through Pi | 2 | 100% (18/18) | 96% (25/26) | 86% (25/29) | 0 / 1 | $0.0133 | 8.1s / 15.1s |
+| `claude-sonnet-5-5` through Claude Code | 1 | 100% (9/9) | 100% (13/13) | 87% (13/15) | 0 / 0 | $0.2710 | 5.8s / 7.1s |
+
+- Sonnet found every planted defect, including all three narrating comments, and raised nothing on the clean and noise cases. Its two false positives are a P3 note that an integer mean truncates in `bug-empty-average` (real, not planted, informational) and the P2 testimonial finding in `policy-unslop-readme` that Pi's reviewer also raises.
+- Sonnet costs about 20 times as much per pass at Claude Code list prices. With a Claude subscription login the spend comes from plan quota, not a bill, but quota is exactly what runs out. Claude Code's fixed system prompt makes the smallest case cost $0.011.
+- One Sonnet run cannot separate it from `gpt-5.6-luna`: the difference is one finding of recall and one noise finding, which is within the per-run variance seen above.
+- Recommendation: keep `openai/gpt-5.6-luna` through Pi as the default reviewer. Configure `claude-sonnet-5-5` through the Claude backend as the reviewer `fallback` in `backends.json`, so a quota pause on the default continues on a reviewer that measured at least as well. Re-measure with two or more Claude runs before making it the default.
+
+xAI answered `402 "You have run out of credits or need a Grok subscription."` and Google, OpenRouter and Meta have no configured credentials on this machine.
 
 ## Scoring
 
@@ -71,7 +88,7 @@ These did not affect the bar but are real:
 - In 04 and 05 the reviewer flagged the user quotation in `policy-unslop-readme` as an unsupported testimonial (P2). The rule scope says to preserve User quotations; the model reads a customer quote in prose as subject to `unslop`.
 - In 03 and 05, `noise-legacy-context` received a speculative finding (P2, then P1) that `InStock` panics for a map entry holding a nil `*Item`. Nothing in the change creates such entries. The same input produced different priorities across runs.
 - In 04 one of three narrating comments in `policy-needless-comments` was missed.
-- Two runs per model are not enough to estimate variance. Expect the counts above to move by a finding or two per run.
+- Two runs per model, and one Claude run, are not enough to estimate variance. Expect the counts above to move by a finding or two per run.
 
 ## Reproducing
 

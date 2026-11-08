@@ -762,18 +762,11 @@ func fixerModelReported(x *Repair, run fixerRun) error {
 	return nil
 }
 
-func fixerEscalation(x *Repair, stdout, stderr []byte) (string, string) {
-	backend := backendOf(fixerAgent(x.Config))
-	if backend == backendPi {
-		return escalation(stdout)
+func fixerEscalation(x *Repair, run fixerRun) (string, string) {
+	if backendOf(fixerAgent(x.Config)) == backendPi {
+		return escalation(run.stdout)
 	}
-	var answer agentAnswer
-	if backend == backendClaude {
-		answer, _ = claudeAnswer(stdout, []string{"Read", "Edit", "Write", "Grep", "Glob"})
-	} else {
-		answer, _ = codexAnswer(stdout, stderr, false)
-	}
-	return escalationText(answer.Text)
+	return escalationText(run.answer.Text)
 }
 
 func partialDiff(worktree string) string {

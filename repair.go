@@ -567,7 +567,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	run := runFixer(ctx, x, filepath.Join(agentDir, "agent"))
-	stdout, e := run.stdout, run.err
+	e = run.err
 	x.Log = run.log
 	if errors.Is(e, ErrWriterTreeUnknown) {
 		x.Writer = "unknown"
@@ -593,7 +593,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("fixer-failed", e)
 		return
 	}
-	if category, reason := fixerEscalation(x, stdout, run.stderr); x.Stage != "" && category != "" {
+	if category, reason := fixerEscalation(x, run); x.Stage != "" && category != "" {
 		x.Authority = category
 		fail("needs-authority", errors.New(reason))
 		return
