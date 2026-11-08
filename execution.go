@@ -19,8 +19,9 @@ import (
 )
 
 type ReviewerConfig struct {
-	Executable string `json:"executable"`
-	Model      string `json:"model"`
+	Executable string         `json:"executable"`
+	Model      string         `json:"model"`
+	Provider   ProviderConfig `json:"provider"`
 }
 type Finding struct {
 	ID          string `json:"id"`
@@ -134,11 +135,13 @@ func admitReview(r *Run) error {
 	if !ready {
 		return errors.New("required rules unresolved")
 	}
-	cfg, e := trustedReviewer()
+	cfg, e := trustedReviewerFor(settings.ReviewerModel)
 	if e != nil {
 		return e
 	}
-	cfg.Model = settings.ReviewerModel
+	if e = preflightModel(settings.ReviewerModel); e != nil {
+		return e
+	}
 	if r.Reviewer == nil || cfg != *r.Reviewer {
 		return errors.New("trusted reviewer changed; prepare with a current token required")
 	}
@@ -267,6 +270,10 @@ func reviewerEnv() []string {
 	return env
 }
 func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string) {
+	trusted, trustErr := trustedReviewerFor(x.Config.Model)
+	if trustErr != nil || digest(trusted) != x.ConfigDigest {
+		return "unconfigured", nil, "trusted reviewer or provider configuration changed; prepare again"
+	}
 	current, err := resolve(x.Source.Worktree)
 	if err != nil || current != x.Source {
 		return "stale", nil, "source moved before process start"
@@ -276,12 +283,16 @@ func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string)
 		return "inconclusive", nil, "private execution directory unavailable"
 	}
 	defer os.RemoveAll(dir)
+	agentDir := filepath.Join(dir, "agent")
+	if e = writeAgentModels(agentDir, x.Config, x.Config.Executable); e != nil {
+		return "inconclusive", nil, "trusted provider configuration unavailable"
+	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, x.Config.Executable, x.Args...)
 	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Dir = dir
-	cmd.Env = append(reviewerEnv(), "PI_CODING_AGENT_DIR="+filepath.Join(dir, "agent"))
+	cmd.Env = append(reviewerEnv(), "PI_CODING_AGENT_DIR="+agentDir)
 	cmd.Stdin = bytes.NewReader(x.Input)
 	out, stderr := &boundedBuffer{limit: 4 * 1024 * 1024}, &boundedBuffer{limit: 65536}
 	cmd.Stdout = out

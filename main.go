@@ -15,6 +15,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -88,6 +89,7 @@ type Request struct {
 	Selected []string  `json:"selected,omitempty"`
 }
 type Response struct {
+	Models     []string       `json:"models,omitempty"`
 	RuleScope  string         `json:"rule_scope,omitempty"`
 	Rules      []RuleEvidence `json:"rules,omitempty"`
 	RulesReady bool           `json:"rules_ready"`
@@ -355,7 +357,8 @@ func view(s *Store, r *Run) Response {
 	return v
 }
 func validModelSelection(backend, model string) bool {
-	return backend == "pi" && validText(model) && len(model) <= 256 && strings.Contains(model, "/") && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
+	provider, modelID, qualified := strings.Cut(model, "/")
+	return backend == "pi" && validText(model) && len(model) <= 256 && qualified && provider != "" && modelID != "" && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
 }
 func valid(s Settings) bool {
 	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel)
@@ -383,6 +386,22 @@ func handle(s *Store, q Request) Response {
 	id, e := resolve(q.Path)
 	if e != nil {
 		return fail(e.Error(), nil)
+	}
+	if q.Op == "models" {
+		config, err := trustedReviewer()
+		if err != nil {
+			return fail(err.Error(), nil)
+		}
+		models, err := providerModelCatalog(config.Executable)
+		if err != nil {
+			return fail(err.Error(), nil)
+		}
+		response := Response{Version: 1, Outcome: "ok", Models: make([]string, 0, len(models))}
+		for model := range models {
+			response.Models = append(response.Models, model)
+		}
+		sort.Strings(response.Models)
+		return response
 	}
 	slot := digest([]string{id.Repository, id.Worktree})
 	r := s.Runs[s.Slots[slot]]
@@ -439,11 +458,21 @@ func handle(s *Store, q Request) Response {
 		if err != nil {
 			return fail("cannot capture complete bounded diff", r)
 		}
-		cfg, err := trustedReviewer()
+		model := r.Configs[len(r.Configs)-1].Settings.ReviewerModel
+		cfg, err := trustedReviewerFor(model)
 		if err != nil {
 			return fail(err.Error(), r)
 		}
-		cfg.Model = r.Configs[len(r.Configs)-1].Settings.ReviewerModel
+		catalog, err := providerModelCatalog(cfg.Executable)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		if !catalog[model] {
+			return fail("model is not reported by Pi; add custom models to private providers.json", r)
+		}
+		if err = preflightModel(model); err != nil {
+			return fail(err.Error(), r)
+		}
 		r.Reviewer = &cfg
 		r.SelectedDiff = string(diff)
 		r.Intent, r.Target = q.Intent, target
@@ -978,6 +1007,11 @@ func terminal(h, path string) error {
 			q.Op = "resolve-rules"
 		}
 		if op == "s" {
+			models, modelErr := call(h, Request{Version: 1, Op: "models", Path: path})
+			modelsText := strings.Join(models.Models, ", ")
+			if modelErr != nil {
+				modelsText = "catalog unavailable: " + modelErr.Error()
+			}
 			fmt.Printf("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
 			if !reader.Scan() {
 				return nil
@@ -994,7 +1028,7 @@ func terminal(h, path string) error {
 			if value := strings.TrimSpace(reader.Text()); value != "" {
 				draft.ReviewerBackend = value
 			}
-			fmt.Printf("Reviewer model (provider/model) [%s]:\n> ", draft.ReviewerModel)
+			fmt.Printf("Reviewer models reported by Pi: %s\nReviewer model (provider/model) [%s]:\n> ", modelsText, draft.ReviewerModel)
 			if !reader.Scan() {
 				return nil
 			}
@@ -1008,7 +1042,7 @@ func terminal(h, path string) error {
 			if value := strings.TrimSpace(reader.Text()); value != "" {
 				draft.FixerBackend = value
 			}
-			fmt.Printf("Fixer model (provider/model) [%s]:\n> ", draft.FixerModel)
+			fmt.Printf("Fixer models reported by Pi: %s\nFixer model (provider/model) [%s]:\n> ", modelsText, draft.FixerModel)
 			if !reader.Scan() {
 				return nil
 			}

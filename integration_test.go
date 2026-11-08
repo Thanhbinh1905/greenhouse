@@ -23,6 +23,7 @@ func git(t *testing.T, dir string, args ...string) string {
 }
 func fixture(t *testing.T) (string, string, string) {
 	t.Helper()
+	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "fixture-secret")
 	root, err := os.MkdirTemp("", "gh-")
 	if err != nil {
 		t.Fatal(err)

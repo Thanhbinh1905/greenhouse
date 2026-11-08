@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -41,9 +43,28 @@ func prepareFixture(t *testing.T) (string, string, string, map[string]any) {
 }
 func installFake(t *testing.T, home, mode string) string {
 	t.Helper()
+	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "fixture-secret")
+	providerPath := filepath.Join(home, "providers.json")
+	if _, err := os.Stat(providerPath); os.IsNotExist(err) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}, {"id": "gpt-6-luna"}}})
+		}))
+		t.Cleanup(server.Close)
+		providerConfig := TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}}
+		providerBytes, _ := json.Marshal(providerConfig)
+		if err := os.WriteFile(providerPath, providerBytes, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	p := filepath.Join(filepath.Dir(home), "fake-pi")
 	script := `#!/usr/bin/python3
 import sys,json,os,time
+if '--list-models' in sys.argv:
+ print('provider model context')
+ print('fixture model 128K')
+ print('openai gpt-5.6-luna 128K')
+ print('openai gpt-6-luna 128K')
+ sys.exit(0)
 root=os.path.dirname(__file__)
 with open(root+'/invocations','a') as f: f.write('invoked\n')
 b=json.load(sys.stdin)
@@ -57,7 +78,7 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 	if e := os.WriteFile(p, []byte(script), 0700); e != nil {
 		t.Fatal(e)
 	}
-	b, _ := json.Marshal(ReviewerConfig{p, "fixture/model"})
+	b, _ := json.Marshal(ReviewerConfig{Executable: p, Model: "fixture/model"})
 	if e := os.WriteFile(filepath.Join(home, "reviewer.json"), b, 0600); e != nil {
 		t.Fatal(e)
 	}

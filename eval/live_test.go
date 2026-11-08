@@ -2,6 +2,8 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +22,10 @@ const fakePi = `#!/usr/bin/python3
 import json, os, sys
 if sys.argv[1:] == ["--version"]:
     print("0.0.0-fake")
+    sys.exit(0)
+if sys.argv[1:] == ["--list-models"]:
+    print("provider model context")
+    print("fake m1 128K")
     sys.exit(0)
 b = json.load(sys.stdin)
 if "--no-tools" in sys.argv:
@@ -50,8 +56,12 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
+	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "m1"}}})
+	}))
+	defer endpoint.Close()
 	out := filepath.Join(dir, "out")
-	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, BaseURL: "http://127.0.0.1:9/v1", Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 2, Settle: time.Minute})
+	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, BaseURL: endpoint.URL + "/v1", Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 2, Settle: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +112,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		Models string `json:"models"`
 	}
 	b, _ = os.ReadFile(filepath.Join(dir, "pi-env.json"))
-	if json.Unmarshal(b, &env) != nil || env.Shim || env.Models != `{"providers":{"fake":{"baseUrl":"http://127.0.0.1:9/v1"}}}` {
+	if json.Unmarshal(b, &env) != nil || env.Shim || !strings.Contains(env.Models, `"baseUrl":"`+endpoint.URL+`/v1"`) || !strings.Contains(env.Models, `"apiKey":"$EVAL_TEST_API_KEY"`) {
 		t.Fatalf("pi environment = %s", b)
 	}
 }

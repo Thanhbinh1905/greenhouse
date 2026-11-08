@@ -10,14 +10,34 @@ import subprocess
 import sys
 import tempfile
 import termios
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 import time
 
 binary = str(Path(sys.argv[1]).resolve())
 root = Path(tempfile.mkdtemp(prefix="gh-pty-", dir=os.environ["TMPDIR"]))
 repo = root / "repo"
 repo.mkdir()
+class ModelHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        body = json.dumps({"data": [{"id": "model"}, {"id": "gpt-5.6-luna"}]}).encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "application/json")
+        self.end_headers()
+        self.wfile.write(body)
+    def log_message(self, *_):
+        pass
+provider = HTTPServer(("127.0.0.1", 0), ModelHandler)
+threading.Thread(target=provider.serve_forever, daemon=True).start()
 env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
-           GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null")
+           GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
+state_dir = root / "state"
+state_dir.mkdir(mode=0o700)
+(state_dir / "providers.json").write_text(json.dumps({"providers": {
+    "fixture": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY", "api": "openai-completions"},
+    "openai": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY"}
+}, "models": []}))
+os.chmod(state_dir / "providers.json", 0o600)
 for args in [["init", "-b", "main"], ["-c", "user.name=Test", "-c",
              "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"]]:
     subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
@@ -116,6 +136,10 @@ try:
     fake = root / "fake-pi"
     fake.write_text('''#!/usr/bin/python3
 import json,sys,os
+if '--list-models' in sys.argv:
+ print('provider model')
+ print('fixture model')
+ sys.exit(0)
 with open(os.path.join(os.path.dirname(__file__), "review-calls"), "a") as calls: calls.write("review\\n")
 b=json.load(sys.stdin)
 f={"id":"fixture","priority":"P2","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Fixture finding","action":"Inspect fixture","rule":"","head":b["Head"]}
@@ -172,6 +196,7 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     assert (root / "review-calls").read_text().count("review") == 1
     print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, and AXI parity; fixture {root}")
 finally:
+    provider.shutdown()
     pidfile = root / "state" / "pid"
     if pidfile.exists():
         os.kill(json.loads(pidfile.read_text()), signal.SIGTERM)

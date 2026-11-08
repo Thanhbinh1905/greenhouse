@@ -310,13 +310,27 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	}
 	rec.Target, rec.Candidate = target, head
 	provider, _, _ := strings.Cut(o.Model, "/")
-	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Provider: provider, BaseURL: o.BaseURL})
+	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Provider: provider})
 	cfgPath := filepath.Join(work, "shim.json")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
 	}
 	reviewer, _ := json.Marshal(map[string]string{"executable": shimBin, "model": o.Model})
 	if err := os.WriteFile(filepath.Join(home, "reviewer.json"), reviewer, 0o600); err != nil {
+		return fail(err)
+	}
+	if o.BaseURL == "" {
+		return fail(errors.New("evaluation provider base URL required"))
+	}
+	keyEnv := strings.ToUpper(provider) + "_API_KEY"
+	if provider == "fake" {
+		keyEnv = "EVAL_TEST_API_KEY"
+	}
+	providerConfig, _ := json.Marshal(map[string]any{
+		"providers": map[string]any{provider: map[string]string{"base_url": o.BaseURL, "api_key_env": keyEnv, "api": "openai-completions"}},
+		"models":    []string{o.Model},
+	})
+	if err := os.WriteFile(filepath.Join(home, "providers.json"), providerConfig, 0o600); err != nil {
 		return fail(err)
 	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath}}
