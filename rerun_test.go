@@ -209,6 +209,8 @@ func TestRerunSkipsUnreadableIgnoredDirectory(t *testing.T) {
 	defer func() {
 		os.Chmod(ignoredDir, 0700)
 		os.RemoveAll(ignoredDir)
+		os.Chmod(filepath.Join(worktree, "readonly-dir"), 0700)
+		os.RemoveAll(filepath.Join(worktree, "readonly-dir"))
 		for _, dir := range []string{filepath.Join(blockedDir, "nested", "deep"), filepath.Join(blockedDir, "nested"), blockedDir} {
 			os.Chmod(dir, 0700)
 		}
