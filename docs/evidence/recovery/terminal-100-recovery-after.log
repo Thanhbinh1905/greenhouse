@@ -1,0 +1,56 @@
+[2J[HGreenhouse | independent review
+Run 0f497b1653551121f0b227de27fa1bbd
+Stage: intent | unconfigured
+Candidate: 6ba4170e01772595774fbca0d7487bf62409d6cf
+Mode: auto | one-pass | limit 4
+Reviewer: pi / fixture/model (rerun from start of eb3713e68d3a62bbf726cd5457efd08b)
+Fixer: pi / fixture/model (rerun from start of eb3713e68d3a62bbf726cd5457efd08b)
+Budget: review 1 + repair 1 = 2 of 4
+Rules: unslop
+Settings source: rerun from start of eb3713e68d3a62bbf726cd5457efd08b
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: optional repair admission consumed; no second repair
+Linked from run eb3713e68d3a62bbf726cd5457efd08b
+Outstanding P2 sample.txt:1 Fixture finding | reviewed 6ba4170e01772595774fbca0d7487bf62409d6cf |
+ID 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [e] Recover  [q] Detach
+
+> i
+[2J[HGreenhouse | independent review
+Run 0f497b1653551121f0b227de27fa1bbd
+Stage: intent | unconfigured
+Candidate: 6ba4170e01772595774fbca0d7487bf62409d6cf
+Mode: auto | one-pass | limit 4
+Reviewer: pi / fixture/model (rerun from start of eb3713e68d3a62bbf726cd5457efd08b)
+Fixer: pi / fixture/model (rerun from start of eb3713e68d3a62bbf726cd5457efd08b)
+Budget: review 1 + repair 1 = 2 of 4
+Rules: unslop
+Settings source: rerun from start of eb3713e68d3a62bbf726cd5457efd08b
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: optional repair admission consumed; no second repair
+Linked from run eb3713e68d3a62bbf726cd5457efd08b
+Outstanding P2 sample.txt:1 Fixture finding | reviewed 6ba4170e01772595774fbca0d7487bf62409d6cf |
+ID 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [e] Recover  [q] Detach
+ok
+>

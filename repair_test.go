@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"os"
 	"path/filepath"
@@ -163,6 +164,7 @@ func TestKilledWriterRunnerParksRepairCustody(t *testing.T) {
 	if err = json.Unmarshal(data, &cfg); err != nil {
 		t.Fatal(err)
 	}
+	original := cfg
 	cfg.Executable = filepath.Join(filepath.Dir(home), "kill-runner.py")
 	program := "import os,signal,subprocess,sys; subprocess.Popen([sys.executable,'-c',\"import pathlib,time; time.sleep(.4); pathlib.Path('sample.txt').write_text('late descendant write')\"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); os.kill(os.getppid(), signal.SIGKILL)"
 	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+program+"\n"), 0700); err != nil {
@@ -189,11 +191,34 @@ func TestKilledWriterRunnerParksRepairCustody(t *testing.T) {
 	for time.Now().Before(deadline) {
 		content, readErr := os.ReadFile(filepath.Join(worktree, "sample.txt"))
 		if readErr == nil && string(content) == "late descendant write" {
-			return
+			break
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("detached fixture descendant did not reproduce the late candidate write")
+	if content, _ := os.ReadFile(filepath.Join(worktree, "sample.txt")); string(content) != "late descendant write" {
+		t.Fatal("detached fixture descendant did not reproduce the late candidate write")
+	}
+	if runOf(t, done)["status"] != "recovery-required" {
+		t.Fatalf("unknown writer outcome must open a recovery: %v", runOf(t, done))
+	}
+	recovered := waitProbed(t, bin, repo, home)
+	rec := runOf(t, recovered)["recovery"].(map[string]any)
+	if fmt.Sprint(rec["options"]) != "[inspect discard new-run]" || rec["executors"].([]any)[0].(map[string]any)["state"] != "unverified" {
+		t.Fatalf("an unverified writer with a dirty candidate must not be adoptable: %v", rec)
+	}
+	data, _ = json.Marshal(original)
+	os.WriteFile(configPath, data, 0600)
+	discarded := recoverRequest(t, bin, repo, home, recovered, "discard", "discard-repair")
+	if discarded["outcome"] != "ok" {
+		t.Fatal(discarded)
+	}
+	settled := waitRepair(t, bin, repo, home)
+	run := runOf(t, settled)
+	prior := run["prior_repairs"].([]any)
+	history := run["recoveries"].([]any)
+	if run["status"] != "fixed-not-independently-rereviewed" || run["repair_used"] != float64(2) || prior[0].(map[string]any)["status"] != "recovery-discarded" || !strings.Contains(history[0].(map[string]any)["partial"].(string), "late descendant write") {
+		t.Fatalf("discard did not preserve the partial write and rerun the repair with new budget: %v", run)
+	}
 }
 
 func TestLiveFixerCancellationStopsDescendants(t *testing.T) {

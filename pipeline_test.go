@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -434,7 +435,7 @@ func TestRestartPreservesStageStateWithoutDuplicateWork(t *testing.T) {
 	}
 }
 
-func TestRestartDuringCommandParksWithoutRetry(t *testing.T) {
+func TestRestartDuringCommandAdoptsRecordedOutcome(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
@@ -446,19 +447,25 @@ func TestRestartDuringCommandParksWithoutRetry(t *testing.T) {
 	}
 	killRepairDaemon(t, home)
 	time.Sleep(2 * time.Second)
-	recovered := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	recovered := waitLeave(t, bin, repo, home, "recovery-required")
 	run := runOf(t, recovered)
-	if run["status"] != "recovery-required" || stageOf(t, recovered, "test")["status"] != "unknown-outcome" || run["review_used"] != float64(1) {
-		t.Fatalf("interrupted command not parked: %v", run["pipeline"])
+	if run["status"] != "parked" || stageOf(t, recovered, "test")["status"] != "passed" || run["review_used"] != float64(1) || !hasEvent(run, "reconciled") {
+		t.Fatalf("orphaned command outcome not adopted: %v", run)
 	}
-	for _, action := range recovered["actions"].([]any) {
-		if action == "pipeline" || action == "new" {
-			t.Fatalf("unsafe action %v advertised after interruption", action)
-		}
+	if commands := stageOf(t, recovered, "test")["commands"].([]any); len(commands) != 1 || !strings.Contains(commands[0].(map[string]any)["output"].(string), "ok test") {
+		t.Fatalf("adopted command evidence missing: %v", commands)
+	}
+	if actions := fmt.Sprint(recovered["actions"]); !strings.Contains(actions, "pipeline") {
+		t.Fatalf("adopted run must wait for an explicit continue: %v", actions)
 	}
 	time.Sleep(300 * time.Millisecond)
 	if got := countLines(t, filepath.Join(root, "commands.log")); got["test"] != 1 || got["lint"] != 0 {
-		t.Fatalf("restart retried work: %v", got)
+		t.Fatalf("restart retried or advanced work: %v", got)
+	}
+	mutate(t, bin, repo, home, recovered, "pipeline", "continue-after-adoption", nil)
+	waitPipeline(t, bin, repo, home)
+	if got := countLines(t, filepath.Join(root, "commands.log")); got["test"] != 1 || got["lint"] != 1 {
+		t.Fatalf("continue reran adopted work: %v", got)
 	}
 }
 
@@ -660,6 +667,21 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 	if got := mutate(t, bin, linked, home, other, "pipeline", "linked-start", nil); got["outcome"] != "refused" || !strings.Contains(got["error"].(string), "custody") {
 		t.Fatalf("linked worktree ignored ambiguous custody: %v", got)
 	}
+	os.Remove(filepath.Join(root, "kill-test"))
+	recovered := waitProbed(t, bin, repo, home)
+	if rec := runOf(t, recovered)["recovery"].(map[string]any); rec["kind"] != "commands" || fmt.Sprint(rec["options"]) != "[inspect discard new-run]" {
+		t.Fatalf("unknown command recovery options: %v", rec)
+	}
+	if discarded := recoverRequest(t, bin, repo, home, recovered, "discard", "discard-test"); discarded["outcome"] != "ok" || runOf(t, discarded)["status"] != "running" {
+		t.Fatalf("discard did not rerun the stage: %v", discarded)
+	}
+	settled := waitPipeline(t, bin, repo, home)
+	if stageOf(t, settled, "test")["status"] != "passed" || stageOf(t, settled, "lint")["status"] != "passed" || runOf(t, settled)["review_used"] != float64(1) {
+		t.Fatalf("discarded command stage did not rerun once: %v", runOf(t, settled)["pipeline"])
+	}
+	if got := countLines(t, filepath.Join(root, "commands.log")); got["test"] != 2 || got["lint"] != 1 {
+		t.Fatalf("discard reran the wrong work: %v", got)
+	}
 }
 
 func TestRetainedFindingsBlockCleanFullReview(t *testing.T) {
@@ -762,6 +784,25 @@ func TestConflictMergeUnknownOutcomeLaunchesNothing(t *testing.T) {
 		t.Fatalf("review ran after an unknown merge outcome: %v", got)
 	}
 	assertRecoveryCustody(t, bin, repo, home, done, path)
+	recovered := waitProbed(t, bin, repo, home)
+	rec := runOf(t, recovered)["recovery"].(map[string]any)
+	if rec["kind"] != "conflict" || rec["candidate"].(map[string]any)["merging"] != true || fmt.Sprint(rec["options"]) != "[inspect discard new-run]" {
+		t.Fatalf("an interrupted conflict merge must not be adoptable: %v", rec)
+	}
+	old := runOf(t, recovered)
+	successor := recoverRequest(t, bin, repo, home, recovered, "new-run", "recover-new-run")
+	next := runOf(t, successor)
+	if successor["outcome"] != "ok" || next["predecessor"] != old["id"] || next["review_used"] != old["review_used"] || next["repair_used"] != old["repair_used"] || !hasEvent(next, "recovery-new-run") {
+		t.Fatalf("linked new run lost budget or lineage: %v", successor)
+	}
+	previous := runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect","run_id":"`+old["id"].(string)+`"}`, path))
+	pipe := previous["pipeline"].(map[string]any)
+	if previous["status"] != "superseded" || previous["successor"] != next["id"] || pipe["ref"] == "" || len(previous["recoveries"].([]any)) != 1 {
+		t.Fatalf("predecessor evidence not kept: %v", previous)
+	}
+	if strings.TrimSpace(git(t, repo, "rev-parse", "--verify", pipe["ref"].(string))) == "" {
+		t.Fatal("candidate ref deleted")
+	}
 }
 
 func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {

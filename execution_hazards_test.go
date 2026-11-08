@@ -76,6 +76,16 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
+			if scenario == "restart" {
+				adopted := waitLeave(t, bin, repo, home, "recovery-required")
+				run := runOf(t, adopted)
+				if run["status"] != "outstanding-findings" || run["review"].(map[string]any)["status"] != "outstanding-findings" || run["review_used"] != float64(1) {
+					t.Fatalf("orphaned reviewer verdict was not adopted after restart: %v", adopted)
+				}
+				if !hasEvent(run, "reconciled") {
+					t.Fatalf("adoption is not audited: %v", run["events"])
+				}
+			}
 			count, _ := os.ReadFile(invocation)
 			if strings.Count(string(count), "invoked") != 1 {
 				t.Fatal("duplicate execution")
@@ -116,4 +126,28 @@ func TestRequiredRulesAndBudgetRefuseDispatch(t *testing.T) {
 	if _, err := os.Stat(invocation); !os.IsNotExist(err) {
 		t.Fatal("exhausted cap invoked executor")
 	}
+}
+
+func waitLeave(t *testing.T, bin, repo, home, leave string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	var v map[string]any
+	for time.Now().Before(deadline) {
+		v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		if runOf(t, v)["status"] != leave {
+			return v
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("run stayed %s: %v", leave, runOf(t, v)["recovery"])
+	return nil
+}
+
+func hasEvent(run map[string]any, kind string) bool {
+	for _, e := range run["events"].([]any) {
+		if e.(map[string]any)["kind"] == kind {
+			return true
+		}
+	}
+	return false
 }

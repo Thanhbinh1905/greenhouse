@@ -1,0 +1,140 @@
+[2J[HGreenhouse | independent review
+Run 17d64edb2323a6adf4f04f6caf24c904
+Stage: selected-repair |
+fixed-not-independently-rereviewed
+Candidate: 064e78d1ac3f35beac2629f2e4fa0076eee425d4
+Mode: auto | one-pass | limit 4
+Reviewer: pi / fixture/model (run-local)
+Fixer: pi / fixture/model (run-local)
+Budget: review 1 + repair 1 = 2 of 4
+Rules: unslop
+Settings source: run-local
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository
+configuration is untrusted
+Blocked: required rules unresolved or failed; use
+resolve-rules and inspect errors
+Blocked: optional repair admission consumed; no second
+repair
+Blocked: fixed but not independently rereviewed
+Recovered repair: adopt by terminal: candidate commit
+064e78d1ac3f matches the recorded repair; adopt it as
+fixed, not independently rereviewed
+Outstanding P2 sample.txt:1 Fixture finding | reviewed
+030888def0ff0475d7c2bf8e8217bce05f6a2971 | ID
+53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+Repair: fixed-not-independently-rereviewed | handback:
+awaiting-handback | actor: client
+Writer: stopped | base:
+030888def0ff0475d7c2bf8e8217bce05f6a2971 | commit:
+064e78d1ac3f35beac2629f2e4fa0076eee425d4
+Selected: 1 | fixer input:
+9bef36675c35818eb83ddfdc79c…0c52773417ced275f899c0540b5
+| rules:
+557d800cf663131a85c81752922…f9fdd538a7d0ccb505eab7a0ac4
+| config:
+7307a7cc21d24a8eb4e8692bb59…9d81bce3c99a8a3f1740c13a798
+Check /usr/bin/python3 -c from pathlib import Path;
+assert Path('sample.txt').read_text() == 'repaired\n'
+exit=0: passed
+exit=0 stdout=0 stderr=0 overflow=false; raw logs
+withheld
+Review: outstanding-findings | pi-json-v1 |
+fixture/model
+Input:
+4d00aff7140d623172834165ad9…bafb2e7d5d29570e4aa78c2a649
+Criteria:
+556e237e586b79d6c4b6e5f8ed1…7e1fb6da5b972fdc3dbc342dc14
+Config:
+c5dea6efdec2ae918dfa72c6a6f…be32d91d4a8e4b1a17080445163
+process completed; exit=0 stdout bytes=610 stderr
+bytes=0 overflow=false; raw diagnostics withheld to
+avoid credential disclosure
+Reported model: fixture/model
+Coverage: sample.txt
+P2 correctness sample.txt:1-1 Fixture finding
+Action: Repair the sample
+Rule:  | ID:
+53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s]
+Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [e] Recover  [q] Detach
+
+> i
+[2J[HGreenhouse | independent review
+Run 17d64edb2323a6adf4f04f6caf24c904
+Stage: selected-repair |
+fixed-not-independently-rereviewed
+Candidate: 064e78d1ac3f35beac2629f2e4fa0076eee425d4
+Mode: auto | one-pass | limit 4
+Reviewer: pi / fixture/model (run-local)
+Fixer: pi / fixture/model (run-local)
+Budget: review 1 + repair 1 = 2 of 4
+Rules: unslop
+Settings source: run-local
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository
+configuration is untrusted
+Blocked: required rules unresolved or failed; use
+resolve-rules and inspect errors
+Blocked: optional repair admission consumed; no second
+repair
+Blocked: fixed but not independently rereviewed
+Recovered repair: adopt by terminal: candidate commit
+064e78d1ac3f matches the recorded repair; adopt it as
+fixed, not independently rereviewed
+Outstanding P2 sample.txt:1 Fixture finding | reviewed
+030888def0ff0475d7c2bf8e8217bce05f6a2971 | ID
+53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+Repair: fixed-not-independently-rereviewed | handback:
+awaiting-handback | actor: client
+Writer: stopped | base:
+030888def0ff0475d7c2bf8e8217bce05f6a2971 | commit:
+064e78d1ac3f35beac2629f2e4fa0076eee425d4
+Selected: 1 | fixer input:
+9bef36675c35818eb83ddfdc79c…0c52773417ced275f899c0540b5
+| rules:
+557d800cf663131a85c81752922…f9fdd538a7d0ccb505eab7a0ac4
+| config:
+7307a7cc21d24a8eb4e8692bb59…9d81bce3c99a8a3f1740c13a798
+Check /usr/bin/python3 -c from pathlib import Path;
+assert Path('sample.txt').read_text() == 'repaired\n'
+exit=0: passed
+exit=0 stdout=0 stderr=0 overflow=false; raw logs
+withheld
+Review: outstanding-findings | pi-json-v1 |
+fixture/model
+Input:
+4d00aff7140d623172834165ad9…bafb2e7d5d29570e4aa78c2a649
+Criteria:
+556e237e586b79d6c4b6e5f8ed1…7e1fb6da5b972fdc3dbc342dc14
+Config:
+c5dea6efdec2ae918dfa72c6a6f…be32d91d4a8e4b1a17080445163
+process completed; exit=0 stdout bytes=610 stderr
+bytes=0 overflow=false; raw diagnostics withheld to
+avoid credential disclosure
+Reported model: fixture/model
+Coverage: sample.txt
+P2 correctness sample.txt:1-1 Fixture finding
+Action: Repair the sample
+Rule:  | ID:
+53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s]
+Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [e] Recover  [q] Detach
+ok
+>

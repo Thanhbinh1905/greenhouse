@@ -77,6 +77,7 @@ type Pipeline struct {
 	FinalFix       *FinalFix         `json:"final_fix,omitempty"`
 	Resolutions    []Resolution      `json:"resolutions,omitempty"`
 	Outcome        string            `json:"outcome,omitempty"`
+	LeaseEpoch     int               `json:"lease_epoch,omitempty"`
 }
 type stepOutcome struct {
 	Run, Step string
@@ -309,7 +310,7 @@ func custodyHeld(s *Store, r *Run) bool {
 		if other.ID == r.ID || other.Submitted.Repository != r.Submitted.Repository {
 			continue
 		}
-		if other.Repair != nil && other.Repair.Handback != "handed-back" {
+		if repairHeld(other.Repair) {
 			return true
 		}
 		if other.Pipeline != nil && other.Pipeline.Worktree != "" && !released(other.Pipeline) && other.Pipeline.Handback != "handed-back" && (other.Candidate != other.Submitted.Head || other.Status == "running" || other.Status == "cancelling" || other.Status == "recovery-required") {
@@ -607,7 +608,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 		return e
 	}
 	id := opaque()
-	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody"}
+	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody"}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Stage, Reason, Diff string
 		Paths                             []string
@@ -681,7 +682,7 @@ func completeStep(r *Run, o stepOutcome) error {
 	case "commands", "sync":
 		st.Status, st.Reason, st.Commands = o.Stage.Status, o.Stage.Reason, o.Stage.Commands
 		if st.Status == "unknown-outcome" {
-			holdRecovery(r, st.Name, st.Reason)
+			holdRecovery(r, step.Kind, st.Name, step.ID, st.Reason)
 			return nil
 		}
 		if o.Head != "" {
@@ -697,7 +698,7 @@ func completeStep(r *Run, o stepOutcome) error {
 		st.Status, st.Reason, st.Head, st.URL, st.Number = o.Status, o.Log, o.Head, o.URL, o.Stage.Number
 		st.Commands = append(st.Commands, o.Stage.Commands...)
 		if o.Status == "unknown-outcome" {
-			holdRecovery(r, st.Name, o.Log)
+			holdRecovery(r, "delivery", st.Name, step.ID, o.Log)
 			return nil
 		}
 		if retry, exhausted := deliveryRetry(st); retry {
@@ -779,7 +780,7 @@ func completeStep(r *Run, o stepOutcome) error {
 				st.Reason = "repaired; awaiting independent review and gate rerun"
 			}
 		case "unknown-outcome":
-			holdRecovery(r, st.Name, "repair writer outcome unknown: "+x.Log)
+			holdRecovery(r, step.Kind, st.Name, x.ID, "repair writer outcome unknown: "+x.Log)
 			return nil
 		case "needs-authority":
 			openDecision(r, st, "needs-decision", Decision{Kind: "authority", Category: x.Authority, UserOnly: true, Options: []string{"rethink", "discard"}, Reason: "repair requires " + x.Authority + " authority (" + x.Log + "); only an explicit User decision can grant it and a round budget cannot"})
@@ -1023,8 +1024,12 @@ func ensureCandidate(r *Run) error {
 	if e = gitHazards(r.Submitted.Worktree); e != nil {
 		return e
 	}
-	p.Worktree = filepath.Join(h, "candidates", r.ID)
-	p.Ref = "refs/heads/greenhouse/" + r.ID
+	ref := "refs/heads/greenhouse/" + r.ID
+	epoch, e := acquireLease(r.Submitted.Repository, ref, 0)
+	if e != nil {
+		return e
+	}
+	p.Worktree, p.Ref, p.LeaseEpoch = filepath.Join(h, "candidates", r.ID), ref, epoch
 	if e = os.MkdirAll(filepath.Dir(p.Worktree), 0700); e != nil {
 		return e
 	}
@@ -1037,16 +1042,14 @@ func ensureCandidate(r *Run) error {
 var errCandidateUnknown = errors.New("private candidate worktree creation outcome unknown")
 var errHandbackUnknown = errors.New("handback outcome unknown; inspect source and candidate refs")
 
-func holdRecovery(r *Run, stage, reason string) {
+func holdRecovery(r *Run, kind, stage, execution, reason string) {
 	p := r.Pipeline
 	if st := p.stage(stage); st != nil {
 		st.Status, st.Reason = "unknown-outcome", reason
 	}
 	p.Active = nil
-	p.Status, p.Failed, p.Reason = "recovery-required", stage, reason+"; recovery unsupported"
-	r.Status = "recovery-required"
-	r.Token = opaque()
-	r.Events = append(r.Events, Event{Kind: "recovery-required", Actor: "daemon", Reason: reason})
+	p.Status, p.Failed, p.Reason = "recovery-required", stage, reason+"; explicit recovery required"
+	requireRecovery(r, kind, stage, execution, reason)
 }
 
 func gitArgv(identity CommandPlan, args ...string) []string {
@@ -1088,6 +1091,10 @@ func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (Stag
 			return false
 		}
 		return true
+	}
+	if err := checkCandidateLease(p.Worktree, p.Ref, p.LeaseEpoch); err != nil {
+		out.Status, out.Reason = "needs-decision", err.Error()
+		return out, "", nil
 	}
 	check, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge-base", "--is-ancestor", target, "HEAD"), p.CommandDigests)
 	if !settled(check, err) {
@@ -1170,6 +1177,9 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			return errors.New("trusted fixer changed after authorization")
 		}
 		if e := candidateSafe(x, x.Base); e != nil {
+			return e
+		}
+		if e := checkLease(source.Repository, x.Ref, x.LeaseEpoch); e != nil {
 			return e
 		}
 		merge, err := runGateCommand(ctx, x.Worktree, gitArgv(p.Plan, "merge", "--no-ff", "--no-edit", "-m", "Merge target "+target, target), p.CommandDigests)
@@ -1258,6 +1268,10 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		if ctx.Err() != nil || !save() {
 			x.Status = "cancelled"
 			return errors.New("cancelled before commit admission")
+		}
+		if e = checkLease(source.Repository, x.Ref, x.LeaseEpoch); e != nil {
+			x.Status = "refused"
+			return e
 		}
 		if _, e = controllerGit(x.Worktree, append([]string{"--literal-pathspecs", "add", "--"}, x.Paths...)...); e != nil {
 			x.Status = "unknown-outcome"
@@ -1398,7 +1412,7 @@ func reconcileHandbacks(s *Store) {
 				p.HandbackError = err.Error()
 				if errors.Is(err, errHandbackUnknown) {
 					p.Handback = "unknown-outcome"
-					holdRecovery(r, "handback", err.Error())
+					holdRecovery(r, "handback", "handback", "", err.Error())
 				}
 			}
 		}

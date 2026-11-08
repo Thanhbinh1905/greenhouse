@@ -349,28 +349,21 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 		}
 		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, executorTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, x.Config.Executable, x.Args...)
-	cmd.WaitDelay = 250 * time.Millisecond
-	cmd.Dir = dir
-	cmd.Env = env
-	cmd.Stdin = bytes.NewReader(x.Input)
-	out, stderr := &boundedBuffer{limit: 4 * 1024 * 1024}, &boundedBuffer{limit: 65536}
-	cmd.Stdout = stallWatch(out, x.Config.Backend, cancel)
-	cmd.Stderr = stderr
-	err = cmd.Run()
-	exitCode := -1
-	if cmd.ProcessState != nil {
-		exitCode = cmd.ProcessState.ExitCode()
-	}
+	out, stderr := &boundedBuffer{limit: executorStdoutLimit}, &boundedBuffer{limit: executorStderrLimit}
+	exitCode, err := runProcess(withExecutor(ctx, x.ID), dir, x.Config.Executable, x.Args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
+	return reviewFrom(x, exitCode, out, stderr, err, ctx.Err() != nil)
+}
+
+func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err error, cancelled bool) reviewOutcome {
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
 	usage := agentAnswer{}
 	usage.CostUSD, usage.Tokens = agentUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
 	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
 		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage}
 	}
-	if ctx.Err() != nil {
+	if cancelled {
 		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 	}
 	if err != nil || out.exceeded || stderr.exceeded {

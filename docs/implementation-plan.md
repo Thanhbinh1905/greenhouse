@@ -36,7 +36,7 @@ Executable fake-Pi, fake-command and real-Git tests cover agent-free command sta
 
 Task t20 adds authority modes and review-cap outcomes. Ask groups the actionable findings of a review into one `findings` decision and asks before gate repairs; informational findings stay visible without a question. Auto repairs findings and authorized gates. YOLO adds a configured actor from `pipeline.json` that also answers the cap decision with `final-fix` or `accept-head`. Repairs that delete files, change file modes, leave the authorized paths, or that the fixer escalates as intent, acceptance or credentials changes park a user-only `authority` decision in every mode. The combined cap counts review and finding-repair rounds separately and as a total; gate retries count apart. The `decide` action answers accept-head, final-fix, increase-cap, rethink and discard with token-bound, replayable receipts that record the actor and reason. Accept-head binds the exact candidate and review inputs and never passes a failing gate. Final-fix is a separate, restart-safe, single grant. Rethink links a successor run; discard keeps every record and ref. Executable fake-Pi and real-Git tests cover each mode, user-only refusal, cap exhaustion, cap increase with retained usage, acceptance binding, final-fix replay and restart, rethink, discard, and stale or duplicate answers. The PTY check answers decisions at 56 and 100 columns.
 
-Step 4 still leaves unsupported: granting expanded fixer authority, mechanical lint autofix, gate repairs that add or delete files, and recovery of interrupted pipeline steps.
+Step 4 still leaves unsupported: granting expanded fixer authority, mechanical lint autofix, and gate repairs that add or delete files.
 
 Delivery scope in step 4:
 
@@ -56,7 +56,11 @@ A fresh isolated HOME installed Greenhouse and ran the bare-command Pi one-pass 
 
 The live exercise exposed empty-diff rereview refusal when a repair restores the target tree. The fix retains the preceding paths, captures current committed contents, and invokes independent review again. Word wrapping now covers screens and prompts at 56, 80, and 100 columns. Long tokens are abbreviated; a unique displayed finding ID is selectable. Cancelled repair progress now remains `cancelling` until final completion, avoiding a stale-token window on rerun. The unused `runCaptured` stdout return is removed. The AXI test helper disables Go race-runtime exit delay so scheduled-retry snapshots do not arrive one second late.
 
-V1 is not complete against every SPEC.md item. The missing work is listed below. This validation does not implement the Posse adapter, repository trust, event subscriptions, or recovery of unknown writer outcomes.
+V1 is not complete against every SPEC.md item. The missing work is listed below. This validation does not implement the Posse adapter, repository trust, or event subscriptions.
+
+## Restart reconciliation and explicit recovery (t66)
+
+Areas A, E and F: every runner-started executor holds a durable lease and leaves an exit record with its input digest and bounded output after reaping its tree. Restart adopts interrupted reviews and command stages whose records prove the result and parks everything else as unknown, without retry or PID signalling. `recover` (terminal `e`) inspects the evidence, adopts a candidate that matches the durable record, discards the step and reruns its stage, or links a new run. Answers are token-bound, audited and replayable, and never refund budget. Candidate refs carry lease files with an owner and epoch in the repository; another state home or a stale store copy cannot write them, and the daemon releases only dead leases of its own state home. See [recovery after interruption](../README.md#recovery-after-interruption) and the [PTY captures](evidence/recovery/).
 
 ## 6. Live backend validation and host contract
 
@@ -68,9 +72,9 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 
 - Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
 
-- Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
+- Area A: a descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
 - Area B: versioned configuration schemas and migration, raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
 - Area C: full-tree review snapshots, explicit finding-resolution responses, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
 - Area D: granting expanded fixer authority and cap decisions for embedded hosts.
-- Area E and D2: explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
-- Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
+- Area E and D2: broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
+- Area F: finding-resolution responses, transcript logs, event subscriptions, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

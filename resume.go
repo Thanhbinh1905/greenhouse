@@ -448,7 +448,7 @@ func rerunStage(s *Store, r *Run, actor string) error {
 	if r.Repair != nil {
 		return rerunRepair(r, actor)
 	}
-	if r.Review == nil || r.Status != "cancelled" && r.Status != "inconclusive" && r.Status != "unconfigured" {
+	if r.Review == nil || r.Status != "cancelled" && r.Status != "inconclusive" && r.Status != "unconfigured" && r.Status != "recovery-discarded" {
 		return errors.New("nothing to rerun: the review is not paused, failed or cancelled")
 	}
 	if err := admitReviewAgain(r); err != nil {
@@ -482,10 +482,10 @@ func rerunnable(r *Run) bool {
 	if r.Repair != nil {
 		return stoppedRepair(r.Repair)
 	}
-	return r.Review != nil && (r.Status == "cancelled" || r.Status == "inconclusive" || r.Status == "unconfigured")
+	return r.Review != nil && (r.Status == "cancelled" || r.Status == "inconclusive" || r.Status == "unconfigured" || r.Status == "recovery-discarded")
 }
 
-var stoppedRepairStatuses = map[string]bool{"cancelled": true, "fixer-failed": true, "failed-check": true, "no-change": true, "scope-refused": true, "refused": true, "writer-conflict": true, "authority-changed": true, "unconfigured": true, "failed": true}
+var stoppedRepairStatuses = map[string]bool{"cancelled": true, "fixer-failed": true, "failed-check": true, "no-change": true, "scope-refused": true, "refused": true, "writer-conflict": true, "authority-changed": true, "unconfigured": true, "failed": true, "recovery-discarded": true}
 
 func stoppedRepair(x *Repair) bool {
 	return x.Stage == "" && stoppedRepairStatuses[x.Status] && (x.Writer == "stopped" || x.Writer == "not-started")
