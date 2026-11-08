@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -182,9 +183,7 @@ func (a axiClient) call(q map[string]any) (map[string]any, error) {
 
 func (a axiClient) mutate(v map[string]any, op string, extra map[string]any) (map[string]any, error) {
 	q := map[string]any{"op": op, "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "eval-" + op}
-	for k, x := range extra {
-		q[k] = x
-	}
+	maps.Copy(q, extra)
 	r, err := a.call(q)
 	if err != nil {
 		return nil, err
@@ -295,7 +294,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 		return fail(err)
 	}
 	rec.Target, rec.Candidate = target, head
-	provider := strings.SplitN(o.Model, "/", 2)[0]
+	provider, _, _ := strings.Cut(o.Model, "/")
 	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Provider: provider, BaseURL: o.BaseURL})
 	cfgPath := filepath.Join(work, "shim.json")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
@@ -378,10 +377,10 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 func secretValues() []string {
 	var out []string
 	for _, v := range os.Environ() {
-		kv := strings.SplitN(v, "=", 2)
-		name := strings.ToUpper(kv[0])
-		if len(kv) == 2 && len(kv[1]) >= 8 && (strings.Contains(name, "KEY") || strings.Contains(name, "TOKEN") || strings.Contains(name, "SECRET") || strings.Contains(name, "PASSWORD")) {
-			out = append(out, kv[1])
+		name, value, _ := strings.Cut(v, "=")
+		name = strings.ToUpper(name)
+		if len(value) >= 8 && (strings.Contains(name, "KEY") || strings.Contains(name, "TOKEN") || strings.Contains(name, "SECRET") || strings.Contains(name, "PASSWORD")) {
+			out = append(out, value)
 		}
 	}
 	return out
@@ -431,6 +430,9 @@ func runLive(o runOptions) (*Report, error) {
 		if len(want) > 0 {
 			return nil, fmt.Errorf("unknown cases: %v", want)
 		}
+	}
+	if o.Out, err = filepath.Abs(o.Out); err != nil {
+		return nil, err
 	}
 	if _, err := os.Stat(o.Out); err == nil {
 		return nil, fmt.Errorf("output %s already exists", o.Out)
