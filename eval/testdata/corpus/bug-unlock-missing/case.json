@@ -20,7 +20,12 @@
         "P0",
         "P1"
       ],
-      "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache."
+      "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache.",
+      "keywords": [
+        "unlock",
+        "locked",
+        "deadlock"
+      ]
     }
   ],
   "noise": []

@@ -2,6 +2,7 @@
 
 - Model: `openai/gpt-5.6-luna` through `pi-json-v1`, Pi 1.5.0
 - Greenhouse: `bd9dd6abca7dcd3efe5517598677f7d135c5dca2`, corpus v1 revision 2 `4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812`
+- Scored with corpus revision 3 `88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619`
 - Started 2026-11-08T06:16:01Z, finished 2026-11-08T06:16:41Z, parallel 4
 
 Bar (high-severity recall >= 80%, no blocking result on clean cases): **met**
@@ -10,9 +11,10 @@ Bar (high-severity recall >= 80%, no blocking result on clean cases): **met**
 |---|---|
 | High-severity recall | 100% (9/9) |
 | Recall | 100% (13/13) |
-| Precision | 88% (14/16) |
+| Precision | 81% (13/16) |
 | Priority accuracy | 100% (13/13) |
-| False positives (clean / noise / all) | 0 / 1 / 2 |
+| False positives (clean / noise / all) | 0 / 1 / 3 |
+| False positives at an expected location naming another defect | 1 |
 | Blocking results on clean cases | 0 |
 | Inconclusive reviews | 0/16 |
 | Cost (Pi catalog pricing) | $0.0136 |
@@ -23,7 +25,7 @@ Bar (high-severity recall >= 80%, no blocking result on clean cases): **met**
 | bug-empty-average | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0008 | 7.3s |
 | bug-nil-before-error | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0008 | 7.0s |
 | bug-offbyone-window | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0008 | 8.4s |
-| bug-pagination-bounds | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0012 | 15.1s |
+| bug-pagination-bounds | outstanding-findings | 1/1 | 1 | 1 | 1/1 | $0.0012 | 15.1s |
 | bug-race-word-count | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0008 | 7.8s |
 | bug-shell-injection | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0010 | 11.3s |
 | bug-sql-injection | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0008 | 7.8s |

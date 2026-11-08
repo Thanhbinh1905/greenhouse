@@ -49,6 +49,7 @@ type Expected struct {
 	Severity   string   `json:"severity"`
 	Priorities []string `json:"priorities"`
 	Defect     string   `json:"defect"`
+	Keywords   []string `json:"keywords"`
 }
 
 type Noise struct {
@@ -192,6 +193,14 @@ func loadCase(dir, id string) (*Case, error) {
 		}
 		if strings.TrimSpace(e.Defect) == "" {
 			return nil, errors.New("defect description required")
+		}
+		if len(e.Keywords) == 0 {
+			return nil, errors.New("defect keyword required")
+		}
+		for _, kw := range e.Keywords {
+			if strings.TrimSpace(kw) == "" || kw != strings.ToLower(kw) {
+				return nil, fmt.Errorf("defect keyword %q must be nonblank lower case", kw)
+			}
 		}
 	}
 	for _, n := range k.Noise {

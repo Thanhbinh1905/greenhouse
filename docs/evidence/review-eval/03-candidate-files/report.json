@@ -10,7 +10,10 @@
     "greenhouse_version": "f64d4cf0332edab56670fecc6a8656de9d6045ef",
     "go_version": "go1.26.7",
     "corpus_version": 1,
+    "corpus_revision": 0,
     "corpus_digest": "77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3",
+    "scored_corpus_revision": 3,
+    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -43,6 +46,7 @@
     "findings": 15,
     "matched": 13,
     "false_positives": 2,
+    "wrong_defect": 0,
     "clean_false_positives": 1,
     "clean_blocking": 1,
     "noise_false_positives": 1,
@@ -124,7 +128,8 @@
           "start": 19,
           "end": 20,
           "rule": "",
-          "explanation": "The loop condition uses `i \u003c= len(values)`, so any positive `n` causes an out-of-bounds access when `i == len(values)`. For example, `LastN([]int{1,2,3}, 1)` sums index 2 and then panics at index 3."
+          "explanation": "The loop condition uses `i \u003c= len(values)`, so any positive `n` causes an out-of-bounds access when `i == len(values)`. For example, `LastN([]int{1,2,3}, 1)` sums index 2 and then panics at index 3.",
+          "action": ""
         }
       ],
       "score": {
@@ -140,12 +145,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(values)"
+          }
+        ]
       }
     },
     {
@@ -211,7 +225,8 @@
           "start": 29,
           "end": 30,
           "rule": "",
-          "explanation": "When the ID does not exist, Lookup returns a nil user and ErrNotFound. The code dereferences u.Name before checking err, causing a nil-pointer panic instead of returning \"unknown\" as documented."
+          "explanation": "When the ID does not exist, Lookup returns a nil user and ErrNotFound. The code dereferences u.Name before checking err, causing a nil-pointer panic instead of returning \"unknown\" as documented.",
+          "action": ""
         }
       ],
       "score": {
@@ -227,12 +242,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "u.name"
+          }
+        ]
       }
     },
     {
@@ -298,7 +322,8 @@
           "start": 33,
           "end": 33,
           "rule": "",
-          "explanation": "A failure from os.WriteFile is discarded and Save returns nil, so callers are told the configuration was persisted even when the temporary file could not be written."
+          "explanation": "A failure from os.WriteFile is discarded and Save returns nil, so callers are told the configuration was persisted even when the temporary file could not be written.",
+          "action": ""
         }
       ],
       "score": {
@@ -314,12 +339,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "returns nil"
+          }
+        ]
       }
     },
     {
@@ -385,7 +419,8 @@
           "start": 22,
           "end": 22,
           "rule": "",
-          "explanation": "Concurrent goroutines update the shared variable total without synchronization. This introduces a data race and can lose increments, causing CountAll to return an incorrect word count."
+          "explanation": "Concurrent goroutines update the shared variable total without synchronization. This introduces a data race and can lose increments, causing CountAll to return an incorrect word count.",
+          "action": ""
         }
       ],
       "score": {
@@ -401,12 +436,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "race"
+          }
+        ]
       }
     },
     {
@@ -472,7 +516,8 @@
           "start": 19,
           "end": 19,
           "rule": "",
-          "explanation": "The user-supplied email is concatenated directly into the SQL statement, allowing SQL injection and causing valid emails containing quotes to fail."
+          "explanation": "The user-supplied email is concatenated directly into the SQL statement, allowing SQL injection and causing valid emails containing quotes to fail.",
+          "action": ""
         }
       ],
       "score": {
@@ -488,12 +533,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inject"
+          }
+        ]
       }
     },
     {
@@ -559,7 +613,8 @@
           "start": 21,
           "end": 21,
           "rule": "",
-          "explanation": "Build calls average for every team, but Team.Scores is explicitly allowed to be empty. average divides by len(scores), so an unplayed team causes a divide-by-zero panic instead of producing a weekly report row."
+          "explanation": "Build calls average for every team, but Team.Scores is explicitly allowed to be empty. average divides by len(scores), so an unplayed team causes a divide-by-zero panic instead of producing a weekly report row.",
+          "action": ""
         }
       ],
       "score": {
@@ -575,12 +630,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "divide-by-zero"
+          }
+        ]
       }
     },
     {
@@ -646,7 +710,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "The repository path and branch name are interpolated into a shell command while `shell=True` is enabled. Because the branch is sent by the web client, an attacker can inject shell syntax and execute arbitrary commands with the server process's privileges."
+          "explanation": "The repository path and branch name are interpolated into a shell command while `shell=True` is enabled. Because the branch is sent by the web client, an attacker can inject shell syntax and execute arbitrary commands with the server process's privileges.",
+          "action": ""
         }
       ],
       "score": {
@@ -662,12 +727,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inject"
+          }
+        ]
       }
     },
     {
@@ -733,7 +807,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "The documented last-page case panics when the page is non-empty but contains fewer than size items: end is set beyond len(items), and items[start:end] requires end to be within the slice bounds."
+          "explanation": "The documented last-page case panics when the page is non-empty but contains fewer than size items: end is set beyond len(items), and items[start:end] requires end to be within the slice bounds.",
+          "action": ""
         }
       ],
       "score": {
@@ -749,12 +824,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(items)"
+          }
+        ]
       }
     },
     {
@@ -820,7 +904,8 @@
           "start": 24,
           "end": 27,
           "rule": "",
-          "explanation": "Get locks c.mu but returns early when the key is absent without unlocking it. Any subsequent Put or Get call will block indefinitely on the permanently locked mutex."
+          "explanation": "Get locks c.mu but returns early when the key is absent without unlocking it. Any subsequent Put or Get call will block indefinitely on the permanently locked mutex.",
+          "action": ""
         }
       ],
       "score": {
@@ -836,12 +921,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "unlock"
+          }
+        ]
       }
     },
     {
@@ -931,7 +1025,8 @@
           "start": 10,
           "end": 10,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the assignment of the base delay, which is already self-explanatory from the code."
+          "explanation": "This comment merely narrates the assignment of the base delay, which is already self-explanatory from the code.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -940,7 +1035,8 @@
           "start": 12,
           "end": 12,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the following loop and doubling operation, which are clear from the code."
+          "explanation": "This comment merely narrates the following loop and doubling operation, which are clear from the code.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -949,7 +1045,8 @@
           "start": 21,
           "end": 21,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the return statement and does not provide information beyond the code."
+          "explanation": "This comment merely narrates the return statement and does not provide information beyond the code.",
+          "action": ""
         }
       ],
       "score": {
@@ -965,12 +1062,33 @@
         "matched": 3,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 3,
         "priority_correct": 3,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "narrat"
+          },
+          {
+            "finding": 1,
+            "expected": 1,
+            "verdict": "detected",
+            "keyword": "narrat"
+          },
+          {
+            "finding": 2,
+            "expected": 2,
+            "verdict": "detected",
+            "keyword": "narrat"
+          }
+        ]
       }
     },
     {
@@ -1036,7 +1154,8 @@
           "start": 11,
           "end": 11,
           "rule": "unslop/plain-prose",
-          "explanation": "This sentence uses inflated promotional language and unsupported broad claims rather than documenting a concrete reason to use the library."
+          "explanation": "This sentence uses inflated promotional language and unsupported broad claims rather than documenting a concrete reason to use the library.",
+          "action": ""
         }
       ],
       "score": {
@@ -1052,12 +1171,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inflated"
+          }
+        ]
       }
     },
     {
@@ -1123,7 +1251,8 @@
           "start": 12,
           "end": 12,
           "rule": "",
-          "explanation": "If items contains sku with a nil *Item value, InStock dereferences it and panics instead of returning a boolean."
+          "explanation": "If items contains sku with a nil *Item value, InStock dereferences it and panics instead of returning a boolean.",
+          "action": ""
         }
       ],
       "score": {
@@ -1139,6 +1268,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1152,7 +1282,15 @@
             "start": 12,
             "end": 12,
             "rule": "",
-            "explanation": "If items contains sku with a nil *Item value, InStock dereferences it and panics instead of returning a boolean."
+            "explanation": "If items contains sku with a nil *Item value, InStock dereferences it and panics instead of returning a boolean.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1213,12 +1351,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1277,12 +1417,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1341,12 +1483,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1412,7 +1556,8 @@
           "start": 3,
           "end": 3,
           "rule": "",
-          "explanation": "The change adds a stringer generation directive but does not include the generated String method or generated source file, so the stated String functionality is not present in the candidate until an external generation step is run."
+          "explanation": "The change adds a stringer generation directive but does not include the generated String method or generated source file, so the stated String functionality is not present in the candidate until an external generation step is run.",
+          "action": ""
         }
       ],
       "score": {
@@ -1428,6 +1573,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 1,
         "blocking": 1,
         "priority_judged": 0,
@@ -1441,7 +1587,15 @@
             "start": 3,
             "end": 3,
             "rule": "",
-            "explanation": "The change adds a stringer generation directive but does not include the generated String method or generated source file, so the stated String functionality is not present in the candidate until an external generation step is run."
+            "explanation": "The change adds a stringer generation directive but does not include the generated String method or generated source file, so the stated String functionality is not present in the candidate until an external generation step is run.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }

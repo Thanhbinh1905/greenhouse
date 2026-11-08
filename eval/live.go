@@ -43,6 +43,8 @@ type RunConfig struct {
 	CorpusVersion     int       `json:"corpus_version"`
 	CorpusRevision    int       `json:"corpus_revision"`
 	CorpusDigest      string    `json:"corpus_digest"`
+	ScoredRevision    int       `json:"scored_corpus_revision"`
+	ScoredDigest      string    `json:"scored_corpus_digest"`
 	Cases             []string  `json:"cases"`
 	Parallel          int       `json:"parallel"`
 	MaxSpan           int       `json:"max_span"`
@@ -475,7 +477,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	jobs := make(chan int)
 	var wg sync.WaitGroup
@@ -496,10 +498,8 @@ func runLive(o runOptions) (*Report, error) {
 	close(jobs)
 	wg.Wait()
 	r.Config.Finished = time.Now().UTC()
-	var scores []CaseScore
 	for _, rec := range records {
 		r.Config.Cases = append(r.Config.Cases, rec.ID)
-		scores = append(scores, rec.Score)
 		r.CostUSD += rec.Usage.CostUSD
 		r.LatencyMillis.Total += rec.LatencyMillis
 		if rec.LatencyMillis > r.LatencyMillis.Max {
@@ -509,12 +509,38 @@ func runLive(o runOptions) (*Report, error) {
 	if len(records) > 0 {
 		r.LatencyMillis.Mean = r.LatencyMillis.Total / int64(len(records))
 	}
-	r.Summary = Summarize(scores)
 	r.Cases = records
+	r.Summary = summarizeRecords(records)
 	if err := writeReport(o.Out, r); err != nil {
 		return nil, err
 	}
 	return r, redactTree(o.Out)
+}
+
+func summarizeRecords(records []CaseRecord) Summary {
+	var scores []CaseScore
+	for _, rec := range records {
+		scores = append(scores, rec.Score)
+	}
+	return Summarize(scores)
+}
+
+func rescoreReport(r *Report, c *Corpus) error {
+	cases := map[string]Case{}
+	for _, k := range c.Cases {
+		cases[k.ID] = k
+	}
+	for i := range r.Cases {
+		rec := &r.Cases[i]
+		k, ok := cases[rec.ID]
+		if !ok {
+			return fmt.Errorf("case %s not in corpus", rec.ID)
+		}
+		rec.Score = ScoreCase(k, rec.Status, rec.Findings)
+	}
+	r.Config.ScoredRevision, r.Config.ScoredDigest = c.Revision, c.Digest
+	r.Summary = summarizeRecords(r.Cases)
+	return nil
 }
 
 func pct(p *float64) string {
@@ -540,6 +566,7 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "# Review evaluation: %s\n\n", r.Config.Label)
 	fmt.Fprintf(&md, "- Model: `%s` through `%s`, Pi %s\n", r.Config.Model, r.Config.Backend, r.Config.PiVersion)
 	fmt.Fprintf(&md, "- Greenhouse: `%s`, corpus v%d revision %d `%s`\n", r.Config.GreenhouseVersion, r.Config.CorpusVersion, r.Config.CorpusRevision, r.Config.CorpusDigest)
+	fmt.Fprintf(&md, "- Scored with corpus revision %d `%s`\n", r.Config.ScoredRevision, r.Config.ScoredDigest)
 	fmt.Fprintf(&md, "- Started %s, finished %s, parallel %d\n\n", r.Config.Started.Format(time.RFC3339), r.Config.Finished.Format(time.RFC3339), r.Config.Parallel)
 	bar := "not met"
 	if s.BarMet {
@@ -552,6 +579,7 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Precision | %s (%d/%d) |\n", pct(s.Precision), s.Matched, s.Findings)
 	fmt.Fprintf(&md, "| Priority accuracy | %s (%d/%d) |\n", pct(s.PriorityAccuracy), s.PriorityCorrect, s.PriorityJudged)
 	fmt.Fprintf(&md, "| False positives (clean / noise / all) | %d / %d / %d |\n", s.CleanFalsePositives, s.NoiseFalsePositives, s.FalsePositives)
+	fmt.Fprintf(&md, "| False positives at an expected location naming another defect | %d |\n", s.WrongDefect)
 	fmt.Fprintf(&md, "| Blocking results on clean cases | %d |\n", s.CleanBlocking)
 	fmt.Fprintf(&md, "| Inconclusive reviews | %d/%d |\n", s.Inconclusive, s.Cases)
 	fmt.Fprintf(&md, "| Cost (Pi catalog pricing) | $%.4f |\n", r.CostUSD)

@@ -20,7 +20,14 @@
         "P2",
         "P3"
       ],
-      "defect": "Comment restates the assignment."
+      "defect": "Comment restates the assignment.",
+      "keywords": [
+        "narrat",
+        "restat",
+        "obvious",
+        "redundant",
+        "self-explanatory"
+      ]
     },
     {
       "file": "client/retry.go",
@@ -33,7 +40,14 @@
         "P2",
         "P3"
       ],
-      "defect": "Comment restates the loop."
+      "defect": "Comment restates the loop.",
+      "keywords": [
+        "narrat",
+        "restat",
+        "obvious",
+        "redundant",
+        "self-explanatory"
+      ]
     },
     {
       "file": "client/retry.go",
@@ -46,7 +60,14 @@
         "P2",
         "P3"
       ],
-      "defect": "Comment restates the return."
+      "defect": "Comment restates the return.",
+      "keywords": [
+        "narrat",
+        "restat",
+        "obvious",
+        "redundant",
+        "self-explanatory"
+      ]
     }
   ],
   "noise": [

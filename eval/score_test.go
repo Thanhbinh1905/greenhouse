@@ -7,8 +7,8 @@ import (
 func bugCase() Case {
 	return Case{ID: "bug", Category: "bug",
 		Expected: []Expected{
-			{File: "a.go", Start: 10, End: 12, Origin: "correctness", Severity: "high", Priorities: []string{"P0", "P1"}},
-			{File: "a.go", Start: 20, End: 20, Origin: "policy", Rule: "no-comments/necessary-comments", Severity: "low", Priorities: []string{"P2", "P3"}},
+			{File: "a.go", Start: 10, End: 12, Origin: "correctness", Severity: "high", Priorities: []string{"P0", "P1"}, Keywords: []string{"past the end", "out of range"}},
+			{File: "a.go", Start: 20, End: 20, Origin: "policy", Rule: "no-comments/necessary-comments", Severity: "low", Priorities: []string{"P2", "P3"}, Keywords: []string{"narrat"}},
 		},
 		Noise: []Noise{{File: "a.go", Start: 30, End: 32}},
 	}
@@ -16,11 +16,11 @@ func bugCase() Case {
 
 func TestScoreCaseMatchesFileRangeOriginAndRule(t *testing.T) {
 	s := ScoreCase(bugCase(), "outstanding-findings", []Finding{
-		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 12, End: 14},
-		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 11, End: 11},
+		{Priority: "P1", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 12, End: 14},
+		{Priority: "P1", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 11, End: 11},
 		{Priority: "P3", Origin: "policy", Rule: "unslop/plain-prose", File: "a.go", Start: 20, End: 20},
 		{Priority: "P2", Origin: "correctness", File: "b.go", Start: 10, End: 12},
-		{Priority: "P0", Origin: "correctness", File: "a.go", Start: 31, End: 31},
+		{Priority: "P0", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 31, End: 31},
 	})
 	if s.Expected != 2 || s.Detected != 1 || s.HighExpected != 1 || s.HighDetected != 1 {
 		t.Fatalf("detection = %+v", s)
@@ -37,18 +37,18 @@ func TestScoreCaseMatchesFileRangeOriginAndRule(t *testing.T) {
 }
 
 func TestScoreCaseRejectsOversizedRanges(t *testing.T) {
-	s := ScoreCase(bugCase(), "outstanding-findings", []Finding{{Priority: "P1", Origin: "correctness", File: "a.go", Start: 1, End: 1 + maxSpan}})
+	s := ScoreCase(bugCase(), "outstanding-findings", []Finding{{Priority: "P1", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 1, End: 1 + maxSpan}})
 	if s.Detected != 0 || s.FalsePositives != 1 {
 		t.Fatalf("a range of %d lines must not match: %+v", maxSpan+1, s)
 	}
-	s = ScoreCase(bugCase(), "outstanding-findings", []Finding{{Priority: "P1", Origin: "correctness", File: "a.go", Start: 1, End: maxSpan}})
+	s = ScoreCase(bugCase(), "outstanding-findings", []Finding{{Priority: "P1", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 1, End: maxSpan}})
 	if s.Detected != 1 {
 		t.Fatalf("a range of %d lines overlapping the defect must match: %+v", maxSpan, s)
 	}
 }
 
 func TestScoreCaseCountsWrongPriority(t *testing.T) {
-	s := ScoreCase(bugCase(), "outstanding-findings", []Finding{{Priority: "P2", Origin: "correctness", File: "a.go", Start: 10, End: 10}})
+	s := ScoreCase(bugCase(), "outstanding-findings", []Finding{{Priority: "P2", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 10, End: 10}})
 	if s.Detected != 1 || s.PriorityJudged != 1 || s.PriorityCorrect != 0 {
 		t.Fatalf("score = %+v", s)
 	}
@@ -60,7 +60,7 @@ func TestScoreCaseCleanAndInconclusive(t *testing.T) {
 	if s.Blocking != 0 || s.FalsePositives != 0 {
 		t.Fatalf("clean = %+v", s)
 	}
-	s = ScoreCase(clean, "outstanding-findings", []Finding{{Priority: "P3", Origin: "policy", File: "a.go", Start: 1, End: 1}, {Priority: "P0", Origin: "correctness", File: "a.go", Start: 2, End: 2}})
+	s = ScoreCase(clean, "outstanding-findings", []Finding{{Priority: "P3", Origin: "policy", File: "a.go", Start: 1, End: 1}, {Priority: "P0", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 2, End: 2}})
 	if s.Blocking != 1 || s.FalsePositives != 2 {
 		t.Fatalf("clean with findings = %+v", s)
 	}
@@ -77,8 +77,8 @@ func TestScoreCaseCleanAndInconclusive(t *testing.T) {
 func TestSummarizeComputesRatesAndBar(t *testing.T) {
 	scores := []CaseScore{
 		ScoreCase(bugCase(), "outstanding-findings", []Finding{
-			{Priority: "P1", Origin: "correctness", File: "a.go", Start: 10, End: 10},
-			{Priority: "P2", Origin: "correctness", File: "a.go", Start: 40, End: 40},
+			{Priority: "P1", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 10, End: 10},
+			{Priority: "P2", Origin: "correctness", Explanation: "Reads past the end.", File: "a.go", Start: 40, End: 40},
 		}),
 		ScoreCase(Case{ID: "clean", Category: "clean"}, "clean-review", nil),
 		ScoreCase(Case{ID: "noise", Category: "noise", Noise: []Noise{{File: "n.go", Start: 1, End: 3}}}, "outstanding-findings", []Finding{{Priority: "P3", Origin: "policy", File: "n.go", Start: 2, End: 2}}),
@@ -99,5 +99,59 @@ func TestSummarizeComputesRatesAndBar(t *testing.T) {
 	}
 	if m = Summarize([]CaseScore{ScoreCase(Case{ID: "clean", Category: "clean"}, "clean-review", nil)}); m.Precision != nil || m.HighRecall != nil || m.BarMet {
 		t.Fatalf("undefined rates must be nil and fail the bar: %+v", m)
+	}
+}
+
+func TestScoreCaseRequiresDefectIdentity(t *testing.T) {
+	s := ScoreCase(bugCase(), "outstanding-findings", []Finding{
+		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 10, End: 12, Explanation: "A negative size panics."},
+		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 11, End: 11, Explanation: "Index out of range.", Action: "Stop before len."},
+		{Priority: "P2", Origin: "correctness", File: "a.go", Start: 10, End: 14, Explanation: "Concurrent calls share state.", Action: "Add a lock."},
+		{Priority: "P3", Origin: "policy", Rule: "no-comments/necessary-comments", File: "a.go", Start: 20, End: 20, Explanation: "Comment is fine.", Action: "Remove the narrating comment."},
+	})
+	if s.Detected != 2 || s.HighDetected != 1 || s.Duplicates != 0 || s.WrongDefect != 2 || s.FalsePositives != 2 || s.Blocking != 1 || s.Matched != 2 {
+		t.Fatalf("a located finding naming another defect must not detect or duplicate: %+v", s)
+	}
+	want := []Adjudication{
+		{Finding: 0, Expected: -1, Verdict: "wrong-defect"},
+		{Finding: 1, Expected: 0, Verdict: "detected", Keyword: "out of range"},
+		{Finding: 2, Expected: -1, Verdict: "wrong-defect"},
+		{Finding: 3, Expected: 1, Verdict: "detected", Keyword: "narrat"},
+	}
+	if len(s.Adjudications) != len(want) {
+		t.Fatalf("adjudications = %+v", s.Adjudications)
+	}
+	for i := range want {
+		if s.Adjudications[i] != want[i] {
+			t.Fatalf("adjudication %d = %+v, want %+v", i, s.Adjudications[i], want[i])
+		}
+	}
+	s = ScoreCase(bugCase(), "outstanding-findings", []Finding{
+		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 10, End: 10, Explanation: "Reads past the end."},
+		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 12, End: 12, Explanation: "Also out of range here."},
+		{Priority: "P2", Origin: "correctness", File: "b.go", Start: 1, End: 1, Explanation: "Unrelated."},
+	})
+	if s.Duplicates != 1 || s.Adjudications[1].Verdict != "duplicate" || s.Adjudications[2].Verdict != "false-positive" || s.WrongDefect != 0 {
+		t.Fatalf("same-defect repeats are duplicates: %+v", s)
+	}
+}
+
+func TestRescoreReportUsesCurrentGroundTruth(t *testing.T) {
+	c := &Corpus{Revision: 7, Digest: "d", Cases: []Case{bugCase()}}
+	r := &Report{Config: RunConfig{CorpusRevision: 1}, Cases: []CaseRecord{{ID: "bug", Status: "outstanding-findings", Findings: []Finding{
+		{Priority: "P1", Origin: "correctness", File: "a.go", Start: 10, End: 10, Explanation: "A negative size panics."},
+	}, Score: CaseScore{Detected: 1}}}}
+	if err := rescoreReport(r, c); err != nil {
+		t.Fatal(err)
+	}
+	if r.Config.ScoredRevision != 7 || r.Config.ScoredDigest != "d" || r.Config.CorpusRevision != 1 {
+		t.Fatalf("config = %+v", r.Config)
+	}
+	if r.Cases[0].Score.Detected != 0 || r.Cases[0].Score.WrongDefect != 1 || r.Summary.HighDetected != 0 || r.Summary.WrongDefect != 1 {
+		t.Fatalf("rescored = %+v %+v", r.Cases[0].Score, r.Summary)
+	}
+	r.Cases[0].ID = "gone"
+	if err := rescoreReport(r, c); err == nil {
+		t.Fatal("a case missing from the corpus must refuse")
 	}
 }

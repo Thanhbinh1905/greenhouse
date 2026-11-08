@@ -13,15 +13,17 @@ All runs used the same setup:
 
 ## Runs
 
+All runs below were re-scored with `go run ./eval rescore` against corpus revision 3, which adds defect keywords (see [Scoring](#scoring)). The Corpus column names the revision each run reviewed.
+
 | Run | Product change | Corpus | High-severity recall | Recall | Precision | Clean blocking | Inconclusive | Cost | Mean latency | Bar |
 |---|---|---|---|---|---|---|---|---|---|---|
 | [01-baseline](01-baseline/report.md) | none (product as on `main`) | rev 1 | 0% (0/9) | 0% | n/a | 3 | 16/16 | $0.0251 | 19.9s | not met |
-| [02-event-fix](02-event-fix/report.md) | accept Pi system messages | rev 1 | 89% (8/9) | 92% | 93% | 1 | 2/16 | $0.0228 | 18.3s | not met |
+| [02-event-fix](02-event-fix/report.md) | accept Pi system messages | rev 1 | 89% (8/9) | 92% | 86% | 1 | 2/16 | $0.0228 | 18.3s | not met |
 | [03-candidate-files](03-candidate-files/report.md) | numbered candidate files, no-checkout contract | rev 1 | 100% (9/9) | 100% | 87% | 1 | 0/16 | $0.0137 | 8.8s | not met |
 | [04-corpus-r2](04-corpus-r2/report.md) | same as 03 | rev 2 | 100% (9/9) | 92% | 92% | 0 | 0/16 | $0.0131 | 7.7s | met |
-| [05-corpus-r2](05-corpus-r2/report.md) | same as 03, repeated | rev 2 | 100% (9/9) | 100% | 88% | 0 | 0/16 | $0.0136 | 8.5s | met |
-| [06-gpt-6.1-sol-r1](06-gpt-6.1-sol-r1/report.md) | same as 03, `openai/gpt-6.1-sol` | rev 2 | 100% (9/9) | 85% | 86% | 0 | 0/16 | $0.1173 | 9.1s | met |
-| [07-gpt-6.1-sol-r2](07-gpt-6.1-sol-r2/report.md) | same as 06, repeated | rev 2 | 100% (9/9) | 85% | 86% | 0 | 0/16 | $0.1153 | 8.7s | met |
+| [05-corpus-r2](05-corpus-r2/report.md) | same as 03, repeated | rev 2 | 100% (9/9) | 100% | 81% | 0 | 0/16 | $0.0136 | 8.5s | met |
+| [06-gpt-6.1-sol-r1](06-gpt-6.1-sol-r1/report.md) | same as 03, `openai/gpt-6.1-sol` | rev 2 | 100% (9/9) | 85% | 79% | 0 | 0/16 | $0.1173 | 9.1s | met |
+| [07-gpt-6.1-sol-r2](07-gpt-6.1-sol-r2/report.md) | same as 06, repeated | rev 2 | 100% (9/9) | 85% | 79% | 0 | 0/16 | $0.1153 | 8.7s | met |
 | [08-gpt-6-luna-r1](08-gpt-6-luna-r1/report.md) | same as 03, `openai/gpt-6-luna` | rev 2 | 100% (9/9) | 92% | 92% | 0 | 0/16 | $0.0046 | 4.6s | met |
 | [09-gpt-6-luna-r2](09-gpt-6-luna-r2/report.md) | same as 08, repeated | rev 2 | 89% (8/9) | 85% | 85% | 0 | 0/16 | $0.0045 | 4.2s | met |
 
@@ -46,15 +48,21 @@ Runs 04 to 09 use the same product code, corpus revision 2, criteria and setting
 
 | Model | High-severity recall | Recall | Precision | Priority accuracy | Clean false positives (blocking) | Noise false positives (blocking) | Cost per pass | Mean and max latency |
 |---|---|---|---|---|---|---|---|---|
-| `openai/gpt-5.6-luna` | 100% (18/18) | 96% (25/26) | 90% (26/29) | 100% | 0 (0) | 1 (1) | $0.0133 | 8.1s / 15.1s |
-| `openai/gpt-6.1-sol` | 100% (18/18) | 85% (22/26) | 86% (24/28) | 95% | 2 (0) | 2 (0) | $0.1163 | 8.9s / 15.8s |
+| `openai/gpt-5.6-luna` | 100% (18/18) | 96% (25/26) | 86% (25/29) | 100% | 0 (0) | 1 (1) | $0.0133 | 8.1s / 15.1s |
+| `openai/gpt-6.1-sol` | 100% (18/18) | 85% (22/26) | 79% (22/28) | 95% | 2 (0) | 2 (0) | $0.1163 | 8.9s / 15.8s |
 | `openai/gpt-6-luna` | 94% (17/18) | 88% (23/26) | 88% (23/26) | 100% | 0 (0) | 2 (2) | $0.0046 | 4.4s / 7.1s |
 
-- `gpt-6.1-sol` found every planted bug but missed two of three narrating comments in both runs and flagged a necessary doc comment on a clean case (P3). It costs about nine times as much as `gpt-5.6-luna` with no measured gain.
+- `gpt-6.1-sol` found every planted bug but missed two of three narrating comments in both runs and flagged a necessary doc comment on a clean case (P3). Both runs also reported that concurrent `Save` calls share one temporary file. That defect is real but not planted, so it scores as a wrong-defect false positive. It costs about nine times as much as `gpt-5.6-luna` with no measured gain.
 - `gpt-6-luna` is the cheapest and fastest. In run 09 it flagged negative page arguments in `bug-pagination-bounds` instead of the unclamped end index, missing a planted bug. Both runs raised the same P1 noise finding.
-- Recommendation: use `openai/gpt-5.6-luna` as the reviewer model. It had the best recall and precision, no clean-case false positive, and costs about $0.013 per 16-case pass. Re-measure with this corpus before changing models.
+- Recommendation: use `openai/gpt-5.6-luna` as the reviewer model. It had the best recall, found every planted bug, raised no clean-case false positive, and costs about $0.013 per 16-case pass. Its precision (86%) is within one finding of `gpt-6-luna` (88%). Re-measure with this corpus before changing models.
 
 This is not a cross-vendor comparison. The proxy behind the `openai` provider serves only OpenAI models. xAI has OAuth credentials, but its API answered `402 "You have run out of credits or need a Grok subscription."` Anthropic, Google, OpenRouter and Meta have no configured credentials on this machine. The nine recorded runs cost $0.33 at Pi catalog prices.
+
+## Scoring
+
+A finding detects an expected finding only when it is at the expected location and its explanation or action contains one of that finding's `keywords`. The keywords name the defect, for example `len(items)`, `partial` and `clamp` for the unclamped page end. Each report records one adjudication per finding: `detected`, `duplicate`, `wrong-defect` (expected location, different defect) or `false-positive`. A finding counts as a duplicate only when it names an already detected defect.
+
+The first scorer checked location alone. Re-scoring with revision 3 changed no detection, but four findings that had been counted as duplicates became wrong-defect false positives: negative `page` or `size` arguments in `bug-pagination-bounds` (02 and 05), and the shared temporary file in `bug-swallowed-write-error` (06 and 07). Findings recorded before the scorer kept the `action` field carry only the explanation, so these runs were scored on explanations alone.
 
 ## Remaining weaknesses
 
@@ -67,6 +75,6 @@ These did not affect the bar but are real:
 
 ## Reproducing
 
-Commit IDs in each `report.json` identify the product code. `input.json` in each case directory holds the exact bytes Greenhouse delivered, so the review input can be replayed without the corpus. Runs 01 to 03 used corpus revision 1 (digest `77d755d3…`); 04 and 05 used revision 2 (digest `4f1ccef6…`).
+Commit IDs in each `report.json` identify the product code. `input.json` in each case directory holds the exact bytes Greenhouse delivered, so the review input can be replayed without the corpus. Runs 01 to 03 reviewed corpus revision 1 (digest `77d755d3…`) and 04 to 09 revision 2 (digest `4f1ccef6…`). All were scored with revision 3 (digest `88ba03b5…`), which changes only ground-truth keywords.
 
 Stored `events.jsonl` files exclude Pi's `message_update` streaming deltas; the matching `message_end` events carry the same final content.

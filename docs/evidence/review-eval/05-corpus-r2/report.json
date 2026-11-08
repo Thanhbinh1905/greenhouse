@@ -12,6 +12,8 @@
     "corpus_version": 1,
     "corpus_revision": 2,
     "corpus_digest": "4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812",
+    "scored_corpus_revision": 3,
+    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -42,8 +44,9 @@
     "high_expected": 9,
     "high_detected": 9,
     "findings": 16,
-    "matched": 14,
-    "false_positives": 2,
+    "matched": 13,
+    "false_positives": 3,
+    "wrong_defect": 1,
     "clean_false_positives": 0,
     "clean_blocking": 0,
     "noise_false_positives": 1,
@@ -51,7 +54,7 @@
     "priority_correct": 13,
     "recall": 1,
     "high_recall": 1,
-    "precision": 0.875,
+    "precision": 0.8125,
     "priority_accuracy": 1,
     "bar_met": true
   },
@@ -125,7 +128,8 @@
           "start": 19,
           "end": 20,
           "rule": "",
-          "explanation": "The loop condition uses `i \u003c= len(values)`, so it attempts to read `values[len(values)]`, which is always out of bounds. Consequently, every non-empty call panics, including valid positive `n` values."
+          "explanation": "The loop condition uses `i \u003c= len(values)`, so it attempts to read `values[len(values)]`, which is always out of bounds. Consequently, every non-empty call panics, including valid positive `n` values.",
+          "action": ""
         }
       ],
       "score": {
@@ -141,12 +145,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(values)"
+          }
+        ]
       }
     },
     {
@@ -212,7 +225,8 @@
           "start": 28,
           "end": 30,
           "rule": "",
-          "explanation": "When the ID is not found, Lookup returns a nil user and ErrNotFound. The code dereferences u.Name before checking err, causing a nil-pointer panic instead of returning \"unknown\"."
+          "explanation": "When the ID is not found, Lookup returns a nil user and ErrNotFound. The code dereferences u.Name before checking err, causing a nil-pointer panic instead of returning \"unknown\".",
+          "action": ""
         }
       ],
       "score": {
@@ -228,12 +242,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "u.name"
+          }
+        ]
       }
     },
     {
@@ -299,7 +322,8 @@
           "start": 32,
           "end": 33,
           "rule": "",
-          "explanation": "If os.WriteFile fails, Save returns nil, falsely reporting success and potentially leaving the previous configuration unchanged or a partial temporary file behind."
+          "explanation": "If os.WriteFile fails, Save returns nil, falsely reporting success and potentially leaving the previous configuration unchanged or a partial temporary file behind.",
+          "action": ""
         }
       ],
       "score": {
@@ -315,12 +339,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "returns nil"
+          }
+        ]
       }
     },
     {
@@ -386,7 +419,8 @@
           "start": 22,
           "end": 22,
           "rule": "",
-          "explanation": "The goroutines update the shared variable total without synchronization. This introduces a data race and can lose increments, so CountAll may return an incorrect total."
+          "explanation": "The goroutines update the shared variable total without synchronization. This introduces a data race and can lose increments, so CountAll may return an incorrect total.",
+          "action": ""
         }
       ],
       "score": {
@@ -402,12 +436,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "race"
+          }
+        ]
       }
     },
     {
@@ -473,7 +516,8 @@
           "start": 19,
           "end": 19,
           "rule": "",
-          "explanation": "The email input is concatenated directly into the SQL statement, allowing crafted search-form input to alter the query and potentially expose or modify database data via SQL injection."
+          "explanation": "The email input is concatenated directly into the SQL statement, allowing crafted search-form input to alter the query and potentially expose or modify database data via SQL injection.",
+          "action": ""
         }
       ],
       "score": {
@@ -489,12 +533,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inject"
+          }
+        ]
       }
     },
     {
@@ -560,7 +613,8 @@
           "start": 31,
           "end": 31,
           "rule": "",
-          "explanation": "average divides by len(scores) without handling an empty score slice. The Team documentation states Scores is empty until the first game, so Build will panic for any team that has not played."
+          "explanation": "average divides by len(scores) without handling an empty score slice. The Team documentation states Scores is empty until the first game, so Build will panic for any team that has not played.",
+          "action": ""
         }
       ],
       "score": {
@@ -576,12 +630,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "divides by len"
+          }
+        ]
       }
     },
     {
@@ -647,7 +710,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "The repository path and web-client-supplied branch are interpolated into a shell command while shell=True is enabled, allowing crafted input to execute arbitrary commands with the application's privileges."
+          "explanation": "The repository path and web-client-supplied branch are interpolated into a shell command while shell=True is enabled, allowing crafted input to execute arbitrary commands with the application's privileges.",
+          "action": ""
         }
       ],
       "score": {
@@ -663,12 +727,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "shell=true"
+          }
+        ]
       }
     },
     {
@@ -746,7 +819,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "For any non-empty final page whose length is less than size, end exceeds len(items), so slicing items[start:end] panics instead of returning the documented partial page."
+          "explanation": "For any non-empty final page whose length is less than size, end exceeds len(items), so slicing items[start:end] panics instead of returning the documented partial page.",
+          "action": ""
         },
         {
           "priority": "P1",
@@ -755,7 +829,8 @@
           "start": 14,
           "end": 19,
           "rule": "",
-          "explanation": "The function does not validate page or size. A zero or negative size, or a negative page, can produce invalid indexes and panics; size \u003c= 0 is already handled explicitly by Count but not by Page."
+          "explanation": "The function does not validate page or size. A zero or negative size, or a negative page, can produce invalid indexes and panics; size \u003c= 0 is already handled explicitly by Count but not by Page.",
+          "action": ""
         }
       ],
       "score": {
@@ -768,15 +843,40 @@
         "high_expected": 1,
         "high_detected": 1,
         "findings": 2,
-        "matched": 2,
-        "duplicates": 1,
-        "false_positives": 0,
+        "matched": 1,
+        "duplicates": 0,
+        "false_positives": 1,
+        "wrong_defect": 1,
         "noise_flagged": 0,
-        "blocking": 0,
+        "blocking": 1,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [
+          {
+            "priority": "P1",
+            "origin": "correctness",
+            "file": "list/page.go",
+            "start": 14,
+            "end": 19,
+            "rule": "",
+            "explanation": "The function does not validate page or size. A zero or negative size, or a negative page, can produce invalid indexes and panics; size \u003c= 0 is already handled explicitly by Count but not by Page.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(items)"
+          },
+          {
+            "finding": 1,
+            "expected": -1,
+            "verdict": "wrong-defect"
+          }
+        ]
       }
     },
     {
@@ -842,7 +942,8 @@
           "start": 27,
           "end": 27,
           "rule": "",
-          "explanation": "When the key is absent, Get returns without unlocking c.mu. Any subsequent Put or Get call on the cache will block indefinitely."
+          "explanation": "When the key is absent, Get returns without unlocking c.mu. Any subsequent Put or Get call on the cache will block indefinitely.",
+          "action": ""
         }
       ],
       "score": {
@@ -858,12 +959,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "unlock"
+          }
+        ]
       }
     },
     {
@@ -953,7 +1063,8 @@
           "start": 10,
           "end": 10,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the immediately following base-delay assignment and does not add necessary context."
+          "explanation": "This comment merely narrates the immediately following base-delay assignment and does not add necessary context.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -962,7 +1073,8 @@
           "start": 12,
           "end": 15,
           "rule": "no-comments/necessary-comments",
-          "explanation": "The comments narrate the obvious loop and doubling operation rather than explaining non-obvious behavior."
+          "explanation": "The comments narrate the obvious loop and doubling operation rather than explaining non-obvious behavior.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -971,7 +1083,8 @@
           "start": 21,
           "end": 22,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely restates that the function returns the computed delay."
+          "explanation": "This comment merely restates that the function returns the computed delay.",
+          "action": ""
         }
       ],
       "score": {
@@ -987,12 +1100,33 @@
         "matched": 3,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 3,
         "priority_correct": 3,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "narrat"
+          },
+          {
+            "finding": 1,
+            "expected": 1,
+            "verdict": "detected",
+            "keyword": "narrat"
+          },
+          {
+            "finding": 2,
+            "expected": 2,
+            "verdict": "detected",
+            "keyword": "restat"
+          }
+        ]
       }
     },
     {
@@ -1070,7 +1204,8 @@
           "start": 11,
           "end": 11,
           "rule": "unslop/plain-prose",
-          "explanation": "This sentence uses inflated promotional language and makes an unsupported claim that the limiter can handle any load imaginable."
+          "explanation": "This sentence uses inflated promotional language and makes an unsupported claim that the limiter can handle any load imaginable.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -1079,7 +1214,8 @@
           "start": 13,
           "end": 13,
           "rule": "unslop/plain-prose",
-          "explanation": "The unattributed testimonial makes an unsupported performance claim and presents certainty that is not substantiated by the documentation."
+          "explanation": "The unattributed testimonial makes an unsupported performance claim and presents certainty that is not substantiated by the documentation.",
+          "action": ""
         }
       ],
       "score": {
@@ -1095,6 +1231,7 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 1,
         "blocking": 0,
         "priority_judged": 1,
@@ -1108,7 +1245,21 @@
             "start": 13,
             "end": 13,
             "rule": "unslop/plain-prose",
-            "explanation": "The unattributed testimonial makes an unsupported performance claim and presents certainty that is not substantiated by the documentation."
+            "explanation": "The unattributed testimonial makes an unsupported performance claim and presents certainty that is not substantiated by the documentation.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inflated"
+          },
+          {
+            "finding": 1,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1176,7 +1327,8 @@
           "start": 12,
           "end": 12,
           "rule": "",
-          "explanation": "If items contains the requested SKU with a nil *Item value, InStock dereferences it and panics instead of reporting availability. A stock map can legally contain nil pointer values because its value type is *Item."
+          "explanation": "If items contains the requested SKU with a nil *Item value, InStock dereferences it and panics instead of reporting availability. A stock map can legally contain nil pointer values because its value type is *Item.",
+          "action": ""
         }
       ],
       "score": {
@@ -1192,6 +1344,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
@@ -1205,7 +1358,15 @@
             "start": 12,
             "end": 12,
             "rule": "",
-            "explanation": "If items contains the requested SKU with a nil *Item value, InStock dereferences it and panics instead of reporting availability. A stock map can legally contain nil pointer values because its value type is *Item."
+            "explanation": "If items contains the requested SKU with a nil *Item value, InStock dereferences it and panics instead of reporting availability. A stock map can legally contain nil pointer values because its value type is *Item.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1266,12 +1427,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1330,12 +1493,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1394,12 +1559,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1458,12 +1625,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     }
   ]

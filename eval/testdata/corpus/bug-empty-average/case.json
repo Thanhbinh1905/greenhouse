@@ -20,7 +20,15 @@
         "P0",
         "P1"
       ],
-      "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero."
+      "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero.",
+      "keywords": [
+        "divide by zero",
+        "divide-by-zero",
+        "division by zero",
+        "divides by len",
+        "dividing by len",
+        "empty"
+      ]
     }
   ],
   "noise": [

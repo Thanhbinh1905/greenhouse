@@ -10,7 +10,10 @@
     "greenhouse_version": "1c944db9e9171f6faa8c89f99599844a468e034d",
     "go_version": "go1.26.7",
     "corpus_version": 1,
+    "corpus_revision": 0,
     "corpus_digest": "77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3",
+    "scored_corpus_revision": 3,
+    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -41,8 +44,9 @@
     "high_expected": 9,
     "high_detected": 8,
     "findings": 14,
-    "matched": 13,
-    "false_positives": 1,
+    "matched": 12,
+    "false_positives": 2,
+    "wrong_defect": 1,
     "clean_false_positives": 1,
     "clean_blocking": 1,
     "noise_false_positives": 0,
@@ -50,7 +54,7 @@
     "priority_correct": 12,
     "recall": 0.9230769230769231,
     "high_recall": 0.8888888888888888,
-    "precision": 0.9285714285714286,
+    "precision": 0.8571428571428571,
     "priority_accuracy": 1,
     "bar_met": false
   },
@@ -124,7 +128,8 @@
           "start": 19,
           "end": 20,
           "rule": "",
-          "explanation": "The loop condition uses i \u003c= len(values), so it accesses values[len(values)] after processing the requested elements and panics for every non-negative n, including n == 0."
+          "explanation": "The loop condition uses i \u003c= len(values), so it accesses values[len(values)] after processing the requested elements and panics for every non-negative n, including n == 0.",
+          "action": ""
         }
       ],
       "score": {
@@ -140,12 +145,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(values)"
+          }
+        ]
       }
     },
     {
@@ -211,7 +225,8 @@
           "start": 29,
           "end": 29,
           "rule": "",
-          "explanation": "DisplayName dereferences u before checking err. When Lookup cannot find the ID and returns a nil user with an error, this panics instead of returning \"unknown\"."
+          "explanation": "DisplayName dereferences u before checking err. When Lookup cannot find the ID and returns a nil user with an error, this panics instead of returning \"unknown\".",
+          "action": ""
         }
       ],
       "score": {
@@ -227,12 +242,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "nil user"
+          }
+        ]
       }
     },
     {
@@ -298,7 +322,8 @@
           "start": 33,
           "end": 33,
           "rule": "",
-          "explanation": "Save returns nil when os.WriteFile fails, falsely reporting that the configuration was persisted. Callers cannot detect permission, disk, or filesystem errors."
+          "explanation": "Save returns nil when os.WriteFile fails, falsely reporting that the configuration was persisted. Callers cannot detect permission, disk, or filesystem errors.",
+          "action": ""
         }
       ],
       "score": {
@@ -314,12 +339,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "returns nil"
+          }
+        ]
       }
     },
     {
@@ -385,7 +419,8 @@
           "start": 21,
           "end": 21,
           "rule": "",
-          "explanation": "Concurrent goroutines update total with an unsynchronized read-modify-write. This introduces a data race and can cause CountAll to return an incorrect, nondeterministic total."
+          "explanation": "Concurrent goroutines update total with an unsynchronized read-modify-write. This introduces a data race and can cause CountAll to return an incorrect, nondeterministic total.",
+          "action": ""
         }
       ],
       "score": {
@@ -401,12 +436,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "race"
+          }
+        ]
       }
     },
     {
@@ -472,7 +516,8 @@
           "start": 19,
           "end": 19,
           "rule": "",
-          "explanation": "The email value is concatenated directly into the SQL statement, allowing a crafted search-form email to alter the query or inject SQL."
+          "explanation": "The email value is concatenated directly into the SQL statement, allowing a crafted search-form email to alter the query or inject SQL.",
+          "action": ""
         }
       ],
       "score": {
@@ -488,12 +533,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inject"
+          }
+        ]
       }
     },
     {
@@ -565,6 +619,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -581,10 +636,19 @@
               "P0",
               "P1"
             ],
-            "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero."
+            "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero.",
+            "keywords": [
+              "divide by zero",
+              "divide-by-zero",
+              "division by zero",
+              "divides by len",
+              "dividing by len",
+              "empty"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -650,7 +714,8 @@
           "start": 18,
           "end": 18,
           "rule": "",
-          "explanation": "The repository path and branch name are interpolated directly into a shell command while `shell=True` is enabled. Because the branch name is sent by the web client, a crafted value can execute arbitrary shell commands, and repository paths containing shell metacharacters are likewise unsafe."
+          "explanation": "The repository path and branch name are interpolated directly into a shell command while `shell=True` is enabled. Because the branch name is sent by the web client, a crafted value can execute arbitrary shell commands, and repository paths containing shell metacharacters are likewise unsafe.",
+          "action": ""
         }
       ],
       "score": {
@@ -666,12 +731,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "shell=true"
+          }
+        ]
       }
     },
     {
@@ -749,7 +823,8 @@
           "start": 19,
           "end": 19,
           "rule": "",
-          "explanation": "For any non-empty final page whose length is less than size, end exceeds len(items), so slicing items[start:end] panics instead of returning the remaining items as the comment promises."
+          "explanation": "For any non-empty final page whose length is less than size, end exceeds len(items), so slicing items[start:end] panics instead of returning the remaining items as the comment promises.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -758,7 +833,8 @@
           "start": 14,
           "end": 19,
           "rule": "",
-          "explanation": "Negative page or size values can produce negative slice bounds and panic; size zero also yields behavior that is not defined by the function contract."
+          "explanation": "Negative page or size values can produce negative slice bounds and panic; size zero also yields behavior that is not defined by the function contract.",
+          "action": ""
         }
       ],
       "score": {
@@ -771,15 +847,40 @@
         "high_expected": 1,
         "high_detected": 1,
         "findings": 2,
-        "matched": 2,
-        "duplicates": 1,
-        "false_positives": 0,
+        "matched": 1,
+        "duplicates": 0,
+        "false_positives": 1,
+        "wrong_defect": 1,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [
+          {
+            "priority": "P2",
+            "origin": "correctness",
+            "file": "list/page.go",
+            "start": 14,
+            "end": 19,
+            "rule": "",
+            "explanation": "Negative page or size values can produce negative slice bounds and panic; size zero also yields behavior that is not defined by the function contract.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(items)"
+          },
+          {
+            "finding": 1,
+            "expected": -1,
+            "verdict": "wrong-defect"
+          }
+        ]
       }
     },
     {
@@ -845,7 +946,8 @@
           "start": 23,
           "end": 27,
           "rule": "",
-          "explanation": "Get acquires c.mu but returns from the missing-key branch without unlocking it. After the first lookup of an absent key, the cache remains permanently locked and subsequent operations can deadlock."
+          "explanation": "Get acquires c.mu but returns from the missing-key branch without unlocking it. After the first lookup of an absent key, the cache remains permanently locked and subsequent operations can deadlock.",
+          "action": ""
         }
       ],
       "score": {
@@ -861,12 +963,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "unlock"
+          }
+        ]
       }
     },
     {
@@ -956,7 +1067,8 @@
           "start": 10,
           "end": 10,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the immediately following assignment and does not add necessary context."
+          "explanation": "This comment merely narrates the immediately following assignment and does not add necessary context.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -965,7 +1077,8 @@
           "start": 12,
           "end": 12,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely describes the obvious loop operation of doubling the delay."
+          "explanation": "This comment merely describes the obvious loop operation of doubling the delay.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -974,7 +1087,8 @@
           "start": 21,
           "end": 21,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the immediately following return statement."
+          "explanation": "This comment merely narrates the immediately following return statement.",
+          "action": ""
         }
       ],
       "score": {
@@ -990,12 +1104,33 @@
         "matched": 3,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 3,
         "priority_correct": 3,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "narrat"
+          },
+          {
+            "finding": 1,
+            "expected": 1,
+            "verdict": "detected",
+            "keyword": "obvious"
+          },
+          {
+            "finding": 2,
+            "expected": 2,
+            "verdict": "detected",
+            "keyword": "narrat"
+          }
+        ]
       }
     },
     {
@@ -1061,7 +1196,8 @@
           "start": 11,
           "end": 11,
           "rule": "unslop/plain-prose",
-          "explanation": "This sentence uses inflated promotional language and unsupported certainty (\"blazingly fast,\" \"revolutionary,\" \"world-class,\" and \"any load imaginable\") rather than documenting the limiter's benefits factually."
+          "explanation": "This sentence uses inflated promotional language and unsupported certainty (\"blazingly fast,\" \"revolutionary,\" \"world-class,\" and \"any load imaginable\") rather than documenting the limiter's benefits factually.",
+          "action": ""
         }
       ],
       "score": {
@@ -1077,12 +1213,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inflated"
+          }
+        ]
       }
     },
     {
@@ -1141,12 +1286,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1205,12 +1352,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1276,7 +1425,8 @@
           "start": 18,
           "end": 18,
           "rule": "no-comments/necessary-comments",
-          "explanation": "The added comment merely narrates the obvious behavior of the small unexported helper and does not document a non-obvious invariant or external quirk."
+          "explanation": "The added comment merely narrates the obvious behavior of the small unexported helper and does not document a non-obvious invariant or external quirk.",
+          "action": ""
         }
       ],
       "score": {
@@ -1292,6 +1442,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1305,7 +1456,15 @@
             "start": 18,
             "end": 18,
             "rule": "no-comments/necessary-comments",
-            "explanation": "The added comment merely narrates the obvious behavior of the small unexported helper and does not document a non-obvious invariant or external quirk."
+            "explanation": "The added comment merely narrates the obvious behavior of the small unexported helper and does not document a non-obvious invariant or external quirk.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1366,12 +1525,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1430,12 +1591,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     }
   ]

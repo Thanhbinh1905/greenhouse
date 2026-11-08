@@ -20,7 +20,13 @@
         "P0",
         "P1"
       ],
-      "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder."
+      "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder.",
+      "keywords": [
+        "inject",
+        "concatenat",
+        "placeholder",
+        "parameteriz"
+      ]
     }
   ],
   "noise": [

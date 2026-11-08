@@ -12,6 +12,8 @@
     "corpus_version": 1,
     "corpus_revision": 2,
     "corpus_digest": "4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812",
+    "scored_corpus_revision": 3,
+    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -42,8 +44,9 @@
     "high_expected": 9,
     "high_detected": 9,
     "findings": 14,
-    "matched": 12,
-    "false_positives": 2,
+    "matched": 11,
+    "false_positives": 3,
+    "wrong_defect": 1,
     "clean_false_positives": 1,
     "clean_blocking": 0,
     "noise_false_positives": 1,
@@ -51,7 +54,7 @@
     "priority_correct": 10,
     "recall": 0.8461538461538461,
     "high_recall": 1,
-    "precision": 0.8571428571428571,
+    "precision": 0.7857142857142857,
     "priority_accuracy": 0.9090909090909091,
     "bar_met": true
   },
@@ -125,7 +128,8 @@
           "start": 19,
           "end": 20,
           "rule": "",
-          "explanation": "The inclusive loop bound allows i to reach len(values), so values[i] panics for every nonnegative n instead of returning a sum. This also affects n == 0, empty slices, and n greater than the slice length."
+          "explanation": "The inclusive loop bound allows i to reach len(values), so values[i] panics for every nonnegative n instead of returning a sum. This also affects n == 0, empty slices, and n greater than the slice length.",
+          "action": ""
         }
       ],
       "score": {
@@ -141,12 +145,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(values)"
+          }
+        ]
       }
     },
     {
@@ -212,7 +225,8 @@
           "start": 29,
           "end": 29,
           "rule": "",
-          "explanation": "When the ID does not exist, Lookup returns nil and ErrNotFound. Accessing u.Name before checking err therefore panics instead of returning the documented \"unknown\" fallback."
+          "explanation": "When the ID does not exist, Lookup returns nil and ErrNotFound. Accessing u.Name before checking err therefore panics instead of returning the documented \"unknown\" fallback.",
+          "action": ""
         }
       ],
       "score": {
@@ -228,12 +242,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "u.name"
+          }
+        ]
       }
     },
     {
@@ -311,7 +334,8 @@
           "start": 32,
           "end": 33,
           "rule": "",
-          "explanation": "Save returns nil when writing the temporary file fails. A missing directory, permission error, or full disk therefore reports success without persisting the configuration, preventing the settings screen from detecting the failed save."
+          "explanation": "Save returns nil when writing the temporary file fails. A missing directory, permission error, or full disk therefore reports success without persisting the configuration, preventing the settings screen from detecting the failed save.",
+          "action": ""
         },
         {
           "priority": "P2",
@@ -320,7 +344,8 @@
           "start": 31,
           "end": 35,
           "rule": "",
-          "explanation": "Concurrent saves to the same path share one temporary file. One call can truncate that file while another renames it into place, exposing partially written content to readers and potentially corrupting the saved JSON. The rename alone does not provide the documented atomic publication guarantee when writers share the temporary file."
+          "explanation": "Concurrent saves to the same path share one temporary file. One call can truncate that file while another renames it into place, exposing partially written content to readers and potentially corrupting the saved JSON. The rename alone does not provide the documented atomic publication guarantee when writers share the temporary file.",
+          "action": ""
         }
       ],
       "score": {
@@ -333,15 +358,40 @@
         "high_expected": 1,
         "high_detected": 1,
         "findings": 2,
-        "matched": 2,
-        "duplicates": 1,
-        "false_positives": 0,
+        "matched": 1,
+        "duplicates": 0,
+        "false_positives": 1,
+        "wrong_defect": 1,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [
+          {
+            "priority": "P2",
+            "origin": "correctness",
+            "file": "config/config.go",
+            "start": 31,
+            "end": 35,
+            "rule": "",
+            "explanation": "Concurrent saves to the same path share one temporary file. One call can truncate that file while another renames it into place, exposing partially written content to readers and potentially corrupting the saved JSON. The rename alone does not provide the documented atomic publication guarantee when writers share the temporary file.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "returns nil"
+          },
+          {
+            "finding": 1,
+            "expected": -1,
+            "verdict": "wrong-defect"
+          }
+        ]
       }
     },
     {
@@ -407,7 +457,8 @@
           "start": 22,
           "end": 22,
           "rule": "",
-          "explanation": "Multiple document goroutines read and write total concurrently without synchronization. The read-modify-write operation can lose updates, causing CountAll to return an incorrect word count. wg.Wait() waits for completion but does not serialize these updates."
+          "explanation": "Multiple document goroutines read and write total concurrently without synchronization. The read-modify-write operation can lose updates, causing CountAll to return an incorrect word count. wg.Wait() waits for completion but does not serialize these updates.",
+          "action": ""
         }
       ],
       "score": {
@@ -423,12 +474,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "synchroniz"
+          }
+        ]
       }
     },
     {
@@ -494,7 +554,8 @@
           "start": 19,
           "end": 19,
           "rule": "",
-          "explanation": "The search-form email is concatenated directly into SQL. An input such as `' OR 1=1 -- ` changes the predicate and can return every order instead of only orders matching the email. Legitimate addresses containing an apostrophe also cause SQL syntax errors."
+          "explanation": "The search-form email is concatenated directly into SQL. An input such as `' OR 1=1 -- ` changes the predicate and can return every order instead of only orders matching the email. Legitimate addresses containing an apostrophe also cause SQL syntax errors.",
+          "action": ""
         }
       ],
       "score": {
@@ -510,12 +571,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "concatenat"
+          }
+        ]
       }
     },
     {
@@ -581,7 +651,8 @@
           "start": 31,
           "end": 31,
           "rule": "",
-          "explanation": "A team that has not played yet has an empty Scores slice, as explicitly documented on Team. Build now calls average for every team, so encountering such a team causes an integer divide-by-zero panic and prevents the entire weekly report from being returned."
+          "explanation": "A team that has not played yet has an empty Scores slice, as explicitly documented on Team. Build now calls average for every team, so encountering such a team causes an integer divide-by-zero panic and prevents the entire weekly report from being returned.",
+          "action": ""
         }
       ],
       "score": {
@@ -597,12 +668,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "divide-by-zero"
+          }
+        ]
       }
     },
     {
@@ -668,7 +748,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "The web-client-supplied branch is interpolated into a command executed with shell=True. A value such as `main; id` executes an additional command with the server process's privileges instead of merely selecting a branch. The unquoted repository path is also interpreted by the shell."
+          "explanation": "The web-client-supplied branch is interpolated into a command executed with shell=True. A value such as `main; id` executes an additional command with the server process's privileges instead of merely selecting a branch. The unquoted repository path is also interpreted by the shell.",
+          "action": ""
         }
       ],
       "score": {
@@ -684,12 +765,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "shell=true"
+          }
+        ]
       }
     },
     {
@@ -755,7 +845,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "The final partial page is sliced using start + size without bounding it to len(items). For example, Page([]string{\"a\", \"b\", \"c\"}, 1, 2) panics instead of returning [\"c\"]. If the slice has spare capacity, this can instead return elements beyond its logical length. This contradicts the documented behavior that the last page may contain fewer than size items."
+          "explanation": "The final partial page is sliced using start + size without bounding it to len(items). For example, Page([]string{\"a\", \"b\", \"c\"}, 1, 2) panics instead of returning [\"c\"]. If the slice has spare capacity, this can instead return elements beyond its logical length. This contradicts the documented behavior that the last page may contain fewer than size items.",
+          "action": ""
         }
       ],
       "score": {
@@ -771,12 +862,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(items)"
+          }
+        ]
       }
     },
     {
@@ -842,7 +942,8 @@
           "start": 26,
           "end": 27,
           "rule": "",
-          "explanation": "When the key is absent, Get returns without unlocking c.mu. A single cache miss therefore leaves the mutex permanently locked, blocking all subsequent Get and Put calls on this cache."
+          "explanation": "When the key is absent, Get returns without unlocking c.mu. A single cache miss therefore leaves the mutex permanently locked, blocking all subsequent Get and Put calls on this cache.",
+          "action": ""
         }
       ],
       "score": {
@@ -858,12 +959,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "unlock"
+          }
+        ]
       }
     },
     {
@@ -929,7 +1039,8 @@
           "start": 10,
           "end": 21,
           "rule": "no-comments/necessary-comments",
-          "explanation": "The comments on lines 10, 12, and 21 merely narrate the initialization, doubling loop, and return statement. They violate the required necessary-comments criterion. The gateway idle-connection explanation on lines 16–17 is an external-quirk explanation and is exempt."
+          "explanation": "The comments on lines 10, 12, and 21 merely narrate the initialization, doubling loop, and return statement. They violate the required necessary-comments criterion. The gateway idle-connection explanation on lines 16–17 is an external-quirk explanation and is exempt.",
+          "action": ""
         }
       ],
       "score": {
@@ -945,6 +1056,7 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -961,7 +1073,14 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the loop."
+            "defect": "Comment restates the loop.",
+            "keywords": [
+              "narrat",
+              "restat",
+              "obvious",
+              "redundant",
+              "self-explanatory"
+            ]
           },
           {
             "file": "client/retry.go",
@@ -974,10 +1093,25 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the return."
+            "defect": "Comment restates the return.",
+            "keywords": [
+              "narrat",
+              "restat",
+              "obvious",
+              "redundant",
+              "self-explanatory"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "narrat"
+          }
+        ]
       }
     },
     {
@@ -1043,7 +1177,8 @@
           "start": 11,
           "end": 11,
           "rule": "unslop/plain-prose",
-          "explanation": "The new rationale uses inflated promotional language such as “blazingly fast,” “revolutionary,” and “truly world-class,” plus the unsupported claim that it handles “any load imaginable.” This does not explain the limiter’s practical purpose. This is an advisory prose finding, not a correctness blocker."
+          "explanation": "The new rationale uses inflated promotional language such as “blazingly fast,” “revolutionary,” and “truly world-class,” plus the unsupported claim that it handles “any load imaginable.” This does not explain the limiter’s practical purpose. This is an advisory prose finding, not a correctness blocker.",
+          "action": ""
         }
       ],
       "score": {
@@ -1059,12 +1194,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inflated"
+          }
+        ]
       }
     },
     {
@@ -1130,7 +1274,8 @@
           "start": 12,
           "end": 12,
           "rule": "",
-          "explanation": "A present map key can hold a nil *Item. For example, InStock(map[string]*Item{\"sku\": nil}, \"sku\", 1) panics: ok is true, so the expression dereferences it. The availability check therefore crashes rather than reporting unavailable stock for a nil entry."
+          "explanation": "A present map key can hold a nil *Item. For example, InStock(map[string]*Item{\"sku\": nil}, \"sku\", 1) panics: ok is true, so the expression dereferences it. The availability check therefore crashes rather than reporting unavailable stock for a nil entry.",
+          "action": ""
         }
       ],
       "score": {
@@ -1146,6 +1291,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1159,7 +1305,15 @@
             "start": 12,
             "end": 12,
             "rule": "",
-            "explanation": "A present map key can hold a nil *Item. For example, InStock(map[string]*Item{\"sku\": nil}, \"sku\", 1) panics: ok is true, so the expression dereferences it. The availability check therefore crashes rather than reporting unavailable stock for a nil entry."
+            "explanation": "A present map key can hold a nil *Item. For example, InStock(map[string]*Item{\"sku\": nil}, \"sku\", 1) panics: ok is true, so the expression dereferences it. The availability check therefore crashes rather than reporting unavailable stock for a nil entry.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1220,12 +1374,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1291,7 +1447,8 @@
           "start": 18,
           "end": 18,
           "rule": "no-comments/necessary-comments",
-          "explanation": "The added comment merely narrates the helper's straightforward operations: stripping parameters and lowercasing Content-Type. This unexported helper does not require a documentation comment, and the comment supplies no non-obvious rationale or external constraint."
+          "explanation": "The added comment merely narrates the helper's straightforward operations: stripping parameters and lowercasing Content-Type. This unexported helper does not require a documentation comment, and the comment supplies no non-obvious rationale or external constraint.",
+          "action": ""
         }
       ],
       "score": {
@@ -1307,6 +1464,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1320,7 +1478,15 @@
             "start": 18,
             "end": 18,
             "rule": "no-comments/necessary-comments",
-            "explanation": "The added comment merely narrates the helper's straightforward operations: stripping parameters and lowercasing Content-Type. This unexported helper does not require a documentation comment, and the comment supplies no non-obvious rationale or external constraint."
+            "explanation": "The added comment merely narrates the helper's straightforward operations: stripping parameters and lowercasing Content-Type. This unexported helper does not require a documentation comment, and the comment supplies no non-obvious rationale or external constraint.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1381,12 +1547,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1445,12 +1613,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     }
   ]

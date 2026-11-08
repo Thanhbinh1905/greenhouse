@@ -10,7 +10,10 @@
     "greenhouse_version": "453d1380267cd2325c8199be642618088cc5a981",
     "go_version": "go1.26.7",
     "corpus_version": 1,
+    "corpus_revision": 0,
     "corpus_digest": "77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3",
+    "scored_corpus_revision": 3,
+    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -43,6 +46,7 @@
     "findings": 0,
     "matched": 0,
     "false_positives": 0,
+    "wrong_defect": 0,
     "clean_false_positives": 0,
     "clean_blocking": 3,
     "noise_false_positives": 0,
@@ -130,6 +134,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -146,10 +151,22 @@
               "P0",
               "P1"
             ],
-            "defect": "Loop condition i \u003c= len(values) indexes values[len(values)] and panics on every call."
+            "defect": "Loop condition i \u003c= len(values) indexes values[len(values)] and panics on every call.",
+            "keywords": [
+              "len(values)",
+              "past the end",
+              "out of range",
+              "out-of-range",
+              "out of bounds",
+              "out-of-bounds",
+              "off-by-one",
+              "off by one",
+              "inclusive"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -221,6 +238,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -237,10 +255,19 @@
               "P0",
               "P1"
             ],
-            "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\"."
+            "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\".",
+            "keywords": [
+              "u.name",
+              "nil user",
+              "u is nil",
+              "nil pointer",
+              "nil-pointer",
+              "dereferenc"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -312,6 +339,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -328,10 +356,20 @@
               "P0",
               "P1"
             ],
-            "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success."
+            "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success.",
+            "keywords": [
+              "returns nil",
+              "return nil",
+              "reports success",
+              "reporting success",
+              "swallow",
+              "discard",
+              "ignor"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -403,6 +441,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -419,10 +458,17 @@
               "P0",
               "P1"
             ],
-            "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates."
+            "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates.",
+            "keywords": [
+              "race",
+              "synchroniz",
+              "mutex",
+              "atomic"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -494,6 +540,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -510,10 +557,17 @@
               "P0",
               "P1"
             ],
-            "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder."
+            "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder.",
+            "keywords": [
+              "inject",
+              "concatenat",
+              "placeholder",
+              "parameteriz"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -585,6 +639,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -601,10 +656,19 @@
               "P0",
               "P1"
             ],
-            "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero."
+            "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero.",
+            "keywords": [
+              "divide by zero",
+              "divide-by-zero",
+              "division by zero",
+              "divides by len",
+              "dividing by len",
+              "empty"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -676,6 +740,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -692,10 +757,17 @@
               "P0",
               "P1"
             ],
-            "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell."
+            "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell.",
+            "keywords": [
+              "inject",
+              "shell=true",
+              "metacharacter",
+              "arbitrary command"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -767,6 +839,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -783,10 +856,18 @@
               "P0",
               "P1"
             ],
-            "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range."
+            "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range.",
+            "keywords": [
+              "len(items)",
+              "partial",
+              "last page",
+              "final page",
+              "clamp"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -858,6 +939,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -874,10 +956,16 @@
               "P0",
               "P1"
             ],
-            "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache."
+            "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache.",
+            "keywords": [
+              "unlock",
+              "locked",
+              "deadlock"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -985,6 +1073,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1001,7 +1090,14 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the assignment."
+            "defect": "Comment restates the assignment.",
+            "keywords": [
+              "narrat",
+              "restat",
+              "obvious",
+              "redundant",
+              "self-explanatory"
+            ]
           },
           {
             "file": "client/retry.go",
@@ -1014,7 +1110,14 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the loop."
+            "defect": "Comment restates the loop.",
+            "keywords": [
+              "narrat",
+              "restat",
+              "obvious",
+              "redundant",
+              "self-explanatory"
+            ]
           },
           {
             "file": "client/retry.go",
@@ -1027,10 +1130,18 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the return."
+            "defect": "Comment restates the return.",
+            "keywords": [
+              "narrat",
+              "restat",
+              "obvious",
+              "redundant",
+              "self-explanatory"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1102,6 +1213,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1118,10 +1230,18 @@
               "P2",
               "P3"
             ],
-            "defect": "Promotional, inflated claims with no concrete behavior."
+            "defect": "Promotional, inflated claims with no concrete behavior.",
+            "keywords": [
+              "inflated",
+              "promotional",
+              "superlative",
+              "marketing",
+              "unsupported claim"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1180,12 +1300,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1244,12 +1366,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1308,12 +1432,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1372,12 +1498,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1436,12 +1564,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     }
   ]

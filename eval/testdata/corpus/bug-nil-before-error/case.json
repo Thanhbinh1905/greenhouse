@@ -20,7 +20,15 @@
         "P0",
         "P1"
       ],
-      "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\"."
+      "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\".",
+      "keywords": [
+        "u.name",
+        "nil user",
+        "u is nil",
+        "nil pointer",
+        "nil-pointer",
+        "dereferenc"
+      ]
     }
   ],
   "noise": []

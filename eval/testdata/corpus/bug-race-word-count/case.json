@@ -20,7 +20,13 @@
         "P0",
         "P1"
       ],
-      "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates."
+      "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates.",
+      "keywords": [
+        "race",
+        "synchroniz",
+        "mutex",
+        "atomic"
+      ]
     }
   ],
   "noise": []

@@ -31,7 +31,7 @@ func writeManifest(t *testing.T, root, body string) {
 }
 
 const bugSpec = `{"version":1,"id":"bug","category":"bug","intent":"Add LastN","rules":["unslop","no-comments"],
-"expected":[{"file":"a.go","start":2,"end":3,"origin":"correctness","rule":"","severity":"high","priorities":["P0","P1"],"defect":"reads past the end"}],
+"expected":[{"file":"a.go","start":2,"end":3,"origin":"correctness","rule":"","severity":"high","priorities":["P0","P1"],"defect":"reads past the end","keywords":["past the end"]}],
 "noise":[{"file":"a.go","start":1,"end":1,"note":"package clause"}]}`
 
 func TestLoadCorpusReadsManifestCasesAndTrees(t *testing.T) {
@@ -71,6 +71,8 @@ func TestLoadCorpusRejectsInvalidGroundTruth(t *testing.T) {
 		{"bad priority", strings.Replace(bugSpec, `["P0","P1"]`, `["P5"]`, 1), "priority", nil},
 		{"clean with findings", strings.Replace(bugSpec, `"category":"bug"`, `"category":"clean"`, 1), "clean", nil},
 		{"bug without findings", `{"version":1,"id":"bug","category":"bug","intent":"x","rules":[],"expected":[],"noise":[]}`, "expected", nil},
+		{"no keywords", strings.Replace(bugSpec, `"keywords":["past the end"]`, `"keywords":[]`, 1), "keyword", nil},
+		{"uppercase keyword", strings.Replace(bugSpec, `"keywords":["past the end"]`, `"keywords":["Past"]`, 1), "keyword", nil},
 		{"no change", bugSpec, "no change", map[string]string{"base/a.go": "package a\nx\ny\n", "head/a.go": "package a\nx\ny\n"}},
 	}
 	for _, tc := range tests {

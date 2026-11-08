@@ -20,7 +20,16 @@
         "P0",
         "P1"
       ],
-      "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success."
+      "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success.",
+      "keywords": [
+        "returns nil",
+        "return nil",
+        "reports success",
+        "reporting success",
+        "swallow",
+        "discard",
+        "ignor"
+      ]
     }
   ],
   "noise": [

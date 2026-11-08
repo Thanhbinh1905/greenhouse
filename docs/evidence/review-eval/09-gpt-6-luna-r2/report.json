@@ -12,6 +12,8 @@
     "corpus_version": 1,
     "corpus_revision": 2,
     "corpus_digest": "4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812",
+    "scored_corpus_revision": 3,
+    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -44,6 +46,7 @@
     "findings": 13,
     "matched": 11,
     "false_positives": 2,
+    "wrong_defect": 0,
     "clean_false_positives": 0,
     "clean_blocking": 0,
     "noise_false_positives": 1,
@@ -125,7 +128,8 @@
           "start": 19,
           "end": 20,
           "rule": "",
-          "explanation": "The loop condition includes index len(values), so every non-empty call eventually indexes past the end and panics. For an empty slice, n=0 and the loop also starts at index 0 and panics."
+          "explanation": "The loop condition includes index len(values), so every non-empty call eventually indexes past the end and panics. For an empty slice, n=0 and the loop also starts at index 0 and panics.",
+          "action": ""
         }
       ],
       "score": {
@@ -141,12 +145,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "len(values)"
+          }
+        ]
       }
     },
     {
@@ -212,7 +225,8 @@
           "start": 29,
           "end": 29,
           "rule": "",
-          "explanation": "When Lookup returns an error, u is nil, so accessing u.Name panics before the missing-user fallback can return \"unknown\"."
+          "explanation": "When Lookup returns an error, u is nil, so accessing u.Name panics before the missing-user fallback can return \"unknown\".",
+          "action": ""
         }
       ],
       "score": {
@@ -228,12 +242,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "u.name"
+          }
+        ]
       }
     },
     {
@@ -299,7 +322,8 @@
           "start": 32,
           "end": 33,
           "rule": "",
-          "explanation": "When writing the temporary file fails, Save returns nil, falsely reporting success even though the configuration was not saved."
+          "explanation": "When writing the temporary file fails, Save returns nil, falsely reporting success even though the configuration was not saved.",
+          "action": ""
         }
       ],
       "score": {
@@ -315,12 +339,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "returns nil"
+          }
+        ]
       }
     },
     {
@@ -386,7 +419,8 @@
           "start": 22,
           "end": 22,
           "rule": "",
-          "explanation": "Concurrent goroutines mutate `total` without synchronization, causing a data race and potentially losing increments; the returned count can be incorrect."
+          "explanation": "Concurrent goroutines mutate `total` without synchronization, causing a data race and potentially losing increments; the returned count can be incorrect.",
+          "action": ""
         }
       ],
       "score": {
@@ -402,12 +436,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "race"
+          }
+        ]
       }
     },
     {
@@ -473,7 +516,8 @@
           "start": 19,
           "end": 19,
           "rule": "",
-          "explanation": "The email is concatenated directly into the SQL query, allowing crafted search input to alter the query and potentially expose or modify data."
+          "explanation": "The email is concatenated directly into the SQL query, allowing crafted search input to alter the query and potentially expose or modify data.",
+          "action": ""
         }
       ],
       "score": {
@@ -489,12 +533,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "concatenat"
+          }
+        ]
       }
     },
     {
@@ -560,7 +613,8 @@
           "start": 21,
           "end": 21,
           "rule": "",
-          "explanation": "Build panics for a team with no scores because average divides by len(scores), which is zero. Empty scores are explicitly allowed by the Team documentation."
+          "explanation": "Build panics for a team with no scores because average divides by len(scores), which is zero. Empty scores are explicitly allowed by the Team documentation.",
+          "action": ""
         }
       ],
       "score": {
@@ -576,12 +630,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "divides by len"
+          }
+        ]
       }
     },
     {
@@ -647,7 +710,8 @@
           "start": 18,
           "end": 19,
           "rule": "",
-          "explanation": "The branch value is interpolated into a shell command and executed with shell=True. Since the branch is supplied by the web client, shell metacharacters can execute arbitrary commands on the server."
+          "explanation": "The branch value is interpolated into a shell command and executed with shell=True. Since the branch is supplied by the web client, shell metacharacters can execute arbitrary commands on the server.",
+          "action": ""
         }
       ],
       "score": {
@@ -663,12 +727,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "shell=true"
+          }
+        ]
       }
     },
     {
@@ -734,7 +807,8 @@
           "start": 14,
           "end": 14,
           "rule": "",
-          "explanation": "Negative page or size values can produce a negative start index, causing a slice-bounds panic. A negative size can also produce an invalid end index."
+          "explanation": "Negative page or size values can produce a negative start index, causing a slice-bounds panic. A negative size can also produce an invalid end index.",
+          "action": ""
         }
       ],
       "score": {
@@ -750,6 +824,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
@@ -766,7 +841,14 @@
               "P0",
               "P1"
             ],
-            "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range."
+            "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range.",
+            "keywords": [
+              "len(items)",
+              "partial",
+              "last page",
+              "final page",
+              "clamp"
+            ]
           }
         ],
         "unmatched": [
@@ -777,7 +859,15 @@
             "start": 14,
             "end": 14,
             "rule": "",
-            "explanation": "Negative page or size values can produce a negative start index, causing a slice-bounds panic. A negative size can also produce an invalid end index."
+            "explanation": "Negative page or size values can produce a negative start index, causing a slice-bounds panic. A negative size can also produce an invalid end index.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -845,7 +935,8 @@
           "start": 27,
           "end": 27,
           "rule": "",
-          "explanation": "The missing-key branch returns while the mutex is still locked. Subsequent calls to Put or Get will block indefinitely."
+          "explanation": "The missing-key branch returns while the mutex is still locked. Subsequent calls to Put or Get will block indefinitely.",
+          "action": ""
         }
       ],
       "score": {
@@ -861,12 +952,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "locked"
+          }
+        ]
       }
     },
     {
@@ -944,7 +1044,8 @@
           "start": 10,
           "end": 15,
           "rule": "no-comments/necessary-comments",
-          "explanation": "These comments narrate the obvious base-delay assignment and doubling loop rather than adding useful context."
+          "explanation": "These comments narrate the obvious base-delay assignment and doubling loop rather than adding useful context.",
+          "action": ""
         },
         {
           "priority": "P3",
@@ -953,7 +1054,8 @@
           "start": 21,
           "end": 21,
           "rule": "no-comments/necessary-comments",
-          "explanation": "This comment merely narrates the return statement."
+          "explanation": "This comment merely narrates the return statement.",
+          "action": ""
         }
       ],
       "score": {
@@ -969,6 +1071,7 @@
         "matched": 2,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 2,
@@ -985,10 +1088,31 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the loop."
+            "defect": "Comment restates the loop.",
+            "keywords": [
+              "narrat",
+              "restat",
+              "obvious",
+              "redundant",
+              "self-explanatory"
+            ]
           }
         ],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "narrat"
+          },
+          {
+            "finding": 1,
+            "expected": 2,
+            "verdict": "detected",
+            "keyword": "narrat"
+          }
+        ]
       }
     },
     {
@@ -1054,7 +1178,8 @@
           "start": 11,
           "end": 13,
           "rule": "unslop/plain-prose",
-          "explanation": "The promotional superlatives and unsupported user testimonial make inflated, unsubstantiated claims."
+          "explanation": "The promotional superlatives and unsupported user testimonial make inflated, unsubstantiated claims.",
+          "action": ""
         }
       ],
       "score": {
@@ -1070,12 +1195,21 @@
         "matched": 1,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
         "priority_correct": 1,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": 0,
+            "verdict": "detected",
+            "keyword": "inflated"
+          }
+        ]
       }
     },
     {
@@ -1141,7 +1275,8 @@
           "start": 12,
           "end": 12,
           "rule": "",
-          "explanation": "A nil item pointer for an existing SKU causes a panic instead of reporting availability."
+          "explanation": "A nil item pointer for an existing SKU causes a panic instead of reporting availability.",
+          "action": ""
         }
       ],
       "score": {
@@ -1157,6 +1292,7 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 1,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
@@ -1170,7 +1306,15 @@
             "start": 12,
             "end": 12,
             "rule": "",
-            "explanation": "A nil item pointer for an existing SKU causes a panic instead of reporting availability."
+            "explanation": "A nil item pointer for an existing SKU causes a panic instead of reporting availability.",
+            "action": ""
+          }
+        ],
+        "adjudications": [
+          {
+            "finding": 0,
+            "expected": -1,
+            "verdict": "false-positive"
           }
         ]
       }
@@ -1231,12 +1375,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1295,12 +1441,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1359,12 +1507,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     },
     {
@@ -1423,12 +1573,14 @@
         "matched": 0,
         "duplicates": 0,
         "false_positives": 0,
+        "wrong_defect": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [],
-        "unmatched": []
+        "unmatched": [],
+        "adjudications": []
       }
     }
   ]

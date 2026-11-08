@@ -4,16 +4,19 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 const usage = `usage:
   go run ./eval check [-corpus dir]
+  go run ./eval rescore [-corpus dir] run-dir...
   go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-base-url url] [-cases a,b] [-parallel n]`
 
 func main() {
@@ -53,6 +56,32 @@ func dispatch(sub string, args []string) error {
 			}
 		}
 		fmt.Printf("corpus v%d revision %d %s: %d cases, bug=%d policy=%d noise=%d clean=%d, %d high-severity findings\n", c.Version, c.Revision, c.Digest, len(c.Cases), count["bug"], count["policy"], count["noise"], count["clean"], high)
+		return nil
+	case "rescore":
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		c, err := LoadCorpus(*corpus)
+		if err != nil {
+			return err
+		}
+		for _, dir := range fs.Args() {
+			b, err := os.ReadFile(filepath.Join(dir, "report.json"))
+			if err != nil {
+				return err
+			}
+			var r Report
+			if err := json.Unmarshal(b, &r); err != nil {
+				return fmt.Errorf("%s: %w", dir, err)
+			}
+			if err := rescoreReport(&r, c); err != nil {
+				return fmt.Errorf("%s: %w", dir, err)
+			}
+			if err := writeReport(dir, &r); err != nil {
+				return err
+			}
+			fmt.Printf("%s: bar met %t\n", dir, r.Summary.BarMet)
+		}
 		return nil
 	case "run":
 		o := runOptions{Settle: 12 * time.Minute}

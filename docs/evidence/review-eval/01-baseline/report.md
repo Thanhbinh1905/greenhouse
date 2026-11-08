@@ -1,7 +1,8 @@
 # Review evaluation: 01 baseline: unchanged product reviewer
 
 - Model: `openai/gpt-5.6-luna` through `pi-json-v1`, Pi 1.5.0
-- Greenhouse: `453d1380267cd2325c8199be642618088cc5a981`, corpus v1 `77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3`
+- Greenhouse: `453d1380267cd2325c8199be642618088cc5a981`, corpus v1 revision 0 `77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3`
+- Scored with corpus revision 3 `88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619`
 - Started 2026-11-08T06:08:17Z, finished 2026-11-08T06:09:49Z, parallel 4
 
 Bar (high-severity recall >= 80%, no blocking result on clean cases): **not met**
@@ -13,6 +14,7 @@ Bar (high-severity recall >= 80%, no blocking result on clean cases): **not met*
 | Precision | n/a (0/0) |
 | Priority accuracy | n/a (0/0) |
 | False positives (clean / noise / all) | 0 / 0 / 0 |
+| False positives at an expected location naming another defect | 0 |
 | Blocking results on clean cases | 3 |
 | Inconclusive reviews | 16/16 |
 | Cost (Pi catalog pricing) | $0.0251 |

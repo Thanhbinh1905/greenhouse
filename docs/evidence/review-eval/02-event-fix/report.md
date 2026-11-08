@@ -1,7 +1,8 @@
 # Review evaluation: 02 event parsing fix
 
 - Model: `openai/gpt-5.6-luna` through `pi-json-v1`, Pi 1.5.0
-- Greenhouse: `1c944db9e9171f6faa8c89f99599844a468e034d`, corpus v1 `77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3`
+- Greenhouse: `1c944db9e9171f6faa8c89f99599844a468e034d`, corpus v1 revision 0 `77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3`
+- Scored with corpus revision 3 `88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619`
 - Started 2026-11-08T06:09:55Z, finished 2026-11-08T06:11:19Z, parallel 4
 
 Bar (high-severity recall >= 80%, no blocking result on clean cases): **not met**
@@ -10,9 +11,10 @@ Bar (high-severity recall >= 80%, no blocking result on clean cases): **not met*
 |---|---|
 | High-severity recall | 89% (8/9) |
 | Recall | 92% (12/13) |
-| Precision | 93% (13/14) |
+| Precision | 86% (12/14) |
 | Priority accuracy | 100% (12/12) |
-| False positives (clean / noise / all) | 1 / 0 / 1 |
+| False positives (clean / noise / all) | 1 / 0 / 2 |
+| False positives at an expected location naming another defect | 1 |
 | Blocking results on clean cases | 1 |
 | Inconclusive reviews | 2/16 |
 | Cost (Pi catalog pricing) | $0.0228 |
@@ -23,7 +25,7 @@ Bar (high-severity recall >= 80%, no blocking result on clean cases): **not met*
 | bug-empty-average | inconclusive | 0/1 | 0 | 0 | 0/0 | $0.0013 | 19.7s |
 | bug-nil-before-error | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0014 | 18.6s |
 | bug-offbyone-window | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0017 | 22.2s |
-| bug-pagination-bounds | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0019 | 24.5s |
+| bug-pagination-bounds | outstanding-findings | 1/1 | 1 | 0 | 1/1 | $0.0019 | 24.5s |
 | bug-race-word-count | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0011 | 11.9s |
 | bug-shell-injection | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0016 | 22.6s |
 | bug-sql-injection | outstanding-findings | 1/1 | 0 | 0 | 1/1 | $0.0015 | 18.7s |
