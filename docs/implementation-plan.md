@@ -78,7 +78,7 @@ Areas C and F. Each review binds a digest of the candidate's full tree listing i
 
 A finding repair must answer every selected finding as fixed, disputed with a reason, or deferred under a cited answered decision. Invalid responses refuse the repair. In the full pipeline the next independent review checks each response. Only a confirmed response resolves a finding, and a dispute never counts as a fix. A repair that only disputes or defers commits nothing and still triggers that review.
 
-On Linux, reviewers and fixers run under Landlock. Reviewers write only their backend's private state, fixers also their candidate and scratch directory, and TCP is limited to the backend's provider, HTTPS and proxy ports. Without Landlock, or below ABI 4, the confinement record is `degraded` and the terminal and AXI show it.
+On Linux, reviewers and fixers run under Landlock. Pi reviewers write only their per-run agent directory and Claude Code reviewers only their two token files. Fixers may also write their candidate and scratch directory. TCP is limited to the backend's provider, HTTPS and proxy ports. Codex needs all of `CODEX_HOME` writable, so its roles are `degraded`, as is any role without Landlock or below ABI 4; the terminal and AXI show it.
 
 Executable daemon, AXI and terminal tests with real Git and fake backends cover each item, including a seccomp-filtered daemon without Landlock. PTY captures at 56, 80 and 100 columns are in `evidence/review-confinement/`. The eval rerun, `evidence/review-eval/11-snapshot-confinement`, kept 100% recall and 81% precision.
 
@@ -93,7 +93,7 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 - Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
 
 - Area A: a descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
-- Area C: OS confinement on platforms other than Linux, where the confinement record is `degraded`. A review adopted after a controller restart keeps its verdict, but its snapshot check reads `unverified`. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
+- Area C: full OS confinement for Codex agents, which need `CODEX_HOME` writable, and on platforms other than Linux; both are recorded as `degraded`. A review adopted after a controller restart keeps its verdict, but its snapshot check reads `unverified`. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
 - Area D: cap decisions for embedded hosts.
 - Area E and D2: broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
 - Area F: event subscriptions and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

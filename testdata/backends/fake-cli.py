@@ -5,8 +5,21 @@ backend=os.path.basename(__file__).replace('fake-','')
 fixtures=FIXTURES+'/'+backend
 args=sys.argv[1:]
 stdin=sys.stdin.read()
-with open(root+'/'+backend+'-calls.jsonl','a') as f:
-    f.write(json.dumps({'args':args,'cwd':os.getcwd(),'env':sorted(k for k in os.environ if k.startswith(('CLAUDE','CODEX','PI_','RUST_LOG')))})+'\n')
+try:
+    with open(root+'/'+backend+'-calls.jsonl','a') as f:
+        f.write(json.dumps({'args':args,'cwd':os.getcwd(),'env':sorted(k for k in os.environ if k.startswith(('CLAUDE','CODEX','PI_','RUST_LOG')))})+'\n')
+except OSError:
+    pass
+if os.path.exists(root+'/probe-'+backend):
+    home=os.environ['HOME']
+    probe={}
+    for name,path in [('credentials',home+'/.claude/.credentials.json'),('state',home+'/.claude.json'),('settings',home+'/.claude/settings.json'),('codex-config',home+'/.codex/config.toml')]:
+        try:
+            open(path,'a').close()
+            probe[name]='allowed'
+        except OSError:
+            probe[name]='denied'
+    json.dump(probe,open(open(root+'/probe-'+backend).read()+'/'+backend+'.json','w'))
 modes=root+'/'+backend+'-modes'
 mode='success'
 if os.path.exists(modes):

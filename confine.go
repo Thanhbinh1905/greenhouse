@@ -22,6 +22,7 @@ type Confinement struct {
 	Status    string   `json:"status"`
 	Role      string   `json:"role"`
 	Writable  []string `json:"writable"`
+	Files     []string `json:"writable_files,omitempty"`
 	Ports     []int    `json:"tcp_connect_ports,omitempty"`
 	Network   string   `json:"network"`
 	Reason    string   `json:"reason,omitempty"`
@@ -104,26 +105,32 @@ func agentPorts(config ReviewerConfig) []int {
 	return ports
 }
 
-func backendState(backend string) []string {
+// backendGrants returns what a vendor CLI must write: Claude Code refreshes
+// only its token files, while Codex keeps login, databases and temporary files
+// throughout CODEX_HOME, so granting it makes the role degraded.
+func backendGrants(backend string) (files, dirs []string, degraded string) {
 	h, _ := os.UserHomeDir()
 	switch backend {
 	case backendClaude:
+		files = []string{filepath.Join(h, ".claude", ".credentials.json"), filepath.Join(h, ".claude.json")}
 		if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-			return []string{dir}
+			files = []string{filepath.Join(dir, ".credentials.json"), filepath.Join(dir, ".claude.json")}
 		}
-		return []string{filepath.Join(h, ".claude")}
 	case backendCodex:
-		if dir := os.Getenv("CODEX_HOME"); dir != "" {
-			return []string{dir}
+		dir := os.Getenv("CODEX_HOME")
+		if dir == "" {
+			dir = filepath.Join(h, ".codex")
 		}
-		return []string{filepath.Join(h, ".codex")}
+		dirs = []string{dir}
+		degraded = "Codex keeps its login, state databases and temporary files in CODEX_HOME (" + dir + "), which stays writable; edits there can change later Codex sessions"
 	}
-	return nil
+	return files, dirs, degraded
 }
 
 func confinementFor(role string, config ReviewerConfig, writable []string) (*confinePolicy, Confinement) {
 	c := Confinement{Mechanism: "landlock", Role: role, Writable: []string{}}
-	paths := append(append([]string{}, writable...), backendState(backendOf(config))...)
+	files, dirs, degraded := backendGrants(backendOf(config))
+	paths := append(append([]string{}, writable...), dirs...)
 	if trusted, err := trustedBackends(); err == nil {
 		paths = append(paths, trusted.Writable[role]...)
 	}
@@ -132,17 +139,25 @@ func confinementFor(role string, config ReviewerConfig, writable []string) (*con
 			c.Writable = append(c.Writable, filepath.Clean(p))
 		}
 	}
+	for _, f := range files {
+		if info, err := os.Stat(f); err == nil && info.Mode().IsRegular() && filepath.IsAbs(f) {
+			c.Files = append(c.Files, filepath.Clean(f))
+		}
+	}
 	abi, err := landlockABI()
 	if err != nil {
 		c.Status, c.Network, c.Reason = "degraded", "unrestricted", err.Error()+"; the agent runs without OS confinement"
 		return nil, c
 	}
 	c.ABI = abi
-	policy := &confinePolicy{ABI: abi, Writable: c.Writable, Files: []string{"/dev/null"}}
+	policy := &confinePolicy{ABI: abi, Writable: c.Writable, Files: append([]string{"/dev/null"}, c.Files...)}
 	c.Status = "enforced"
+	if degraded != "" {
+		c.Status, c.Reason = "degraded", degraded
+	}
 	if abi < 4 {
 		c.Status, c.Network = "degraded", "unrestricted"
-		c.Reason = fmt.Sprintf("Landlock ABI %d cannot restrict TCP; filesystem writes are confined, network is not", abi)
+		c.Reason = strings.TrimPrefix(c.Reason+fmt.Sprintf("; Landlock ABI %d cannot restrict TCP; filesystem writes are confined, network is not", abi), "; ")
 	} else {
 		policy.Ports = agentPorts(config)
 		c.Ports = policy.Ports
@@ -257,11 +272,14 @@ func confinementLine(c *Confinement) string {
 		head = fmt.Sprintf("Confinement: %s DEGRADED: %s", c.Role, c.Reason)
 	}
 	lines := []string{head}
-	if len(c.Writable) == 0 {
+	if len(c.Writable)+len(c.Files) == 0 {
 		lines = append(lines, "  Writable: none")
 	}
 	for _, path := range c.Writable {
 		lines = append(lines, "  Writable: "+path)
+	}
+	for _, path := range c.Files {
+		lines = append(lines, "  Writable file: "+path)
 	}
 	network := c.Network
 	if len(c.Ports) > 0 {

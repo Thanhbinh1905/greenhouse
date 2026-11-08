@@ -292,3 +292,56 @@ open(cwd+'/sample.txt','w').write('tampered\n')`)
 		t.Fatalf("terminal must show degraded confinement:\n%s", screen)
 	}
 }
+
+func TestVendorReviewersWriteOnlyTheirTokenFiles(t *testing.T) {
+	t.Parallel()
+	if _, err := landlockABI(); err != nil {
+		t.Skip("Landlock unavailable:", err)
+	}
+	for _, c := range []struct{ backend, model string }{{"claude", "claude-haiku-5-5"}, {"codex", "gpt-5.6-luna"}} {
+		t.Run(c.backend, func(t *testing.T) {
+			bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
+			probe := filepath.Join(root, "probe")
+			os.Mkdir(probe, 0700)
+			for _, dir := range []string{".claude", ".codex"} {
+				os.Mkdir(filepath.Join(root, dir), 0700)
+			}
+			for _, file := range []string{".claude/.credentials.json", ".claude.json", ".codex/auth.json"} {
+				os.WriteFile(filepath.Join(root, file), []byte("{}"), 0600)
+			}
+			os.WriteFile(filepath.Join(root, "probe-"+c.backend), []byte(probe), 0600)
+			writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{
+				"claude":   map[string]any{"executable": filepath.Join(root, "fake-claude")},
+				"codex":    map[string]any{"executable": filepath.Join(root, "fake-codex"), "provider": map[string]any{"base_url": "http://127.0.0.1:1/v1"}},
+				"writable": map[string][]string{"reviewer": {probe}},
+			})
+			v = mutate(t, bin, repo, home, v, "review", "review-"+c.backend, nil)
+			v = waitReview(t, bin, repo, home)
+			got := readProbe(t, filepath.Join(probe, c.backend+".json"))
+			review := runOf(t, v)["review"].(map[string]any)
+			conf := review["confinement"].(map[string]any)
+			if strings.Contains(jsonText(conf["writable"]), filepath.Join(root, ".claude")) {
+				t.Fatalf("the real Claude config directory is writable: %v", conf)
+			}
+			if c.backend == "claude" {
+				want := map[string]string{"credentials": "allowed", "state": "allowed", "settings": "denied", "codex-config": "denied"}
+				for k, w := range want {
+					if got[k] != w {
+						t.Fatalf("claude reviewer access %s = %q, want %q (all: %v)", k, got[k], w, got)
+					}
+				}
+				files := jsonText(conf["writable_files"])
+				if conf["status"] != "enforced" || !strings.Contains(files, ".credentials.json") || !strings.Contains(files, ".claude.json") {
+					t.Fatalf("claude confinement record = %v", conf)
+				}
+				return
+			}
+			if got["settings"] != "denied" || conf["status"] != "degraded" || !strings.Contains(conf["reason"].(string), "CODEX_HOME") || !strings.Contains(jsonText(conf["writable"]), filepath.Join(root, ".codex")) {
+				t.Fatalf("codex must be recorded as degraded while CODEX_HOME stays writable: probe %v record %v", got, conf)
+			}
+			if screen := terminalOutput(t, bin, repo, home, "q\n"); !strings.Contains(screen, "Confinement: reviewer DEGRADED") {
+				t.Fatalf("terminal must show the degraded Codex reviewer:\n%s", screen)
+			}
+		})
+	}
+}
