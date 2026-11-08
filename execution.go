@@ -239,7 +239,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: "pi-json-v1", Config: cfg, ConfigDigest: digest(cfg), Args: reviewerArgs(cfg.Model), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
+	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: "pi-json-v1", Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: reviewerArgs(cfg.Model), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
 }
 
 type reviewFile struct {
@@ -303,7 +303,7 @@ func reviewerEnv() []string {
 }
 func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string) {
 	trusted, trustErr := trustedReviewerFor(x.Config.Model)
-	if trustErr != nil || digest(trusted) != x.ConfigDigest {
+	if trustErr != nil || reviewerConfigDigest(trusted) != x.ConfigDigest {
 		return "unconfigured", nil, "trusted reviewer or provider configuration changed; prepare again"
 	}
 	current, err := resolve(x.Source.Worktree)
@@ -316,7 +316,7 @@ func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string)
 	}
 	defer os.RemoveAll(dir)
 	agentDir := filepath.Join(dir, "agent")
-	if e = writeAgentModels(agentDir, x.Config, x.Config.Executable); e != nil {
+	if e = writeAgentModels(agentDir, x.Config); e != nil {
 		return "inconclusive", nil, "trusted provider configuration unavailable"
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)

@@ -40,9 +40,10 @@ type Identity struct {
 	Head       string `json:"head"`
 }
 type Snapshot struct {
-	ID       string   `json:"id"`
-	Settings Settings `json:"settings"`
-	Source   string   `json:"source"`
+	ID           string   `json:"id"`
+	Settings     Settings `json:"settings"`
+	Source       string   `json:"source"`
+	LegacyDigest string   `json:"legacy_digest,omitempty"`
 }
 type Event struct {
 	Kind   string `json:"kind"`
@@ -130,6 +131,31 @@ func digest(v any) string {
 	b, _ := json.Marshal(v)
 	s := sha256.Sum256(b)
 	return hex.EncodeToString(s[:])
+}
+func legacySnapshotDigest(s Snapshot) string {
+	type settings struct {
+		Mode   string   `json:"mode"`
+		Preset string   `json:"preset"`
+		Limit  int      `json:"limit"`
+		Rules  []string `json:"rules"`
+	}
+	return digest(struct {
+		ID       string   `json:"id"`
+		Settings settings `json:"settings"`
+		Source   string   `json:"source"`
+	}{s.ID, settings{s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.Rules}, s.Source})
+}
+func snapshotDigestMatches(s Snapshot, expected string) bool {
+	return expected == digest(s) || (s.LegacyDigest != "" && s.LegacyDigest == legacySnapshotDigest(s) && expected == s.LegacyDigest)
+}
+func reviewerConfigDigest(config ReviewerConfig) string {
+	if config.Provider == (ProviderConfig{}) {
+		return digest(struct {
+			Executable string `json:"executable"`
+			Model      string `json:"model"`
+		}{config.Executable, config.Model})
+	}
+	return digest(config)
 }
 func resolve(path string) (Identity, error) {
 	run := func(args ...string) (string, error) {
@@ -241,7 +267,12 @@ func load(h string) (*Store, error) {
 	for _, run := range s.Runs {
 		if run != nil {
 			for i := range run.Configs {
-				run.Configs[i].Settings = withModelDefaults(run.Configs[i].Settings, initial)
+				snapshot := &run.Configs[i]
+				settings := snapshot.Settings
+				if settings.ReviewerBackend == "" && settings.ReviewerModel == "" && settings.FixerBackend == "" && settings.FixerModel == "" && snapshot.LegacyDigest == "" {
+					snapshot.LegacyDigest = legacySnapshotDigest(*snapshot)
+				}
+				snapshot.Settings = withModelDefaults(settings, initial)
 			}
 		}
 	}
@@ -254,7 +285,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
+			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -447,7 +478,7 @@ func handle(s *Store, q Request) Response {
 	r := s.Runs[s.Slots[slot]]
 	if q.Op == "attach" || q.Op == "inspect" {
 		if r == nil && q.Op == "attach" {
-			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, s.DefaultsSource}}, Events: []Event{{Kind: "created", Actor: "client"}}}
+			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: s.Defaults, Source: s.DefaultsSource}}, Events: []Event{{Kind: "created", Actor: "client"}}}
 			s.Runs[r.ID] = r
 			s.Slots[slot] = r.ID
 		}
@@ -598,7 +629,7 @@ func handle(s *Store, q Request) Response {
 					r.Review.Status = "stale"
 				}
 			}
-			r.Configs = append(r.Configs, Snapshot{opaque(), *q.Settings, "run-local"})
+			r.Configs = append(r.Configs, Snapshot{ID: opaque(), Settings: *q.Settings, Source: "run-local"})
 			invalidate(r, "")
 			r.Events = append(r.Events, Event{q.Op, "client", q.Reason, r.ReviewUsed + r.RepairUsed, old.Limit, q.Settings.Limit})
 		} else {
@@ -610,7 +641,7 @@ func handle(s *Store, q Request) Response {
 	} else {
 		prior := r.ID
 		findings := append([]Finding(nil), r.Findings...)
-		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{opaque(), s.Defaults, s.DefaultsSource}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: s.Defaults, Source: s.DefaultsSource}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}

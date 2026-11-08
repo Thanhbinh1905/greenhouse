@@ -15,7 +15,7 @@ func validateRuleSnapshots(r *Run) error {
 				break
 			}
 		}
-		if !validText(s.Scope) || s.ID == "" || seen[s.ID] || s.Candidate == "" || cfg == nil || s.ConfigDigest != digest(*cfg) {
+		if !validText(s.Scope) || s.ID == "" || seen[s.ID] || s.Candidate == "" || cfg == nil || !snapshotDigestMatches(*cfg, s.ConfigDigest) {
 			return errors.New("invalid rule snapshot identity")
 		}
 		seen[s.ID] = true

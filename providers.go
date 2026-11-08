@@ -120,23 +120,6 @@ func providerModelCatalog(executable string) (map[string]bool, error) {
 	return catalog, nil
 }
 
-func piReportsModel(executable, model string) bool {
-	command := exec.Command(executable, "--list-models")
-	command.Env = reviewerEnv()
-	output, err := command.Output()
-	if err != nil {
-		return false
-	}
-	provider, modelID, _ := strings.Cut(model, "/")
-	for _, line := range strings.Split(string(output), "\n") {
-		fields := strings.Fields(line)
-		if len(fields) >= 2 && fields[0] == provider && fields[1] == modelID {
-			return true
-		}
-	}
-	return false
-}
-
 func preflightModel(model string) error {
 	provider, modelID, found := strings.Cut(model, "/")
 	if !found {
@@ -181,11 +164,6 @@ func preflightModel(model string) error {
 			return nil
 		}
 	}
-	for _, explicit := range config.Models {
-		if explicit == model {
-			return nil
-		}
-	}
 	return fmt.Errorf("model %s is not reported by provider %s", model, provider)
 }
 
@@ -211,22 +189,20 @@ func trustedReviewerFor(model string) (ReviewerConfig, error) {
 	return config, nil
 }
 
-func writeAgentModels(agentDir string, config ReviewerConfig, catalogExecutable string) error {
+func writeAgentModels(agentDir string, config ReviewerConfig) error {
 	provider, modelID, ok := strings.Cut(config.Model, "/")
 	if !ok || config.Provider.BaseURL == "" {
 		return errors.New("model provider configuration is unavailable")
 	}
-	piEntry := PiProviderEntry{BaseURL: config.Provider.BaseURL, APIKey: "$" + config.Provider.APIKeyEnv, API: config.Provider.API}
-	if !piReportsModel(catalogExecutable, config.Model) {
-		providers, err := trustedProviders()
-		if err != nil {
-			return err
-		}
-		api := providers.Providers[provider].API
-		if api == "" {
-			return errors.New("custom model provider requires an api in providers.json")
-		}
-		piEntry.Models = []PiModelConfig{{ID: modelID, Name: modelID, API: api, Reasoning: false, Input: []string{"text"}, ContextWindow: 128000, MaxTokens: 16384}}
+	api := config.Provider.API
+	if api == "" {
+		return errors.New("custom model provider requires an api in providers.json")
+	}
+	piEntry := PiProviderEntry{
+		BaseURL: config.Provider.BaseURL,
+		APIKey:  "$" + config.Provider.APIKeyEnv,
+		API:     api,
+		Models:  []PiModelConfig{{ID: modelID, Name: modelID, API: api, Input: []string{"text"}, ContextWindow: 128000, MaxTokens: 16384}},
 	}
 	if err := os.MkdirAll(agentDir, 0700); err != nil {
 		return err

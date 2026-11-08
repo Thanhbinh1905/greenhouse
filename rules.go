@@ -196,7 +196,7 @@ func effectiveRuleSnapshot(r *Run) *RuleSnapshot {
 	cfg := r.Configs[len(r.Configs)-1]
 	for i := len(r.RuleSnapshots) - 1; i >= 0; i-- {
 		s := &r.RuleSnapshots[i]
-		if s.Candidate == r.Candidate && s.ConfigID == cfg.ID && s.ConfigDigest == digest(cfg) {
+		if s.Candidate == r.Candidate && s.ConfigID == cfg.ID && snapshotDigestMatches(cfg, s.ConfigDigest) {
 			return s
 		}
 	}

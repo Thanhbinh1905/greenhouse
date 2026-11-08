@@ -867,11 +867,11 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			return e
 		}
 		defer os.RemoveAll(agentDir)
-		reviewer, err := trustedReviewer()
+		_, err = trustedReviewer()
 		if err != nil {
 			return err
 		}
-		if err = writeAgentModels(filepath.Join(agentDir, "agent"), ReviewerConfig{Executable: x.Config.Executable, Model: x.Config.Model, Provider: x.Config.Provider}, reviewer.Executable); err != nil {
+		if err = writeAgentModels(filepath.Join(agentDir, "agent"), ReviewerConfig{Executable: x.Config.Executable, Model: x.Config.Model, Provider: x.Config.Provider}); err != nil {
 			return err
 		}
 		_, log, e := runBounded(ctx, x.Worktree, x.Config.Executable, x.Args, x.Input, filepath.Join(agentDir, "agent"))

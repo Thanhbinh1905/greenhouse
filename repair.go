@@ -554,12 +554,12 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	}
 	defer os.RemoveAll(agentDir)
 	piConfig := ReviewerConfig{Executable: x.Config.Executable, Model: x.Config.Model, Provider: x.Config.Provider}
-	reviewer, err := trustedReviewer()
+	_, err = trustedReviewer()
 	if err != nil {
 		fail("unconfigured", errors.New("trusted Pi installation unavailable"))
 		return
 	}
-	if err := writeAgentModels(filepath.Join(agentDir, "agent"), piConfig, reviewer.Executable); err != nil {
+	if err := writeAgentModels(filepath.Join(agentDir, "agent"), piConfig); err != nil {
 		fail("unconfigured", errors.New("trusted fixer provider configuration unavailable"))
 		return
 	}
