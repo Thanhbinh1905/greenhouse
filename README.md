@@ -147,7 +147,7 @@ A `quota`, `auth` or `unavailable` outcome parks only the affected stage as `pau
 
 `resume` (terminal `r`) continues at the paused stage. A paused review runs again in a fresh session with the same bound input; a paused repair runs again from the restored candidate. Greenhouse never reuses a partial transcript.
 
-`rerun` (terminal `r`) works whenever the current stage is paused, failed, or cancelled. Cancelling a stage with `x` is an abort; the run stays rerunnable. Rerun starts again at that stage with the current settings and keeps every earlier stage and its evidence. It never resets budgets: a rerun review or repair counts as a new round. It refuses while an execution of the stage is live or its outcome is unknown. `rerun-from-start` (terminal `b`, confirmed by typing `rerun`) instead creates a linked New run with the same settings, intent and target, and marks the old run `restarted` with its evidence and candidate branch intact. Both actions are token-bound and replay their receipts.
+`rerun` (terminal `r`) works whenever the current stage is paused, failed, or cancelled. Cancelling a stage with `x` is an abort; the run stays rerunnable. Rerun starts again at that stage with the current settings and keeps every earlier stage and its evidence. It never resets budgets: a rerun review or repair counts as a new round. A rerun of a stopped one-pass repair first checks that its writer stopped and its private candidate is still at the base commit, then resets that candidate; the stopped repair stays in `run.prior_repairs`. It refuses while an execution of the stage is live or its outcome is unknown. `rerun-from-start` (terminal `b`, confirmed by typing `rerun`) instead creates a linked New run with the same settings, intent and target, and marks the old run `restarted` with its evidence and candidate branch intact. Both actions are token-bound and replay their receipts.
 
 ### Automatic resume
 
@@ -226,7 +226,7 @@ Answer the open decision with `decide` (terminal `d`). The terminal accepts only
 
 Each answer records the choice, the actor (`terminal`, `axi`, `auto`, or `yolo:<actor>`), the reason as typed, and the action ID; no quote is generated. Replaying an action returns its receipt. An answered or superseded decision changes the gate, so a stale answer refuses. A rule or limit change supersedes an open decision that is not user-only. `pipeline` refuses while a decision is open.
 
-Still unsupported in step 4: granting expanded fixer authority, mechanical lint autofix, new or deleted files in gate repairs, recovery of interrupted steps, and push, PR and CI. A failed or cancelled one-pass repair cannot be rerun in the same run; use `rerun-from-start`.
+Still unsupported in step 4: granting expanded fixer authority, mechanical lint autofix, new or deleted files in gate repairs, recovery of interrupted steps, and push, PR and CI.
 
 ## State and compatibility
 

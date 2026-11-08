@@ -967,6 +967,9 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			x.Status = "cancelled"
 			return e
 		}
+		if e == nil {
+			e = fixerModelReported(x, run)
+		}
 		if e != nil {
 			x.Status = "fixer-failed"
 			return e

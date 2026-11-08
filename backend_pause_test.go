@@ -140,3 +140,16 @@ func TestPipelineRepairPauseRestoresCandidateAndResumes(t *testing.T) {
 		t.Fatalf("resumed repair must converge with one gate repair: %v", p)
 	}
 }
+
+func TestFailedAndPausedAttemptsKeepReportedUsage(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := onePassWith(t, "claude", "claude-haiku-5-5")
+	os.WriteFile(filepath.Join(root, "bad-verdict-claude"), []byte("1"), 0600)
+	mutate(t, bin, repo, home, v, "review", "review-bad-verdict", nil)
+	v = waitStatus(t, bin, repo, home, "inconclusive")
+	attempts := runOf(t, v)["attempts"].([]any)
+	last := attempts[len(attempts)-1].(map[string]any)
+	if last["outcome"] != "inconclusive" || last["cost_usd"].(float64) != 6.0519999999999997e-05 || last["tokens"].(float64) != 55 {
+		t.Fatalf("an inconclusive attempt must keep its reported usage: %v", last)
+	}
+}

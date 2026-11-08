@@ -443,12 +443,6 @@ func piAnswer(b []byte) (agentAnswer, error) {
 				Model    string          `json:"model"`
 				Stop     string          `json:"stopReason"`
 				Content  json.RawMessage `json:"content"`
-				Usage    struct {
-					Total int `json:"totalTokens"`
-					Cost  struct {
-						Total float64 `json:"total"`
-					} `json:"cost"`
-				} `json:"usage"`
 			} `json:"message"`
 		}
 		if err := uniqueJSON(json.NewDecoder(bytes.NewReader(scanner.Bytes()))); err != nil {
@@ -467,8 +461,6 @@ func piAnswer(b []byte) (agentAnswer, error) {
 			answer.Text = ""
 			settled = false
 			answer.Provider, answer.Model = ev.Message.Provider, ev.Message.Model
-			answer.CostUSD += ev.Message.Usage.Cost.Total
-			answer.Tokens += ev.Message.Usage.Total
 			if ev.Message.Stop != "stop" {
 				continue
 			}
@@ -509,7 +501,6 @@ func claudeAnswer(b []byte, tools []string) (agentAnswer, error) {
 				IsError    bool                       `json:"is_error"`
 				Result     string                     `json:"result"`
 				Structured json.RawMessage            `json:"structured_output"`
-				Cost       float64                    `json:"total_cost_usd"`
 				Usage      map[string]json.RawMessage `json:"modelUsage"`
 			}
 			if json.Unmarshal(mapJSON(event), &result) != nil || result.IsError {
@@ -517,22 +508,15 @@ func claudeAnswer(b []byte, tools []string) (agentAnswer, error) {
 				return
 			}
 			done = true
-			answer.CostUSD = result.Cost
 			answer.Text = result.Result
 			if len(result.Structured) > 0 && string(result.Structured) != "null" {
 				answer.Text = string(result.Structured)
 			}
-			for model, raw := range result.Usage {
+			for model := range result.Usage {
 				if answer.Model != "" {
 					err = errors.New("claude reported more than one model")
 				}
 				answer.Model = model
-				var usage struct {
-					Input  int `json:"inputTokens"`
-					Output int `json:"outputTokens"`
-				}
-				json.Unmarshal(raw, &usage)
-				answer.Tokens = usage.Input + usage.Output
 			}
 		}
 	})
@@ -573,12 +557,6 @@ func codexAnswer(stdout, stderr []byte, readOnly bool) (agentAnswer, error) {
 				answer.Text = item.Text
 			}
 		case "turn.completed":
-			var usage struct {
-				Input  int `json:"input_tokens"`
-				Output int `json:"output_tokens"`
-			}
-			json.Unmarshal(event["usage"], &usage)
-			answer.Tokens = usage.Input + usage.Output
 			completed = true
 		case "turn.failed":
 			completed = false
@@ -602,6 +580,49 @@ func codexAnswer(stdout, stderr []byte, readOnly bool) (agentAnswer, error) {
 		return answer, errors.New("codex session was not read-only")
 	}
 	return answer, nil
+}
+
+func agentUsage(backend string, stdout, stderr []byte) (float64, int) {
+	cost, tokens := 0.0, 0
+	jsonLines(stdout, func(event map[string]json.RawMessage) {
+		switch kind := field(event, "type"); {
+		case backend == backendClaude && kind == "result":
+			var result struct {
+				Cost  float64 `json:"total_cost_usd"`
+				Usage map[string]struct {
+					Input  int `json:"inputTokens"`
+					Output int `json:"outputTokens"`
+				} `json:"modelUsage"`
+			}
+			json.Unmarshal(mapJSON(event), &result)
+			cost += result.Cost
+			for _, usage := range result.Usage {
+				tokens += usage.Input + usage.Output
+			}
+		case backend == backendCodex && kind == "turn.completed":
+			var usage struct {
+				Input  int `json:"input_tokens"`
+				Output int `json:"output_tokens"`
+			}
+			json.Unmarshal(event["usage"], &usage)
+			tokens += usage.Input + usage.Output
+		case (backend == backendPi || backend == "") && kind == "message_end":
+			var m struct {
+				Role  string `json:"role"`
+				Usage struct {
+					Total int `json:"totalTokens"`
+					Cost  struct {
+						Total float64 `json:"total"`
+					} `json:"cost"`
+				} `json:"usage"`
+			}
+			if json.Unmarshal(event["message"], &m) == nil && m.Role == "assistant" {
+				cost += m.Usage.Cost.Total
+				tokens += m.Usage.Total
+			}
+		}
+	})
+	return cost, tokens
 }
 
 func agentReply(x *Execution, stdout, stderr []byte) (agentAnswer, error) {
@@ -743,15 +764,19 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	if !errors.Is(err, ErrWriterTreeUnknown) && ctx.Err() == nil && !out.exceeded {
 		run.failure = classifyBackend(backend, code, run.stdout, run.stderr, time.Now())
 	}
+	var answerErr error
 	switch backend {
 	case backendClaude:
-		run.answer, _ = claudeAnswer(run.stdout, []string{"Read", "Edit", "Write", "Grep", "Glob"})
+		run.answer, answerErr = claudeAnswer(run.stdout, []string{"Read", "Edit", "Write", "Grep", "Glob"})
 	case backendCodex:
-		run.answer, _ = codexAnswer(run.stdout, run.stderr, false)
+		run.answer, answerErr = codexAnswer(run.stdout, run.stderr, false)
 	default:
 		run.answer, _ = piAnswer(run.stdout)
 	}
-	x.CostUSD, x.Tokens = run.answer.CostUSD, run.answer.Tokens
+	if answerErr != nil && run.err == nil && run.failure == nil {
+		run.err = fmt.Errorf("%s fixer: %w", backend, answerErr)
+	}
+	x.CostUSD, x.Tokens = agentUsage(backend, run.stdout, run.stderr)
 	return run
 }
 
@@ -787,15 +812,20 @@ func pauseRepair(x *Repair, failure *BackendFailure) {
 	x.Failure = failure
 	x.Status = "paused"
 	x.Log += "; backend " + failure.Reason + ": " + failure.Message
-	if _, err := controllerGit(x.Worktree, "reset", "--hard", x.Base); err != nil {
+	if restoreCandidate(x) != nil {
 		x.Status, x.Writer = "unknown-outcome", "unknown"
-		return
+	}
+}
+
+func restoreCandidate(x *Repair) error {
+	if _, err := controllerGit(x.Worktree, "reset", "--hard", x.Base); err != nil {
+		return err
 	}
 	if _, err := controllerGit(x.Worktree, "clean", "-fd"); err != nil {
-		x.Status, x.Writer = "unknown-outcome", "unknown"
-		return
+		return err
 	}
-	if status, err := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); err != nil || len(status) != 0 || candidateSafe(x, x.Base) != nil {
-		x.Status, x.Writer = "unknown-outcome", "unknown"
+	if status, err := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); err != nil || len(status) != 0 {
+		return errors.New("candidate is still dirty after restore")
 	}
+	return candidateSafe(x, x.Base)
 }

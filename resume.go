@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 )
@@ -431,7 +432,10 @@ func rerunStage(s *Store, r *Run, actor string) error {
 		r.Events = append(r.Events, Event{Kind: "rerun", Actor: actor, Reason: "rerun from " + st.Name})
 		return nil
 	}
-	if r.Review == nil || r.Repair != nil || r.Status != "cancelled" && r.Status != "inconclusive" && r.Status != "unconfigured" {
+	if r.Repair != nil {
+		return rerunRepair(r, actor)
+	}
+	if r.Review == nil || r.Status != "cancelled" && r.Status != "inconclusive" && r.Status != "unconfigured" {
 		return errors.New("nothing to rerun: the review is not paused, failed or cancelled")
 	}
 	if err := admitReviewAgain(r); err != nil {
@@ -462,7 +466,44 @@ func rerunnable(r *Run) bool {
 	if p := r.Pipeline; p != nil {
 		return p.open() == nil && (p.Status == "cancelled" || p.Status == "needs-decision" && p.Failed != "")
 	}
-	return r.Review != nil && r.Repair == nil && (r.Status == "cancelled" || r.Status == "inconclusive" || r.Status == "unconfigured")
+	if r.Repair != nil {
+		return stoppedRepair(r.Repair)
+	}
+	return r.Review != nil && (r.Status == "cancelled" || r.Status == "inconclusive" || r.Status == "unconfigured")
+}
+
+var stoppedRepairStatuses = map[string]bool{"cancelled": true, "fixer-failed": true, "failed-check": true, "no-change": true, "scope-refused": true, "refused": true, "writer-conflict": true, "authority-changed": true, "unconfigured": true, "failed": true}
+
+func stoppedRepair(x *Repair) bool {
+	return x.Stage == "" && stoppedRepairStatuses[x.Status] && (x.Writer == "stopped" || x.Writer == "not-started")
+}
+
+func rerunRepair(r *Run, actor string) error {
+	old := r.Repair
+	if !stoppedRepair(old) {
+		return errors.New("nothing to rerun: the selected repair is not failed, cancelled or refused with a stopped writer")
+	}
+	_, statErr := os.Stat(old.Worktree)
+	if statErr == nil {
+		if id, err := resolve(old.Worktree); err != nil || id.Branch != old.Ref || id.Head != old.Base {
+			return errors.New("candidate moved after the repair stopped; recovery required")
+		}
+		if err := restoreCandidate(old); err != nil {
+			return fmt.Errorf("cannot restore the private candidate: %w", err)
+		}
+	} else if !os.IsNotExist(statErr) {
+		return statErr
+	}
+	x, err := readmitRepair(r, *old)
+	if err != nil {
+		return err
+	}
+	x.Resumed = statErr == nil
+	r.PriorRepairs = append(r.PriorRepairs, *old)
+	r.Repair = x
+	r.Status, r.Stage = "writing", "selected-repair"
+	r.Events = append(r.Events, Event{Kind: "rerun", Actor: actor, Reason: "rerun selected repair after " + old.Status})
+	return nil
 }
 
 func autoResumeLabel(s Settings) string {

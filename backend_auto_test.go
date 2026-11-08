@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -158,5 +159,49 @@ func TestSwitchFromCodexToClaudeWhilePaused(t *testing.T) {
 	reviews := run["pipeline"].(map[string]any)["reviews"].([]any)
 	if len(reviews) != 1 || reviews[0].(map[string]any)["backend"] != "codex-json-v1" || reviews[0].(map[string]any)["status"] != "paused" {
 		t.Fatalf("the paused codex attempt keeps its provenance: %v", reviews)
+	}
+}
+
+func TestPausedOnePassReviewSurvivesDaemonRestart(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
+	writeBackends(t, home, map[string]any{"auto_resume": map[string]any{"max_attempts": 3, "base_seconds": 3600, "max_seconds": 3600}})
+	setModes(t, root, "codex", "rate-limit", "success")
+	mutate(t, bin, repo, home, v, "review", "review-before-restart", nil)
+	v = waitStatus(t, bin, repo, home, "paused")
+	scheduled := pauseOf(t, v)["auto_resume_at"]
+	stopDaemon(t, home)
+	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	if v["outcome"] != "ok" || runOf(t, v)["status"] != "paused" || runOf(t, v)["review_used"].(float64) != 0 || pauseOf(t, v)["auto_resume_at"] != scheduled {
+		t.Fatalf("restart must keep the paused run, its budget and its schedule: %v", v)
+	}
+}
+
+func TestQuotaResetTimeDecidesAutomaticResume(t *testing.T) {
+	t.Parallel()
+	for _, c := range []struct{ backend, model string }{{"claude", "claude-haiku-5-5"}, {"codex", "gpt-5.6-luna"}} {
+		t.Run(c.backend, func(t *testing.T) {
+			t.Parallel()
+			for _, reset := range []string{"3600", "-120"} {
+				bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
+				os.WriteFile(filepath.Join(root, "reset-in-"+c.backend), []byte(reset), 0600)
+				setModes(t, root, c.backend, "quota", "success")
+				mutate(t, bin, repo, home, v, "review", "review-reset-"+reset, nil)
+				if reset == "3600" {
+					v = waitStatus(t, bin, repo, home, "paused")
+					time.Sleep(time.Second)
+					v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+					at, err := time.Parse(time.RFC3339, pauseOf(t, v)["auto_resume_at"].(string))
+					if runOf(t, v)["status"] != "paused" || err != nil || time.Until(at) < 50*time.Minute {
+						t.Fatalf("a future reset must keep the run paused until then: %v", pauseOf(t, v))
+					}
+					continue
+				}
+				v = waitStatus(t, bin, repo, home, "clean-review")
+				if resumes := eventsOf(t, v, "resume"); len(resumes) != 1 || resumes[0]["actor"] != "auto" {
+					t.Fatalf("a passed reset must resume automatically: %v", runOf(t, v)["events"])
+				}
+			}
+		})
 	}
 }

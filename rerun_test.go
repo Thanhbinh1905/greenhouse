@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -89,5 +90,40 @@ func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(strs(v["actions"]), " "), "pipeline") {
 		t.Fatalf("the new run must be ready to run: %v", v["actions"])
+	}
+}
+
+func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
+	os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600)
+	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nopen('sample.txt','w').write('half\\n' if os.path.exists(root+'/fix-fail') else 'repaired\\n')\nsys.exit(1 if os.path.exists(root+'/fix-fail') else 0)\n")
+	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
+	os.WriteFile(filepath.Join(root, "fix-fail"), []byte("1"), 0600)
+	mutate(t, bin, repo, home, v, "review", "review-findings", nil)
+	v = waitStatus(t, bin, repo, home, "outstanding-findings")
+	q := map[string]any{"version": 1, "op": "repair", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": "none", "action_id": "repair", "selected": []string{runOf(t, v)["findings"].([]any)[0].(map[string]any)["id"].(string)}}
+	b, _ := json.Marshal(q)
+	if v = axi(t, bin, repo, home, string(b)); v["outcome"] != "ok" {
+		t.Fatalf("repair: %v", v)
+	}
+	v = waitStatus(t, bin, repo, home, "fixer-failed")
+	first := runOf(t, v)["repair"].(map[string]any)
+	if !has(strs(v["actions"]), "rerun") {
+		t.Fatalf("a stopped selected repair must offer rerun: %v", v["actions"])
+	}
+	os.Remove(filepath.Join(root, "fix-fail"))
+	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-repair", nil); v["outcome"] != "ok" {
+		t.Fatalf("rerun: %v", v)
+	}
+	v = waitStatus(t, bin, repo, home, "fixed-not-independently-rereviewed")
+	run := runOf(t, v)
+	prior := run["prior_repairs"].([]any)
+	if run["repair_used"].(float64) != 2 || run["review_used"].(float64) != 1 || len(prior) != 1 || prior[0].(map[string]any)["id"] != first["id"] || prior[0].(map[string]any)["status"] != "fixer-failed" {
+		t.Fatalf("rerun must keep the failed repair and both counters: %v", run)
+	}
+	worktree := run["repair"].(map[string]any)["worktree"].(string)
+	if worktree != first["worktree"] || strings.TrimSpace(git(t, worktree, "show", "HEAD:sample.txt")) != "repaired" {
+		t.Fatalf("rerun must repair the restored candidate: %v", run["repair"])
 	}
 }

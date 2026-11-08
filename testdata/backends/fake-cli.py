@@ -15,7 +15,16 @@ if os.path.exists(modes):
         mode=queue[0]
         open(modes,'w').write(' '.join(queue[1:] or queue[-1:]))
 def replay(name):
-    sys.stdout.write(open(fixtures+'/'+name+'.stdout').read())
+    import datetime,re,time
+    reset_file=root+'/reset-in-'+backend
+    at=int(time.time())+int(open(reset_file).read() if os.path.exists(reset_file) else 3600)
+    local=datetime.datetime.fromtimestamp(at)
+    day=local.day
+    suffix='th' if 10<=day%100<=20 else {1:'st',2:'nd',3:'rd'}.get(day%10,'th')
+    out=open(fixtures+'/'+name+'.stdout').read()
+    out=re.sub(r'"resetsAt": ?\d+','"resetsAt":%d'%at,out)
+    out=re.sub(r'try again at [^"]*','try again at %s %d%s, %d %s.'%(local.strftime('%b'),day,suffix,local.year,local.strftime('%I:%M %p').lstrip('0')),out)
+    sys.stdout.write(out)
     sys.stderr.write(open(fixtures+'/'+name+'.stderr').read())
     sys.exit(int(open(fixtures+'/'+name+'.exit').read()))
 if mode!='success':
@@ -35,16 +44,24 @@ def verdict():
         v['findings']=[{'id':'x','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample is wrong','action':'Fix the sample','rule':'','head':b['Head']}]
     return json.dumps(v)
 model=args[args.index('--model' if '--model' in args else '-m')+1]
+if os.path.exists(root+'/report-model-'+backend):
+    model=open(root+'/report-model-'+backend).read()
 text=verdict()
+if os.path.exists(root+'/bad-verdict-'+backend):
+    text='{"verdict":"not a contract answer"}'
 if backend=='claude':
     for line in open(fixtures+'/success.stdout'):
         event=json.loads(line)
         if event.get('type')=='system' and event.get('subtype')=='init':
-            event['model']=model
+            event['model']=open(root+'/init-model-claude').read() if os.path.exists(root+'/init-model-claude') else model
             event['tools']=args[args.index('--tools')+1].split(',')+(['StructuredOutput'] if '--json-schema' in args else [])
+            if os.path.exists(root+'/extra-tool-claude'):
+                event['tools'].append(open(root+'/extra-tool-claude').read())
         if event.get('type')=='result':
             event['result']=text
             event['modelUsage']={model:list(event['modelUsage'].values())[0]}
+            if os.path.exists(root+'/extra-model-claude'):
+                event['modelUsage'][open(root+'/extra-model-claude').read()]=list(event['modelUsage'].values())[0]
             if '--json-schema' in args:
                 event['structured_output']=json.loads(text)
             else:

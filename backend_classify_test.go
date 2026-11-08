@@ -74,3 +74,21 @@ func TestClassifyRecordedBackendOutputs(t *testing.T) {
 		}
 	}
 }
+
+func TestUsageIsReadFromFailedAndSuccessfulRuns(t *testing.T) {
+	stdout, stderr, _ := recorded(t, "claude", "success")
+	if cost, tokens := agentUsage("claude", stdout, stderr); cost != 6.0519999999999997e-05 || tokens != 55 {
+		t.Fatalf("claude success usage: %v %v", cost, tokens)
+	}
+	failed := strings.Replace(string(stdout), `"is_error":false`, `"is_error":true`, 1)
+	if failed == string(stdout) {
+		t.Fatal("fixture shape changed")
+	}
+	if cost, tokens := agentUsage("claude", []byte(failed), stderr); cost != 6.0519999999999997e-05 || tokens != 55 {
+		t.Fatalf("claude error result must keep its usage: %v %v", cost, tokens)
+	}
+	stdout, stderr, _ = recorded(t, "codex", "success")
+	if _, tokens := agentUsage("codex", stdout, stderr); tokens != 13410 {
+		t.Fatalf("codex usage: %v", tokens)
+	}
+}

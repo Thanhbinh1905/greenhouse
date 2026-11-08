@@ -354,16 +354,19 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 		exitCode = cmd.ProcessState.ExitCode()
 	}
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
+	usage := agentAnswer{}
+	usage.CostUSD, usage.Tokens = agentUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
 	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
-		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message}
+		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage}
 	}
 	if ctx.Err() != nil {
-		return reviewOutcome{Status: "cancelled", Log: log}
+		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 	}
 	if err != nil || out.exceeded || stderr.exceeded {
-		return reviewOutcome{Status: "inconclusive", Log: log}
+		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage}
 	}
 	answer, e := agentReply(x, out.Bytes(), stderr.Bytes())
+	answer.CostUSD, answer.Tokens = usage.CostUSD, usage.Tokens
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
 	}

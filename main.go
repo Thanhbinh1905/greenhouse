@@ -85,6 +85,7 @@ type Run struct {
 	Pause         *BackendPause   `json:"pause,omitempty"`
 	Attempts      []Attempt       `json:"attempts,omitempty"`
 	AutoRetries   int             `json:"auto_retries,omitempty"`
+	PriorRepairs  []Repair        `json:"prior_repairs,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -302,7 +303,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", x.Full, reviewerPrompt)) {
+			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", x.Full, reviewerPrompt)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
