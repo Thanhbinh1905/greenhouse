@@ -170,7 +170,106 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     assert final["run"]["repair"]["handback"] == "handed-back"
     assert "handed-back" in handed
     assert (root / "review-calls").read_text().count("review") == 1
-    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, and AXI parity; fixture {root}")
+    full_reviewer = root / "full-pi"
+    full_reviewer.write_text('''#!/usr/bin/python3
+import json,sys,os
+root=os.path.dirname(__file__)
+b=json.load(sys.stdin)
+mode=open(root+"/full-review-mode").read() if os.path.exists(root+"/full-review-mode") else "clean"
+v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[],"documentation":{"status":"not-needed","reason":"fixture changes no public behavior"}}
+if mode=="findings":
+    v["verdict"]="findings"
+    v["findings"]=[{"id":"x","priority":"P1","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Repaired sample still wrong","action":"Fix it","rule":"","head":b["Head"]}]
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
+print(json.dumps({"type":"agent_settled","aborted":False}))
+''')
+    full_reviewer.chmod(0o700)
+    config.write_text(json.dumps({"executable": str(full_reviewer), "model": "fixture/model"}))
+    gate = root / "gate"
+    gate.write_text('''#!/usr/bin/python3
+import sys
+name=sys.argv[1]
+got=open("sample.txt").read()
+if name=="test" and got!="repaired\\n":
+    print("FAIL test: sample.txt is "+repr(got))
+    sys.exit(1)
+print("ok "+name)
+''')
+    gate.chmod(0o700)
+    full_fixer = root / "full-fixer"
+    full_fixer.write_text('''#!/usr/bin/python3
+import json,sys,os
+root=os.path.dirname(__file__)
+json.load(sys.stdin)
+if os.path.exists(root+"/fix-then-review"):
+    open(root+"/full-review-mode","w").write("findings")
+open("sample.txt","w").write("repaired\\n")
+''')
+    full_fixer.chmod(0o700)
+    fixer_config.write_text(json.dumps({"executable": str(full_fixer), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [["/usr/bin/true"]]}))
+
+    def full_repo(name, plan):
+        global repo
+        repo = root / name
+        repo.mkdir()
+        for args in [["init", "-b", "main"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial"]]:
+            subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+        base = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
+        (repo / "sample.txt").write_text("candidate\n")
+        for args in [["add", "sample.txt"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate"]]:
+            subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+        plan_file = root / "state" / "pipeline.json"
+        plan_file.write_text(json.dumps(dict(plan, name="Test", email="test@example.invalid")))
+        plan_file.chmod(0o600)
+        return base
+
+    def settle():
+        deadline = time.monotonic() + 30
+        while time.monotonic() < deadline and axi()["run"]["status"] in ("running", "cancelling"):
+            time.sleep(0.05)
+        return axi()
+
+    markers = {"passed": "[pass]", "repaired-unreviewed": "[REPAIRED, NOT REVIEWED]", "failed": "[FAIL]",
+               "not-applicable": "[n/a]", "needs-decision": "[DECISION]", "pending": "[ ]", "unsupported": "[unsupported]"}
+
+    def parity(state, text):
+        for stage in state["run"]["pipeline"]["stages"]:
+            marker = markers[stage["status"]]
+            if stage["status"] == "passed" and stage["repairs"]:
+                marker = "[pass after repair, rereviewed]"
+            assert f"{marker} {stage['name']}\n" in text, stage
+        assert f"Pipeline: {state['run']['pipeline']['status']}" in text
+
+    commands = {"test": [[str(gate), "test"]], "lint": [[str(gate), "lint"]], "not_applicable": {"docs": "fixture publishes no documentation"}}
+    widths = {"full-ready": 56, "full-failed": 100, "full-unreviewed": 56}
+    for name, extra in [("full-ready", {"repairs": ["test"], "repair_limit": 1}), ("full-failed", {}), ("full-unreviewed", {"repairs": ["test"], "repair_limit": 1})]:
+        (root / "full-review-mode").unlink(missing_ok=True)
+        (root / "fix-then-review").unlink(missing_ok=True)
+        if name == "full-unreviewed":
+            (root / "fix-then-review").write_text("1")
+        target = full_repo(name, dict(commands, **extra))
+        width = widths[name]
+        session(width, ["s", "auto full 6", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        state = settle()
+        other = 100 if width == 56 else 56
+        text = session(width, ["i", "q"], f"-{name}-result")
+        session(other, ["i", "c", "q"], f"-{name}-result-wide" if other == 100 else f"-{name}-result-narrow")
+        parity(state, text)
+        stages = {s["name"]: s for s in state["run"]["pipeline"]["stages"]}
+        assert "[unsupported] push" in text
+        if name == "full-ready":
+            assert state["run"]["status"] == "locally-ready", state["run"]["pipeline"]
+            assert stages["test"]["repairs"] == 1 and stages["test"]["status"] == "passed"
+            assert "[pass after repair, rereviewed] test" in text and "Gate repairs: 1/1" in text
+            assert "[pass] review" in text and "[n/a] docs" in text
+        if name == "full-failed":
+            assert state["run"]["status"] == "needs-decision" and stages["test"]["status"] == "failed"
+            assert "[FAIL] test" in text and "| FAIL test" in text and "stopped at test" in text
+            assert "[ ] lint" in text and "Gate repairs: 0/0" in text
+        if name == "full-unreviewed":
+            assert stages["test"]["status"] == "repaired-unreviewed", stages
+            assert "[REPAIRED, NOT REVIEWED] test" in text and "[DECISION] review" in text
+    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics and AXI parity; fixture {root}")
 finally:
     pidfile = root / "state" / "pid"
     if pidfile.exists():

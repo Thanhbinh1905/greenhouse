@@ -28,7 +28,15 @@ The red-before executable test rejected `repair` as `json: unknown field "select
 
 The slice rejects missing trusted checks and unsupported Git hooks, filters, signing, binary/submodule changes, and non-clean source handback. Progress and execution evidence persist in shared AXI/terminal state. Recovery after interruption parks unknown writer outcomes without retry or cleanup. The 56/100-column PTY exercise covers selected repair, check results, dirty handback refusal, safe handback, and AXI parity. A real linked-worktree race test verifies the shared repository lock admits only one writer. The full crash-boundary matrix and stale-action matrix remain incomplete. This is not complete acceptance of SPEC.md.
 
-## 4. Bounded full pipeline and forge fixture
+## 4. Bounded full pipeline and forge fixture: local gates delivered for review
+
+Task t18 delivers the local half of area D. A private per-user `pipeline.json` supplies test, lint and doc commands, not-applicable reasons, authorized gate repairs and a gate-repair limit. The `pipeline` action runs intent, target synchronization, independent review, test, documentation and lint on a managed private candidate and ends at `locally-ready`. Commands run through the subreaper command runner with exit code, output tail, argv and executable digest. Target synchronization merges the exact target with Git and never rebases; a conflict opens a gate for the author or an explicitly authorized fixer. Missing commands are `unconfigured`. Documentation requires the reviewer's impact assessment as well as passing doc commands. In `auto` mode, authorized gate repairs use the one-pass writer custody, consume a separate budget and create a new candidate. Evidence binds declared inputs, so a new candidate reruns review and every gate. Guarded handback fast-forwards the source to a locally ready candidate.
+
+Executable fake-Pi, fake-command and real-Git tests cover agent-free command stages, missing commands, bounded repair failures, invalidation by candidate and settings changes, rerun after repair, target conflicts, cancellation, and restart and reattach without duplicate work. The PTY check covers 56 and 100 columns.
+
+Step 4 still leaves unsupported: full-mode repair of review findings, ask/auto/YOLO authority beyond a visible decision park, combined cap accounting, accept-head, final-fix, rethink and discard outcomes, mechanical lint autofix, gate repairs that add or delete files, recovery of interrupted pipeline steps, and the push, PR and CI stages below.
+
+Remaining scope:
 
 Area D and standalone E: trusted intent/command plan, target synchronization, deterministic tests/lint, documentation assessment, bounded repair/CI retries, changed-input invalidation, ask/auto/YOLO authority, combined cap accounting, exact-head accept-head, final-fix/final Review, rethink lineage, and discard provenance.
 
@@ -45,6 +53,6 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
 - Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
 - Area C: provider-backed behavioral evaluations, full-tree review snapshots, explicit finding resolution, and OS confinement. Pi review is patch-based with fresh context and read-only tools.
-- Area D: pipeline stages other than independent review and explicitly authorized one-pass repair/check/commit; operational ask/auto/YOLO decisions; automatic retries; acceptance, final-fix, rethink, and discard.
+- Area D: push, PR and CI stages; full-mode review-finding repair; operational ask/YOLO decisions; combined cap accounting; acceptance, final-fix, rethink, and discard.
 - Area E and D2: publication, forge and CI, explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, provider-backed fixer evaluation, and independently exact-head review.
 - Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

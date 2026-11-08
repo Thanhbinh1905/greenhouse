@@ -31,10 +31,12 @@ type CheckResult struct {
 	ExecutableDigest string   `json:"executable_digest"`
 	Exit             int      `json:"exit"`
 	Log              string   `json:"log"`
+	Output           string   `json:"output,omitempty"`
 	Status           string   `json:"status"`
 }
 type Repair struct {
 	ID               string        `json:"id"`
+	Stage            string        `json:"stage,omitempty"`
 	Actor            string        `json:"actor"`
 	Binding          string        `json:"binding"`
 	Config           FixerConfig   `json:"config"`
@@ -164,10 +166,8 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	if settings.Preset != "one-pass" || r.ReviewUsed+r.RepairUsed >= settings.Limit {
 		return errors.New("combined budget exhausted or unsupported preset")
 	}
-	for _, other := range s.Runs {
-		if other.ID != r.ID && other.Submitted.Repository == r.Submitted.Repository && other.Repair != nil && other.Repair.Handback != "handed-back" {
-			return errors.New("repository candidate custody is already held")
-		}
+	if custodyHeld(s, r) {
+		return errors.New("repository candidate custody is already held")
 	}
 	cfg, e := trustedFixer()
 	if e != nil {
@@ -426,11 +426,25 @@ func reapChildTree() bool {
 }
 
 func runBounded(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, error) {
+	env := reviewerEnv()
+	if agentDir != "" {
+		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
+	}
+	out, stderr := &boundedBuffer{limit: 65536}, &boundedBuffer{limit: 65536}
+	code, e := runProcess(ctx, dir, exe, args, input, env, out, stderr)
+	log := fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
+	if e == nil && (out.exceeded || stderr.exceeded) {
+		e = errors.New("bounded output exceeded")
+	}
+	return code, log, e
+}
+
+func runProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	self, err := os.Executable()
 	if err != nil {
-		return -1, "writer runner unavailable", err
+		return -1, err
 	}
 	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", exe}, args...)...)
 	cmd.Dir = dir
@@ -441,35 +455,27 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 		}
 		return cmd.Process.Signal(syscall.SIGTERM)
 	}
-	cmd.Env = reviewerEnv()
-	if agentDir != "" {
-		cmd.Env = append(cmd.Env, "PI_CODING_AGENT_DIR="+agentDir)
-	}
+	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(input)
-	out, stderr := &boundedBuffer{limit: 65536}, &boundedBuffer{limit: 65536}
-	cmd.Stdout = out
+	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 	e := cmd.Run()
 	code := -1
 	if cmd.ProcessState != nil {
 		code = cmd.ProcessState.ExitCode()
 	}
-	log := fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
 	if code == 254 || errors.Is(e, exec.ErrWaitDelay) {
-		return code, log, ErrWriterTreeUnknown
+		return code, ErrWriterTreeUnknown
 	}
 	if cmd.ProcessState != nil {
 		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-			return code, log, ErrWriterTreeUnknown
+			return code, ErrWriterTreeUnknown
 		}
 	}
 	if ctx.Err() != nil {
-		return code, log, ctx.Err()
+		return code, ctx.Err()
 	}
-	if out.exceeded || stderr.exceeded {
-		return code, log, errors.New("bounded output exceeded")
-	}
-	return code, log, e
+	return code, e
 }
 func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint func(*Repair) bool) {
 	save := func() bool { return checkpoint(x) }
@@ -496,17 +502,19 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("refused", errors.New("trusted fixer or checks changed after authorization"))
 		return
 	}
-	if e = os.MkdirAll(filepath.Dir(x.Worktree), 0700); e != nil {
-		fail("failed", e)
-		return
-	}
-	x.Status = "creating-candidate"
-	if !save() {
-		return
-	}
-	if _, e = controllerGit(source.Worktree, "worktree", "add", "-b", strings.TrimPrefix(x.Ref, "refs/heads/"), x.Worktree, x.Base); e != nil {
-		fail("unknown-outcome", e)
-		return
+	if x.Stage == "" {
+		if e = os.MkdirAll(filepath.Dir(x.Worktree), 0700); e != nil {
+			fail("failed", e)
+			return
+		}
+		x.Status = "creating-candidate"
+		if !save() {
+			return
+		}
+		if _, e = controllerGit(source.Worktree, "worktree", "add", "-b", strings.TrimPrefix(x.Ref, "refs/heads/"), x.Worktree, x.Base); e != nil {
+			fail("unknown-outcome", e)
+			return
+		}
 	}
 	if e = candidateSafe(x, x.Base); e != nil {
 		fail("unknown-outcome", e)
@@ -560,7 +568,11 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	x.Diff = diff
-	for i, args := range x.Config.Checks {
+	checks := x.Config.Checks
+	if x.Stage != "" {
+		checks = nil
+	}
+	for i, args := range checks {
 		checkDigest, err := executableDigest(args[0])
 		if err != nil || i >= len(x.CheckDigests) || checkDigest != x.CheckDigests[i] {
 			fail("authority-changed", errors.New("trusted check executable changed after authorization"))
@@ -645,7 +657,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("unknown-outcome", errors.New("staged diff differs from checked diff"))
 		return
 	}
-	if _, e = controllerGit(x.Worktree, "-c", "user.name="+x.Config.Name, "-c", "user.email="+x.Config.Email, "commit", "-m", "fix: selected review findings"); e != nil {
+	if _, e = controllerGit(x.Worktree, "-c", "user.name="+x.Config.Name, "-c", "user.email="+x.Config.Email, "commit", "-m", commitMessage(x)); e != nil {
 		fail("unknown-outcome", e)
 		return
 	}
@@ -663,7 +675,16 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	x.Parent = x.Base
 	x.Status = "fixed-not-independently-rereviewed"
 	x.Handback = "awaiting-handback"
+	if x.Stage != "" {
+		x.Handback = "pipeline-custody"
+	}
 	save()
+}
+func commitMessage(x *Repair) string {
+	if x.Stage != "" {
+		return "fix: repair " + x.Stage + " gate"
+	}
+	return "fix: selected review findings"
 }
 func authorizeHandback(r *Run) error {
 	x := r.Repair
