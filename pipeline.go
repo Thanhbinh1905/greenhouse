@@ -81,18 +81,19 @@ type Pipeline struct {
 	Grants         []Grant           `json:"grants,omitempty"`
 }
 type stepOutcome struct {
-	Run, Step string
-	URL       string
-	Stage     StageResult
-	Head      string
-	Status    string
-	Log       string
-	Result    *Verdict
-	Repair    *Repair
-	Conflict  []string
-	Failure   *BackendFailure
-	Answer    agentAnswer
-	Snapshot  string
+	Run, Step   string
+	URL         string
+	Stage       StageResult
+	Head        string
+	Status      string
+	Log         string
+	Result      *Verdict
+	Repair      *Repair
+	Conflict    []string
+	Failure     *BackendFailure
+	Answer      agentAnswer
+	Snapshot    string
+	Confinement *Confinement
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
@@ -728,7 +729,7 @@ func completeStep(r *Run, o stepOutcome) error {
 			return errors.New("review identity mismatch")
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
-		recordSnapshotCheck(x, o.Snapshot)
+		recordReviewEvidence(x, o.Snapshot, o.Confinement)
 		recordAttempt(r, Attempt{Execution: x.ID, Stage: st.Name, Kind: "review", Role: "reviewer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: o.Status, Reason: failureReason(o.Failure), Message: failureMessage(o.Failure), CostUSD: o.Answer.CostUSD, Tokens: o.Answer.Tokens})
 		if o.Failure != nil && !cancelling {
 			if x.Budget == "final-fix" {
@@ -1504,6 +1505,9 @@ func renderPipeline(w io.Writer, r *Run, details bool) {
 		if details {
 			fmt.Fprintf(w, "Candidate worktree: %s\n", p.Worktree)
 		}
+	}
+	if n := len(p.Repairs); n > 0 && p.Repairs[n-1].Confinement != nil {
+		fmt.Fprintln(w, confinementLine(p.Repairs[n-1].Confinement))
 	}
 	if p.Handback != "" {
 		fmt.Fprintf(w, "Handback: %s %s\n", p.Handback, p.HandbackError)

@@ -75,6 +75,7 @@ type Repair struct {
 	Resumed          bool            `json:"resumed,omitempty"`
 	CostUSD          float64         `json:"cost_usd,omitempty"`
 	Tokens           int             `json:"tokens,omitempty"`
+	Confinement      *Confinement    `json:"confinement,omitempty"`
 }
 
 func executableDigest(path string) (string, error) {

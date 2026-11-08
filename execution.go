@@ -62,6 +62,7 @@ type Execution struct {
 	Diff         string         `json:"diff"`
 	Paths        []string       `json:"paths"`
 	Snapshot     *TreeSnapshot  `json:"snapshot,omitempty"`
+	Confinement  *Confinement   `json:"confinement,omitempty"`
 	Status       string         `json:"status"`
 	Log          string         `json:"log"`
 	Result       *Verdict       `json:"result,omitempty"`
@@ -322,12 +323,13 @@ func reviewerEnv() []string {
 }
 
 type reviewOutcome struct {
-	Status   string
-	Result   *Verdict
-	Log      string
-	Failure  *BackendFailure
-	Answer   agentAnswer
-	Snapshot string
+	Status      string
+	Result      *Verdict
+	Log         string
+	Failure     *BackendFailure
+	Answer      agentAnswer
+	Snapshot    string
+	Confinement *Confinement
 }
 
 func executeReview(ctx context.Context, x *Execution) reviewOutcome {
@@ -353,6 +355,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	}
 	defer removeSnapshot(tree)
 	env := agentEnv(x.Config.Backend)
+	var state []string
 	switch x.Config.Backend {
 	case backendCodex:
 		if e = os.WriteFile(filepath.Join(dir, "schema.json"), []byte(verdictSchema(x.Full)), 0600); e != nil {
@@ -365,10 +368,16 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 			return reviewOutcome{Status: "inconclusive", Log: "trusted provider configuration unavailable"}
 		}
 		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
+		state = []string{agentDir}
+	}
+	policy, confinement := confinementFor("reviewer", x.Config, state)
+	exe, args, e := confinedCommand(policy, x.Config.Executable, x.Args)
+	if e != nil {
+		return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable", Confinement: &confinement}
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, x.Config.Executable, x.Args...)
+	cmd := exec.CommandContext(ctx, exe, args...)
 	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Dir = tree
 	cmd.Env = env
@@ -385,26 +394,29 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
 	usage := agentAnswer{}
 	usage.CostUSD, usage.Tokens = agentUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
+	if reason, failed := confinementFailed(exitCode, stderr.Bytes()); failed {
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + reason, Answer: usage, Confinement: &confinement}
+	}
 	if e = verifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; candidate snapshot modified during review: " + e.Error(), Answer: usage, Snapshot: "modified: " + e.Error()}
+		return reviewOutcome{Status: "inconclusive", Log: log + "; candidate snapshot modified during review: " + e.Error(), Answer: usage, Confinement: &confinement, Snapshot: "modified: " + e.Error()}
 	}
 	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
-		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage, Confinement: &confinement, Snapshot: "unchanged"}
 	}
 	if ctx.Err() != nil {
-		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage, Confinement: &confinement, Snapshot: "unchanged"}
 	}
 	if err != nil || out.exceeded || stderr.exceeded {
-		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage, Confinement: &confinement, Snapshot: "unchanged"}
 	}
 	answer, e := agentReply(x, out.Bytes(), stderr.Bytes())
 	answer.CostUSD, answer.Tokens = usage.CostUSD, usage.Tokens
 	if e != nil {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer, Confinement: &confinement, Snapshot: "unchanged"}
 	}
 	result, e := verdictFrom(answer, x)
 	if e != nil {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer, Confinement: &confinement, Snapshot: "unchanged"}
 	}
 	status := "clean-review"
 	if result.Verdict == "findings" {
@@ -413,7 +425,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if result.Verdict == "inconclusive" {
 		status = "inconclusive"
 	}
-	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer, Snapshot: "unchanged"}
+	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer, Confinement: &confinement, Snapshot: "unchanged"}
 }
 func parseReview(b []byte, x *Execution) (*Verdict, error) {
 	answer, err := piAnswer(b)

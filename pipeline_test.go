@@ -136,7 +136,25 @@ func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
 		}
 		data = []byte(head + body)
 	}
+	if filepath.Base(path) == "backends.json" && !strings.Contains(string(data), `"writable"`) {
+		root, _ := json.Marshal(filepath.Dir(filepath.Dir(path)))
+		data = []byte(strings.Replace(string(data), "{", `{"writable":{"reviewer":[`+string(root)+`],"fixer":[`+string(root)+`]},`, 1))
+		data = []byte(strings.Replace(string(data), ",}", "}", 1))
+	}
 	return os.WriteFile(path, data, perm)
+}
+
+// allowFixtureWrites lets fake agents record invocations beside the state
+// directory, which OS confinement would otherwise deny.
+func allowFixtureWrites(t *testing.T, home string) {
+	t.Helper()
+	path := filepath.Join(home, "backends.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.MkdirAll(home, 0700)
+		if err = writeConfigBytes(path, []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func installPipelineProvider(t *testing.T, home string) {
@@ -145,6 +163,7 @@ func installPipelineProvider(t *testing.T, home string) {
 		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}}})
 	}))
 	t.Cleanup(server.Close)
+	allowFixtureWrites(t, home)
 	writePrivateJSON(t, filepath.Join(home, "providers.json"), TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}})
 }
 

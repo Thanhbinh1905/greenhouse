@@ -33,9 +33,7 @@ if "--no-tools" in sys.argv:
     v = {"expected": b["expected"][0]["id"], "verdict": "detects", "rationale": 'The finding says "SQL injection" at the query.'}
     print(json.dumps({"type": "message_end", "message": {"role": "assistant", "provider": "fake", "model": "judge", "stopReason": "stop", "usage": {"cost": {"total": 0.01}}, "content": [{"type": "text", "text": json.dumps(v)}]}}))
     sys.exit(0)
-root = os.path.dirname(os.path.abspath(__file__))
-with open(os.path.join(root, "pi-env.json"), "w") as f:
-    json.dump({"shim": "GREENHOUSE_EVAL_SHIM" in os.environ, "models": open(os.path.join(os.environ["PI_CODING_AGENT_DIR"], "models.json")).read()}, f)
+sys.stderr.write(json.dumps({"shim": "GREENHOUSE_EVAL_SHIM" in os.environ, "models": open(os.path.join(os.environ["PI_CODING_AGENT_DIR"], "models.json")).read()}) + "\n")
 findings = []
 if "orders/orders.go" in b["Paths"]:
     findings.append({"id": "x", "priority": "P0", "origin": "correctness", "file": "orders/orders.go", "start": 19, "end": 19,
@@ -111,7 +109,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		Shim   bool   `json:"shim"`
 		Models string `json:"models"`
 	}
-	b, _ = os.ReadFile(filepath.Join(dir, "pi-env.json"))
+	b, _ = os.ReadFile(filepath.Join(out, "cases/bug-sql-injection/stderr.log"))
 	if json.Unmarshal(b, &env) != nil || env.Shim || !strings.Contains(env.Models, `"baseUrl":"`+endpoint.URL+`/v1"`) || !strings.Contains(env.Models, `"apiKey":"$EVAL_TEST_API_KEY"`) {
 		t.Fatalf("pi environment = %s", b)
 	}

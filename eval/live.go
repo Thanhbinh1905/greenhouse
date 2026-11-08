@@ -350,12 +350,14 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	rec.Target, rec.Candidate = target, head
 	provider, _, _ := strings.Cut(o.Model, "/")
 	executable := o.Pi
+	backends := map[string]any{"version": 2, "writable": map[string][]string{"reviewer": {capture}}}
 	if o.Backend == "claude" {
 		executable = o.Agent
-		backends, _ := json.Marshal(map[string]any{"version": 2, "claude": map[string]string{"executable": shimBin}})
-		if err := os.WriteFile(filepath.Join(home, "backends.json"), backends, 0o600); err != nil {
-			return fail(err)
-		}
+		backends["claude"] = map[string]string{"executable": shimBin}
+	}
+	backendsJSON, _ := json.Marshal(backends)
+	if err := os.WriteFile(filepath.Join(home, "backends.json"), backendsJSON, 0o600); err != nil {
+		return fail(err)
 	}
 	cfg, _ := json.Marshal(shimConfig{Pi: executable, Capture: capture})
 	cfgPath := filepath.Join(work, "shim.json")

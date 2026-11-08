@@ -44,6 +44,7 @@ func prepareFixture(t *testing.T) (string, string, string, map[string]any) {
 }
 func installFake(t *testing.T, home, mode string) string {
 	t.Helper()
+	allowFixtureWrites(t, home)
 	providerPath := filepath.Join(home, "providers.json")
 	if _, err := os.Stat(providerPath); os.IsNotExist(err) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

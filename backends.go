@@ -259,6 +259,7 @@ type BackendsConfig struct {
 	Codex      *AgentCLI                  `json:"codex,omitempty"`
 	Fallback   map[string][]BackendChoice `json:"fallback,omitempty"`
 	AutoResume *RetryPolicy               `json:"auto_resume,omitempty"`
+	Writable   map[string][]string        `json:"writable,omitempty"`
 }
 
 func trustedBackends() (BackendsConfig, error) {
@@ -303,6 +304,16 @@ func trustedBackends() (BackendsConfig, error) {
 		for _, choice := range choices {
 			if !validModelSelection(choice.Backend, choice.Model) {
 				return config, fmt.Errorf("backends.json: invalid fallback %s %s", choice.Backend, choice.Model)
+			}
+		}
+	}
+	for role, paths := range config.Writable {
+		if role != "reviewer" && role != "fixer" || len(paths) > 16 {
+			return config, errors.New("backends.json: writable lists at most 16 paths for reviewer or fixer")
+		}
+		for _, p := range paths {
+			if !filepath.IsAbs(p) || filepath.Clean(p) != p || p == "/" {
+				return config, fmt.Errorf("backends.json: writable path %q must be absolute, clean and not /", p)
 			}
 		}
 	}
@@ -755,12 +766,25 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	} else {
 		limit = 4 * 1024 * 1024
 	}
+	scratch := filepath.Dir(agentDir)
+	env = append(env, "TMPDIR="+scratch)
+	policy, confinement := confinementFor("fixer", fixerAgent(x.Config), []string{x.Worktree, scratch})
+	x.Confinement = &confinement
+	exe, args, err := confinedCommand(policy, x.Config.Executable, x.Args)
+	if err != nil {
+		return fixerRun{log: "confinement launcher unavailable", err: err}
+	}
 	runCtx, stop := context.WithCancel(ctx)
 	defer stop()
 	out, stderr := &boundedBuffer{limit: limit}, &boundedBuffer{limit: 65536}
-	code, err := runProcess(runCtx, x.Worktree, x.Config.Executable, x.Args, x.Input, env, stallWatch(out, backend, stop), stderr)
+	code, err := runProcess(runCtx, x.Worktree, exe, args, x.Input, env, stallWatch(out, backend, stop), stderr)
 	appendTranscript(x.Run, fmt.Sprintf("fixer %s | %s %s | exit=%d", x.ID, backend, x.Config.Model, code), out.Bytes(), stderr.Bytes())
 	run := fixerRun{log: fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded), stdout: out.Bytes(), stderr: stderr.Bytes(), err: err}
+	if reason, failed := confinementFailed(code, run.stderr); failed && err == nil {
+		run.log += "; " + reason
+		run.err = errors.New(reason)
+		return run
+	}
 	if err == nil && (out.exceeded || stderr.exceeded) {
 		run.err = errors.New("bounded output exceeded")
 	}

@@ -285,11 +285,22 @@ func removeSnapshot(root string) {
 	os.RemoveAll(root)
 }
 
-func recordSnapshotCheck(x *Execution, check string) {
+func recordReviewEvidence(x *Execution, check string, confinement *Confinement) {
+	if confinement != nil {
+		x.Confinement = confinement
+	}
 	if x.Snapshot == nil || check == "" {
 		return
 	}
 	s := *x.Snapshot
 	s.Check = check
 	x.Snapshot = &s
+}
+
+func snapshotLine(s *TreeSnapshot) string {
+	check := s.Check
+	if check == "" {
+		check = "not yet checked"
+	}
+	return fmt.Sprintf("Snapshot: tree %s | %d files | digest %s | %s", s.Tree, s.Entries, s.Digest, check)
 }
