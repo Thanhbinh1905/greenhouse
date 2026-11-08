@@ -20,9 +20,8 @@ import (
 const shimEnv = "GREENHOUSE_EVAL_SHIM"
 
 type shimConfig struct {
-	Pi       string `json:"pi"`
-	Capture  string `json:"capture"`
-	Provider string `json:"provider"`
+	Pi      string `json:"pi"`
+	Capture string `json:"capture"`
 }
 
 type shimTiming struct {

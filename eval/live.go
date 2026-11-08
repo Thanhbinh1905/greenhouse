@@ -310,7 +310,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	}
 	rec.Target, rec.Candidate = target, head
 	provider, _, _ := strings.Cut(o.Model, "/")
-	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Provider: provider})
+	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture})
 	cfgPath := filepath.Join(work, "shim.json")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
