@@ -13,6 +13,7 @@ import (
 	"io"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -823,7 +824,68 @@ func capturePartial(x *Repair) {
 	if err != nil {
 		fmt.Fprintf(w, "untracked files unavailable: %v\n", err)
 	}
-	for _, name := range strings.Split(string(untracked), "\x00") {
+	names := strings.Split(string(untracked), "\x00")
+	untrackedNames := make(map[string]bool, len(names))
+	for _, name := range names {
+		untrackedNames[name] = true
+	}
+	tracked, trackedErr := gitRead(x.Worktree, "ls-files", "-z")
+	trackedNames := make(map[string]bool)
+	if trackedErr != nil {
+		fmt.Fprintf(w, "tracked files unavailable: %v\n", trackedErr)
+	} else {
+		for _, name := range strings.Split(string(tracked), "\x00") {
+			trackedNames[name] = true
+		}
+	}
+	walkErr := filepath.WalkDir(x.Worktree, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == filepath.Join(x.Worktree, ".git") && entry.IsDir() {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		name, err := filepath.Rel(x.Worktree, path)
+		if err != nil {
+			return err
+		}
+		if untrackedNames[name] || trackedNames[name] {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		cmd := exec.Command("git", "-C", x.Worktree, "check-ignore", "-q", "--no-index", "--stdin", "-z")
+		for _, value := range os.Environ() {
+			if !strings.HasPrefix(value, "GIT_") {
+				cmd.Env = append(cmd.Env, value)
+			}
+		}
+		cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
+		cmd.Stdin = strings.NewReader(name + "\x00")
+		if err := cmd.Run(); err == nil {
+			return nil
+		} else {
+			var exitErr *exec.ExitError
+			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+				return err
+			}
+		}
+		names = append(names, name)
+		untrackedNames[name] = true
+		return nil
+	})
+	if walkErr != nil {
+		fmt.Fprintf(w, "untracked entries unavailable: %v\n", walkErr)
+	}
+	for _, name := range names {
 		if name == "" {
 			continue
 		}
@@ -843,7 +905,16 @@ func capturePartial(x *Repair) {
 			continue
 		}
 		if !info.Mode().IsRegular() {
-			fmt.Fprintf(w, "untracked: %s (%s)\n", name, info.Mode().Type())
+			typeName := info.Mode().Type().String()
+			switch info.Mode() & os.ModeType {
+			case os.ModeNamedPipe:
+				typeName = "fifo"
+			case os.ModeSocket:
+				typeName = "socket"
+			case os.ModeDevice:
+				typeName = "device"
+			}
+			fmt.Fprintf(w, "untracked: %s (%s)\n", name, typeName)
 			continue
 		}
 		fmt.Fprintf(w, "untracked: %s (%d bytes)\n", name, info.Size())
