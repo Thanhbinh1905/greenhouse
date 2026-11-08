@@ -1,0 +1,210 @@
+[2J[HGreenhouse | independent review
+Run 2b4da950618f47a91ba265cd4af7e97e
+Stage: intent | unconfigured
+Candidate: 391e6fcfb3ad503f76ab93be98fc70633589316c
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Sources: built-in default: mode, preset, limit, rules, reviewer_backend, reviewer_model,
+fixer_backend, fixer_model, auto_resume
+Repository override: .greenhouse.json IGNORED: repository not trusted; trust it to apply this file
+to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: configuration: reviewer.json uses schema version 1; migrate it to version 2
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [q] Detach
+
+> u
+Migrate older configuration files? Each keeps a backup. Type migrate:
+> migrate
+[2J[HGreenhouse | independent review
+Run 2b4da950618f47a91ba265cd4af7e97e
+Stage: intent | unconfigured
+Candidate: 391e6fcfb3ad503f76ab93be98fc70633589316c
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Sources: built-in default: mode, preset, limit, rules, reviewer_backend, reviewer_model,
+fixer_backend, fixer_model, auto_resume
+Repository override: .greenhouse.json IGNORED: repository not trusted; trust it to apply this file
+to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [q] Detach
+ok
+> t
+Trust .greenhouse.json of this repository (digest 806c60feb7ca)? Its values apply to new runs. Type
+trust:
+> trust
+[2J[HGreenhouse | independent review
+Run 2b4da950618f47a91ba265cd4af7e97e
+Stage: intent | unconfigured
+Candidate: 391e6fcfb3ad503f76ab93be98fc70633589316c
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Sources: built-in default: mode, preset, limit, rules, reviewer_backend, reviewer_model,
+fixer_backend, fixer_model, auto_resume
+Repository override: .greenhouse.json applied to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [q] Detach
+ok
+> n
+Retain evidence and start New run? Type new:
+> new
+[2J[HGreenhouse | independent review
+Run ba088be306feac61ef771dcf3069aef4
+Stage: intent | unconfigured
+Candidate: 391e6fcfb3ad503f76ab93be98fc70633589316c
+Mode: ask | one-pass | limit 3
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 3
+Rules: unslop, no-comments
+Sources: trusted repository override: mode, limit | built-in default: preset, rules,
+reviewer_backend, reviewer_model, fixer_backend, fixer_model, auto_resume
+Repository override: .greenhouse.json applied to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: off (always off in ask mode)
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [q] Detach
+ok
+> s
+Current values and sources:
+  mode = ask (trusted repository override)
+  preset = one-pass (built-in default)
+  limit = 3 (trusted repository override)
+  rules = unslop, no-comments (built-in default)
+  reviewer_backend = pi (built-in default)
+  reviewer_model = openai/gpt-5.6-luna (built-in default)
+  fixer_backend = pi (built-in default)
+  fixer_model = openai/gpt-5.6-luna (built-in default)
+  auto_resume = default (built-in default)
+Settings draft (current ask one-pass 3)
+Enter mode preset limit, e.g. ask one-pass 6:
+>
+[2J[HGreenhouse | independent review
+Run ba088be306feac61ef771dcf3069aef4
+Stage: intent | unconfigured
+Candidate: 391e6fcfb3ad503f76ab93be98fc70633589316c
+Mode: ask | one-pass | limit 3
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 3
+Rules: unslop, no-comments
+Sources: trusted repository override: mode, limit | built-in default: preset, rules,
+reviewer_backend, reviewer_model, fixer_backend, fixer_model, auto_resume
+Repository override: .greenhouse.json applied to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: off (always off in ask mode)
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [q] Detach
+Invalid draft: enter exactly mode, preset and limit separated by single spaces
+> o
+[2J[HTranscript log for run ba088be306feac61ef771dcf3069aef4
+Redacted raw reviewer and fixer output; normal use never needs it.
+File: transcripts/ba088be306feac61ef771dcf3069aef4.log | 0 of 4194304 bytes
+No agent has run yet.
+
+Press Enter to return
+>
+[2J[HGreenhouse | independent review
+Run ba088be306feac61ef771dcf3069aef4
+Stage: intent | unconfigured
+Candidate: 391e6fcfb3ad503f76ab93be98fc70633589316c
+Mode: ask | one-pass | limit 3
+Reviewer: pi / openai/gpt-5.6-luna
+Fixer: pi / openai/gpt-5.6-luna
+Budget: review 0 + repair 0 = 0 of 3
+Rules: unslop, no-comments
+Sources: trusted repository override: mode, limit | built-in default: preset, rules,
+reviewer_backend, reviewer_model, fixer_backend, fixer_model, auto_resume
+Repository override: .greenhouse.json applied to new runs
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: off (always off in ask mode)
+Blocked: required rules unresolved or failed; use resolve-rules and inspect errors
+Blocked: prepare requires explicit intent, exact target commit and private reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
+[x] Cancel  [n] New run  [q] Detach
+Invalid draft: enter exactly mode, preset and limit separated by single spaces
+>

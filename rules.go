@@ -98,6 +98,9 @@ func parsePack(b []byte) (*RulePack, error) {
 	if d.Decode(&extra) != io.EOF {
 		return nil, errors.New("trailing JSON")
 	}
+	if p.Version > 1 {
+		return nil, fmt.Errorf("rule pack schema version %d is newer than this Greenhouse supports (1); upgrade Greenhouse", p.Version)
+	}
 	if p.Version != 1 || !packID.MatchString(p.ID) || len(p.Criteria) == 0 || len(p.Criteria) > 64 {
 		return nil, errors.New("invalid pack version, ID or criteria count")
 	}

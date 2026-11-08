@@ -19,7 +19,7 @@ func writeFixerConfig(t *testing.T, home string, cfg FixerConfig) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(home, "fixer.json"), data, 0600); err != nil {
+	if err := writeConfigBytes(filepath.Join(home, "fixer.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
 }

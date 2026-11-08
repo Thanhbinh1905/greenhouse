@@ -1,0 +1,284 @@
+[2J[HGreenhouse | independent review
+Run 8a9e10e9bd70ff97ffda67655217f0b9
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+
+> u
+[2J[HGreenhouse | independent review
+Run 8a9e10e9bd70ff97ffda67655217f0b9
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+> migrate
+[2J[HGreenhouse | independent review
+Run 8a9e10e9bd70ff97ffda67655217f0b9
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+> t
+[2J[HGreenhouse | independent review
+Run 8a9e10e9bd70ff97ffda67655217f0b9
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+> trust
+[2J[HGreenhouse | independent review
+Run 8a9e10e9bd70ff97ffda67655217f0b9
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+> n
+Retain evidence and start New run? Type new:
+> new
+[2J[HGreenhouse | independent review
+Run 6de8b9e349db799169a0cf26727eedc1
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+> s
+Settings draft (current auto one-pass 4)
+Enter mode preset limit, e.g. ask one-pass 6:
+>
+[2J[HGreenhouse | independent review
+Run 6de8b9e349db799169a0cf26727eedc1
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+Invalid draft: enter exactly mode, preset and limit separated by single spaces
+> o
+[2J[HGreenhouse | independent review
+Run 6de8b9e349db799169a0cf26727eedc1
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+>
+[2J[HGreenhouse | independent review
+Run 6de8b9e349db799169a0cf26727eedc1
+Stage: intent | unconfigured
+Candidate: 7e33cd01499cef2a0671da08ca75e330728f025d
+Mode: auto | one-pass | limit 4
+Reviewer: pi / openai/gpt-5.6-luna (built-in default)
+Fixer: pi / openai/gpt-5.6-luna (built-in default)
+Budget: review 0 + repair 0 = 0 of 4
+Rules: unslop, no-comments
+Settings source: built-in default
+Rule unslop | configured | required=true
+Source: builtin:unslop
+Digest:
+Rule no-comments | configured | required=true
+Source: builtin:no-comments
+Digest:
+Auto-resume: on (default in auto mode)
+Blocked: repository overrides unsupported; repository configuration is
+untrusted
+Blocked: required rules unresolved or failed; use resolve-rules and inspect
+errors
+Blocked: prepare requires explicit intent, exact target commit and private
+reviewer.json
+
+[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings
+[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
+[m] Resolve conflict  [f] Selected repair  [h] Handback
+[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[x] Cancel  [n] New run  [q] Detach
+ok
+>

@@ -62,6 +62,10 @@ type Repair struct {
 	Log              string          `json:"log"`
 	Handback         string          `json:"handback"`
 	Authority        string          `json:"authority,omitempty"`
+	AuthorityPaths   []string        `json:"authority_paths,omitempty"`
+	Grants           []Grant         `json:"grants,omitempty"`
+	Granted          []string        `json:"granted,omitempty"`
+	Run              string          `json:"run,omitempty"`
 	Budget           string          `json:"budget,omitempty"`
 	Failure          *BackendFailure `json:"failure,omitempty"`
 	Partial          string          `json:"partial,omitempty"`
@@ -105,9 +109,10 @@ func trustedFixer() (FixerConfig, error) {
 	if e != nil {
 		return cfg, e
 	}
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if d.Decode(&cfg) != nil || d.Decode(new(any)) != io.EOF || !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
+	if e = decodeConfig("fixer.json", b, &cfg); e != nil {
+		return cfg, configFailure(e, "invalid trusted fixer configuration or missing required checks")
+	}
+	if !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
 		return cfg, errors.New("invalid trusted fixer configuration or missing required checks")
 	}
 	info, e = os.Stat(cfg.Executable)
@@ -243,7 +248,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 		}
 	}
 	id := opaque()
-	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready"}
+	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready", Run: r.ID}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Diff string
 		Paths              []string
@@ -339,6 +344,7 @@ func repairScope(x *Repair) (string, error) {
 	for _, p := range x.Paths {
 		allowed[p] = true
 	}
+	var added, deleted []string
 	for _, entry := range strings.Split(string(b), "\x00") {
 		if entry == "" {
 			continue
@@ -346,16 +352,32 @@ func repairScope(x *Repair) (string, error) {
 		switch {
 		case len(entry) < 4:
 			return "", errors.New("out-of-scope, staged, deleted, renamed or new path; recovery required")
-		case entry[:2] == " D" && allowed[entry[3:]]:
-			return "", authorityError{"destructive", "the fixer deleted " + entry[3:]}
+		case entry[:2] == "??" || entry[:2] == " A":
+			added = append(added, entry[3:])
+		case entry[:2] == " D":
+			deleted = append(deleted, entry[3:])
 		case !allowed[entry[3:]]:
-			return "", authorityError{"scope", "the fixer changed " + entry[3:] + " outside the authorized paths"}
+			return "", authorityError{"scope", "the fixer changed " + entry[3:] + " outside the authorized paths", nil}
 		case entry[:2] != " M":
 			return "", errors.New("out-of-scope, staged, deleted, renamed or new path; recovery required")
 		}
 	}
-	if e := validateRepairPaths(x.Worktree, x.Paths); e != nil {
+	if e := classifyGranted(x, added, deleted); e != nil {
 		return "", e
+	}
+	present := append([]string(nil), added...)
+	for _, name := range x.Paths {
+		if !has(deleted, name) {
+			present = append(present, name)
+		}
+	}
+	if e := validateRepairPaths(x.Worktree, present); e != nil {
+		return "", e
+	}
+	if len(added) > 0 {
+		if _, e := controllerGit(x.Worktree, append([]string{"--literal-pathspecs", "add", "--intent-to-add", "--"}, added...)...); e != nil {
+			return "", e
+		}
 	}
 	diff, e := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")
 	if e != nil {
@@ -364,8 +386,8 @@ func repairScope(x *Repair) (string, error) {
 	if bytes.Contains(diff, []byte("GIT binary patch")) || bytes.Contains(diff, []byte("Subproject commit")) {
 		return "", errors.New("binary or submodule repair unsupported")
 	}
-	if bytes.Contains(diff, []byte("\nold mode ")) {
-		return "", authorityError{"permissions", "the fixer changed a file mode"}
+	if bytes.Contains(diff, []byte("\nold mode ")) || bytes.Contains(diff, []byte("\nnew file mode 100755")) {
+		return "", authorityError{"permissions", "the fixer changed a file mode", nil}
 	}
 	return string(diff), nil
 }
@@ -565,14 +587,18 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	}
 	if category, reason := fixerEscalation(x, run); x.Stage != "" && category != "" {
 		x.Authority = category
-		fail("needs-authority", errors.New(reason))
+		x.Log = reason
+		refuseAuthority(x)
+		save()
 		return
 	}
 	diff, e := repairScope(x)
 	var authority authorityError
 	if errors.As(e, &authority) && x.Stage != "" {
-		x.Authority = authority.category
-		fail("needs-authority", errors.New(authority.reason))
+		x.Authority, x.AuthorityPaths = authority.category, authority.paths
+		x.Log = authority.reason
+		refuseAuthority(x)
+		save()
 		return
 	}
 	if e != nil {
@@ -663,7 +689,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("refused", e)
 		return
 	}
-	if _, e = controllerGit(x.Worktree, append([]string{"--literal-pathspecs", "add", "--"}, x.Paths...)...); e != nil {
+	if _, e = controllerGit(x.Worktree, append(append([]string{"--literal-pathspecs", "add", "--"}, x.Paths...), grantedPaths(x)...)...); e != nil {
 		fail("unknown-outcome", e)
 		return
 	}
@@ -720,7 +746,7 @@ func authorizeHandback(r *Run) error {
 	return nil
 }
 
-func handback(r *Run) error {
+func handback(r *Run, trusted string) error {
 	x := r.Repair
 	if x == nil {
 		return errors.New("no repair candidate")
@@ -775,9 +801,8 @@ func handback(r *Run) error {
 	if e != nil || strings.TrimSpace(string(parent)) != x.Base {
 		return errors.New("candidate lineage changed")
 	}
-	status, e := gitRead(r.Submitted.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
-	if e != nil || len(status) > 0 {
-		return errors.New("source dirty state is ambiguous; candidate preserved")
+	if e = sourceClean(r.Submitted.Worktree, trusted); e != nil {
+		return e
 	}
 	index, e := gitRead(r.Submitted.Worktree, "rev-parse", "--path-format=absolute", "--git-path", "index.lock")
 	if e != nil {

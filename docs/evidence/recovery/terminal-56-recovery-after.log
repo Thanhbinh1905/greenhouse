@@ -1,42 +1,43 @@
 [2J[HGreenhouse | independent review
-Run f1eca70aca10fc10f52ff970115946c2
+Run bc98391043e859b82d25d0b6cc5a01d1
 Stage: selected-repair |
 fixed-not-independently-rereviewed
-Candidate: 1df2b42c5306366ecb32cca98f76a96eb0d8fdb1
+Candidate: f9ffce7508967a8b421b60007a2d89e3c3e37fbd
 Mode: auto | one-pass | limit 4
-Reviewer: pi / fixture/model (run-local)
-Fixer: pi / fixture/model (run-local)
+Reviewer: pi / fixture/model
+Fixer: pi / fixture/model
 Budget: review 1 + repair 1 = 2 of 4
 Rules: unslop
-Settings source: run-local
+Sources: built-in default: mode, preset, limit,
+reviewer_backend, fixer_backend, auto_resume |
+run-local: rules, reviewer_model, fixer_model
+Repository override: none (no .greenhouse.json)
 Rule unslop | configured | required=true
 Source: builtin:unslop
 Digest:
 Auto-resume: on (default in auto mode)
-Blocked: repository overrides unsupported; repository
-configuration is untrusted
 Blocked: required rules unresolved or failed; use
 resolve-rules and inspect errors
 Blocked: optional repair admission consumed; no second
 repair
 Blocked: fixed but not independently rereviewed
 Recovered repair: adopt by terminal: candidate commit
-1df2b42c5306 matches the recorded repair; adopt it as
+f9ffce750896 matches the recorded repair; adopt it as
 fixed, not independently rereviewed
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-2f4b473533051a890d7828dfd0507bf831f5c3ce | ID
+34d3a9031ed8ba7c82b2c7223d1d7bce2537ced5 | ID
 53ff33092b3e66648459792b65…74df304129e708c7a70d452b03d
 Repair: fixed-not-independently-rereviewed | handback:
 awaiting-handback | actor: client
 Writer: stopped | base:
-2f4b473533051a890d7828dfd0507bf831f5c3ce | commit:
-1df2b42c5306366ecb32cca98f76a96eb0d8fdb1
+34d3a9031ed8ba7c82b2c7223d1d7bce2537ced5 | commit:
+f9ffce7508967a8b421b60007a2d89e3c3e37fbd
 Selected: 1 | fixer input:
-5a6b8141ca9250f96d0c5be37d69ce9ed90194cfd69c82bf1a865ca9f0895bf9
+971dc51cdea34c0380e0b9be0ab60da110aeb29b22a3840354b276f099608759
 | rules:
-072a0417d0f67fac6929f9bfca147a874d44782ab475b07fb180c613b137698f
+64d8f0d6b702ccfc54a47f3050384381c6dcd935413414b65e6174b9002c48a6
 | config:
-78e4c7bb0ac1e0fa2f7ab41aa38cb760b75f299a0b76fbe41d57a990054a1eed
+a0d7dc914659d4df7011ca7d43f51ab251035e2ab0a10d5637b56a4a8493863a
 Check /usr/bin/python3 -c from pathlib import Path;
 assert Path('sample.txt').read_text() == 'repaired\n'
 exit=0: passed
@@ -45,11 +46,11 @@ withheld
 Review: outstanding-findings | pi-json-v1 |
 fixture/model
 Input:
-6ea0ac73db9b1a27766891c6664ea2b513833edd58f3b6a8887e58fa9ccdc950
+006f302cdd682f3e3665a44195709150dc8cc50915f1027c62dd414841acf936
 Criteria:
-6bf7f72889c1049ad3d90da01136397bc52781f4e70fa7233bf81fe14dfd369f
+b62f8f515083d700d2efedd3f857c7cc634d16ff7beed4addb065973f4248943
 Config:
-140e9539d5d81706aedf0f95177a7bd1d194a17aa803b9deff2283603c051c7a
+1aaab0f9be3b5370fbdb60128b480769fa74d1af0f6ee9c68e5093ac2c041d74
 process completed; exit=0 stdout bytes=610 stderr
 bytes=0 overflow=false; raw diagnostics withheld to
 avoid credential disclosure
@@ -65,48 +66,50 @@ Settings
 [p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
 [x] Cancel  [n] New run  [e] Recover  [q] Detach
 
 > i
 [2J[HGreenhouse | independent review
-Run f1eca70aca10fc10f52ff970115946c2
+Run bc98391043e859b82d25d0b6cc5a01d1
 Stage: selected-repair |
 fixed-not-independently-rereviewed
-Candidate: 1df2b42c5306366ecb32cca98f76a96eb0d8fdb1
+Candidate: f9ffce7508967a8b421b60007a2d89e3c3e37fbd
 Mode: auto | one-pass | limit 4
-Reviewer: pi / fixture/model (run-local)
-Fixer: pi / fixture/model (run-local)
+Reviewer: pi / fixture/model
+Fixer: pi / fixture/model
 Budget: review 1 + repair 1 = 2 of 4
 Rules: unslop
-Settings source: run-local
+Sources: built-in default: mode, preset, limit,
+reviewer_backend, fixer_backend, auto_resume |
+run-local: rules, reviewer_model, fixer_model
+Repository override: none (no .greenhouse.json)
 Rule unslop | configured | required=true
 Source: builtin:unslop
 Digest:
 Auto-resume: on (default in auto mode)
-Blocked: repository overrides unsupported; repository
-configuration is untrusted
 Blocked: required rules unresolved or failed; use
 resolve-rules and inspect errors
 Blocked: optional repair admission consumed; no second
 repair
 Blocked: fixed but not independently rereviewed
 Recovered repair: adopt by terminal: candidate commit
-1df2b42c5306 matches the recorded repair; adopt it as
+f9ffce750896 matches the recorded repair; adopt it as
 fixed, not independently rereviewed
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-2f4b473533051a890d7828dfd0507bf831f5c3ce | ID
+34d3a9031ed8ba7c82b2c7223d1d7bce2537ced5 | ID
 53ff33092b3e66648459792b65…74df304129e708c7a70d452b03d
 Repair: fixed-not-independently-rereviewed | handback:
 awaiting-handback | actor: client
 Writer: stopped | base:
-2f4b473533051a890d7828dfd0507bf831f5c3ce | commit:
-1df2b42c5306366ecb32cca98f76a96eb0d8fdb1
+34d3a9031ed8ba7c82b2c7223d1d7bce2537ced5 | commit:
+f9ffce7508967a8b421b60007a2d89e3c3e37fbd
 Selected: 1 | fixer input:
-5a6b8141ca9250f96d0c5be37d69ce9ed90194cfd69c82bf1a865ca9f0895bf9
+971dc51cdea34c0380e0b9be0ab60da110aeb29b22a3840354b276f099608759
 | rules:
-072a0417d0f67fac6929f9bfca147a874d44782ab475b07fb180c613b137698f
+64d8f0d6b702ccfc54a47f3050384381c6dcd935413414b65e6174b9002c48a6
 | config:
-78e4c7bb0ac1e0fa2f7ab41aa38cb760b75f299a0b76fbe41d57a990054a1eed
+a0d7dc914659d4df7011ca7d43f51ab251035e2ab0a10d5637b56a4a8493863a
 Check /usr/bin/python3 -c from pathlib import Path;
 assert Path('sample.txt').read_text() == 'repaired\n'
 exit=0: passed
@@ -115,11 +118,11 @@ withheld
 Review: outstanding-findings | pi-json-v1 |
 fixture/model
 Input:
-6ea0ac73db9b1a27766891c6664ea2b513833edd58f3b6a8887e58fa9ccdc950
+006f302cdd682f3e3665a44195709150dc8cc50915f1027c62dd414841acf936
 Criteria:
-6bf7f72889c1049ad3d90da01136397bc52781f4e70fa7233bf81fe14dfd369f
+b62f8f515083d700d2efedd3f857c7cc634d16ff7beed4addb065973f4248943
 Config:
-140e9539d5d81706aedf0f95177a7bd1d194a17aa803b9deff2283603c051c7a
+1aaab0f9be3b5370fbdb60128b480769fa74d1af0f6ee9c68e5093ac2c041d74
 process completed; exit=0 stdout bytes=610 stderr
 bytes=0 overflow=false; raw diagnostics withheld to
 avoid credential disclosure
@@ -135,6 +138,7 @@ Settings
 [p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
 [x] Cancel  [n] New run  [e] Recover  [q] Detach
 ok
 >

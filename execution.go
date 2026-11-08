@@ -65,6 +65,7 @@ type Execution struct {
 	Log          string         `json:"log"`
 	Result       *Verdict       `json:"result,omitempty"`
 	Budget       string         `json:"budget,omitempty"`
+	Run          string         `json:"run,omitempty"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -113,9 +114,10 @@ func trustedReviewer() (ReviewerConfig, error) {
 	if e != nil {
 		return cfg, e
 	}
-	d := json.NewDecoder(bytes.NewReader(b))
-	d.DisallowUnknownFields()
-	if d.Decode(&cfg) != nil || d.Decode(new(any)) != io.EOF || !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || len(cfg.Model) > 256 || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || strings.HasPrefix(cfg.Model, "-") {
+	if e = decodeConfig("reviewer.json", b, &cfg); e != nil {
+		return cfg, configFailure(e, "explicit executable and model required")
+	}
+	if !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || len(cfg.Model) > 256 || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || strings.HasPrefix(cfg.Model, "-") {
 		return cfg, errors.New("explicit executable and model required")
 	}
 	info, e = os.Stat(cfg.Executable)
@@ -250,7 +252,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", full, reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
+	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", full, reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -353,6 +355,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	defer cancel()
 	out, stderr := &boundedBuffer{limit: executorStdoutLimit}, &boundedBuffer{limit: executorStderrLimit}
 	exitCode, err := runProcess(withExecutor(ctx, x.ID), dir, x.Config.Executable, x.Args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
+	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, backendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
 	return reviewFrom(x, exitCode, out, stderr, err, ctx.Err() != nil)
 }
 

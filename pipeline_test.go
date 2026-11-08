@@ -80,6 +80,12 @@ if os.path.exists(root+'/fix-escalate'):
     print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':answer}]}}))
     print(json.dumps({'type':'agent_settled','aborted':False}))
     sys.exit(0)
+if os.path.exists(root+'/fix-extra'):
+    extra=open(root+'/fix-extra').read()
+    os.makedirs(os.path.dirname(extra) or '.', exist_ok=True)
+    with open(extra,'w') as f: f.write('added\n')
+if os.path.exists(root+'/fix-remove'):
+    os.remove(open(root+'/fix-remove').read())
 if target=='DELETE':
     os.remove(path)
 elif target=='APPEND':
@@ -114,9 +120,24 @@ func writePrivateJSON(t *testing.T, path string, v any) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = os.WriteFile(path, b, 0600); err != nil {
+	if err = writeConfigBytes(path, b, 0600); err != nil {
 		t.Fatal(err)
 	}
+}
+
+func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
+	if has(configFiles, filepath.Base(path)) && !strings.Contains(string(data), `"version"`) {
+		head := `{"version":2,`
+		if filepath.Base(path) == "pipeline.json" {
+			head += `"budget_unit":"rounds",`
+		}
+		body := strings.TrimPrefix(strings.TrimSpace(string(data)), "{")
+		if strings.TrimSpace(body) == "}" {
+			head = strings.TrimSuffix(head, ",")
+		}
+		data = []byte(head + body)
+	}
+	return os.WriteFile(path, data, perm)
 }
 
 func installPipelineProvider(t *testing.T, home string) {

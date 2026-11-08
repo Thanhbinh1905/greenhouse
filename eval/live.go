@@ -352,7 +352,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	executable := o.Pi
 	if o.Backend == "claude" {
 		executable = o.Agent
-		backends, _ := json.Marshal(map[string]any{"claude": map[string]string{"executable": shimBin}})
+		backends, _ := json.Marshal(map[string]any{"version": 2, "claude": map[string]string{"executable": shimBin}})
 		if err := os.WriteFile(filepath.Join(home, "backends.json"), backends, 0o600); err != nil {
 			return fail(err)
 		}
@@ -362,7 +362,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
 	}
-	reviewer, _ := json.Marshal(map[string]string{"executable": shimBin, "model": o.Model})
+	reviewer, _ := json.Marshal(map[string]any{"version": 2, "executable": shimBin, "model": o.Model})
 	if err := os.WriteFile(filepath.Join(home, "reviewer.json"), reviewer, 0o600); err != nil {
 		return fail(err)
 	}
@@ -374,6 +374,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 		keyEnv = "EVAL_TEST_API_KEY"
 	}
 	providerConfig, _ := json.Marshal(map[string]any{
+		"version":   2,
 		"providers": map[string]any{provider: map[string]string{"base_url": o.BaseURL, "api_key_env": keyEnv, "api": "openai-completions"}},
 		"models":    []string{o.Model},
 	})

@@ -42,10 +42,11 @@ type Identity struct {
 	Head       string `json:"head"`
 }
 type Snapshot struct {
-	ID           string   `json:"id"`
-	Settings     Settings `json:"settings"`
-	Source       string   `json:"source"`
-	LegacyDigest string   `json:"legacy_digest,omitempty"`
+	ID           string            `json:"id"`
+	Settings     Settings          `json:"settings"`
+	Source       string            `json:"source"`
+	LegacyDigest string            `json:"legacy_digest,omitempty"`
+	Sources      map[string]string `json:"sources,omitempty"`
 }
 type Event struct {
 	Kind   string `json:"kind"`
@@ -107,26 +108,32 @@ type Request struct {
 	Choice   string    `json:"choice,omitempty"`
 	Limit    int       `json:"limit,omitempty"`
 	Client   string    `json:"client,omitempty"`
+	Digest   string    `json:"digest,omitempty"`
 }
 type Response struct {
-	Models      []string       `json:"models,omitempty"`
-	RuleScope   string         `json:"rule_scope,omitempty"`
-	Rules       []RuleEvidence `json:"rules,omitempty"`
-	RulesReady  bool           `json:"rules_ready"`
-	Version     int            `json:"version"`
-	Outcome     string         `json:"outcome"`
-	Error       string         `json:"error,omitempty"`
-	RunID       string         `json:"run_id,omitempty"`
-	Input       string         `json:"input_id,omitempty"`
-	Gate        string         `json:"gate_id,omitempty"`
-	Token       string         `json:"token,omitempty"`
-	Run         *Run           `json:"run,omitempty"`
-	Defaults    Settings       `json:"defaults"`
-	Blocked     []string       `json:"blocked"`
-	Actions     []string       `json:"actions"`
-	Decision    *Decision      `json:"decision,omitempty"`
-	Budget      *Budget        `json:"budget,omitempty"`
-	Explanation string         `json:"explanation,omitempty"`
+	Models      []string          `json:"models,omitempty"`
+	RuleScope   string            `json:"rule_scope,omitempty"`
+	Rules       []RuleEvidence    `json:"rules,omitempty"`
+	RulesReady  bool              `json:"rules_ready"`
+	Version     int               `json:"version"`
+	Outcome     string            `json:"outcome"`
+	Error       string            `json:"error,omitempty"`
+	RunID       string            `json:"run_id,omitempty"`
+	Input       string            `json:"input_id,omitempty"`
+	Gate        string            `json:"gate_id,omitempty"`
+	Token       string            `json:"token,omitempty"`
+	Run         *Run              `json:"run,omitempty"`
+	Defaults    Settings          `json:"defaults"`
+	Blocked     []string          `json:"blocked"`
+	Actions     []string          `json:"actions"`
+	Decision    *Decision         `json:"decision,omitempty"`
+	Budget      *Budget           `json:"budget,omitempty"`
+	Explanation string            `json:"explanation,omitempty"`
+	Config      []ConfigStatus    `json:"config"`
+	Migrations  []Migration       `json:"migrations,omitempty"`
+	Sources     map[string]string `json:"defaults_sources,omitempty"`
+	Repository  *RepositoryStatus `json:"repository,omitempty"`
+	Transcript  *TranscriptView   `json:"transcript,omitempty"`
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -139,6 +146,8 @@ type Store struct {
 	Runs           map[string]*Run    `json:"runs"`
 	Slots          map[string]string  `json:"slots"`
 	Receipts       map[string]Receipt `json:"receipts"`
+	Migrations     []Migration        `json:"migrations,omitempty"`
+	Trust          map[string]Trust   `json:"trust"`
 }
 
 func opaque() string {
@@ -269,7 +278,7 @@ func persist(h string, s *Store) error {
 	return d.Sync()
 }
 func load(h string) (*Store, error) {
-	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}}
+	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
 	b, e := os.ReadFile(filepath.Join(h, "state.json"))
 	if os.IsNotExist(e) {
 		return s, nil
@@ -281,6 +290,9 @@ func load(h string) (*Store, error) {
 		return nil, e
 	}
 	initial := Settings{ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
+	if s.Trust == nil {
+		s.Trust = map[string]Trust{}
+	}
 	if s.DefaultsSource == "" {
 		s.DefaultsSource = "built-in default"
 	}
@@ -378,8 +390,19 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{}, Actions: []string{"attach", "inspect"}, Config: configStatuses(), Migrations: s.Migrations, Sources: userSources(s)}
+	for _, c := range v.Config {
+		if c.Status == "older" || c.Status == "newer" || c.Status == "invalid" {
+			v.Blocked = append(v.Blocked, "configuration: "+c.Error)
+		}
+		if c.Status == "older" && !has(v.Actions, "migrate") {
+			v.Actions = append(v.Actions, "migrate")
+		}
+	}
 	if r != nil {
+		var status RepositoryStatus
+		v.Defaults, v.Sources, status = repositoryDefaults(s, r.Submitted)
+		v.Repository = &status
 		v.RuleScope = effectiveRuleScope(r)
 		v.Rules, v.RulesReady = effectiveRules(r)
 		if !v.RulesReady {
@@ -421,7 +444,7 @@ func view(s *Store, r *Run) Response {
 				if p := r.Pipeline; p != nil && (p.Status == "ci-ready" || p.Status == "locally-ready" && localOnlyPipeline(p)) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
 					v.Actions = append(v.Actions, "handback")
 				}
-				if r.ReviewUsed == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
+				if ownReviews(r) == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
 					v.Actions = append(v.Actions, "prepare")
 					if r.Intent != "" && r.Target != "" && r.Reviewer != nil && v.RulesReady && r.Configs[len(r.Configs)-1].Settings.Preset == "one-pass" {
 						v.Actions = append(v.Actions, "review")
@@ -575,15 +598,31 @@ func handle(s *Store, q Request) Response {
 		}
 		return v
 	}
+	if q.Op == "transcript" {
+		target := r
+		if q.RunID != "" {
+			target = s.Runs[q.RunID]
+		}
+		if target == nil || target.Submitted.Repository != id.Repository {
+			return fail("unknown run for this repository", r)
+		}
+		transcript, err := readTranscript(target.ID)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		v := view(s, r)
+		v.Transcript = transcript
+		return v
+	}
 	if q.Op == "attach" || q.Op == "inspect" {
 		if r == nil && q.Op == "attach" {
-			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: s.Defaults, Source: s.DefaultsSource}}, Events: []Event{{Kind: "created", Actor: "client"}}}
+			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "created", Actor: "client"}}}
 			s.Runs[r.ID] = r
 			s.Slots[slot] = r.ID
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "recover" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "migrate" && q.Op != "trust" && q.Op != "recover" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -595,6 +634,37 @@ func handle(s *Store, q Request) Response {
 			return fail("action_id reused with different input", r)
 		}
 		return receipt.Result
+	}
+	actor := "axi"
+	if q.Client == "terminal" {
+		actor = "terminal"
+	}
+	if q.Op == "trust" {
+		_, _, status := repositoryDefaults(s, id)
+		if !validText(q.Reason) {
+			return fail("reason required", r)
+		}
+		if q.Digest != status.Digest {
+			return fail("override file changed or was not inspected; inspect it again before trusting", r)
+		}
+		s.Trust[id.Repository] = Trust{Repository: id.Repository, Path: status.Path, Digest: status.Digest, Actor: actor, Reason: q.Reason, Action: q.Action}
+		v := view(s, r)
+		s.Receipts[q.Action] = Receipt{d, frozen(v)}
+		return v
+	}
+	if q.Op == "migrate" {
+		if !validText(q.Reason) {
+			return fail("reason required", r)
+		}
+		records, err := migrateConfig(actor, q.Reason, q.Action)
+		s.Migrations = append(s.Migrations, records...)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		v := view(s, r)
+		v.Migrations = records
+		s.Receipts[q.Action] = Receipt{d, frozen(v)}
+		return v
 	}
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != currentGate(r) {
 		return fail("stale run/input/gate/token", r)
@@ -615,10 +685,6 @@ func handle(s *Store, q Request) Response {
 		r.Token = opaque()
 	} else if q.Op != "recover" && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required") {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
-	}
-	actor := "axi"
-	if q.Client == "terminal" {
-		actor = "terminal"
 	}
 	paused := r
 	if q.Op == "cancel" {
@@ -650,7 +716,7 @@ func handle(s *Store, q Request) Response {
 		r.AutoRetries = 0
 		r.Token = opaque()
 	} else if q.Op == "prepare" {
-		if r.ReviewUsed != 0 || !validText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
+		if ownReviews(r) != 0 || !validText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
 			return fail("immutable review intent required before dispatch", r)
 		}
 		if err := prepareRun(r, q.Intent, q.Target); err != nil {
@@ -761,7 +827,7 @@ func handle(s *Store, q Request) Response {
 					r.Review.Status = "stale"
 				}
 			}
-			r.Configs = append(r.Configs, Snapshot{ID: opaque(), Settings: *q.Settings, Source: "run-local"})
+			r.Configs = append(r.Configs, nextSnapshot(r.Configs[len(r.Configs)-1], *q.Settings, sourceRunLocal))
 			for _, role := range []struct{ name, fromBackend, fromModel, toBackend, toModel string }{{"reviewer", old.ReviewerBackend, old.ReviewerModel, q.Settings.ReviewerBackend, q.Settings.ReviewerModel}, {"fixer", old.FixerBackend, old.FixerModel, q.Settings.FixerBackend, q.Settings.FixerModel}} {
 				if role.fromBackend != role.toBackend || role.fromModel != role.toModel {
 					r.Events = append(r.Events, Event{Kind: "backend-switch", Actor: actor, Reason: role.name + ": " + q.Reason, From: role.fromBackend + " " + role.fromModel, To: role.toBackend + " " + role.toModel})
@@ -770,16 +836,23 @@ func handle(s *Store, q Request) Response {
 			invalidate(r, "")
 			supersede(r)
 			r.Events = append(r.Events, Event{Kind: q.Op, Actor: "client", Reason: q.Reason, Used: r.ReviewUsed + r.RepairUsed, Before: old.Limit, After: q.Settings.Limit, Review: r.ReviewUsed, Repair: r.RepairUsed})
-		} else {
+		} else if q.Target == "repository" {
+			if err := saveRepositoryOverride(s, id, *q.Settings, actor, q.Reason, q.Action); err != nil {
+				return fail(err.Error(), r)
+			}
+			r.Events = append(r.Events, Event{Kind: "save", Actor: actor, Reason: "repository override: " + q.Reason})
+		} else if q.Target == "" || q.Target == "user" {
 			s.Defaults = *q.Settings
 			s.DefaultsSource = "saved"
 			r.Events = append(r.Events, Event{Kind: "save", Actor: "client", Reason: q.Reason})
+		} else {
+			return fail("save target must be user or repository", r)
 		}
 		r.Token = opaque()
 	} else {
 		prior := r.ID
 		findings := append([]Finding(nil), r.Findings...)
-		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{{ID: opaque(), Settings: s.Defaults, Source: s.DefaultsSource}}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
@@ -790,6 +863,12 @@ func handle(s *Store, q Request) Response {
 	json.Unmarshal(b, &frozen)
 	s.Receipts[q.Action] = Receipt{d, frozen}
 	return v
+}
+func frozen(v Response) Response {
+	b, _ := json.Marshal(v)
+	var out Response
+	json.Unmarshal(b, &out)
+	return out
 }
 func acceptRepairProgress(r *Run, id string, value Repair) bool {
 	if r == nil || r.Repair == nil || r.Repair.ID != id || r.Status == "cancelling" && value.Status == "committing" {
@@ -1324,7 +1403,10 @@ func terminal(h, path string) error {
 		} else {
 			fmt.Fprintln(&page, "Greenhouse | independent review")
 		}
-		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s (%s)\nFixer: %s / %s (%s)\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Source, s.Settings.FixerBackend, s.Settings.FixerModel, s.Source, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), s.Source)
+		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), sourceSummary(fieldSources(s)))
+		if o := v.Repository; o != nil {
+			fmt.Fprintln(&page, overrideLine(o))
+		}
 		for _, rule := range v.Rules {
 			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
 			if rule.Error != "" {
@@ -1398,7 +1480,7 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[x] Cancel  [n] New run  [e] Recover  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[t] Trust repository  [u] Migrate config  [o] Logs\n[x] Cancel  [n] New run  [e] Recover  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		terminalPrompt("> ")
@@ -1410,6 +1492,22 @@ func terminal(h, path string) error {
 			return nil
 		}
 		q = Request{Version: 1, Op: "inspect", Path: path}
+		if op == "o" {
+			logged, err := call(h, Request{Version: 1, Op: "transcript", Path: path, RunID: r.ID})
+			if err != nil {
+				return err
+			}
+			if logged.Transcript == nil {
+				message = logged.Outcome + " " + logged.Error
+				continue
+			}
+			screen(transcriptPage(r.ID, logged.Transcript))
+			terminalPrompt("Press Enter to return\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			continue
+		}
 		if op == "c" {
 			details = !details
 		}
@@ -1540,7 +1638,7 @@ func terminal(h, path string) error {
 			if modelErr != nil {
 				modelsText = "catalog unavailable: " + modelErr.Error()
 			}
-			terminalPrompt("Settings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
+			terminalPrompt("Current values and sources:\n%s\nSettings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", settingsTable(s), s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
 			if !reader.Scan() {
 				return nil
 			}
@@ -1594,7 +1692,7 @@ func terminal(h, path string) error {
 			if value := reader.Text(); value != "" {
 				draft.AutoResume = value
 			}
-			terminalPrompt("[a] Apply to run  [d] Save user defaults  [c] Cancel\n> ")
+			terminalPrompt("[a] Apply to run  [d] Save user defaults\n[r] Save repository override  [c] Cancel\n> ")
 			if !reader.Scan() {
 				return nil
 			}
@@ -1603,11 +1701,35 @@ func terminal(h, path string) error {
 				q.Op = "apply"
 			case "d":
 				q.Op = "save"
+			case "r":
+				q.Op, q.Target = "save", "repository"
 			default:
 				continue
 			}
 			q.Settings = &draft
 			q.Reason = "terminal Settings"
+		} else if op == "t" {
+			o := v.Repository
+			if o == nil {
+				continue
+			}
+			terminalPrompt("Trust %s of this repository (digest %.12s)? Its values apply to new runs. Type trust:\n> ", overrideName, o.Digest)
+			if !reader.Scan() {
+				return nil
+			}
+			if reader.Text() != "trust" {
+				continue
+			}
+			q.Op, q.Digest, q.Reason = "trust", o.Digest, "terminal trust"
+		} else if op == "u" {
+			terminalPrompt("Migrate older configuration files? Each keeps a backup. Type migrate:\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			if reader.Text() != "migrate" {
+				continue
+			}
+			q.Op, q.Reason = "migrate", "terminal migrate"
 		} else if op == "b" {
 			terminalPrompt("Keep this run and start a linked rerun from start? Type rerun:\n> ")
 			if !reader.Scan() {

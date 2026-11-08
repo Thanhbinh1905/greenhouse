@@ -31,7 +31,7 @@ state = pathlib.Path(os.environ["GREENHOUSE_HOME"])
 pi = shutil.which("pi")
 assert pi, "Install Pi 1.5.0 and put pi on PATH"
 config = state / "reviewer.json"
-config.write_text(json.dumps({"executable": pi, "model": "openai/gpt-5.6-luna"}))
+config.write_text(json.dumps({"version": 2, "executable": pi, "model": "openai/gpt-5.6-luna"}))
 config.chmod(0o600)
 PYCONFIG
 ```
@@ -59,9 +59,9 @@ cd /path/to/a/git/worktree
 /path/to/greenhouse
 ```
 
-The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `l` explicitly resolves (loads) rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, `r` reruns a paused, failed or cancelled stage, `a` cancels a scheduled automatic resume, `b` starts a linked rerun from start, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
+The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `l` explicitly resolves (loads) rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, `r` reruns a paused, failed or cancelled stage, `a` cancels a scheduled automatic resume, `b` starts a linked rerun from start, `t` trusts the repository override, `u` migrates older configuration files, `o` shows the transcript log, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
-Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal wraps prose at word boundaries and abbreviates tokens wider than the screen. AXI retains their full values. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. Repository overrides are unsupported and untrusted.
+Settings edits are drafts until you select Apply or Save. Settings lists each current value with its source: `built-in default`, `per-user`, `trusted repository override` or `run-local`. Apply adds an immutable run-local snapshot. Save changes user defaults (`d`) or the trusted repository override (`r`) without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal wraps prose at word boundaries and abbreviates tokens wider than the screen. AXI retains their full values. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. See [repository overrides](#repository-overrides-and-trust).
 
 ## JSON interface
 
@@ -101,14 +101,14 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
 }
 ```
 
-Supported reads include `attach`, `inspect`, and `models`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, `cancel-auto-resume`, and `recover`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes block replacement until an explicit [recovery](#recovery-after-interruption) answers them.
+Supported reads include `attach`, `inspect`, `models`, and `transcript`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `trust`, `migrate`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, and `cancel-auto-resume`, and `recover`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason; `save` takes `"target":"user"` (the default) or `"target":"repository"`. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes block replacement until an explicit [recovery](#recovery-after-interruption) answers them.
 
 Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json`. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. Tool restriction is not OS confinement. Checks run directly, not through an agent.
 
 Create `fixer.json` in `GREENHOUSE_HOME` with mode 0600:
 
 ```json
-{"executable":"/absolute/path/to/pi","model":"provider/exact-model-id","name":"Greenhouse","email":"greenhouse@example.invalid","checks":[["/absolute/path/to/check","--verify"]]}
+{"version":2,"executable":"/absolute/path/to/pi","model":"provider/exact-model-id","name":"Greenhouse","email":"greenhouse@example.invalid","checks":[["/absolute/path/to/check","--verify"]]}
 ```
 
 Each check is an argv array with an absolute executable path. No shell is inserted. Missing checks are unconfigured. Changed fixer/check configuration refuses execution. The controller records check exit codes and bounded output summaries, verifies candidate scope, and commits only authorized paths. Binary changes, submodules, executable Git hooks, configured Git filters, fsmonitor, attributes, or signing requirements are unsupported and refuse rather than being bypassed. Failed or ambiguous candidates remain available in their managed worktree for recovery.
@@ -124,18 +124,18 @@ Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` an
 Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600. The executable is the trusted per-user authority; Settings selects the model independently:
 
 ```json
-{"executable":"/absolute/path/to/pi","model":"openai/gpt-5.6-luna"}
+{"version":2,"executable":"/absolute/path/to/pi","model":"openai/gpt-5.6-luna"}
 ```
 
 Configure custom provider endpoints in a separate private `providers.json` in `GREENHOUSE_HOME`:
 
 ```json
-{"providers":{"openai":{"base_url":"http://127.0.0.1:8317/v1","api_key_env":"OPENAI_API_KEY","api":"openai-completions"}},"models":[]}
+{"version":2,"providers":{"openai":{"base_url":"http://127.0.0.1:8317/v1","api_key_env":"OPENAI_API_KEY","api":"openai-completions"}},"models":[]}
 ```
 
 Set both files to mode 0600. Pi-reported models appear in Settings. Add custom provider-qualified IDs to `models` when Pi does not report them. Prepare checks the provider's `/models` endpoint and the configured key environment variable before any review. Greenhouse writes only the endpoint and `$ENV_VAR` reference into Pi's private temporary agent directory. It never reads Pi's `models.json` or stores credentials.
 
-Only per-user configuration grants executable authority. There are no arbitrary arguments, repository overrides, or session selectors. Models require an exact provider-qualified ID without a thinking suffix or wildcard. A successful response must report the same provider and model. The adapter targets the installed Pi 1.5.0 CLI; incompatible flags or event output yield an inconclusive result.
+Only per-user configuration grants executable authority. There are no arbitrary arguments or session selectors, and a repository override cannot set an executable. Models require an exact provider-qualified ID without a thinking suffix or wildcard. A successful response must report the same provider and model. The adapter targets the installed Pi 1.5.0 CLI; incompatible flags or event output yield an inconclusive result.
 
 Prepare (`p`, or AXI `prepare` with `intent` and `target`) captures a full commit object ID, the current candidate, selected committed diff, and reviewer configuration. Inspect `run.selected_diff` or toggle `c` before dispatch. Resolve rules, then request `review` with current mutation tokens. Review rejects changed reviewer configuration until another explicit Prepare. Dirty files are neither included nor changed. Empty diffs, binary patches, submodules, and inputs exceeding 1 MiB refuse; the encoded bundle is capped at 2 MiB.
 
@@ -143,7 +143,7 @@ A one-pass run permits one invocation. Admission consumes review usage even if l
 
 Pi receives a fresh ephemeral session, explicit read-only tools, no extensions, MCP, skills, context files, prompt templates, or project approval. Its working directory and agent directory are fresh and private. Author session routing and process-injection environment variables are removed. The adapter uses environment-based provider credentials; existing Pi auth files and custom provider files are not copied or loaded. Read-only tools are not an OS sandbox. Pi gets no repository checkout. The bundle carries the committed diff and the candidate content of each changed file, with line numbers, but no other source files.
 
-`run.review` exposes backend, requested and reported model, deterministic argv, configuration digest, exact emitted input and criteria digests, coverage, findings, status, and bounded execution summaries. Output is capped at 4 MiB, stderr at 64 KiB, and runtime at ten minutes. Review uses `exec.CommandContext` with a 250 ms pipe-wait grace; it does not verify descendant cleanup. Repair and check commands use a Linux subreaper that terminates and reaps descendants after completion or cancellation. If that runner dies or cannot verify cleanup, Greenhouse parks the writer outcome. Raw transcripts and stderr are withheld to avoid persisting credentials. The terminal displays the same findings, provenance, and summary; `c` also shows the diff. A successful verdict certifies only the bound independent-review input. Config changes and source movement mark current evidence stale; historical verdicts remain inspectable.
+`run.review` exposes backend, requested and reported model, deterministic argv, configuration digest, exact emitted input and criteria digests, coverage, findings, status, and bounded execution summaries. Output is capped at 4 MiB, stderr at 64 KiB, and runtime at ten minutes. Review uses `exec.CommandContext` with a 250 ms pipe-wait grace; it does not verify descendant cleanup. Repair and check commands use a Linux subreaper that terminates and reaps descendants after completion or cancellation. If that runner dies or cannot verify cleanup, Greenhouse parks the writer outcome. Raw output goes only to the redacted [transcript log](#transcript-logs). The terminal displays the same findings, provenance, and summary; `c` also shows the diff. A successful verdict certifies only the bound independent-review input. Config changes and source movement mark current evidence stale; historical verdicts remain inspectable.
 
 ## Agent backends
 
@@ -160,7 +160,8 @@ A run whose backend reports a different model is `inconclusive` for a review and
 Claude Code and Codex use the User's existing CLI logins. Greenhouse runs the installed CLI with the environment it already strips for Pi, minus author-session variables (`CLAUDECODE`, `CLAUDE_CODE_*`, `CODEX_*` except `CODEX_HOME`). It never reads, copies or stores credential files, and it stores only a redacted one-line failure message. Declare the executables in a private `backends.json` (mode 0600) in `GREENHOUSE_HOME`:
 
 ```json
-{"claude": {"executable": "/home/me/.local/bin/claude"},
+{"version": 2,
+ "claude": {"executable": "/home/me/.local/bin/claude"},
  "codex": {"executable": "/home/me/.local/bin/codex",
            "provider": {"base_url": "http://127.0.0.1:8317/v1"}},
  "fallback": {"reviewer": [{"backend": "claude", "model": "claude-sonnet-5-5"}]},
@@ -215,7 +216,7 @@ While a run is paused, change the reviewer or fixer backend and model in Setting
 Apply the `full` preset, then Prepare. Prepare also reads a private `pipeline.json` from `GREENHOUSE_HOME` with mode 0600 and records its commands and executable digests. Repository files never add commands.
 
 ```json
-{"name":"Greenhouse","email":"greenhouse@example.invalid",
+{"version":2,"budget_unit":"rounds","name":"Greenhouse","email":"greenhouse@example.invalid",
  "remote":"git@github.com:acme/garden.git","github_owner":"acme","github_repo":"garden","pull_base":"main",
  "required_checks":["CI / test"],
  "test":[["/absolute/path/to/test-runner","./..."]],
@@ -225,7 +226,8 @@ Apply the `full` preset, then Prepare. Prepare also reads a private `pipeline.js
  "not_applicable":{},
  "repairs":["test","lint","docs"],
  "repair_limit":2,
- "yolo":{"actor":"night-shift","cap":"final-fix"}}
+ "yolo":{"actor":"night-shift","cap":"final-fix"},
+ "grants":[{"authority":"add-files","stages":["test"],"paths":["testdata/"],"reason":"test repairs may add fixtures"}]}
 ```
 
 `pipeline` (terminal `g`) runs the stages in order on a managed private candidate worktree:
@@ -264,7 +266,15 @@ The combined cap counts review rounds and finding-repair rounds; `budget` in eve
 - `rethink`: marks the run `rethought` and creates a linked successor run (`predecessor` and `successor`) with the same settings and every finding. The old run keeps its reviews, repairs, decisions and candidate ref; `inspect` with its `run_id` shows them. The successor needs a new Prepare.
 - `discard`: marks the run `discarded` and keeps every record, the candidate branch and its worktree. It deletes nothing and releases the run's custody, so New run becomes possible.
 
-A repair that needs authority beyond the approved intent parks a user-only `authority` decision in every mode. The controller detects a deleted file (`destructive`), a changed file mode (`permissions`) and a change outside the authorized paths (`scope`). The fixer can also stop without edits and answer `{"escalate":"intent|acceptance|credentials|scope|permissions|destructive","reason":"..."}`. Nothing is committed. The only options are `rethink` and `discard`; neither a budget nor `accept-head` can answer it. Granting expanded authority to the fixer is unsupported.
+A repair that needs authority beyond the approved intent parks a user-only `authority` decision in every mode. The controller detects a deleted file (`destructive`), a changed file mode (`permissions`) and a change outside the authorized paths (`scope`). The fixer can also stop without edits and answer `{"escalate":"intent|acceptance|credentials|scope|permissions|destructive","reason":"..."}`. Nothing is committed. The options are `rethink` and `discard`, plus `grant` when the fixer added or deleted files; neither a budget nor `accept-head` can answer it.
+
+### Fixer authority grants
+
+A repair never adds or deletes files by default. When it does, the controller commits nothing, keeps the edits in the repair's `partial`, restores the candidate, and parks the `authority` decision with category `add-files` or `destructive` and the attempted paths in `authority_paths`. Answering `grant` records a run grant for exactly those paths at that stage; the stage then repairs again within its normal budget. Only the User can answer it: neither `auto` nor the YOLO actor can.
+
+A grant can also be declared in the trusted `pipeline.json`. `authority` is `add-files` or `delete-files`, `stages` lists `review`, `test`, `lint`, `docs` or `ci`, and each path is a repository-relative file or a directory ending in `/`. A reason is required. A repository override can never declare a grant.
+
+`run.pipeline.grants` lists every grant with its source (`pipeline.json` or `run`), actor, reason, and deciding decision. The fixer input lists the grants of its stage, and each repair records the changes it made under a grant in `granted`, for example `add-files:testdata/case.json`. Changed file modes, executable new files, and edits outside the authorized paths still park a decision that a grant cannot answer.
 
 Answer the open decision with `decide` (terminal `d`). The terminal accepts an option exactly as listed, a limit in digits, and finding IDs as shown, separated by commas or spaces. Narrow screens abbreviate long finding IDs with `…`; a displayed finding ID selects only a unique matching finding. Other values wider than the screen, such as URLs and refs, are printed whole on their own line. Full IDs remain available through AXI. Only an empty line selects the whole group. Other input selects the listed IDs after validation. The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
 
@@ -274,7 +284,7 @@ Answer the open decision with `decide` (terminal `d`). The terminal accepts an o
 
 Each answer records the choice, the actor (`terminal`, `axi`, `auto`, or `yolo:<actor>`), the reason as typed, and the action ID; no quote is generated. Replaying an action returns its receipt. An answered or superseded decision changes the gate, so a stale answer refuses. A rule or limit change supersedes an open decision that is not user-only. `pipeline` refuses while a decision is open.
 
-Still unsupported in step 4: granting expanded fixer authority, mechanical lint autofix, and new or deleted files in gate repairs.
+Still unsupported in step 4: mechanical lint autofix.
 
 ### Recovery after interruption
 
@@ -295,11 +305,37 @@ On restart, and every 250 ms while an orphaned executor still holds its lease, t
 - `inspect`: probes again and records a `recovery-inspect` event.
 - `adopt`: offered only when no executor still holds a lease and the observed candidate matches what the durable record predicted: a repair commit whose parent is the repair base and whose diff equals the checked diff, with every configured check passed; a conflict or target merge whose parents are the recorded candidate and target and, for a conflict, without markers; an intact new candidate worktree; or a source branch that is unchanged or already at the candidate after an interrupted handback. A full pipeline continues from there.
 - `discard`: keeps an advanced head at `refs/greenhouse/recovered/<recovery id>` and uncommitted changes in `run.recoveries[].partial`, resets the private candidate to the recorded head, and reruns the stage. The rerun spends new budget; when the budget refuses it, the run stays stopped at that stage with the reason. Interrupted handbacks cannot be discarded.
-- `new-run`: marks the run `superseded`, keeps its records and candidate ref, and links a successor that inherits the consumed review and repair usage, the gate repair usage, and any final-fix grant. `run.inherited` records them, and a later Prepare keeps them.
+- `new-run`: marks the run `superseded`, keeps its records and candidate ref, and links a successor that inherits the consumed review and repair usage, the gate repair usage, and any final-fix grant. `run.inherited` records them. The successor can be prepared again until it dispatches its own review, and Prepare keeps the inherited usage and grant.
 
 Each answer is stored in `run.recoveries` with its choice, actor, reason, action ID and outcome, and changes the token and gate, so a stale or repeated answer refuses or replays its receipt. No choice refunds budget.
 
 A candidate ref is guarded by a lease file in the repository's common Git directory under `greenhouse-leases/`. It names the owning state home and an epoch, and survives daemon restarts. Creating a candidate takes the lease; every fixer start, commit, target merge, conflict fix and recovery write first checks that this state home holds it at the epoch the run recorded. A daemon on another state home, or a restored copy of an older store, is refused. `discard` moves the lease to the next epoch. The daemon removes a lease of its own state home only when the run holding that exact epoch has released custody and has no running executor. Runs created before leases stay unleased.
+
+## Configuration versions
+
+Each per-user file (`reviewer.json`, `fixer.json`, `providers.json`, `backends.json` and `pipeline.json`) carries `"version": 2`. A file without `version` is version 1. Greenhouse refuses to use an older file and names it in `blocked` and in the AXI `config` list. A file newer than this Greenhouse supports is refused with an upgrade message and left unchanged.
+
+`migrate` (terminal `u`) upgrades every older file in one action. It checks that the new file decodes to exactly the old values, saves the original bytes as `<file>.v1-<digest>.bak` with mode 0600, and replaces the file atomically. Each migration is recorded in `migrations` with the file, versions, backup, before and after digests, actor, reason, and action ID. If any file is newer or invalid, nothing changes.
+
+`pipeline.json` declares `"budget_unit": "rounds"`; migration adds it, because version 1 counted rounds. Greenhouse never converts a budget unit and refuses any other unit. Rule packs keep schema version 1, and a newer pack fails its load with an upgrade message.
+
+## Repository overrides and trust
+
+A worktree may hold `.greenhouse.json`:
+
+```json
+{"version": 1, "budget_unit": "rounds", "mode": "ask", "limit": 3, "rules": ["unslop"]}
+```
+
+It applies to new runs only after the User trusts the repository with `trust` (terminal `t`), which binds the exact file digest shown in `repository.digest`. An untrusted, changed, newer or invalid file is shown as ignored with the reason, and new runs use the per-user defaults. Trust is recorded per repository with its actor, reason, and action ID. Trusting never changes the current run.
+
+An override can only narrow or select among per-user choices. `mode`, `preset` and `limit` cannot exceed the per-user values, with `ask` below `auto` below `yolo` and `one-pass` below `full`. `auto_resume` cannot turn on a per-user `off`. `rules` must be built-in or already selected in the per-user defaults, and a backend must be configured in per-user files. Keys that would set an executable, command, grant, remote, or YOLO actor make the whole file ignored.
+
+Responses carry `repository` (path, `status` of `absent`, `ignored` or `applied`, reason, digest and trust record), the effective `defaults` with `defaults_sources`, and `sources` on each configuration snapshot. Saving with `"target":"repository"` requires a trusted, unchanged file. It writes only the values that differ from the per-user defaults and trusts the written bytes. Commit the file to share it. Until then, guarded handback accepts an untracked or modified `.greenhouse.json` only while its bytes match the trusted digest; any other change still blocks handback.
+
+## Transcript logs
+
+Normal use never needs a transcript: findings, verdicts and bounded summaries are in the run. For diagnosis, each reviewer and fixer invocation appends its raw stdout and stderr to `transcripts/<run-id>.log` in the state directory (mode 0600). Before writing, Greenhouse replaces the values of environment variables whose names contain `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `AUTH`, `CREDENTIAL`, `COOKIE` or `SESSION`, along with bearer tokens and common API-key shapes, with `[REDACTED]`. A run's log stops at 4 MiB with an omission marker. AXI `transcript` returns the whole log of the current run, or of `run_id`; the terminal `o` shows its last 40 lines.
 
 ## State and compatibility
 
@@ -323,7 +359,7 @@ python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
 python3 tools/recovery_check.py "$TMPDIR/greenhouse" docs/evidence/recovery
 ```
 
-Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56- and 100-column PTYs through a backend quota pause with its explanation, auto-resume cancellation, an agent switch and rerun, selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to CI readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. The recovery check kills the daemon right after a selected repair commits, then captures the recovery screen before and after `adopt` at 56 columns, `discard` at 80 and `new-run` at 100. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
+Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56-, 80- and 100-column PTYs through configuration migration, repository trust, per-value sources, a repository Save, the transcript log, a backend quota pause with its explanation, auto-resume cancellation, an agent switch and rerun, selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to CI readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. The recovery check kills the daemon right after a selected repair commits, then captures the recovery screen before and after `adopt` at 56 columns, `discard` at 80 and `new-run` at 100. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
 
 ## Review evaluation
 

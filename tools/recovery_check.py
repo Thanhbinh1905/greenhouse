@@ -89,9 +89,9 @@ def fixture(width):
         (root / name).write_text(body)
         (root / name).chmod(0o700)
     configs = {
-        "providers.json": {"providers": {"fixture": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY", "api": "openai-completions"}}, "models": []},
-        "reviewer.json": {"executable": str(root / "fake-pi"), "model": "fixture/model"},
-        "fixer.json": {"executable": str(root / "fake-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid",
+        "providers.json": {"version": 2, "providers": {"fixture": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY", "api": "openai-completions"}}, "models": []},
+        "reviewer.json": {"version": 2, "executable": str(root / "fake-pi"), "model": "fixture/model"},
+        "fixer.json": {"version": 2, "executable": str(root / "fake-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid",
                        "checks": [["/usr/bin/python3", "-c", "from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]]},
     }
     for name, value in configs.items():

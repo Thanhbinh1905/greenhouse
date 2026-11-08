@@ -1,49 +1,49 @@
 [2J[HGreenhouse | independent review
-Run 640c58be2701c7146f22c1a278030279
+Run 908a6a7a919aa220c6589d8711aca51e
 Stage: selected-repair | recovery-required
-Candidate: 08a582cb0e7176af057845ccee8be78e8d7fe90c
+Candidate: 0c1621c518743b07d55b6211bd0c9bababebe526
 Mode: auto | one-pass | limit 4
-Reviewer: pi / fixture/model (run-local)
-Fixer: pi / fixture/model (run-local)
+Reviewer: pi / fixture/model
+Fixer: pi / fixture/model
 Budget: review 1 + repair 1 = 2 of 4
 Rules: unslop
-Settings source: run-local
+Sources: built-in default: mode, preset, limit, reviewer_backend,
+fixer_backend, auto_resume | run-local: rules, reviewer_model, fixer_model
+Repository override: none (no .greenhouse.json)
 Rule unslop | resolved | required=true
 Source: builtin:unslop
 Digest: d8fdae77a603fad9c32418612583b40b74235dc4e0945c5a276a961505d42df1
 Auto-resume: on (default in auto mode)
-Blocked: repository overrides unsupported; repository configuration is
-untrusted
 Blocked: optional repair admission consumed; no second repair
 Blocked: unknown repair outcome at selected-repair; explicit recovery: inspect,
 adopt, discard, new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor 27bf56ab7d85.0: exited exit=0
-Executor 27bf56ab7d85.1: exited exit=0
-Candidate greenhouse/27bf56ab7d85aff0f0669774bfc6c98f: advanced past the
+Executor e4e1d1e44d97.0: exited exit=0
+Executor e4e1d1e44d97.1: exited exit=0
+Candidate greenhouse/e4e1d1e44d97f9809f6cf81be6ac4b66: advanced past the
 recorded head
-  recorded 08a582cb0e71 observed 6707c14209cf
-Adopt: candidate commit 6707c14209cf matches the recorded repair; adopt it as
+  recorded 0c1621c51874 observed e58cc80c297f
+Adopt: candidate commit e58cc80c297f matches the recorded repair; adopt it as
 fixed, not independently rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate 5dcd86802759
+[e] answers recovery gate 0af33a0bece0
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-08a582cb0e7176af057845ccee8be78e8d7fe90c | ID
+0c1621c518743b07d55b6211bd0c9bababebe526 | ID
 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor: client
-Writer: unknown | base: 08a582cb0e7176af057845ccee8be78e8d7fe90c | commit:
+Writer: unknown | base: 0c1621c518743b07d55b6211bd0c9bababebe526 | commit:
 Selected: 1 | fixer input:
-794ef0adb779d6ec438fb56d1b0ed7a398f42e11937db3e10bf6bb6e75002ef9 | rules:
-c3698635855f1c3224feee09da2cea563a88967eb86b164fd045446080b2c929 | config:
-18e7dc78a2012a6186c4809437b11d2b1c0846e9ecad51e8e1ac8484fdca3ecf
+b323cfa2d7aa55ae2bdaa792b3e0dc7067d4a6a93f74b28e66c88353da703b35 | rules:
+1281238d5be3fb8f0ab67f33024b4efd20b264491474a43a8e96e36981e9add8 | config:
+68169227d2afb19253005be36ebf4680a939dd1c65e4b7914781de36f9150351
 Check /usr/bin/python3 -c from pathlib import Path; assert
 Path('sample.txt').read_text() == 'repaired\n' exit=0: passed
 exit=0 stdout=0 stderr=0 overflow=false; raw logs withheld
 Review: outstanding-findings | pi-json-v1 | fixture/model
-Input: 19a072e8c8a541afb1b028ce15d396a7b7932b1f5b20bb50ec8d5a1471bc9f73
-Criteria: d284300d3be35602372e3cf85c49edf826572b03bad9482a128fae9999390273
-Config: 8f89b919cd673f95ec44dd0c4a6deab537f5c6073d4fda68fef9e95a2555bd7e
+Input: 232189cbf7ae9e9c85c6877d60fa1bbf02533dc0b131f16e740188eb7abadf59
+Criteria: 76347c93e13bd3ab9a0dd4c9fe5af3e90342a9f6093827a6e46c6c4adb22e897
+Config: b3794a3f87d8608a6b3bda99f108dde0f85ca0bcbe74703e66f66f0a8abe420c
 process completed; exit=0 stdout bytes=610 stderr bytes=0 overflow=false; raw
 diagnostics withheld to avoid credential disclosure
 Reported model: fixture/model
@@ -56,55 +56,56 @@ Rule:  | ID: 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 [p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
 [x] Cancel  [n] New run  [e] Recover  [q] Detach
 
 > i
 [2J[HGreenhouse | independent review
-Run 640c58be2701c7146f22c1a278030279
+Run 908a6a7a919aa220c6589d8711aca51e
 Stage: selected-repair | recovery-required
-Candidate: 08a582cb0e7176af057845ccee8be78e8d7fe90c
+Candidate: 0c1621c518743b07d55b6211bd0c9bababebe526
 Mode: auto | one-pass | limit 4
-Reviewer: pi / fixture/model (run-local)
-Fixer: pi / fixture/model (run-local)
+Reviewer: pi / fixture/model
+Fixer: pi / fixture/model
 Budget: review 1 + repair 1 = 2 of 4
 Rules: unslop
-Settings source: run-local
+Sources: built-in default: mode, preset, limit, reviewer_backend,
+fixer_backend, auto_resume | run-local: rules, reviewer_model, fixer_model
+Repository override: none (no .greenhouse.json)
 Rule unslop | resolved | required=true
 Source: builtin:unslop
 Digest: d8fdae77a603fad9c32418612583b40b74235dc4e0945c5a276a961505d42df1
 Auto-resume: on (default in auto mode)
-Blocked: repository overrides unsupported; repository configuration is
-untrusted
 Blocked: optional repair admission consumed; no second repair
 Blocked: unknown repair outcome at selected-repair; explicit recovery: inspect,
 adopt, discard, new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor 27bf56ab7d85.0: exited exit=0
-Executor 27bf56ab7d85.1: exited exit=0
-Candidate greenhouse/27bf56ab7d85aff0f0669774bfc6c98f: advanced past the
+Executor e4e1d1e44d97.0: exited exit=0
+Executor e4e1d1e44d97.1: exited exit=0
+Candidate greenhouse/e4e1d1e44d97f9809f6cf81be6ac4b66: advanced past the
 recorded head
-  recorded 08a582cb0e71 observed 6707c14209cf
-Adopt: candidate commit 6707c14209cf matches the recorded repair; adopt it as
+  recorded 0c1621c51874 observed e58cc80c297f
+Adopt: candidate commit e58cc80c297f matches the recorded repair; adopt it as
 fixed, not independently rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate 5dcd86802759
+[e] answers recovery gate 0af33a0bece0
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-08a582cb0e7176af057845ccee8be78e8d7fe90c | ID
+0c1621c518743b07d55b6211bd0c9bababebe526 | ID
 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor: client
-Writer: unknown | base: 08a582cb0e7176af057845ccee8be78e8d7fe90c | commit:
+Writer: unknown | base: 0c1621c518743b07d55b6211bd0c9bababebe526 | commit:
 Selected: 1 | fixer input:
-794ef0adb779d6ec438fb56d1b0ed7a398f42e11937db3e10bf6bb6e75002ef9 | rules:
-c3698635855f1c3224feee09da2cea563a88967eb86b164fd045446080b2c929 | config:
-18e7dc78a2012a6186c4809437b11d2b1c0846e9ecad51e8e1ac8484fdca3ecf
+b323cfa2d7aa55ae2bdaa792b3e0dc7067d4a6a93f74b28e66c88353da703b35 | rules:
+1281238d5be3fb8f0ab67f33024b4efd20b264491474a43a8e96e36981e9add8 | config:
+68169227d2afb19253005be36ebf4680a939dd1c65e4b7914781de36f9150351
 Check /usr/bin/python3 -c from pathlib import Path; assert
 Path('sample.txt').read_text() == 'repaired\n' exit=0: passed
 exit=0 stdout=0 stderr=0 overflow=false; raw logs withheld
 Review: outstanding-findings | pi-json-v1 | fixture/model
-Input: 19a072e8c8a541afb1b028ce15d396a7b7932b1f5b20bb50ec8d5a1471bc9f73
-Criteria: d284300d3be35602372e3cf85c49edf826572b03bad9482a128fae9999390273
-Config: 8f89b919cd673f95ec44dd0c4a6deab537f5c6073d4fda68fef9e95a2555bd7e
+Input: 232189cbf7ae9e9c85c6877d60fa1bbf02533dc0b131f16e740188eb7abadf59
+Criteria: 76347c93e13bd3ab9a0dd4c9fe5af3e90342a9f6093827a6e46c6c4adb22e897
+Config: b3794a3f87d8608a6b3bda99f108dde0f85ca0bcbe74703e66f66f0a8abe420c
 process completed; exit=0 stdout bytes=610 stderr bytes=0 overflow=false; raw
 diagnostics withheld to avoid credential disclosure
 Reported model: fixture/model
@@ -117,6 +118,7 @@ Rule:  | ID: 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 [p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
 [x] Cancel  [n] New run  [e] Recover  [q] Detach
 ok
 >

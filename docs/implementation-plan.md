@@ -10,7 +10,7 @@ Runs remain at intent/unconfigured. Target is an empty unconfigured identity, no
 
 The implementation uses a single serialized daemon and atomic whole-store replacement rather than a database or generic workflow engine. Limits and compatibility assumptions are in README.md. No dependency on an orchestrator is required.
 
-Still unsupported within these areas: live event subscriptions, explicit recovery, repository overrides/trust enrollment, migration, and an embedding contract. Task t7 adds finding views, execution summaries, and cancellation. Terminal clients refresh through Inspect rather than receive live events. Settings cannot start work.
+Still unsupported within these areas: live event subscriptions, explicit recovery, and an embedding contract. Task t67 adds configuration migration and repository trust. Task t7 adds finding views, execution summaries, and cancellation. Terminal clients refresh through Inspect rather than receive live events. Settings cannot start work.
 
 ## 2. Rule snapshots and independent review: delivered for review
 
@@ -36,7 +36,7 @@ Executable fake-Pi, fake-command and real-Git tests cover agent-free command sta
 
 Task t20 adds authority modes and review-cap outcomes. Ask groups the actionable findings of a review into one `findings` decision and asks before gate repairs; informational findings stay visible without a question. Auto repairs findings and authorized gates. YOLO adds a configured actor from `pipeline.json` that also answers the cap decision with `final-fix` or `accept-head`. Repairs that delete files, change file modes, leave the authorized paths, or that the fixer escalates as intent, acceptance or credentials changes park a user-only `authority` decision in every mode. The combined cap counts review and finding-repair rounds separately and as a total; gate retries count apart. The `decide` action answers accept-head, final-fix, increase-cap, rethink and discard with token-bound, replayable receipts that record the actor and reason. Accept-head binds the exact candidate and review inputs and never passes a failing gate. Final-fix is a separate, restart-safe, single grant. Rethink links a successor run; discard keeps every record and ref. Executable fake-Pi and real-Git tests cover each mode, user-only refusal, cap exhaustion, cap increase with retained usage, acceptance binding, final-fix replay and restart, rethink, discard, and stale or duplicate answers. The PTY check answers decisions at 56 and 100 columns.
 
-Step 4 still leaves unsupported: granting expanded fixer authority, mechanical lint autofix, and gate repairs that add or delete files.
+Step 4 still leaves unsupported: mechanical lint autofix. Task t67 adds expanded fixer authority grants.
 
 Delivery scope in step 4:
 
@@ -62,6 +62,16 @@ V1 is not complete against every SPEC.md item. The missing work is listed below.
 
 Areas A, E and F: every runner-started executor holds a durable lease and leaves an exit record with its input digest and bounded output after reaping its tree. Restart adopts interrupted reviews and command stages whose records prove the result and parks everything else as unknown, without retry or PID signalling. `recover` (terminal `e`) inspects the evidence, adopts a candidate that matches the durable record, discards the step and reruns its stage, or links a new run. Answers are token-bound, audited and replayable, and never refund budget. Candidate refs carry lease files with an owner and epoch in the repository; another state home or a stale store copy cannot write them, and the daemon releases only dead leases of its own state home. See [recovery after interruption](../README.md#recovery-after-interruption) and the [PTY captures](evidence/recovery/).
 
+## Versioned configuration, repository trust, fixer grants and transcripts (t67)
+
+Areas B, D and F. Per-user configuration files carry schema version 2; unversioned files are version 1 and stay unused until the explicit `migrate` action rewrites them losslessly with a backup and a recorded migration. Newer versions refuse. `pipeline.json` names `budget_unit` `rounds`, and no other unit is accepted.
+
+A repository's `.greenhouse.json` applies to new runs only after the User trusts its exact digest. It can only narrow or select among per-user choices; authority keys make it ignored, with the reason shown. Each snapshot records the source of every value, and Save can target the trusted override.
+
+Repairs that add or delete files park a user-only decision. The User can grant exactly the attempted paths for the run, or declare scoped grants in `pipeline.json`; both are recorded. Reviewer and fixer output goes to a redacted, 4 MiB per-run transcript log that AXI `transcript` and terminal `o` show.
+
+Executable daemon, AXI and real-Git tests cover each item; the PTY check covers 56, 80 and 100 columns. Before and after captures are in `evidence/config-trust/`.
+
 ## 6. Live backend validation and host contract
 
 Areas C, E, and F: validate selected real agent and forge backends, capture actual rule inputs and permissions, and publish versioned configuration/AXI compatibility guarantees. Verify custody, budgets, and stale evidence at embedding boundaries.
@@ -73,8 +83,7 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 - Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
 
 - Area A: a descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
-- Area B: versioned configuration schemas and migration, raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
 - Area C: full-tree review snapshots, explicit finding-resolution responses, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
-- Area D: granting expanded fixer authority and cap decisions for embedded hosts.
+- Area D: cap decisions for embedded hosts.
 - Area E and D2: broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
-- Area F: finding-resolution responses, transcript logs, event subscriptions, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
+- Area F: finding-resolution responses, event subscriptions, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

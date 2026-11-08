@@ -453,8 +453,11 @@ func recoverRun(s *Store, r *Run, source Identity, a Answer) (*Run, error) {
 		next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 		if p := r.Pipeline; p != nil {
 			next.Inherited = &Inheritance{From: r.ID, GateRepairs: p.RepairUsed, FinalFix: p.FinalFix}
-			inherit(next)
+		} else {
+			next.Inherited = &Inheritance{From: r.ID}
 		}
+		next.Inherited.Review, next.Inherited.Repair = r.ReviewUsed, r.RepairUsed
+		inherit(next)
 		reason := "inherited consumed budget from " + r.ID
 		if r.Pipeline != nil {
 			reason += fmt.Sprintf("; gate repairs %d", r.Pipeline.RepairUsed)
@@ -590,8 +593,17 @@ func rerunAfterDiscard(s *Store, r *Run, actor string) error {
 
 type Inheritance struct {
 	From        string    `json:"from"`
+	Review      int       `json:"review"`
+	Repair      int       `json:"repair"`
 	GateRepairs int       `json:"gate_repairs"`
 	FinalFix    *FinalFix `json:"final_fix,omitempty"`
+}
+
+func ownReviews(r *Run) int {
+	if r.Inherited == nil {
+		return r.ReviewUsed
+	}
+	return r.ReviewUsed - r.Inherited.Review
 }
 
 func inherit(r *Run) {

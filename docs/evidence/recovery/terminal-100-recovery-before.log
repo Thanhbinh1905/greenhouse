@@ -1,45 +1,46 @@
 [2J[HGreenhouse | independent review
-Run 7b89a56df1d84e06d57d150ee518e7d1
+Run 70e5f95390f28220855c97713666d3a9
 Stage: selected-repair | recovery-required
-Candidate: 6370bf4e255c675d60a0f66b2c5f719899d7727d
+Candidate: 84f0a4b92cc84f6c180d54b44cb6b44ae555c7b3
 Mode: auto | one-pass | limit 4
-Reviewer: pi / fixture/model (run-local)
-Fixer: pi / fixture/model (run-local)
+Reviewer: pi / fixture/model
+Fixer: pi / fixture/model
 Budget: review 1 + repair 1 = 2 of 4
 Rules: unslop
-Settings source: run-local
+Sources: built-in default: mode, preset, limit, reviewer_backend, fixer_backend, auto_resume |
+run-local: rules, reviewer_model, fixer_model
+Repository override: none (no .greenhouse.json)
 Rule unslop | resolved | required=true
 Source: builtin:unslop
 Digest: d8fdae77a603fad9c32418612583b40b74235dc4e0945c5a276a961505d42df1
 Auto-resume: on (default in auto mode)
-Blocked: repository overrides unsupported; repository configuration is untrusted
 Blocked: optional repair admission consumed; no second repair
 Blocked: unknown repair outcome at selected-repair; explicit recovery: inspect, adopt, discard,
 new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor 176a080b9b44.0: exited exit=0
-Executor 176a080b9b44.1: exited exit=0
-Candidate greenhouse/176a080b9b44a88607140b1992d89e87: advanced past the recorded head
-  recorded 6370bf4e255c observed 91facc994ce4
-Adopt: candidate commit 91facc994ce4 matches the recorded repair; adopt it as fixed, not
+Executor a10aff61d4c5.0: exited exit=0
+Executor a10aff61d4c5.1: exited exit=0
+Candidate greenhouse/a10aff61d4c5ab6d78d949cd7330ebc1: advanced past the recorded head
+  recorded 84f0a4b92cc8 observed f1fdc3d52e0d
+Adopt: candidate commit f1fdc3d52e0d matches the recorded repair; adopt it as fixed, not
 independently rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate 4803046b34b0
-Outstanding P2 sample.txt:1 Fixture finding | reviewed 6370bf4e255c675d60a0f66b2c5f719899d7727d |
+[e] answers recovery gate bd9b26f7a083
+Outstanding P2 sample.txt:1 Fixture finding | reviewed 84f0a4b92cc84f6c180d54b44cb6b44ae555c7b3 |
 ID 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor: client
-Writer: unknown | base: 6370bf4e255c675d60a0f66b2c5f719899d7727d | commit:
-Selected: 1 | fixer input: 53d667ac1ea6a5bd256102d4bc6bd8b065b4694a460768c56ad8d0c4a6323ab3 |
-rules: eae252c4dd10ad1bf34ec5fcd1af4379d371f32ab5d4baad77ecac8a225cea20 | config:
-62ee8e576e3ab28a213493ad6d5304d065323cdb002a173e83772263f110697a
+Writer: unknown | base: 84f0a4b92cc84f6c180d54b44cb6b44ae555c7b3 | commit:
+Selected: 1 | fixer input: 775ccc68b17a86e4a4cf99aa9ec0444f91648819b8157524b2bda17b2cb49ed2 |
+rules: 97ca697eba14c6cf8a9a0cdc2257267e5337bff06bca35caac22bc2851446ae9 | config:
+18581d7f7272f6f551cb2dbc8c6173abb01bee5bd2e30f6802e04890b0fe4227
 Check /usr/bin/python3 -c from pathlib import Path; assert Path('sample.txt').read_text() ==
 'repaired\n' exit=0: passed
 exit=0 stdout=0 stderr=0 overflow=false; raw logs withheld
 Review: outstanding-findings | pi-json-v1 | fixture/model
-Input: 21a10d291a946c73e207b257465a15d4702cdbfe4175f5b843ffb4498cfda658
-Criteria: 8966f2c9bd10b8f8a517fde0fd19ca34d902d21b7c690f927e0caccfa3efea08
-Config: 8c040572187b561f67bb0c5b9cf3850fcf46f081dbf424da154b271c13baebe6
+Input: effbdfeef3e34027cf41bbeb80db9d208eb1dbc52654621213973a0e474dba2f
+Criteria: 30d95685f5a0ce76729251ac35db772223b90d0d308af7585803228f54b75abf
+Config: 1442f21e831d961fb3d9a0b978929e838033001f664509a1a07e204409da85fc
 process completed; exit=0 stdout bytes=610 stderr bytes=0 overflow=false; raw diagnostics withheld
 to avoid credential disclosure
 Reported model: fixture/model
@@ -52,51 +53,53 @@ Rule:  | ID: 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 [p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
 [x] Cancel  [n] New run  [e] Recover  [q] Detach
 
 > i
 [2J[HGreenhouse | independent review
-Run 7b89a56df1d84e06d57d150ee518e7d1
+Run 70e5f95390f28220855c97713666d3a9
 Stage: selected-repair | recovery-required
-Candidate: 6370bf4e255c675d60a0f66b2c5f719899d7727d
+Candidate: 84f0a4b92cc84f6c180d54b44cb6b44ae555c7b3
 Mode: auto | one-pass | limit 4
-Reviewer: pi / fixture/model (run-local)
-Fixer: pi / fixture/model (run-local)
+Reviewer: pi / fixture/model
+Fixer: pi / fixture/model
 Budget: review 1 + repair 1 = 2 of 4
 Rules: unslop
-Settings source: run-local
+Sources: built-in default: mode, preset, limit, reviewer_backend, fixer_backend, auto_resume |
+run-local: rules, reviewer_model, fixer_model
+Repository override: none (no .greenhouse.json)
 Rule unslop | resolved | required=true
 Source: builtin:unslop
 Digest: d8fdae77a603fad9c32418612583b40b74235dc4e0945c5a276a961505d42df1
 Auto-resume: on (default in auto mode)
-Blocked: repository overrides unsupported; repository configuration is untrusted
 Blocked: optional repair admission consumed; no second repair
 Blocked: unknown repair outcome at selected-repair; explicit recovery: inspect, adopt, discard,
 new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor 176a080b9b44.0: exited exit=0
-Executor 176a080b9b44.1: exited exit=0
-Candidate greenhouse/176a080b9b44a88607140b1992d89e87: advanced past the recorded head
-  recorded 6370bf4e255c observed 91facc994ce4
-Adopt: candidate commit 91facc994ce4 matches the recorded repair; adopt it as fixed, not
+Executor a10aff61d4c5.0: exited exit=0
+Executor a10aff61d4c5.1: exited exit=0
+Candidate greenhouse/a10aff61d4c5ab6d78d949cd7330ebc1: advanced past the recorded head
+  recorded 84f0a4b92cc8 observed f1fdc3d52e0d
+Adopt: candidate commit f1fdc3d52e0d matches the recorded repair; adopt it as fixed, not
 independently rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate 4803046b34b0
-Outstanding P2 sample.txt:1 Fixture finding | reviewed 6370bf4e255c675d60a0f66b2c5f719899d7727d |
+[e] answers recovery gate bd9b26f7a083
+Outstanding P2 sample.txt:1 Fixture finding | reviewed 84f0a4b92cc84f6c180d54b44cb6b44ae555c7b3 |
 ID 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor: client
-Writer: unknown | base: 6370bf4e255c675d60a0f66b2c5f719899d7727d | commit:
-Selected: 1 | fixer input: 53d667ac1ea6a5bd256102d4bc6bd8b065b4694a460768c56ad8d0c4a6323ab3 |
-rules: eae252c4dd10ad1bf34ec5fcd1af4379d371f32ab5d4baad77ecac8a225cea20 | config:
-62ee8e576e3ab28a213493ad6d5304d065323cdb002a173e83772263f110697a
+Writer: unknown | base: 84f0a4b92cc84f6c180d54b44cb6b44ae555c7b3 | commit:
+Selected: 1 | fixer input: 775ccc68b17a86e4a4cf99aa9ec0444f91648819b8157524b2bda17b2cb49ed2 |
+rules: 97ca697eba14c6cf8a9a0cdc2257267e5337bff06bca35caac22bc2851446ae9 | config:
+18581d7f7272f6f551cb2dbc8c6173abb01bee5bd2e30f6802e04890b0fe4227
 Check /usr/bin/python3 -c from pathlib import Path; assert Path('sample.txt').read_text() ==
 'repaired\n' exit=0: passed
 exit=0 stdout=0 stderr=0 overflow=false; raw logs withheld
 Review: outstanding-findings | pi-json-v1 | fixture/model
-Input: 21a10d291a946c73e207b257465a15d4702cdbfe4175f5b843ffb4498cfda658
-Criteria: 8966f2c9bd10b8f8a517fde0fd19ca34d902d21b7c690f927e0caccfa3efea08
-Config: 8c040572187b561f67bb0c5b9cf3850fcf46f081dbf424da154b271c13baebe6
+Input: effbdfeef3e34027cf41bbeb80db9d208eb1dbc52654621213973a0e474dba2f
+Criteria: 30d95685f5a0ce76729251ac35db772223b90d0d308af7585803228f54b75abf
+Config: 1442f21e831d961fb3d9a0b978929e838033001f664509a1a07e204409da85fc
 process completed; exit=0 stdout bytes=610 stderr bytes=0 overflow=false; raw diagnostics withheld
 to avoid credential disclosure
 Reported model: fixture/model
@@ -109,6 +112,7 @@ Rule:  | ID: 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 [p] Intent/target  [v] Review  [g] Pipeline  [d] Decide
 [m] Resolve conflict  [f] Selected repair  [h] Handback
 [r] Rerun  [a] Cancel auto-resume  [b] Rerun from start
+[t] Trust repository  [u] Migrate config  [o] Logs
 [x] Cancel  [n] New run  [e] Recover  [q] Detach
 ok
 >

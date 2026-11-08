@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -64,7 +65,7 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 		t.Fatalf("pipeline did not record its candidate lease: %v", pipe)
 	}
 	os.Remove(filepath.Join(root, "kill-test"))
-	stopDaemon(t, home)
+	stopDaemonAndWait(t, home)
 	lease := readRefLease(t, repo, ref)
 	if lease == nil || lease.Epoch != 1 || lease.Home != home {
 		t.Fatalf("lease did not survive the daemon: %v", lease)
@@ -82,7 +83,7 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "leased by another Greenhouse state home") {
 		t.Fatalf("a second daemon wrote the leased candidate: %v", refused)
 	}
-	stopDaemon(t, second)
+	stopDaemonAndWait(t, second)
 
 	current := waitProbed(t, bin, repo, home)
 	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
@@ -95,7 +96,7 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 	if lease = readRefLease(t, repo, ref); lease == nil || lease.Epoch != 2 {
 		t.Fatalf("discard did not renew the lease epoch: %v", lease)
 	}
-	stopDaemon(t, home)
+	stopDaemonAndWait(t, home)
 	newer, err := os.ReadFile(filepath.Join(home, "state.json"))
 	if err != nil {
 		t.Fatal(err)
@@ -115,7 +116,7 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 	if lease = readRefLease(t, repo, ref); lease == nil || lease.Epoch != 2 {
 		t.Fatalf("a stale store released the newer lease: %v", lease)
 	}
-	stopDaemon(t, home)
+	stopDaemonAndWait(t, home)
 
 	if err = os.WriteFile(filepath.Join(home, "state.json"), newer, 0600); err != nil {
 		t.Fatal(err)
@@ -150,7 +151,7 @@ func TestAdoptedGateRepairCommitContinuesPipeline(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	stopDaemon(t, home)
+	stopDaemonAndWait(t, home)
 	realGit, err := exec.LookPath("git")
 	if err != nil {
 		t.Fatal(err)
@@ -213,4 +214,77 @@ sys.exit(p.returncode)
 	if got := countLines(t, filepath.Join(root, "fix-invocations")); got["test"] != 1 {
 		t.Fatalf("adoption reran the fixer: %v", got)
 	}
+}
+
+func TestRecoveryNewRunKeepsFinalFixGrantAcrossPrepare(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := authorityFixture(t, "auto", 1, repairPlan)
+	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	if granted := decide(t, bin, repo, home, waitPipeline(t, bin, repo, home), "final", "final-fix", nil); granted["outcome"] != "ok" {
+		t.Fatal(granted)
+	}
+	parked := waitPipeline(t, bin, repo, home)
+	if runOf(t, parked)["status"] != "recovery-required" {
+		t.Fatalf("final-fix run did not reach the interrupted test stage: %v", runOf(t, parked)["pipeline"])
+	}
+	os.Remove(filepath.Join(root, "kill-test"))
+	recovered := waitProbed(t, bin, repo, home)
+	before := recovered["budget"].(map[string]any)
+	grant := runOf(t, recovered)["pipeline"].(map[string]any)["final_fix"]
+	if before["final_fix_repair"] != float64(1) || before["final_fix_review"] != float64(1) || before["review"] != float64(1) {
+		t.Fatalf("predecessor budget: %v", before)
+	}
+	successor := recoverRequest(t, bin, repo, home, recovered, "new-run", "final-fix-new-run")
+	assertBudget := func(view map[string]any, when string) {
+		t.Helper()
+		after := view["budget"].(map[string]any)
+		for _, counter := range []string{"review", "repair", "total", "gate_retries", "final_fix_repair", "final_fix_review"} {
+			if after[counter] != before[counter] {
+				t.Fatalf("%s reset budget counter %s: before %v after %v", when, counter, before, after)
+			}
+		}
+		a, _ := json.Marshal(grant)
+		b, _ := json.Marshal(runOf(t, view)["pipeline"].(map[string]any)["final_fix"])
+		if string(a) != string(b) {
+			t.Fatalf("%s changed the final-fix grant:\n%s\n%s", when, a, b)
+		}
+	}
+	if successor["outcome"] != "ok" {
+		t.Fatal(successor)
+	}
+	assertBudget(successor, "new-run")
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": successor["run_id"], "input_id": successor["input_id"], "gate_id": successor["gate_id"], "expected": successor["token"], "action_id": "re-prepare", "intent": "Change the sample again", "target": runOf(t, successor)["target"]}
+	b, _ := json.Marshal(q)
+	prepared := axi(t, bin, repo, home, string(b))
+	if prepared["outcome"] != "ok" || runOf(t, prepared)["intent"] != "Change the sample again" {
+		t.Fatalf("the linked new run could not be prepared again: %v", prepared)
+	}
+	assertBudget(prepared, "re-Prepare")
+	if d := decisionIn(t, func() map[string]any {
+		mutate(t, bin, repo, home, prepared, "pipeline", "successor-start", nil)
+		return waitPipeline(t, bin, repo, home)
+	}()); has(strs(d["options"]), "final-fix") {
+		t.Fatalf("the successor was offered a second final-fix grant: %v", d)
+	}
+}
+
+func stopDaemonAndWait(t *testing.T, home string) {
+	t.Helper()
+	stopDaemon(t, home)
+	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lock.Close()
+	deadline := time.Now().Add(10 * time.Second)
+	for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		if time.Now().After(deadline) {
+			t.Fatal("daemon kept its state lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 }

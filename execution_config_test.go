@@ -17,12 +17,12 @@ func TestChangedReviewerAndStaleRuleTokenRefuse(t *testing.T) {
 	json.Unmarshal(b, &cfg)
 	cfg.Executable = "/bin/true"
 	changed, _ := json.Marshal(cfg)
-	os.WriteFile(path, changed, 0600)
+	writeConfigBytes(path, changed, 0600)
 	refused := mutate(t, bin, repo, home, v, "review", "changed-config", nil)
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "trusted reviewer changed") {
 		t.Fatal(refused)
 	}
-	os.WriteFile(path, b, 0600)
+	writeConfigBytes(path, b, 0600)
 	updated := mutate(t, bin, repo, home, v, "resolve-rules", "new-resolution", nil)
 	refused = mutate(t, bin, repo, home, v, "review", "old-rule-token", nil)
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "stale") {
