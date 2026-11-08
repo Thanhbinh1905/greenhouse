@@ -829,8 +829,21 @@ func capturePartial(x *Repair) {
 		}
 		path := filepath.Join(x.Worktree, name)
 		info, err := os.Lstat(path)
-		if err != nil || !info.Mode().IsRegular() {
-			fmt.Fprintf(w, "untracked: %s (not a regular file)\n", name)
+		if err != nil {
+			fmt.Fprintf(w, "untracked: %s (stat failed: %v)\n", name, err)
+			continue
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			target, err := os.Readlink(path)
+			if err != nil {
+				fmt.Fprintf(w, "untracked: %s (symlink target unavailable: %v)\n", name, err)
+				continue
+			}
+			fmt.Fprintf(w, "untracked: %s (symlink -> %s)\n", name, target)
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			fmt.Fprintf(w, "untracked: %s (%s)\n", name, info.Mode().Type())
 			continue
 		}
 		fmt.Fprintf(w, "untracked: %s (%d bytes)\n", name, info.Size())

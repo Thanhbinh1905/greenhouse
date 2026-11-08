@@ -97,7 +97,7 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 	t.Helper()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
 	os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600)
-	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half '+mode+'\\n' if mode else 'repaired\\n')\nif mode=='untracked': open('notes.txt','w').write('unique-untracked-content-7f3a\\n')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode else 0)\n")
+	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half '+mode+'\\n' if mode else 'repaired\\n')\nif mode=='untracked': open('notes.txt','w').write('unique-untracked-content-7f3a\\n')\nif mode=='symlink': os.symlink('unique-symlink-target-9e1f','link.txt')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode else 0)\n")
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
 	os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600)
 	mutate(t, bin, repo, home, v, "review", "review-findings", nil)
@@ -197,6 +197,21 @@ func TestRepeatedRerunsKeepEachFailedRepairsEvidence(t *testing.T) {
 	}
 	if priorEvidence(t, prior[0], "+half fail") == priorEvidence(t, prior[1], "+half again") {
 		t.Fatal("each failed attempt needs its own digest")
+	}
+}
+
+func TestRerunKeepsUntrackedSymlinkTarget(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := stoppedRepairFixture(t, "symlink")
+	os.Remove(filepath.Join(root, "fix-mode"))
+	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-symlink", nil); v["outcome"] != "ok" {
+		t.Fatalf("rerun: %v", v)
+	}
+	v = waitStatus(t, bin, repo, home, "fixed-not-independently-rereviewed")
+	priorEvidence(t, runOf(t, v)["prior_repairs"].([]any)[0], "unique-symlink-target-9e1f")
+	worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string)
+	if _, err := os.Lstat(filepath.Join(worktree, "link.txt")); !os.IsNotExist(err) {
+		t.Fatal("the restored candidate must not keep the stopped attempt's symlink")
 	}
 }
 
