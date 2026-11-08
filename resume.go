@@ -247,13 +247,32 @@ func pauseStage(r *Run, st *StageResult, kind, role string, config ReviewerConfi
 	pauseRun(r, st.Name, kind, role, config, execution, f, time.Now())
 }
 
-func readmitRepair(r *Run, old Repair) (*Repair, error) {
+func readmitBlocker(r *Run, old Repair) (FixerConfig, string, error) {
 	settings := r.Configs[len(r.Configs)-1].Settings
 	cfg, err := admitFixer(settings.FixerBackend, settings.FixerModel)
 	if err != nil {
-		return nil, err
+		return cfg, "", err
 	}
 	fixerDigest, err := executableDigest(cfg.Executable)
+	if err != nil {
+		return cfg, "", err
+	}
+	switch old.Budget {
+	case "gate":
+		if r.Pipeline.RepairUsed >= r.Pipeline.RepairLimit {
+			return cfg, "", fmt.Errorf("gate repair budget exhausted (%d/%d)", r.Pipeline.RepairUsed, r.Pipeline.RepairLimit)
+		}
+	case "final-fix":
+	default:
+		if r.ReviewUsed+r.RepairUsed >= settings.Limit {
+			return cfg, "", errors.New("combined review and repair budget exhausted; increase the limit")
+		}
+	}
+	return cfg, fixerDigest, nil
+}
+
+func readmitRepair(r *Run, old Repair) (*Repair, error) {
+	cfg, fixerDigest, err := readmitBlocker(r, old)
 	if err != nil {
 		return nil, err
 	}
@@ -267,16 +286,10 @@ func readmitRepair(r *Run, old Repair) (*Repair, error) {
 	x.Failure, x.Partial, x.Resumed, x.CostUSD, x.Tokens, x.Authority = nil, "", true, 0, 0, ""
 	switch x.Budget {
 	case "gate":
-		if r.Pipeline.RepairUsed >= r.Pipeline.RepairLimit {
-			return nil, fmt.Errorf("gate repair budget exhausted (%d/%d)", r.Pipeline.RepairUsed, r.Pipeline.RepairLimit)
-		}
 		r.Pipeline.RepairUsed++
 	case "final-fix":
 		r.Pipeline.FinalFix.Repair = 1
 	default:
-		if r.ReviewUsed+r.RepairUsed >= settings.Limit {
-			return nil, errors.New("combined review and repair budget exhausted; increase the limit")
-		}
 		r.RepairUsed++
 	}
 	return &x, nil
@@ -483,10 +496,21 @@ func rerunRepair(r *Run, actor string) error {
 	if !stoppedRepair(old) {
 		return errors.New("nothing to rerun: the selected repair is not failed, cancelled or refused with a stopped writer")
 	}
+	if _, _, err := readmitBlocker(r, *old); err != nil {
+		return err
+	}
 	_, statErr := os.Stat(old.Worktree)
 	if statErr == nil {
 		if id, err := resolve(old.Worktree); err != nil || id.Branch != old.Ref || id.Head != old.Base {
 			return errors.New("candidate moved after the repair stopped; recovery required")
+		}
+		if old.Partial == "" {
+			old.Partial = partialDiff(old.Worktree)
+		}
+		for i := range r.Attempts {
+			if r.Attempts[i].Execution == old.ID {
+				r.Attempts[i].Partial = old.Partial
+			}
 		}
 		if err := restoreCandidate(old); err != nil {
 			return fmt.Errorf("cannot restore the private candidate: %w", err)

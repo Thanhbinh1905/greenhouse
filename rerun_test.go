@@ -93,13 +93,13 @@ func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 	}
 }
 
-func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
-	t.Parallel()
+func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, string, map[string]any) {
+	t.Helper()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
 	os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600)
-	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nopen('sample.txt','w').write('half\\n' if os.path.exists(root+'/fix-fail') else 'repaired\\n')\nsys.exit(1 if os.path.exists(root+'/fix-fail') else 0)\n")
+	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half\\n' if mode else 'repaired\\n')\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode=='fail' else 0)\n")
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
-	os.WriteFile(filepath.Join(root, "fix-fail"), []byte("1"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600)
 	mutate(t, bin, repo, home, v, "review", "review-findings", nil)
 	v = waitStatus(t, bin, repo, home, "outstanding-findings")
 	q := map[string]any{"version": 1, "op": "repair", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": "none", "action_id": "repair", "selected": []string{runOf(t, v)["findings"].([]any)[0].(map[string]any)["id"].(string)}}
@@ -107,23 +107,57 @@ func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
 	if v = axi(t, bin, repo, home, string(b)); v["outcome"] != "ok" {
 		t.Fatalf("repair: %v", v)
 	}
-	v = waitStatus(t, bin, repo, home, "fixer-failed")
-	first := runOf(t, v)["repair"].(map[string]any)
-	if !has(strs(v["actions"]), "rerun") {
-		t.Fatalf("a stopped selected repair must offer rerun: %v", v["actions"])
+	if stop == "cancel" {
+		for i := 0; i < 400 && (runOf(t, v)["repair"] == nil || runOf(t, v)["repair"].(map[string]any)["status"] != "fixing"); i++ {
+			v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		}
+		v = mutate(t, bin, repo, home, v, "cancel", "abort-repair", nil)
+		return bin, repo, home, root, waitStatus(t, bin, repo, home, "cancelled")
 	}
-	os.Remove(filepath.Join(root, "fix-fail"))
-	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-repair", nil); v["outcome"] != "ok" {
-		t.Fatalf("rerun: %v", v)
+	return bin, repo, home, root, waitStatus(t, bin, repo, home, "fixer-failed")
+}
+
+func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
+	t.Parallel()
+	for _, stop := range []string{"fail", "cancel"} {
+		t.Run(stop, func(t *testing.T) {
+			t.Parallel()
+			bin, repo, home, root, v := stoppedRepairFixture(t, stop)
+			first := runOf(t, v)["repair"].(map[string]any)
+			if !has(strs(v["actions"]), "rerun") {
+				t.Fatalf("a stopped selected repair must offer rerun: %v", v["actions"])
+			}
+			os.Remove(filepath.Join(root, "fix-mode"))
+			if v = mutate(t, bin, repo, home, v, "rerun", "rerun-repair", nil); v["outcome"] != "ok" {
+				t.Fatalf("rerun: %v", v)
+			}
+			v = waitStatus(t, bin, repo, home, "fixed-not-independently-rereviewed")
+			run := runOf(t, v)
+			prior := run["prior_repairs"].([]any)
+			if run["repair_used"].(float64) != 2 || run["review_used"].(float64) != 1 || len(prior) != 1 || prior[0].(map[string]any)["id"] != first["id"] || prior[0].(map[string]any)["status"] != first["status"] {
+				t.Fatalf("rerun must keep the stopped repair and both counters: %v", run)
+			}
+			if partial, _ := prior[0].(map[string]any)["partial"].(string); !strings.Contains(partial, "+half") {
+				t.Fatalf("the stopped repair's edits must be kept before the candidate is reset: %q", partial)
+			}
+			worktree := run["repair"].(map[string]any)["worktree"].(string)
+			if worktree != first["worktree"] || strings.TrimSpace(git(t, worktree, "show", "HEAD:sample.txt")) != "repaired" {
+				t.Fatalf("rerun must repair the restored candidate: %v", run["repair"])
+			}
+		})
 	}
-	v = waitStatus(t, bin, repo, home, "fixed-not-independently-rereviewed")
+}
+
+func TestRefusedRepairRerunLeavesCandidateUntouched(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, _, v := stoppedRepairFixture(t, "fail")
+	worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string)
+	os.Remove(filepath.Join(home, "fixer.json"))
+	refused := mutate(t, bin, repo, home, v, "rerun", "rerun-unconfigured", nil)
+	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	run := runOf(t, v)
-	prior := run["prior_repairs"].([]any)
-	if run["repair_used"].(float64) != 2 || run["review_used"].(float64) != 1 || len(prior) != 1 || prior[0].(map[string]any)["id"] != first["id"] || prior[0].(map[string]any)["status"] != "fixer-failed" {
-		t.Fatalf("rerun must keep the failed repair and both counters: %v", run)
-	}
-	worktree := run["repair"].(map[string]any)["worktree"].(string)
-	if worktree != first["worktree"] || strings.TrimSpace(git(t, worktree, "show", "HEAD:sample.txt")) != "repaired" {
-		t.Fatalf("rerun must repair the restored candidate: %v", run["repair"])
+	b, _ := os.ReadFile(filepath.Join(worktree, "sample.txt"))
+	if refused["outcome"] != "refused" || string(b) != "half\n" || run["repair_used"].(float64) != 1 || run["prior_repairs"] != nil || run["status"] != "fixer-failed" {
+		t.Fatalf("a refused rerun must not clean the candidate or spend budget: %v %q %v", refused["error"], b, run)
 	}
 }
