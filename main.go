@@ -250,11 +250,9 @@ func load(h string) (*Store, error) {
 		if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" {
 			r.Status = "recovery-required"
 			if p := r.Pipeline; p != nil {
-				p.Status = "recovery-required"
+				stage := ""
 				if p.Active != nil {
-					st := p.stage(p.Active.Stage)
-					st.Status, st.Reason = "unknown-outcome", "controller stopped during "+p.Active.Kind+"; no retry"
-					p.Failed, p.Reason = st.Name, st.Reason
+					stage = p.Active.Stage
 					if p.Active.Kind == "review" && r.Review != nil {
 						r.Review.Status = "unknown-outcome"
 					}
@@ -263,6 +261,7 @@ func load(h string) (*Store, error) {
 						p.Repairs[len(p.Repairs)-1].Writer = "unknown"
 					}
 				}
+				holdRecovery(r, stage, "controller stopped during a pipeline step; no retry")
 			} else if r.Review != nil {
 				r.Review.Status = "unknown-outcome"
 			}
@@ -302,19 +301,23 @@ func view(s *Store, r *Run) Response {
 		v.Gate = currentGate(r)
 		id, e := resolve(r.Submitted.Worktree)
 		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "cancelling" && r.Status != "writing" && r.Status != "recovery-required"
+		held := custodyHeld(s, r)
+		if held {
+			v.Blocked = append(v.Blocked, "another run holds unpublished or ambiguous repository candidate custody; writer actions blocked")
+		}
 		if safe {
 			if id == r.Submitted {
 				v.Actions = append(v.Actions, "apply", "save", "resolve-rules")
-				if r.Status == "outstanding-findings" && r.Repair == nil && r.RepairUsed == 0 && r.ReviewUsed+r.RepairUsed < r.Configs[len(r.Configs)-1].Settings.Limit && repairable(r) {
+				if !held && r.Status == "outstanding-findings" && r.Repair == nil && r.RepairUsed == 0 && r.ReviewUsed+r.RepairUsed < r.Configs[len(r.Configs)-1].Settings.Limit && repairable(r) {
 					v.Actions = append(v.Actions, "repair")
 				}
 				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && (r.Repair.Handback == "awaiting-handback" || r.Repair.Handback == "handback-in-progress") {
 					v.Actions = append(v.Actions, "handback")
 				}
-				if p := r.Pipeline; p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "locally-ready" {
+				if p := r.Pipeline; !held && p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "locally-ready" {
 					v.Actions = append(v.Actions, "pipeline")
 				}
-				if p := r.Pipeline; p != nil && p.Gate != "" {
+				if p := r.Pipeline; !held && p != nil && p.Gate != "" {
 					v.Actions = append(v.Actions, "resolve-conflict")
 				}
 				if p := r.Pipeline; p != nil && p.Status == "locally-ready" && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
@@ -475,6 +478,9 @@ func handle(s *Store, q Request) Response {
 		}
 		r.Token = opaque()
 	} else if q.Op == "resolve-conflict" {
+		if custodyHeld(s, r) {
+			return fail("repository candidate custody is already held", r)
+		}
 		if err := admitConflictRepair(r, q); err != nil {
 			return fail(err.Error(), r)
 		}
@@ -646,11 +652,10 @@ func daemon(h string) error {
 			if step != nil && step.Kind == "sync" {
 				if err := withWriterLock(r.Submitted.Repository, func() error { return ensureCandidate(r) }); err != nil {
 					p.Active = nil
-					park(r, p.stage(step.Stage), "needs-decision", "private candidate unavailable: "+err.Error())
 					if errors.Is(err, errCandidateUnknown) {
-						st := p.stage(step.Stage)
-						st.Status = "unknown-outcome"
-						r.Status, p.Status = "recovery-required", "recovery-required"
+						holdRecovery(r, step.Stage, err.Error())
+					} else {
+						park(r, p.stage(step.Stage), "needs-decision", "private candidate unavailable: "+err.Error())
 					}
 					step = nil
 				}
@@ -847,7 +852,7 @@ func daemon(h string) error {
 					v.Outcome = "refused"
 					v.Error = r.Repair.Log
 				}
-				if r != nil && r.Repair == nil && r.Pipeline != nil && r.Pipeline.Handback == "awaiting-handback" {
+				if r != nil && r.Repair == nil && r.Pipeline != nil && (r.Pipeline.Handback == "awaiting-handback" || r.Pipeline.Handback == "unknown-outcome") {
 					v.Outcome = "refused"
 					v.Error = r.Pipeline.HandbackError
 				}

@@ -508,9 +508,7 @@ func completeStep(r *Run, o stepOutcome) error {
 	case "commands", "sync":
 		st.Status, st.Reason, st.Commands = o.Stage.Status, o.Stage.Reason, o.Stage.Commands
 		if st.Status == "unknown-outcome" {
-			r.Status = "recovery-required"
-			p.Status, p.Failed, p.Reason = "recovery-required", st.Name, st.Reason+"; recovery unsupported"
-			r.Token = opaque()
+			holdRecovery(r, st.Name, st.Reason)
 			return nil
 		}
 		if o.Head != "" {
@@ -565,10 +563,7 @@ func completeStep(r *Run, o stepOutcome) error {
 				st.Reason = "repaired; awaiting independent review and gate rerun"
 			}
 		case "unknown-outcome":
-			r.Status = "recovery-required"
-			st.Status, st.Reason = "failed", "repair writer outcome unknown; recovery unsupported"
-			p.Status, p.Failed, p.Reason = "recovery-required", st.Name, st.Reason
-			r.Token = opaque()
+			holdRecovery(r, st.Name, "repair writer outcome unknown: "+x.Log)
 			return nil
 		case "cancelled":
 			st.Status, st.Reason = "cancelled", "repair cancelled"
@@ -590,13 +585,13 @@ func completeStep(r *Run, o stepOutcome) error {
 	return nil
 }
 
-func runGateCommand(ctx context.Context, dir string, args []string, digests map[string]string) CheckResult {
+func runGateCommand(ctx context.Context, dir string, args []string, digests map[string]string) (CheckResult, error) {
 	res := CheckResult{Args: args, Exit: -1, Status: "running"}
 	current, err := executableDigest(args[0])
 	res.ExecutableDigest = current
 	if err != nil || current != digests[args[0]] {
 		res.Status, res.Log = "authority-changed", "trusted command executable changed after prepare"
-		return res
+		return res, nil
 	}
 	out := &tailBuffer{limit: 16384}
 	code, err := runProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), out, out)
@@ -606,6 +601,7 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 	switch {
 	case errors.Is(err, ErrWriterTreeUnknown):
 		res.Status = "unknown-outcome"
+		return res, ErrWriterTreeUnknown
 	case errors.Is(err, context.Canceled):
 		res.Status = "cancelled"
 	case err != nil || code != 0:
@@ -613,7 +609,7 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 	default:
 		res.Status = "passed"
 	}
-	return res
+	return res, nil
 }
 
 func worktreeClean(dir, head string) error {
@@ -635,20 +631,20 @@ func runStageCommands(ctx context.Context, p Pipeline, stage, candidate string) 
 		return out
 	}
 	for _, args := range p.commands(stage) {
-		res := runGateCommand(ctx, p.Worktree, args, p.CommandDigests)
+		res, err := runGateCommand(ctx, p.Worktree, args, p.CommandDigests)
 		out.Commands = append(out.Commands, res)
+		if err != nil {
+			out.Status, out.Reason = "unknown-outcome", strings.Join(displayArgs(args), " ")+": "+err.Error()
+			return out
+		}
 		if res.Status == "cancelled" {
 			out.Status, out.Reason = "cancelled", "cancelled"
 			return out
 		}
 		if res.Status != "passed" {
 			out.Status, out.Reason = "failed", fmt.Sprintf("%s exited %d", strings.Join(displayArgs(args), " "), res.Exit)
-			if res.Status == "authority-changed" || res.Status == "unknown-outcome" {
-				out.Status = res.Status
-				out.Reason = res.Log
-			}
 			if res.Status == "authority-changed" {
-				out.Status = "needs-decision"
+				out.Status, out.Reason = "needs-decision", res.Log
 			}
 			return out
 		}
@@ -684,6 +680,19 @@ func ensureCandidate(r *Run) error {
 }
 
 var errCandidateUnknown = errors.New("private candidate worktree creation outcome unknown")
+var errHandbackUnknown = errors.New("handback outcome unknown; inspect source and candidate refs")
+
+func holdRecovery(r *Run, stage, reason string) {
+	p := r.Pipeline
+	if st := p.stage(stage); st != nil {
+		st.Status, st.Reason = "unknown-outcome", reason
+	}
+	p.Active = nil
+	p.Status, p.Failed, p.Reason = "recovery-required", stage, reason+"; recovery unsupported"
+	r.Status = "recovery-required"
+	r.Token = opaque()
+	r.Events = append(r.Events, Event{Kind: "recovery-required", Actor: "daemon", Reason: reason})
+}
 
 func gitArgv(identity CommandPlan, args ...string) []string {
 	gitPath, _ := exec.LookPath("git")
@@ -717,16 +726,16 @@ func unmergedPaths(dir string) []string {
 
 func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (StageResult, string, []string) {
 	out := StageResult{Name: "sync"}
-	settled := func(res CheckResult) bool {
+	settled := func(res CheckResult, err error) bool {
 		out.Commands = append(out.Commands, res)
-		if res.Status == "unknown-outcome" || res.Status == "cancelled" {
+		if err != nil || res.Status == "cancelled" {
 			out.Status, out.Reason = res.Status, "git "+res.Status+"; candidate preserved without retry"
 			return false
 		}
 		return true
 	}
-	check := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge-base", "--is-ancestor", target, "HEAD"), p.CommandDigests)
-	if !settled(check) {
+	check, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge-base", "--is-ancestor", target, "HEAD"), p.CommandDigests)
+	if !settled(check, err) {
 		return out, "", nil
 	}
 	if check.Status == "passed" {
@@ -737,8 +746,8 @@ func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (Stag
 		out.Status, out.Reason = "failed", "target ancestry check failed: "+check.Log
 		return out, "", nil
 	}
-	merge := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge", "--no-ff", "--no-edit", "-m", "Merge target "+target, target), p.CommandDigests)
-	if !settled(merge) {
+	merge, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge", "--no-ff", "--no-edit", "-m", "Merge target "+target, target), p.CommandDigests)
+	if !settled(merge, err) {
 		return out, "", nil
 	}
 	if merge.Status == "passed" {
@@ -752,8 +761,8 @@ func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (Stag
 		return out, fields[0], nil
 	}
 	conflicts := unmergedPaths(p.Worktree)
-	abort := runGateCommand(context.Background(), p.Worktree, gitArgv(p.Plan, "merge", "--abort"), p.CommandDigests)
-	if !settled(abort) {
+	abort, err := runGateCommand(context.Background(), p.Worktree, gitArgv(p.Plan, "merge", "--abort"), p.CommandDigests)
+	if !settled(abort, err) {
 		return out, "", nil
 	}
 	if abort.Status != "passed" {
@@ -789,10 +798,13 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 	save := func() bool { return checkpoint(x) }
 	merging := false
 	fail := func(status string, e error) {
-		if merging {
-			runGateCommand(context.Background(), x.Worktree, gitArgv(p.Plan, "merge", "--abort"), p.CommandDigests)
-		}
 		x.Status, x.Log = status, e.Error()
+		if merging {
+			if abort, err := runGateCommand(context.Background(), x.Worktree, gitArgv(p.Plan, "merge", "--abort"), p.CommandDigests); err != nil || abort.Status != "passed" {
+				x.Status, x.Writer = "unknown-outcome", "unknown"
+				x.Log += "; merge abort " + abort.Status + ", candidate state ambiguous"
+			}
+		}
 		save()
 	}
 	err := withWriterLock(source.Repository, func() error {
@@ -807,11 +819,21 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		if e = candidateSafe(x, x.Base); e != nil {
 			return e
 		}
-		merge := runGateCommand(ctx, x.Worktree, gitArgv(p.Plan, "merge", "--no-ff", "--no-edit", "-m", "Merge target "+target, target), p.CommandDigests)
-		merging = true
-		if merge.Status == "passed" {
-			merging = false
+		merge, err := runGateCommand(ctx, x.Worktree, gitArgv(p.Plan, "merge", "--no-ff", "--no-edit", "-m", "Merge target "+target, target), p.CommandDigests)
+		if err != nil {
+			x.Status = "unknown-outcome"
+			return errors.New("target merge runner outcome unknown; no fixer, abort or commit started")
+		}
+		switch merge.Status {
+		case "authority-changed":
+			return errors.New(merge.Log)
+		case "passed":
 			return errors.New("target merged without conflict; rerun the pipeline instead")
+		}
+		merging = true
+		if merge.Status == "cancelled" {
+			x.Status = "cancelled"
+			return errors.New("cancelled during target merge")
 		}
 		got := unmergedPaths(x.Worktree)
 		sort.Strings(got)
@@ -953,10 +975,13 @@ func handbackPipeline(r *Run) error {
 			return errors.New("source dirty state is ambiguous; candidate preserved")
 		}
 		if _, e := controllerGit(r.Submitted.Worktree, "merge", "--ff-only", r.Candidate); e != nil {
-			return errors.New("guarded handback outcome unknown or refused; candidate preserved")
+			if after, err := resolve(r.Submitted.Worktree); err == nil && after == r.Submitted {
+				return errors.New("guarded handback refused; candidate preserved")
+			}
+			return errHandbackUnknown
 		}
 		if after, e := resolve(r.Submitted.Worktree); e != nil || after.Head != r.Candidate {
-			return errors.New("handback outcome unknown; inspect source and candidate refs")
+			return errHandbackUnknown
 		}
 		p.Handback = "handed-back"
 		return nil
@@ -1005,6 +1030,10 @@ func reconcileHandbacks(s *Store) {
 			if err := handbackPipeline(r); err != nil {
 				p.Handback = "awaiting-handback"
 				p.HandbackError = err.Error()
+				if errors.Is(err, errHandbackUnknown) {
+					p.Handback = "unknown-outcome"
+					holdRecovery(r, "handback", err.Error())
+				}
 			}
 		}
 	}

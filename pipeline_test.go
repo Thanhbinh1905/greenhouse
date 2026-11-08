@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -54,6 +55,8 @@ with open(root+'/fix-invocations','a') as f: f.write(b['Stage']+'\n')
 with open(root+'/fix-input.json','w') as f: json.dump(b,f)
 target=open(root+'/fix-content').read() if os.path.exists(root+'/fix-content') else 'repaired\n'
 path=open(root+'/fix-path').read() if os.path.exists(root+'/fix-path') else 'sample.txt'
+if os.path.exists(root+'/fix-fail'):
+    sys.exit(1)
 if os.path.exists(root+'/fix-then-review'):
     open(root+'/review-mode','w').write(open(root+'/fix-then-review').read())
 if target=='APPEND':
@@ -421,7 +424,8 @@ func TestRestartDuringCommandParksWithoutRetry(t *testing.T) {
 	}
 }
 
-func TestTargetConflictBecomesGatedFixerAction(t *testing.T) {
+func conflictFixture(t *testing.T, env ...string) (string, string, string, string, string, string, map[string]any) {
+	t.Helper()
 	bin, repo, home := fixture(t)
 	root := filepath.Dir(home)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
@@ -445,13 +449,18 @@ func TestTargetConflictBecomesGatedFixerAction(t *testing.T) {
 	writePrivateJSON(t, filepath.Join(home, "reviewer.json"), ReviewerConfig{filepath.Join(root, "fake-pi"), "fixture/model"})
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "fake-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
 	writePrivateJSON(t, filepath.Join(home, "pipeline.json"), repairPlan(root))
-	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`, env...)
 	v = mutate(t, bin, repo, home, v, "apply", "full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": "prepare", "intent": "Change the sample", "target": target}
 	b, _ := json.Marshal(q)
 	v = axi(t, bin, repo, home, string(b))
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
+	return bin, repo, home, root, target, submitted, parked
+}
+
+func TestTargetConflictBecomesGatedFixerAction(t *testing.T) {
+	bin, repo, home, root, target, submitted, parked := conflictFixture(t)
 	run := runOf(t, parked)
 	p := run["pipeline"].(map[string]any)
 	if run["status"] != "needs-decision" || stageOf(t, parked, "sync")["status"] != "needs-decision" || parked["gate_id"] == "none" {
@@ -587,6 +596,20 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 	if other["outcome"] != "ok" {
 		t.Fatal(other)
 	}
+	for _, action := range other["actions"].([]any) {
+		if action == "pipeline" || action == "repair" {
+			t.Fatalf("linked worktree advertises %v while custody is ambiguous", action)
+		}
+	}
+	if !strings.Contains(strings.Join(func() []string {
+		var out []string
+		for _, b := range other["blocked"].([]any) {
+			out = append(out, b.(string))
+		}
+		return out
+	}(), "\n"), "custody") {
+		t.Fatalf("linked worktree does not show the custody hazard: %v", other["blocked"])
+	}
 	if got := mutate(t, bin, linked, home, other, "pipeline", "linked-start", nil); got["outcome"] != "refused" || !strings.Contains(got["error"].(string), "custody") {
 		t.Fatalf("linked worktree ignored ambiguous custody: %v", got)
 	}
@@ -626,4 +649,82 @@ func TestNotApplicableDocsStillRequiresDocumentation(t *testing.T) {
 	if runOf(t, done)["status"] == "locally-ready" || docs["status"] != "failed" || !strings.Contains(docs["reason"].(string), "README does not describe the new sample") {
 		t.Fatalf("not-applicable doc build hid missing documentation: %v", docs)
 	}
+}
+
+func gitWrapper(t *testing.T, root string) string {
+	t.Helper()
+	real, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, "wrapped-bin")
+	if err = os.MkdirAll(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, filepath.Join(dir, "git"), `#!/bin/sh
+case " $* " in
+*" merge --no-ff "*) [ -e "`+root+`/kill-merge" ] && { "`+real+`" "$@"; kill -KILL $PPID; exit 0; } ;;
+*" merge --abort "*) [ -e "`+root+`/kill-abort" ] && { "`+real+`" "$@"; kill -KILL $PPID; exit 0; } ;;
+esac
+exec "`+real+`" "$@"
+`)
+	return "PATH=" + dir + string(os.PathListSeparator) + os.Getenv("PATH")
+}
+
+func assertRecoveryCustody(t *testing.T, bin, repo, home string, v map[string]any, path string) {
+	t.Helper()
+	run := runOf(t, v)
+	if run["status"] != "recovery-required" || run["pipeline"].(map[string]any)["status"] != "recovery-required" {
+		t.Fatalf("unknown Git outcome did not require recovery: %v", run["pipeline"])
+	}
+	repairs := run["pipeline"].(map[string]any)["repairs"].([]any)
+	if last := repairs[len(repairs)-1].(map[string]any); last["status"] != "unknown-outcome" || last["writer"] != "unknown" {
+		t.Fatalf("repair record lost the unknown outcome: %v", last)
+	}
+	for _, action := range v["actions"].([]any) {
+		if action == "pipeline" || action == "new" || action == "resolve-conflict" {
+			t.Fatalf("unknown outcome still offers %v", action)
+		}
+	}
+	if mutate(t, bin, repo, home, v, "new", "new-after-unknown-git", nil)["outcome"] != "refused" {
+		t.Fatal("unknown Git outcome allowed New run")
+	}
+	stopDaemon(t, home)
+	if got := runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"attach"}`, path)); got["status"] != "recovery-required" {
+		t.Fatalf("restart dropped recovery custody: %v", got["status"])
+	}
+}
+
+func TestConflictMergeUnknownOutcomeLaunchesNothing(t *testing.T) {
+	scratch := t.TempDir()
+	path := gitWrapper(t, scratch)
+	bin, repo, home, root, _, _, parked := conflictFixture(t, path)
+	os.WriteFile(filepath.Join(scratch, "kill-merge"), []byte("1"), 0600)
+	if resolved := mutate(t, bin, repo, home, parked, "resolve-conflict", "resolve", nil); resolved["outcome"] != "ok" {
+		t.Fatal(resolved)
+	}
+	done := waitPipeline(t, bin, repo, home)
+	if got := countLines(t, filepath.Join(root, "fix-invocations")); len(got) != 0 {
+		t.Fatalf("fixer ran after an unknown merge outcome: %v", got)
+	}
+	if got := countLines(t, filepath.Join(root, "review-invocations")); len(got) != 0 {
+		t.Fatalf("review ran after an unknown merge outcome: %v", got)
+	}
+	assertRecoveryCustody(t, bin, repo, home, done, path)
+}
+
+func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {
+	scratch := t.TempDir()
+	path := gitWrapper(t, scratch)
+	bin, repo, home, root, _, _, parked := conflictFixture(t, path)
+	os.WriteFile(filepath.Join(root, "fix-fail"), []byte("1"), 0600)
+	os.WriteFile(filepath.Join(scratch, "kill-abort"), []byte("1"), 0600)
+	if resolved := mutate(t, bin, repo, home, parked, "resolve-conflict", "resolve", nil); resolved["outcome"] != "ok" {
+		t.Fatal(resolved)
+	}
+	done := waitPipeline(t, bin, repo, home)
+	if got := countLines(t, filepath.Join(root, "fix-invocations")); got["sync"] != 1 {
+		t.Fatalf("fixer invocations %v", got)
+	}
+	assertRecoveryCustody(t, bin, repo, home, done, path)
 }
