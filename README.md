@@ -136,7 +136,7 @@ For each case, `run` commits the base and head trees with fixed identities and d
 - Inconclusive reviews score no findings. `model_answer` keeps the model's raw answer.
 - Cost uses Pi's catalog pricing; a proxy or subscription may bill differently. Latency is the wall time of the Pi process.
 
-[The recorded runs](docs/evidence/review-eval/README.md) document each reviewer change, its measured effect, and a model comparison. On this corpus, `openai/gpt-5.6-luna` measured best of the reachable models and is the recommended reviewer model.
+[The recorded runs](docs/evidence/review-eval/README.md) document each reviewer change, its measured effect, and a model comparison. On this corpus, `openai/gpt-5.6-luna` measured best of the reachable models and is the recommended reviewer model. Only OpenAI models were compared: on the evaluation machine, the `openai` proxy serves only OpenAI models, `xai` answered `402` (no credits), and `anthropic`, `google`, `openrouter`, and `meta` had no credentials.
 
 See [the rule contract](docs/rules.md) for selection, validation, provenance, and fixture delivery limits.
 
