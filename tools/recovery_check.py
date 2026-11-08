@@ -176,7 +176,7 @@ def session(env, repo, width, commands, label):
     (evidence / f"terminal-{width}-recovery-{label}.log").write_text("\n".join(line.rstrip() for line in text.splitlines()) + "\n")
     for frame in text.split("\x1b[2J\x1b[H")[1:]:
         home = frame.split("\n> ")[0]
-        assert all(len(line) <= width for line in home.splitlines()), (width, label, home)
+        assert all(len(line) <= width or line.split() == [line] for line in home.splitlines()), (width, label, home)
     return text
 
 

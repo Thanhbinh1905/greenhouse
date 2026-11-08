@@ -1,7 +1,7 @@
 [2J[HGreenhouse | independent review
-Run cc1ca1d4aa69da54459d4bfc1d49dc5a
+Run 640c58be2701c7146f22c1a278030279
 Stage: selected-repair | recovery-required
-Candidate: 339af455c3f2377558a32d2c5a5d11d74eb95968
+Candidate: 08a582cb0e7176af057845ccee8be78e8d7fe90c
 Mode: auto | one-pass | limit 4
 Reviewer: pi / fixture/model (run-local)
 Fixer: pi / fixture/model (run-local)
@@ -19,31 +19,31 @@ Blocked: unknown repair outcome at selected-repair; explicit recovery: inspect,
 adopt, discard, new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor dae96aea3818.0: exited exit=0
-Executor dae96aea3818.1: exited exit=0
-Candidate greenhouse/dae96aea3818c0fc5e2143d3d3cbc4be: advanced past the
+Executor 27bf56ab7d85.0: exited exit=0
+Executor 27bf56ab7d85.1: exited exit=0
+Candidate greenhouse/27bf56ab7d85aff0f0669774bfc6c98f: advanced past the
 recorded head
-  recorded 339af455c3f2 observed 6e7772d43a38
-Adopt: candidate commit 6e7772d43a38 matches the recorded repair; adopt it as
+  recorded 08a582cb0e71 observed 6707c14209cf
+Adopt: candidate commit 6707c14209cf matches the recorded repair; adopt it as
 fixed, not independently rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate c504819cfa4a
+[e] answers recovery gate 5dcd86802759
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-339af455c3f2377558a32d2c5a5d11d74eb95968 | ID
+08a582cb0e7176af057845ccee8be78e8d7fe90c | ID
 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor: client
-Writer: unknown | base: 339af455c3f2377558a32d2c5a5d11d74eb95968 | commit:
+Writer: unknown | base: 08a582cb0e7176af057845ccee8be78e8d7fe90c | commit:
 Selected: 1 | fixer input:
-0788c83434f6689975617d35364d006bbc6faf2a50c89ade9c7de4d30c24bffe | rules:
-0ff8564093484f6058a78447435cbb9efb1c811e1b2f6ecffc6ec56790ffb20b | config:
-8b6df205ce29cf290a4a37f9b5a00908e8f3033392c43ff5a360550f9e5e8566
+794ef0adb779d6ec438fb56d1b0ed7a398f42e11937db3e10bf6bb6e75002ef9 | rules:
+c3698635855f1c3224feee09da2cea563a88967eb86b164fd045446080b2c929 | config:
+18e7dc78a2012a6186c4809437b11d2b1c0846e9ecad51e8e1ac8484fdca3ecf
 Check /usr/bin/python3 -c from pathlib import Path; assert
 Path('sample.txt').read_text() == 'repaired\n' exit=0: passed
 exit=0 stdout=0 stderr=0 overflow=false; raw logs withheld
 Review: outstanding-findings | pi-json-v1 | fixture/model
-Input: 637b1b7253551133a5ef75ef2ca5f24344324b0f21575a67bf07f4201c5e9f86
-Criteria: 7eac160a314ce2011e90074d28cded7ca2a503b3ab210c0dd791c077d7791ac2
-Config: 544bf123773052d73b0bbdbac126297e49cf814319aa4b2cede7e34923c4b0b5
+Input: 19a072e8c8a541afb1b028ce15d396a7b7932b1f5b20bb50ec8d5a1471bc9f73
+Criteria: d284300d3be35602372e3cf85c49edf826572b03bad9482a128fae9999390273
+Config: 8f89b919cd673f95ec44dd0c4a6deab537f5c6073d4fda68fef9e95a2555bd7e
 process completed; exit=0 stdout bytes=610 stderr bytes=0 overflow=false; raw
 diagnostics withheld to avoid credential disclosure
 Reported model: fixture/model
@@ -60,9 +60,9 @@ Rule:  | ID: 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 
 > i
 [2J[HGreenhouse | independent review
-Run cc1ca1d4aa69da54459d4bfc1d49dc5a
+Run 640c58be2701c7146f22c1a278030279
 Stage: selected-repair | recovery-required
-Candidate: 339af455c3f2377558a32d2c5a5d11d74eb95968
+Candidate: 08a582cb0e7176af057845ccee8be78e8d7fe90c
 Mode: auto | one-pass | limit 4
 Reviewer: pi / fixture/model (run-local)
 Fixer: pi / fixture/model (run-local)
@@ -80,31 +80,31 @@ Blocked: unknown repair outcome at selected-repair; explicit recovery: inspect,
 adopt, discard, new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor dae96aea3818.0: exited exit=0
-Executor dae96aea3818.1: exited exit=0
-Candidate greenhouse/dae96aea3818c0fc5e2143d3d3cbc4be: advanced past the
+Executor 27bf56ab7d85.0: exited exit=0
+Executor 27bf56ab7d85.1: exited exit=0
+Candidate greenhouse/27bf56ab7d85aff0f0669774bfc6c98f: advanced past the
 recorded head
-  recorded 339af455c3f2 observed 6e7772d43a38
-Adopt: candidate commit 6e7772d43a38 matches the recorded repair; adopt it as
+  recorded 08a582cb0e71 observed 6707c14209cf
+Adopt: candidate commit 6707c14209cf matches the recorded repair; adopt it as
 fixed, not independently rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate c504819cfa4a
+[e] answers recovery gate 5dcd86802759
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-339af455c3f2377558a32d2c5a5d11d74eb95968 | ID
+08a582cb0e7176af057845ccee8be78e8d7fe90c | ID
 53ff33092b3e66648459792b6557b516c3f7c74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor: client
-Writer: unknown | base: 339af455c3f2377558a32d2c5a5d11d74eb95968 | commit:
+Writer: unknown | base: 08a582cb0e7176af057845ccee8be78e8d7fe90c | commit:
 Selected: 1 | fixer input:
-0788c83434f6689975617d35364d006bbc6faf2a50c89ade9c7de4d30c24bffe | rules:
-0ff8564093484f6058a78447435cbb9efb1c811e1b2f6ecffc6ec56790ffb20b | config:
-8b6df205ce29cf290a4a37f9b5a00908e8f3033392c43ff5a360550f9e5e8566
+794ef0adb779d6ec438fb56d1b0ed7a398f42e11937db3e10bf6bb6e75002ef9 | rules:
+c3698635855f1c3224feee09da2cea563a88967eb86b164fd045446080b2c929 | config:
+18e7dc78a2012a6186c4809437b11d2b1c0846e9ecad51e8e1ac8484fdca3ecf
 Check /usr/bin/python3 -c from pathlib import Path; assert
 Path('sample.txt').read_text() == 'repaired\n' exit=0: passed
 exit=0 stdout=0 stderr=0 overflow=false; raw logs withheld
 Review: outstanding-findings | pi-json-v1 | fixture/model
-Input: 637b1b7253551133a5ef75ef2ca5f24344324b0f21575a67bf07f4201c5e9f86
-Criteria: 7eac160a314ce2011e90074d28cded7ca2a503b3ab210c0dd791c077d7791ac2
-Config: 544bf123773052d73b0bbdbac126297e49cf814319aa4b2cede7e34923c4b0b5
+Input: 19a072e8c8a541afb1b028ce15d396a7b7932b1f5b20bb50ec8d5a1471bc9f73
+Criteria: d284300d3be35602372e3cf85c49edf826572b03bad9482a128fae9999390273
+Config: 8f89b919cd673f95ec44dd0c4a6deab537f5c6073d4fda68fef9e95a2555bd7e
 process completed; exit=0 stdout bytes=610 stderr bytes=0 overflow=false; raw
 diagnostics withheld to avoid credential disclosure
 Reported model: fixture/model

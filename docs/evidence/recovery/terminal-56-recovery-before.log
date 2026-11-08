@@ -1,7 +1,7 @@
 [2J[HGreenhouse | independent review
-Run 17d64edb2323a6adf4f04f6caf24c904
+Run f1eca70aca10fc10f52ff970115946c2
 Stage: selected-repair | recovery-required
-Candidate: 030888def0ff0475d7c2bf8e8217bce05f6a2971
+Candidate: 2f4b473533051a890d7828dfd0507bf831f5c3ce
 Mode: auto | one-pass | limit 4
 Reviewer: pi / fixture/model (run-local)
 Fixer: pi / fixture/model (run-local)
@@ -11,7 +11,7 @@ Settings source: run-local
 Rule unslop | resolved | required=true
 Source: builtin:unslop
 Digest:
-d8fdae77a603fad9c3241861258…dc4e0945c5a276a961505d42df1
+d8fdae77a603fad9c32418612583b40b74235dc4e0945c5a276a961505d42df1
 Auto-resume: on (default in auto mode)
 Blocked: repository overrides unsupported; repository
 configuration is untrusted
@@ -21,29 +21,29 @@ Blocked: unknown repair outcome at selected-repair;
 explicit recovery: inspect, adopt, discard, new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor 4bab09f09ec4.0: exited exit=0
-Executor 4bab09f09ec4.1: exited exit=0
-Candidate greenhouse/4bab09f09ec438d2539621f148469c1e:
+Executor f1c4d69aee65.0: exited exit=0
+Executor f1c4d69aee65.1: exited exit=0
+Candidate greenhouse/f1c4d69aee65439746c73fdcac82ea90:
 advanced past the recorded head
-  recorded 030888def0ff observed 064e78d1ac3f
-Adopt: candidate commit 064e78d1ac3f matches the
+  recorded 2f4b47353305 observed 1df2b42c5306
+Adopt: candidate commit 1df2b42c5306 matches the
 recorded repair; adopt it as fixed, not independently
 rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate aa1fd7b68c74
+[e] answers recovery gate 4b31a6803783
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-030888def0ff0475d7c2bf8e8217bce05f6a2971 | ID
-53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+2f4b473533051a890d7828dfd0507bf831f5c3ce | ID
+53ff33092b3e66648459792b65…74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor:
 client
 Writer: unknown | base:
-030888def0ff0475d7c2bf8e8217bce05f6a2971 | commit:
+2f4b473533051a890d7828dfd0507bf831f5c3ce | commit:
 Selected: 1 | fixer input:
-9bef36675c35818eb83ddfdc79c…0c52773417ced275f899c0540b5
+5a6b8141ca9250f96d0c5be37d69ce9ed90194cfd69c82bf1a865ca9f0895bf9
 | rules:
-557d800cf663131a85c81752922…f9fdd538a7d0ccb505eab7a0ac4
+072a0417d0f67fac6929f9bfca147a874d44782ab475b07fb180c613b137698f
 | config:
-7307a7cc21d24a8eb4e8692bb59…9d81bce3c99a8a3f1740c13a798
+78e4c7bb0ac1e0fa2f7ab41aa38cb760b75f299a0b76fbe41d57a990054a1eed
 Check /usr/bin/python3 -c from pathlib import Path;
 assert Path('sample.txt').read_text() == 'repaired\n'
 exit=0: passed
@@ -52,11 +52,11 @@ withheld
 Review: outstanding-findings | pi-json-v1 |
 fixture/model
 Input:
-4d00aff7140d623172834165ad9…bafb2e7d5d29570e4aa78c2a649
+6ea0ac73db9b1a27766891c6664ea2b513833edd58f3b6a8887e58fa9ccdc950
 Criteria:
-556e237e586b79d6c4b6e5f8ed1…7e1fb6da5b972fdc3dbc342dc14
+6bf7f72889c1049ad3d90da01136397bc52781f4e70fa7233bf81fe14dfd369f
 Config:
-c5dea6efdec2ae918dfa72c6a6f…be32d91d4a8e4b1a17080445163
+140e9539d5d81706aedf0f95177a7bd1d194a17aa803b9deff2283603c051c7a
 process completed; exit=0 stdout bytes=610 stderr
 bytes=0 overflow=false; raw diagnostics withheld to
 avoid credential disclosure
@@ -65,7 +65,7 @@ Coverage: sample.txt
 P2 correctness sample.txt:1-1 Fixture finding
 Action: Repair the sample
 Rule:  | ID:
-53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+53ff33092b3e66648459792b65…74df304129e708c7a70d452b03d
 
 [i] Inspect  [c] Criteria/diff  [l] Load rules  [s]
 Settings
@@ -76,9 +76,9 @@ Settings
 
 > i
 [2J[HGreenhouse | independent review
-Run 17d64edb2323a6adf4f04f6caf24c904
+Run f1eca70aca10fc10f52ff970115946c2
 Stage: selected-repair | recovery-required
-Candidate: 030888def0ff0475d7c2bf8e8217bce05f6a2971
+Candidate: 2f4b473533051a890d7828dfd0507bf831f5c3ce
 Mode: auto | one-pass | limit 4
 Reviewer: pi / fixture/model (run-local)
 Fixer: pi / fixture/model (run-local)
@@ -88,7 +88,7 @@ Settings source: run-local
 Rule unslop | resolved | required=true
 Source: builtin:unslop
 Digest:
-d8fdae77a603fad9c3241861258…dc4e0945c5a276a961505d42df1
+d8fdae77a603fad9c32418612583b40b74235dc4e0945c5a276a961505d42df1
 Auto-resume: on (default in auto mode)
 Blocked: repository overrides unsupported; repository
 configuration is untrusted
@@ -98,29 +98,29 @@ Blocked: unknown repair outcome at selected-repair;
 explicit recovery: inspect, adopt, discard, new-run
 RECOVERY REQUIRED: repair at selected-repair
 controller stopped during the selected repair; no retry
-Executor 4bab09f09ec4.0: exited exit=0
-Executor 4bab09f09ec4.1: exited exit=0
-Candidate greenhouse/4bab09f09ec438d2539621f148469c1e:
+Executor f1c4d69aee65.0: exited exit=0
+Executor f1c4d69aee65.1: exited exit=0
+Candidate greenhouse/f1c4d69aee65439746c73fdcac82ea90:
 advanced past the recorded head
-  recorded 030888def0ff observed 064e78d1ac3f
-Adopt: candidate commit 064e78d1ac3f matches the
+  recorded 2f4b47353305 observed 1df2b42c5306
+Adopt: candidate commit 1df2b42c5306 matches the
 recorded repair; adopt it as fixed, not independently
 rereviewed
 Options: inspect, adopt, discard, new-run
-[e] answers recovery gate aa1fd7b68c74
+[e] answers recovery gate 4b31a6803783
 Outstanding P2 sample.txt:1 Fixture finding | reviewed
-030888def0ff0475d7c2bf8e8217bce05f6a2971 | ID
-53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+2f4b473533051a890d7828dfd0507bf831f5c3ce | ID
+53ff33092b3e66648459792b65…74df304129e708c7a70d452b03d
 Repair: unknown-outcome | handback: not-ready | actor:
 client
 Writer: unknown | base:
-030888def0ff0475d7c2bf8e8217bce05f6a2971 | commit:
+2f4b473533051a890d7828dfd0507bf831f5c3ce | commit:
 Selected: 1 | fixer input:
-9bef36675c35818eb83ddfdc79c…0c52773417ced275f899c0540b5
+5a6b8141ca9250f96d0c5be37d69ce9ed90194cfd69c82bf1a865ca9f0895bf9
 | rules:
-557d800cf663131a85c81752922…f9fdd538a7d0ccb505eab7a0ac4
+072a0417d0f67fac6929f9bfca147a874d44782ab475b07fb180c613b137698f
 | config:
-7307a7cc21d24a8eb4e8692bb59…9d81bce3c99a8a3f1740c13a798
+78e4c7bb0ac1e0fa2f7ab41aa38cb760b75f299a0b76fbe41d57a990054a1eed
 Check /usr/bin/python3 -c from pathlib import Path;
 assert Path('sample.txt').read_text() == 'repaired\n'
 exit=0: passed
@@ -129,11 +129,11 @@ withheld
 Review: outstanding-findings | pi-json-v1 |
 fixture/model
 Input:
-4d00aff7140d623172834165ad9…bafb2e7d5d29570e4aa78c2a649
+6ea0ac73db9b1a27766891c6664ea2b513833edd58f3b6a8887e58fa9ccdc950
 Criteria:
-556e237e586b79d6c4b6e5f8ed1…7e1fb6da5b972fdc3dbc342dc14
+6bf7f72889c1049ad3d90da01136397bc52781f4e70fa7233bf81fe14dfd369f
 Config:
-c5dea6efdec2ae918dfa72c6a6f…be32d91d4a8e4b1a17080445163
+140e9539d5d81706aedf0f95177a7bd1d194a17aa803b9deff2283603c051c7a
 process completed; exit=0 stdout bytes=610 stderr
 bytes=0 overflow=false; raw diagnostics withheld to
 avoid credential disclosure
@@ -142,7 +142,7 @@ Coverage: sample.txt
 P2 correctness sample.txt:1-1 Fixture finding
 Action: Repair the sample
 Rule:  | ID:
-53ff33092b3e66648459792b655…74df304129e708c7a70d452b03d
+53ff33092b3e66648459792b65…74df304129e708c7a70d452b03d
 
 [i] Inspect  [c] Criteria/diff  [l] Load rules  [s]
 Settings
