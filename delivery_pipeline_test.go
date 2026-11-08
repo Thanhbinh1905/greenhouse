@@ -76,12 +76,17 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 }
 
 func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
-	var bare string
+	var bare, hookStarted, hookRelease, hookFinished, hookLog string
 	var mu sync.Mutex
 	exists, prHead := false, ""
 	var creates, updates atomic.Int32
+	var logMu sync.Mutex
+	var requestLog []string
 	postStarted, releasePost, postFinished := make(chan struct{}), make(chan struct{}), make(chan struct{})
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logMu.Lock()
+		requestLog = append(requestLog, r.Method+" "+r.URL.Path)
+		logMu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
@@ -92,11 +97,14 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 				w.Write([]byte(`[]`))
 				return
 			}
-			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": head}}})
+			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": "Greenhouse: Test", "body": "Validated candidate: `" + head + "`. Greenhouse will not merge this pull request.", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": head}}})
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			creates.Add(1)
 			var request struct {
-				Head string `json:"head"`
+				Head  string `json:"head"`
+				Title string `json:"title"`
+				Body  string `json:"body"`
+				Base  string `json:"base"`
 			}
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 				t.Errorf("decode PR request: %v", err)
@@ -113,7 +121,7 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 			mu.Unlock()
 			close(postStarted)
 			<-releasePost
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": request.Title, "body": request.Body, "base": map[string]string{"ref": request.Base}, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
 			close(postFinished)
 		case r.URL.Path == "/repos/acme/garden/pulls/12" && r.Method == http.MethodPatch:
 			updates.Add(1)
@@ -141,42 +149,72 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 		if err := exec.Command("git", "init", "--bare", bare).Run(); err != nil {
 			t.Fatal(err)
 		}
+		hookStarted = filepath.Join(root, "push-hook-started")
+		hookRelease = filepath.Join(root, "push-hook-release")
+		hookFinished = filepath.Join(root, "push-hook-finished")
+		hookLog = filepath.Join(root, "push-hook-log")
+		hook := "#!/bin/sh\nprintf 'push\\n' >> " + hookLog + "\ntouch " + hookStarted + "\nwhile [ ! -e " + hookRelease + " ]; do sleep 0.01; done\ntouch " + hookFinished + "\n"
+		if err := os.WriteFile(filepath.Join(bare, "hooks", "post-receive"), []byte(hook), 0700); err != nil {
+			t.Fatal(err)
+		}
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
 	})
 	started := mutate(t, bin, repo, home, attached, "pipeline", "start", nil)
 	if started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
+	waitForFile := func(path string) {
+		t.Helper()
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(path); err == nil {
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		t.Fatalf("timed out waiting for %s", path)
+	}
+	killDaemon := func() {
+		t.Helper()
+		pidBytes, err := os.ReadFile(filepath.Join(home, "pid"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var pid int
+		if err := json.Unmarshal(pidBytes, &pid); err != nil || pid <= 0 {
+			t.Fatalf("invalid daemon pid %q: %v", pidBytes, err)
+		}
+		if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+			t.Fatal(err)
+		}
+		lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+			if time.Now().After(deadline) {
+				lock.Close()
+				t.Fatal("interrupted daemon retained its lock")
+			}
+			time.Sleep(time.Millisecond)
+		}
+		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+		_ = lock.Close()
+	}
+	waitForFile(hookStarted)
+	killDaemon()
+	if err := os.WriteFile(hookRelease, nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	waitForFile(hookFinished)
+	axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	select {
 	case <-postStarted:
 	case <-time.After(30 * time.Second):
 		t.Fatal("PR creation did not start")
 	}
-	pidBytes, err := os.ReadFile(filepath.Join(home, "pid"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var pid int
-	if err := json.Unmarshal(pidBytes, &pid); err != nil || pid <= 0 {
-		t.Fatalf("invalid daemon pid %q: %v", pidBytes, err)
-	}
-	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
-	}
-	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
-	if err != nil {
-		t.Fatal(err)
-	}
-	deadline := time.Now().Add(10 * time.Second)
-	for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
-		if time.Now().After(deadline) {
-			lock.Close()
-			t.Fatal("interrupted daemon retained its lock")
-		}
-		time.Sleep(time.Millisecond)
-	}
-	_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	_ = lock.Close()
+	killDaemon()
 	close(releasePost)
 	select {
 	case <-postFinished:
@@ -185,21 +223,23 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 	}
 	state := waitPipeline(t, bin, repo, home)
 	assertDeliveryReady(t, state)
-	if creates.Load() != 1 || updates.Load() != 1 {
+	if creates.Load() != 1 || updates.Load() != 0 {
 		t.Fatalf("PR effects duplicated or not reconciled: creates=%d updates=%d", creates.Load(), updates.Load())
 	}
-	pushCommands := stageOf(t, state, "push")["commands"].([]any)
-	pushCount := 0
-	for _, item := range pushCommands {
-		args := item.(map[string]any)["args"].([]any)
-		for _, arg := range args {
-			if arg == "push" {
-				pushCount++
-			}
+	pushes, err := os.ReadFile(hookLog)
+	if err != nil || strings.Count(string(pushes), "push\n") != 1 {
+		t.Fatalf("push mutation count: log=%q err=%v", pushes, err)
+	}
+	logMu.Lock()
+	prMutations := 0
+	for _, request := range requestLog {
+		if request == "POST /repos/acme/garden/pulls" || request == "PATCH /repos/acme/garden/pulls/12" {
+			prMutations++
 		}
 	}
-	if pushCount != 1 {
-		t.Fatalf("push replayed across restart: commands=%v", pushCommands)
+	logMu.Unlock()
+	if prMutations != 1 {
+		t.Fatalf("fake forge PR mutation log: %v", requestLog)
 	}
 	if stageOf(t, state, "pr")["url"] != "https://example.invalid/acme/garden/pull/12" || stageOf(t, state, "ci")["head"] != runOf(t, state)["candidate"] {
 		t.Fatalf("delivery identity was not reconciled: %v", runOf(t, state)["pipeline"])

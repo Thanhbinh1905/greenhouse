@@ -79,6 +79,26 @@ func TestGitHubForgeReusesExistingPullRequest(t *testing.T) {
 	}
 }
 
+func TestGitHubForgeReconcilesAlreadyExactPullRequestWithoutMutation(t *testing.T) {
+	var mutations int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodGet && r.URL.Path == "/repos/acme/garden/pulls" {
+			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": "title", "body": "body", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": "head-a"}}})
+			return
+		}
+		if r.Method == http.MethodPatch || r.Method == http.MethodPost {
+			mutations++
+		}
+		http.Error(w, "unexpected request", http.StatusNotFound)
+	}))
+	defer server.Close()
+	pr, err := (GitHubForge{BaseURL: server.URL, Client: server.Client()}).EnsurePullRequest(context.Background(), "acme", "garden", "topic", "main", "head-a", "title", "body")
+	if err != nil || pr.Number != 12 || pr.Head != "head-a" || mutations != 0 {
+		t.Fatalf("exact PR was mutated or not reconciled: pr=%+v mutations=%d err=%v", pr, mutations, err)
+	}
+}
+
 func TestGitHubForgeMissingAndStaleChecksDoNotPass(t *testing.T) {
 	for _, tc := range []struct{ name, payload, want string }{
 		{"missing", `{"check_runs":[]}`, "missing required check: trusted-ci"},

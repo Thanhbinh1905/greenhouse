@@ -81,7 +81,12 @@ func (g GitHubForge) EnsurePullRequest(ctx context.Context, owner, repo, branch,
 	var found []struct {
 		Number int    `json:"number"`
 		URL    string `json:"html_url"`
-		Head   struct {
+		Title  string `json:"title"`
+		Body   string `json:"body"`
+		Base   struct {
+			Ref string `json:"ref"`
+		} `json:"base"`
+		Head struct {
 			SHA string `json:"sha"`
 		} `json:"head"`
 	}
@@ -93,6 +98,12 @@ func (g GitHubForge) EnsurePullRequest(ctx context.Context, owner, repo, branch,
 		return PullRequest{}, errors.New("multiple open pull requests match the configured branch")
 	}
 	for _, item := range found {
+		if item.Number == 0 || item.URL == "" {
+			return PullRequest{}, errors.New("existing pull request is missing identity")
+		}
+		if item.Head.SHA == head && item.Title == title && item.Body == body && item.Base.Ref == base {
+			return PullRequest{Number: item.Number, URL: item.URL, Head: item.Head.SHA}, nil
+		}
 		var updated struct {
 			Number int    `json:"number"`
 			URL    string `json:"html_url"`
