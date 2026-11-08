@@ -15,6 +15,7 @@ func (failedInputWriter) Write([]byte) (int, error) {
 }
 
 func TestFixtureInstructionDeliveryNotCompliance(t *testing.T) {
+	t.Parallel()
 	s := RuleSnapshot{Scope: policyScope, ID: "fixture", Candidate: "head", ConfigID: "config", ConfigDigest: "config-digest", Rules: []RuleEvidence{}}
 	for _, name := range []string{"unslop", "no-comments"} {
 		p, e := parsePack([]byte(builtins[name]))

@@ -435,11 +435,12 @@ func TestRestartPreservesStageStateWithoutDuplicateWork(t *testing.T) {
 }
 
 func TestRestartDuringCommandParksWithoutRetry(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("1.5"), 0600)
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) && countLines(t, filepath.Join(root, "commands.log"))["test"] == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -582,11 +583,12 @@ func TestChangedInputsInvalidateOnlyAffectedEvidence(t *testing.T) {
 }
 
 func TestPipelineCancellationStopsCommandAndKeepsBudget(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600)
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) && countLines(t, filepath.Join(root, "commands.log"))["test"] == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}

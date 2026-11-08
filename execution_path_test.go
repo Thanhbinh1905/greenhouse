@@ -3,6 +3,7 @@ package main
 import "testing"
 
 func TestDiffPathSeparatesGitDelimiterFromFilename(t *testing.T) {
+	t.Parallel()
 	for _, test := range []struct{ header, path string }{
 		{"a/has space.txt\t", "has space.txt"},
 		{"b/trailing space \t", "trailing space "},

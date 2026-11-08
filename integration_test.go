@@ -66,6 +66,7 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	return r
 }
 func TestConcurrentAttach(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	var a, b map[string]any
 	var wg sync.WaitGroup

@@ -9,6 +9,7 @@ import (
 )
 
 func TestRuleFailureEligibilityCLI(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	path := filepath.Join(t.TempDir(), "large.json")
 	if e := os.WriteFile(path, []byte(strings.Repeat("x", maxPackBytes+1)), 0600); e != nil {
@@ -36,6 +37,7 @@ func TestRuleFailureEligibilityCLI(t *testing.T) {
 	}
 }
 func TestVersionOneRuleExtensionAndDamage(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	git(t, repo, "init", "-b", "main")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial")
@@ -78,6 +80,7 @@ func TestVersionOneRuleExtensionAndDamage(t *testing.T) {
 	}
 }
 func TestRuleSaveDoesNotChangeResolvedRun(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "initial-resolution", nil)

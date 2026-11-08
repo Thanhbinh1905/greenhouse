@@ -14,6 +14,7 @@ import (
 )
 
 func TestReviewRequiresExplicitIntent(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	v = mutate(t, bin, repo, home, v, "review", "review-missing", nil)
@@ -85,7 +86,7 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 }
 func waitReview(t *testing.T, bin, repo, home string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 		status := runOf(t, v)["status"]
@@ -98,6 +99,7 @@ func waitReview(t *testing.T, bin, repo, home string) map[string]any {
 	return nil
 }
 func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	invocations := installFake(t, home, "")
 	os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600)
@@ -169,6 +171,7 @@ func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
 	}
 }
 func TestReviewCancellationAndMalformedOutput(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"time.sleep(30)", "print('malformed');sys.exit(0)"} {
 		t.Run(mode, func(t *testing.T) {
 			bin, repo, home, v := prepareFixture(t)
@@ -192,6 +195,7 @@ func TestReviewCancellationAndMalformedOutput(t *testing.T) {
 	}
 }
 func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	commit := func(msg string) string {
 		git(t, repo, "add", "-A")

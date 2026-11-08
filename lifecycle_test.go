@@ -32,6 +32,7 @@ func mutate(t *testing.T, bin, repo, home string, v map[string]any, op, action s
 	return axi(t, bin, repo, home, string(b))
 }
 func TestLifecycleSettingsAndIdentity(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	initial := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	if runOf(t, initial)["status"] != "unconfigured" {
@@ -151,6 +152,7 @@ func stopDaemon(t *testing.T, home string) {
 	t.Fatal("daemon did not stop")
 }
 func TestRestartAndUnknownWriter(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	c, e := net.Dial("unix", filepath.Join(home, "socket"))

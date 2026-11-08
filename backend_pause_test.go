@@ -24,6 +24,7 @@ func pauseOf(t *testing.T, v map[string]any) map[string]any {
 }
 
 func TestQuotaPausesOnePassReviewWithoutSpendingBudgetAndResumes(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
 	setModes(t, root, "codex", "quota", "success")
 	v = mutate(t, bin, repo, home, v, "review", "review-quota", nil)

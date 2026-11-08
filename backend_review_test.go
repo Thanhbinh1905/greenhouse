@@ -64,6 +64,7 @@ func onePassWith(t *testing.T, backend, model string) (string, string, string, s
 }
 
 func TestOnePassReviewThroughClaudeAndCodex(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ backend, model, label string }{
 		{"claude", "claude-haiku-5-5", "claude-stream-json-v1"},
 		{"codex", "gpt-5.6-luna", "codex-json-v1"},
@@ -108,6 +109,7 @@ func TestOnePassReviewThroughClaudeAndCodex(t *testing.T) {
 }
 
 func TestReviewRefusesMismatchedReportedModel(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, root, v := onePassWith(t, "claude", "claude-opus-5-5")
 	script, _ := os.ReadFile(filepath.Join(root, "fake-claude"))
 	writeExecutable(t, filepath.Join(root, "fake-claude"), strings.Replace(string(script), "model=args[args.index('--model' if '--model' in args else '-m')+1]", "model='claude-haiku-5-5'", 1))

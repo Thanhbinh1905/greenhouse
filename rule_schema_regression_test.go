@@ -8,6 +8,7 @@ import (
 )
 
 func TestSchemaAliasesRejectedCLI(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	path := filepath.Join(t.TempDir(), "aliased.json")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
@@ -37,6 +38,7 @@ func TestSchemaAliasesRejectedCLI(t *testing.T) {
 }
 
 func TestSchemaFieldNamesAreExact(t *testing.T) {
+	t.Parallel()
 	for _, field := range []string{"version", "id", "criteria", "classification", "text", "repair_guidance"} {
 		for _, alias := range []string{strings.ToUpper(field), strings.ToUpper(field[:1]) + field[1:]} {
 			for _, duplicate := range []bool{false, true} {

@@ -10,6 +10,7 @@ import (
 )
 
 func TestExecutableFindingInSpacePath(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	path := filepath.Join(repo, "has space.txt")
 	if err := os.WriteFile(path, []byte("one\ntwo\nold\n"), 0600); err != nil {
@@ -58,9 +59,11 @@ func TestExecutableFindingInSpacePath(t *testing.T) {
 }
 
 func TestExecutableCancellationBoundsInheritedPipes(t *testing.T) {
+	t.Parallel()
 	testInheritedPipes(t, true)
 }
 func TestExecutableExitBoundsInheritedPipes(t *testing.T) {
+	t.Parallel()
 	testInheritedPipes(t, false)
 }
 func testInheritedPipes(t *testing.T, cancel bool) {
@@ -76,7 +79,7 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 	}
 	installFake(t, home, mode)
 	t.Cleanup(func() {
-		deadline := time.Now().Add(10 * time.Second)
+		deadline := time.Now().Add(30 * time.Second)
 		for {
 			if _, err := os.Stat(filepath.Join(root, "descendant-finished")); err == nil {
 				return
@@ -89,7 +92,7 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 		}
 	})
 	v = mutate(t, bin, repo, home, v, "review", "start", nil)
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for {
 		if _, err := os.Stat(filepath.Join(root, "descendant-ready")); err == nil {
 			break

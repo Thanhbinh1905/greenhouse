@@ -11,12 +11,13 @@ import (
 )
 
 func TestReviewMovementAndUnknownRestart(t *testing.T) {
+	t.Parallel()
 	for _, scenario := range []string{"movement", "restart"} {
 		t.Run(scenario, func(t *testing.T) {
 			bin, repo, home, v := prepareFixture(t)
 			invocation := installFake(t, home, "while not os.path.exists(root+'/release'): time.sleep(0.01)\nwith open(root+'/released','w') as f: f.write('released')")
 			v = mutate(t, bin, repo, home, v, "review", "start", nil)
-			deadline := time.Now().Add(10 * time.Second)
+			deadline := time.Now().Add(30 * time.Second)
 			for {
 				if b, _ := os.ReadFile(invocation); len(b) > 0 {
 					break
@@ -83,6 +84,7 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 	}
 }
 func TestRequiredRulesAndBudgetRefuseDispatch(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	invocation := installFake(t, home, "")
 	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 1, "rules": []string{"missing"}}

@@ -32,6 +32,7 @@ func recorded(t *testing.T, backend, name string) ([]byte, []byte, int) {
 }
 
 func TestClassifyRecordedBackendOutputs(t *testing.T) {
+	t.Parallel()
 	bangkok := time.FixedZone("+07", 7*3600)
 	recordedAt := time.Date(2026, 11, 8, 20, 47, 17, 0, bangkok)
 	for _, c := range []struct {
@@ -76,6 +77,7 @@ func TestClassifyRecordedBackendOutputs(t *testing.T) {
 }
 
 func TestUsageIsReadFromFailedAndSuccessfulRuns(t *testing.T) {
+	t.Parallel()
 	stdout, stderr, _ := recorded(t, "claude", "success")
 	if cost, tokens := agentUsage("claude", stdout, stderr); cost != 6.0519999999999997e-05 || tokens != 55 {
 		t.Fatalf("claude success usage: %v %v", cost, tokens)

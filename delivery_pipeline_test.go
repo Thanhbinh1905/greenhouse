@@ -191,7 +191,7 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		deadline := time.Now().Add(10 * time.Second)
+		deadline := time.Now().Add(30 * time.Second)
 		for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 			if time.Now().After(deadline) {
 				lock.Close()

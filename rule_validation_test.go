@@ -10,6 +10,7 @@ import (
 )
 
 func TestLocalRulesImmutableReplayRestart(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	path := filepath.Join(t.TempDir(), "policy.json")
 	original := []byte(builtins["unslop"])
@@ -59,6 +60,7 @@ func TestLocalRulesImmutableReplayRestart(t *testing.T) {
 	}
 }
 func TestPackValidation(t *testing.T) {
+	t.Parallel()
 	for name, raw := range map[string]string{
 		"version":        strings.Replace(builtins["unslop"], `"version":1`, `"version":2`, 1),
 		"unknown":        strings.Replace(builtins["unslop"], `"version":1`, `"execute":"sh","version":1`, 1),

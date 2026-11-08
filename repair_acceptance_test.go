@@ -23,6 +23,7 @@ func writeFixerConfig(t *testing.T, home string, cfg FixerConfig) {
 }
 
 func TestSelectedRepairRequiresConfiguredCheck(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	var cfg FixerConfig
 	data, err := os.ReadFile(filepath.Join(home, "fixer.json"))
@@ -44,6 +45,7 @@ func TestSelectedRepairRequiresConfiguredCheck(t *testing.T) {
 }
 
 func TestSelectedRepairRefusesChangedCheckAuthority(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	check := filepath.Join(filepath.Dir(home), "trusted-check.py")
 	checkLog := filepath.Join(filepath.Dir(home), "check-ran")
@@ -84,6 +86,7 @@ func TestSelectedRepairRefusesChangedCheckAuthority(t *testing.T) {
 }
 
 func TestManagedRepairRefusesGitHookAndSigningHazards(t *testing.T) {
+	t.Parallel()
 	for _, hazard := range []string{"hook", "signing"} {
 		t.Run(hazard, func(t *testing.T) {
 			bin, repo, home, v := repairFixture(t)

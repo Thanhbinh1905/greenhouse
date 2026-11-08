@@ -5,6 +5,7 @@ import (
 )
 
 func TestRuleResolutionCLI(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	resolved := mutate(t, bin, repo, home, v, "resolve-rules", "resolve-1", nil)

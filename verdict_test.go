@@ -11,6 +11,7 @@ func verdictEvents(t *testing.T, text string) []byte {
 	return append(b, []byte("\n{\"type\":\"agent_settled\",\"aborted\":false}\n")...)
 }
 func TestVerdictRejectsDuplicateAndCaseFoldedFields(t *testing.T) {
+	t.Parallel()
 	x := &Execution{Rules: InputIdentity{Candidate: "head"}, Paths: []string{"f"}}
 	for _, text := range []string{
 		`{"head":"head","verdict":"findings","verdict":"clean","coverage":["f"],"findings":[]}`,
@@ -22,6 +23,7 @@ func TestVerdictRejectsDuplicateAndCaseFoldedFields(t *testing.T) {
 	}
 }
 func TestVerdictAcceptsPiSystemMessageWithStringContent(t *testing.T) {
+	t.Parallel()
 	x := &Execution{Rules: InputIdentity{Candidate: "head"}, Paths: []string{"f"}}
 	system := "{\"type\":\"message_start\",\"message\":{\"role\":\"system\",\"content\":\"\"}}\n{\"type\":\"message_end\",\"message\":{\"role\":\"system\",\"content\":\"\"}}\n"
 	events := append([]byte(system), verdictEvents(t, `{"head":"head","verdict":"clean","coverage":["f"],"findings":[]}`)...)

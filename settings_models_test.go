@@ -6,6 +6,7 @@ import (
 )
 
 func TestApplyAndSaveReviewerAndFixerModels(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "openai/gpt-6-luna", "fixer_backend": "pi", "fixer_model": "anthropic/claude-sonnet-4"}
 	applied := mutate(t, bin, repo, home, v, "apply", "apply-models", settings)
@@ -30,6 +31,7 @@ func TestApplyAndSaveReviewerAndFixerModels(t *testing.T) {
 }
 
 func TestReviewerModelChangeStalesHistoricalVerdict(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	v = mutate(t, bin, repo, home, v, "review", "model-review", nil)
 	v = waitReview(t, bin, repo, home)
@@ -50,6 +52,7 @@ func TestReviewerModelChangeStalesHistoricalVerdict(t *testing.T) {
 }
 
 func TestApplyRejectsInvalidBackendAndModelIdentifiers(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	settings := Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop"}, ReviewerBackend: "claude", ReviewerModel: "openai/*", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
 	result := mutate(t, bin, repo, home, v, "apply", "invalid-provider-model", settings)

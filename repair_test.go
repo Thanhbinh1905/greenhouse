@@ -112,6 +112,7 @@ func TestRepairRunnerDeathMarksWriterUnknown(t *testing.T) {
 }
 
 func TestRepairRunnerStopsDescendants(t *testing.T) {
+	t.Parallel()
 	root := os.Getenv("TMPDIR")
 	marker := filepath.Join(root, "repair-descendant-marker")
 	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
@@ -131,6 +132,7 @@ func TestRepairRunnerStopsDescendants(t *testing.T) {
 }
 
 func TestRepairRunnerStopsDescendantsOnCancellation(t *testing.T) {
+	t.Parallel()
 	root := os.Getenv("TMPDIR")
 	marker := filepath.Join(root, "repair-cancel-marker")
 	if err := os.Remove(marker); err != nil && !os.IsNotExist(err) {
@@ -195,6 +197,7 @@ func TestKilledWriterRunnerParksRepairCustody(t *testing.T) {
 }
 
 func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	configPath := filepath.Join(home, "fixer.json")
 	data, err := os.ReadFile(configPath)
@@ -219,7 +222,7 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 	if admitted["outcome"] != "ok" {
 		t.Fatal(admitted)
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, statErr := os.Stat(started); statErr == nil {
 			break
@@ -250,6 +253,7 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 }
 
 func TestLiveCheckCancellationStopsDescendants(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	configPath := filepath.Join(home, "fixer.json")
 	data, err := os.ReadFile(configPath)
@@ -280,7 +284,7 @@ time.sleep(30)
 	if admitted["outcome"] != "ok" {
 		t.Fatal(admitted)
 	}
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, statErr := os.Stat(checkStarted); statErr == nil {
 			break
@@ -312,6 +316,7 @@ time.sleep(30)
 }
 
 func TestDaemonCrashDuringFixParksUnknownWriter(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	started := filepath.Join(filepath.Dir(home), "crash-fixer-started")
 	configPath := filepath.Join(home, "fixer.json")
@@ -337,7 +342,7 @@ func TestDaemonCrashDuringFixParksUnknownWriter(t *testing.T) {
 		t.Fatal(admitted)
 	}
 	repair := runOf(t, admitted)["repair"].(map[string]any)
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, statErr := os.Stat(started); statErr == nil {
 			break
@@ -418,6 +423,7 @@ func TestAcceptedCancellationAtCommitAdmissionPreventsCommit(t *testing.T) {
 }
 
 func TestRepairFailurePreservesCandidateAndBudget(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	configPath := filepath.Join(home, "fixer.json")
 	data, err := os.ReadFile(configPath)
@@ -453,6 +459,7 @@ func TestRepairFailurePreservesCandidateAndBudget(t *testing.T) {
 }
 
 func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, source := repairFixture(t)
 	linked := filepath.Join(filepath.Dir(home), "linked")
 	git(t, repo, "worktree", "add", "-b", "repair-conflict", linked, "HEAD")
@@ -467,7 +474,7 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 	prepared := axi(t, bin, linked, otherHome, string(b))
 	prepared = mutate(t, bin, linked, otherHome, prepared, "resolve-rules", "rules-linked", nil)
 	prepared = mutate(t, bin, linked, otherHome, prepared, "review", "review-linked", nil)
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		prepared = axi(t, bin, linked, otherHome, `{"version":1,"op":"inspect"}`)
 		if runOf(t, prepared)["status"] != "running" {
@@ -553,6 +560,7 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 }
 
 func TestHandbackRefusesMovedSource(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	response := repairRequest(t, bin, repo, home, v, "repair", "fix-moved-source", selectedID(t, v))
 	if response["outcome"] != "ok" {
@@ -583,6 +591,7 @@ func TestHandbackRefusesMovedSource(t *testing.T) {
 }
 
 func TestExecutableSelectedRepair(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
 	before := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	selected := selectedID(t, v)

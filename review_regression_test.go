@@ -10,6 +10,7 @@ import (
 )
 
 func TestNewRunAfterSourceMovement(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	initial := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	applied := mutate(t, bin, repo, home, initial, "apply", "settings", Settings{Mode: "ask", Preset: "full", Limit: 9, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"})
@@ -79,6 +80,7 @@ func TestNewRunAfterSourceMovement(t *testing.T) {
 }
 
 func TestDaemonGitEnvironmentDoesNotSelectOtherRepository(t *testing.T) {
+	t.Parallel()
 	bin, a, home := fixture(t)
 	b := filepath.Join(filepath.Dir(a), "other")
 	if err := os.Mkdir(b, 0700); err != nil {

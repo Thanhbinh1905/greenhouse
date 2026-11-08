@@ -12,6 +12,7 @@ import (
 )
 
 func TestDamagedStoreRefusedBeforeBinding(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	stopDaemon(t, home)
@@ -48,6 +49,7 @@ type legacySnapshot struct {
 }
 
 func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, "")
 	v = mutate(t, bin, repo, home, v, "review", "legacy-review", nil)
@@ -130,6 +132,7 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 }
 
 func TestRetainedUsageAndLimitEdits(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	stopDaemon(t, home)

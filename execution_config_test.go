@@ -9,6 +9,7 @@ import (
 )
 
 func TestChangedReviewerAndStaleRuleTokenRefuse(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	path := filepath.Join(home, "reviewer.json")
 	b, _ := os.ReadFile(path)
