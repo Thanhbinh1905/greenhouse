@@ -470,3 +470,53 @@ func TestUserOnlyAuthorityParksInEveryMode(t *testing.T) {
 		})
 	}
 }
+
+func TestLaterReviewReopensResolvedFinding(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := authorityFixture(t, "auto", 4, repairPlan)
+	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-then-review-review"), []byte("clean"), 0600)
+	os.WriteFile(filepath.Join(root, "require-test"), []byte("gate fixed\n"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-content-test"), []byte("gate fixed\n"), 0600)
+	os.WriteFile(filepath.Join(root, "fix-then-review-test"), []byte("findings"), 0600)
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	done := waitPipeline(t, bin, repo, home)
+	run := runOf(t, done)
+	p := run["pipeline"].(map[string]any)
+	if got := countLines(t, filepath.Join(root, "fix-invocations")); got["review"] != 1 || got["test"] != 1 {
+		t.Fatalf("fixture did not reach the later review: %v", got)
+	}
+	if run["status"] == "locally-ready" {
+		t.Fatalf("a finding reported again after its resolution did not block readiness: %v", p)
+	}
+	findings := run["findings"].([]any)
+	if len(findings) != 1 || findings[0].(map[string]any)["head"] != run["candidate"] {
+		t.Fatalf("finding ledger did not take the later report: %v", findings)
+	}
+	d := decisionIn(t, done)
+	if d["kind"] != "cap" || !has(strs(d["findings"]), findings[0].(map[string]any)["id"].(string)) {
+		t.Fatalf("reopened finding is not in the decision: %v", d)
+	}
+	resolutions := p["resolutions"].([]any)
+	if len(resolutions) != 1 || resolutions[0].(map[string]any)["reopened"] != run["review"].(map[string]any)["id"] {
+		t.Fatalf("resolution history lost or not reopened: %v", resolutions)
+	}
+}
+
+func TestOnePassReviewUpdatesRetainedFindingData(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := prepareFixture(t)
+	mutate(t, bin, repo, home, v, "review", "first-review", nil)
+	first := waitReview(t, bin, repo, home)
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "moved")
+	next := mutate(t, bin, repo, home, first, "new", "next-run", nil)
+	head := runOf(t, next)["candidate"]
+	q, _ := json.Marshal(map[string]any{"version": 1, "op": "prepare", "run_id": next["run_id"], "input_id": next["input_id"], "expected": next["token"], "gate_id": "none", "action_id": "prepare-next", "intent": "Review sample change", "target": runOf(t, first)["target"]})
+	prepared := axi(t, bin, repo, home, string(q))
+	prepared = mutate(t, bin, repo, home, prepared, "resolve-rules", "rules-next", nil)
+	mutate(t, bin, repo, home, prepared, "review", "second-review", nil)
+	findings := runOf(t, waitReview(t, bin, repo, home))["findings"].([]any)
+	if len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
+		t.Fatalf("retained finding kept data from the earlier head: %v", findings)
+	}
+}

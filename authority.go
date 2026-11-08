@@ -60,6 +60,7 @@ type Resolution struct {
 	Repair    string `json:"repair"`
 	Review    string `json:"review"`
 	Candidate string `json:"candidate"`
+	Reopened  string `json:"reopened,omitempty"`
 }
 type Budget struct {
 	Review      int `json:"review"`
@@ -111,7 +112,7 @@ func outstanding(r *Run) (actionable, informational []Finding) {
 	resolved := map[string]bool{}
 	if r.Pipeline != nil {
 		for _, x := range r.Pipeline.Resolutions {
-			resolved[x.Finding] = true
+			resolved[x.Finding] = resolved[x.Finding] || x.Reopened == ""
 		}
 	}
 	for _, f := range r.Findings {
@@ -155,27 +156,41 @@ func findingIDs(findings []Finding) []string {
 	return ids
 }
 
-func resolveFindings(r *Run, x *Execution) {
+func recordReview(r *Run, x *Execution) {
 	p := r.Pipeline
+	index := map[string]int{}
+	for i, f := range r.Findings {
+		index[f.ID] = i
+	}
 	reported := map[string]bool{}
 	for _, f := range x.Result.Findings {
 		reported[f.ID] = true
+		if i, ok := index[f.ID]; ok {
+			r.Findings[i] = f
+		} else {
+			r.Findings = append(r.Findings, f)
+		}
+	}
+	for i := range p.Resolutions {
+		if res := &p.Resolutions[i]; res.Reopened == "" && reported[res.Finding] {
+			res.Reopened = x.ID
+		}
 	}
 	actionable, informational := outstanding(r)
 	for _, f := range append(actionable, informational...) {
-		if repair := repairedBy(p, f.ID); !reported[f.ID] && repair != "" {
+		if repair := repairedBy(p, f); !reported[f.ID] && repair != "" {
 			p.Resolutions = append(p.Resolutions, Resolution{Finding: f.ID, Repair: repair, Review: x.ID, Candidate: r.Candidate})
 		}
 	}
 }
 
-func repairedBy(p *Pipeline, id string) string {
+func repairedBy(p *Pipeline, finding Finding) string {
 	for _, repair := range p.Repairs {
 		if repair.Stage != "review" || repair.Head == "" {
 			continue
 		}
 		for _, f := range repair.Selected {
-			if f.ID == id {
+			if f.ID == finding.ID && f.Head == finding.Head {
 				return repair.ID
 			}
 		}

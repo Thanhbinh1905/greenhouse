@@ -594,16 +594,7 @@ func completeStep(r *Run, o stepOutcome) error {
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
 		switch o.Status {
 		case "clean-review", "outstanding-findings":
-			seen := map[string]bool{}
-			for _, f := range r.Findings {
-				seen[f.ID] = true
-			}
-			for _, f := range o.Result.Findings {
-				if !seen[f.ID] {
-					r.Findings = append(r.Findings, f)
-				}
-			}
-			resolveFindings(r, x)
+			recordReview(r, x)
 			actionable, informational := outstanding(r)
 			st.Status, st.Reason = "passed", "independent review clean with complete coverage"
 			if len(o.Result.Findings) > 0 {

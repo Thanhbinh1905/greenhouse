@@ -56,12 +56,16 @@ root=os.path.dirname(__file__)
 b=json.load(sys.stdin)
 with open(root+'/fix-invocations','a') as f: f.write(b['Stage']+'\n')
 with open(root+'/fix-input.json','w') as f: json.dump(b,f)
-target=open(root+'/fix-content').read() if os.path.exists(root+'/fix-content') else 'repaired\n'
+def staged(name):
+    for candidate in [root+'/fix-'+name+'-'+b['Stage'], root+'/fix-'+name]:
+        if os.path.exists(candidate):
+            return candidate
+target=open(staged('content')).read() if staged('content') else 'repaired\n'
 path=open(root+'/fix-path').read() if os.path.exists(root+'/fix-path') else 'sample.txt'
 if os.path.exists(root+'/fix-fail'):
     sys.exit(1)
-if os.path.exists(root+'/fix-then-review'):
-    open(root+'/review-mode','w').write(open(root+'/fix-then-review').read())
+if staged('then-review'):
+    open(root+'/review-mode','w').write(open(staged('then-review')).read())
 if os.path.exists(root+'/fix-escalate'):
     answer=json.dumps({'escalate':open(root+'/fix-escalate').read(),'reason':'the correct repair changes the requested behavior'})
     print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':answer}]}}))

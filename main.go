@@ -849,14 +849,16 @@ func daemon(h string) error {
 			r.Status, r.Review.Status, r.Review.Log = status, status, done.log
 			r.Review.Result = done.result
 			if done.result != nil {
-				seen := map[string]bool{}
-				for _, f := range r.Findings {
-					seen[f.ID] = true
+				index := map[string]int{}
+				for i, f := range r.Findings {
+					index[f.ID] = i
 				}
 				for _, f := range done.result.Findings {
-					if !seen[f.ID] {
+					if i, ok := index[f.ID]; ok {
+						r.Findings[i] = f
+					} else {
+						index[f.ID] = len(r.Findings)
 						r.Findings = append(r.Findings, f)
-						seen[f.ID] = true
 					}
 				}
 				if status == "clean-review" && len(r.Findings) > 0 {
@@ -1170,13 +1172,26 @@ func terminal(h, path string) error {
 				if !reader.Scan() {
 					return nil
 				}
-				for _, id := range strings.Split(reader.Text(), ",") {
-					id = strings.TrimSpace(id)
-					for _, f := range r.Findings {
-						if id != "" && strings.HasPrefix(f.ID, id) {
-							q.Selected = append(q.Selected, f.ID)
+				invalid := ""
+				for _, entry := range strings.Split(reader.Text(), ",") {
+					if entry = strings.TrimSpace(entry); entry == "" {
+						continue
+					}
+					var matches []string
+					for _, id := range v.Decision.Findings {
+						if strings.HasPrefix(id, entry) {
+							matches = append(matches, id)
 						}
 					}
+					if len(matches) != 1 {
+						invalid = entry
+						break
+					}
+					q.Selected = append(q.Selected, matches[0])
+				}
+				if invalid != "" {
+					message = "Unknown or ambiguous finding ID: " + invalid + "; nothing submitted"
+					continue
 				}
 			}
 			if q.Choice == "increase-cap" {

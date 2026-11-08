@@ -294,6 +294,10 @@ open("sample.txt","w").write("repaired\\n")
         assert "Options: " + ", ".join(decision["options"]) in asked.replace("\n", "")
         if name == "full-ask":
             assert decision["kind"] == "findings" and "Grouped findings:" in asked
+            invalid = session(width, ["d", "repair", "zzz", "i", "q"], f"-{name}-invalid-selection")
+            unchanged = axi()
+            assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["status"] == "needs-decision", unchanged["run"]["pipeline"]
+            assert "Unknown or ambiguous finding ID: zzz; nothing submitted" in invalid
         else:
             assert decision["kind"] == "cap" and "review cap reached" in asked
         session(width, answer + ["q"], f"-{name}-answer")
