@@ -66,6 +66,8 @@ type Repair struct {
 	Budget           string          `json:"budget,omitempty"`
 	Failure          *BackendFailure `json:"failure,omitempty"`
 	Partial          string          `json:"partial,omitempty"`
+	PartialDigest    string          `json:"partial_digest,omitempty"`
+	PartialBytes     int             `json:"partial_bytes,omitempty"`
 	Resumed          bool            `json:"resumed,omitempty"`
 	CostUSD          float64         `json:"cost_usd,omitempty"`
 	Tokens           int             `json:"tokens,omitempty"`

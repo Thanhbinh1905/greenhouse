@@ -501,11 +501,15 @@ func rerunRepair(r *Run, actor string) error {
 	}
 	_, statErr := os.Stat(old.Worktree)
 	if statErr == nil {
-		if id, err := resolve(old.Worktree); err != nil || id.Branch != old.Ref || id.Head != old.Base {
-			return errors.New("candidate moved after the repair stopped; recovery required")
+		id, err := resolve(old.Worktree)
+		if err != nil || id.Branch != old.Ref {
+			return errors.New("candidate branch changed after the repair stopped; recovery required")
 		}
-		if old.Partial == "" {
-			old.Partial = partialDiff(old.Worktree)
+		if _, err := gitRead(old.Worktree, "merge-base", "--is-ancestor", old.Base, id.Head); err != nil {
+			return errors.New("candidate no longer descends from the repair base; recovery required")
+		}
+		if old.PartialDigest == "" {
+			capturePartial(old)
 		}
 		for i := range r.Attempts {
 			if r.Attempts[i].Execution == old.ID {

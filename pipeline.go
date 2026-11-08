@@ -1215,7 +1215,7 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		}
 		x.Writer = "stopped"
 		if run.failure != nil {
-			x.Partial = partialDiff(x.Worktree)
+			capturePartial(x)
 			x.Failure = run.failure
 			x.Status = "paused"
 			return errors.New("backend " + run.failure.Reason + ": " + run.failure.Message)

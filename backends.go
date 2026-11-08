@@ -794,21 +794,32 @@ func fixerEscalation(x *Repair, run fixerRun) (string, string) {
 	return escalationText(run.answer.Text)
 }
 
-func partialDiff(worktree string) string {
-	diff, _ := gitRead(worktree, "diff", "--no-ext-diff", "--no-textconv", "HEAD", "--")
-	untracked, _ := gitRead(worktree, "ls-files", "--others", "--exclude-standard")
-	text := string(diff)
-	for _, name := range strings.Fields(string(untracked)) {
-		text += "untracked: " + name + "\n"
+func capturePartial(x *Repair) {
+	text := ""
+	diff, err := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, "--")
+	untracked, untrackedErr := gitRead(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
+	switch {
+	case err != nil:
+		text = "partial diff unavailable: " + err.Error() + "\n"
+	case untrackedErr != nil:
+		text = string(diff) + "untracked files unavailable: " + untrackedErr.Error() + "\n"
+	default:
+		text = string(diff)
+		for _, name := range strings.Split(string(untracked), "\x00") {
+			if name != "" {
+				text += "untracked: " + name + "\n"
+			}
+		}
 	}
+	x.PartialDigest, x.PartialBytes = bytesDigest([]byte(text)), len(text)
 	if len(text) > 65536 {
 		text = strings.ToValidUTF8(text[:65536], "") + "\n[truncated]\n"
 	}
-	return text
+	x.Partial = text
 }
 
 func pauseRepair(x *Repair, failure *BackendFailure) {
-	x.Partial = partialDiff(x.Worktree)
+	capturePartial(x)
 	x.Failure = failure
 	x.Status = "paused"
 	x.Log += "; backend " + failure.Reason + ": " + failure.Message

@@ -129,6 +129,10 @@ func TestPipelineRepairPauseRestoresCandidateAndResumes(t *testing.T) {
 	if last["kind"] != "repair" || !strings.Contains(last["partial"].(string), "+half done") {
 		t.Fatalf("partial edits must be kept as evidence: %v", last)
 	}
+	paused := p["repairs"].([]any)[0].(map[string]any)
+	if paused["status"] != "paused" || paused["partial_digest"] != bytesDigest([]byte(paused["partial"].(string))) || paused["partial_bytes"].(float64) == 0 {
+		t.Fatalf("the paused repair keeps its edits with digest and size: %v", paused)
+	}
 	v = mutate(t, bin, repo, home, v, "resume", "resume-repair", nil)
 	if v["outcome"] != "ok" {
 		t.Fatalf("resume: %v", v)

@@ -97,7 +97,7 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 	t.Helper()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
 	os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600)
-	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half\\n' if mode else 'repaired\\n')\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode=='fail' else 0)\n")
+	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nsys.stdin.read()\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half\\n' if mode else 'repaired\\n')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nsys.exit(1 if mode in ('fail','commit') else 0)\n")
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
 	os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600)
 	mutate(t, bin, repo, home, v, "review", "review-findings", nil)
@@ -114,12 +114,16 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 		v = mutate(t, bin, repo, home, v, "cancel", "abort-repair", nil)
 		return bin, repo, home, root, waitStatus(t, bin, repo, home, "cancelled")
 	}
-	return bin, repo, home, root, waitStatus(t, bin, repo, home, "fixer-failed")
+	v = waitStatus(t, bin, repo, home, "fixer-failed")
+	if worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string); stop == "commit" && strings.TrimSpace(git(t, worktree, "log", "-1", "--format=%s")) != "fixer commit" {
+		t.Fatal("fixture fixer did not commit")
+	}
+	return bin, repo, home, root, v
 }
 
 func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
 	t.Parallel()
-	for _, stop := range []string{"fail", "cancel"} {
+	for _, stop := range []string{"fail", "cancel", "commit"} {
 		t.Run(stop, func(t *testing.T) {
 			t.Parallel()
 			bin, repo, home, root, v := stoppedRepairFixture(t, stop)
@@ -137,8 +141,10 @@ func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
 			if run["repair_used"].(float64) != 2 || run["review_used"].(float64) != 1 || len(prior) != 1 || prior[0].(map[string]any)["id"] != first["id"] || prior[0].(map[string]any)["status"] != first["status"] {
 				t.Fatalf("rerun must keep the stopped repair and both counters: %v", run)
 			}
-			if partial, _ := prior[0].(map[string]any)["partial"].(string); !strings.Contains(partial, "+half") {
-				t.Fatalf("the stopped repair's edits must be kept before the candidate is reset: %q", partial)
+			kept := prior[0].(map[string]any)
+			partial, _ := kept["partial"].(string)
+			if !strings.Contains(partial, "+half") || kept["partial_digest"] != bytesDigest([]byte(partial)) || kept["partial_bytes"] != float64(len(partial)) {
+				t.Fatalf("the stopped repair's committed and uncommitted edits must be kept with digest and size before the candidate is reset: %v", kept)
 			}
 			worktree := run["repair"].(map[string]any)["worktree"].(string)
 			if worktree != first["worktree"] || strings.TrimSpace(git(t, worktree, "show", "HEAD:sample.txt")) != "repaired" {
