@@ -34,11 +34,13 @@ Task t18 delivers the local half of area D. A private per-user `pipeline.json` s
 
 Executable fake-Pi, fake-command and real-Git tests cover agent-free command stages, missing commands, bounded repair failures, invalidation by candidate and settings changes, rerun after repair, target conflicts, cancellation, and restart and reattach without duplicate work. The PTY check covers 56 and 100 columns.
 
-Step 4 still leaves unsupported: full-mode repair of review findings, ask/auto/YOLO authority beyond a visible decision park, combined cap accounting, accept-head, final-fix, rethink and discard outcomes, mechanical lint autofix, gate repairs that add or delete files, recovery of interrupted pipeline steps, and the push, PR and CI stages below.
+Task t20 adds authority modes and review-cap outcomes. Ask groups the actionable findings of a review into one `findings` decision and asks before gate repairs; informational findings stay visible without a question. Auto repairs findings and authorized gates. YOLO adds a configured actor from `pipeline.json` that also answers the cap decision with `final-fix` or `accept-head`. Repairs that delete files, change file modes, leave the authorized paths, or that the fixer escalates as intent, acceptance or credentials changes park a user-only `authority` decision in every mode. The combined cap counts review and finding-repair rounds separately and as a total; gate retries count apart. The `decide` action answers accept-head, final-fix, increase-cap, rethink and discard with token-bound, replayable receipts that record the actor and reason. Accept-head binds the exact candidate and review inputs and never passes a failing gate. Final-fix is a separate, restart-safe, single grant. Rethink links a successor run; discard keeps every record and ref. Executable fake-Pi and real-Git tests cover each mode, user-only refusal, cap exhaustion, cap increase with retained usage, acceptance binding, final-fix replay and restart, rethink, discard, and stale or duplicate answers. The PTY check answers decisions at 56 and 100 columns.
+
+Step 4 still leaves unsupported: granting expanded fixer authority, mechanical lint autofix, gate repairs that add or delete files, recovery of interrupted pipeline steps, and the push, PR and CI stages below.
 
 Remaining scope:
 
-Area D and standalone E: trusted intent/command plan, target synchronization, deterministic tests/lint, documentation assessment, bounded repair/CI retries, changed-input invalidation, ask/auto/YOLO authority, combined cap accounting, exact-head accept-head, final-fix/final Review, rethink lineage, and discard provenance.
+Area D and standalone E: bounded CI retries.
 
 Add guarded push, idempotent PR creation/update, and exact-head checks against a forge fixture. Stop at CI-ready without merging. Prove that command and forge work do not dispatch agents unnecessarily. No green state can substitute for missing commands or unknown checks.
 
@@ -53,6 +55,6 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
 - Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
 - Area C: full-tree review snapshots, explicit finding resolution, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; fixer evaluation is not.
-- Area D: push, PR and CI stages; full-mode review-finding repair; operational ask/YOLO decisions; combined cap accounting; acceptance, final-fix, rethink, and discard.
+- Area D: push, PR and CI stages; granting expanded fixer authority; cap decisions for embedded hosts.
 - Area E and D2: publication, forge and CI, explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, provider-backed fixer evaluation, and independently exact-head review.
 - Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

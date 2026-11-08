@@ -5,7 +5,7 @@
 
 # Greenhouse
 
-Greenhouse is a standalone terminal and JSON client for a per-user local run store. This slice implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded local handback, and a local full pipeline that stops at local readiness. Review success is not test, lint, or delivery success.
+Greenhouse is a standalone terminal and JSON client for a per-user local run store. This slice implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded local handback, and a local full pipeline with ask, auto and YOLO authority and review-cap decisions that stops at local readiness. Review success is not test, lint, or delivery success.
 
 ## Build and open
 
@@ -15,7 +15,7 @@ cd /path/to/a/git/worktree
 /path/to/greenhouse
 ```
 
-The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `r` explicitly resolves rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `x` cancels a review, fixer, check, or pipeline step, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
+The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `r` explicitly resolves rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
 Settings edits are drafts until you select Apply or Save. Apply adds an immutable run-local snapshot. Save changes user defaults without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal supports mode, preset, combined review/repair limit, and rule selection. Repository overrides are unsupported and untrusted.
 
@@ -52,7 +52,7 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
 }
 ```
 
-Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `handback`, and `cancel`. All mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
+Supported mutations are `apply`, `save`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, and `cancel`. All mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes still block replacement; there is no recovery override in this slice.
 
 Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json`. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. Tool restriction is not OS confinement. Checks run directly, not through an agent.
 
@@ -66,9 +66,9 @@ Each check is an argv array with an absolute executable path. No shell is insert
 
 The `handback` action is separate. It fast-forwards the original source branch only when source identity is unchanged, the fixer is known stopped, candidate lineage is exact, and the source worktree and index are clean. Refusal preserves the candidate commit and source work. A repaired head is `fixed-not-independently-rereviewed`; Greenhouse never automatically rereviews or publishes it. New run is blocked while candidate custody is unpublished or ambiguous.
 
-The terminal `f` action requests selected finding IDs for repair; `h` requests handback. AXI requests place the selected ID list in `selected`. All states, selected findings, check results, commit identities, handback status, and budget usage are available in the same run snapshot. There are no acceptance, publication, or automatic recovery commands.
+The terminal `f` action requests selected finding IDs for repair; `h` requests handback. AXI requests place the selected ID list in `selected`. All states, selected findings, check results, commit identities, handback status, and budget usage are available in the same run snapshot. There are no publication or automatic recovery commands.
 
-Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` and `no-comments` names. The numeric limit is provisional. Valid limits are 1 through 1000; reductions cannot erase consumed usage. In the full preset, `auto` lets the controller start gate repairs that the trusted plan authorizes; `ask` and `yolo` park those repairs as a decision.
+Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` and `no-comments` names. The numeric limit is provisional. Valid limits are 1 through 1000; reductions cannot erase consumed usage. Modes apply to the full preset; see [modes and decisions](#modes-and-decisions). A one-pass repair always needs an explicit selection.
 
 ## Independent review configuration
 
@@ -82,7 +82,7 @@ Only per-user configuration grants executable authority. There are no arbitrary 
 
 Prepare (`p`, or AXI `prepare` with `intent` and `target`) captures a full commit object ID, the current candidate, selected committed diff, and reviewer configuration. Inspect `run.selected_diff` or toggle `c` before dispatch. Resolve rules, then request `review` with current mutation tokens. Review rejects changed reviewer configuration until another explicit Prepare. Dirty files are neither included nor changed. Empty diffs, binary patches, submodules, and inputs exceeding 1 MiB refuse; the encoded bundle is capped at 2 MiB.
 
-A one-pass run permits one invocation. Admission consumes review usage even if launch fails, the process is cancelled, or its output is inconclusive. Apply cannot reset usage. Cap decisions, acceptance, forge operations, and automatic retries are unsupported. New run retains prior finding identities; omission does not resolve them. Resolution actions are not implemented.
+A one-pass run permits one invocation. Admission consumes review usage even if launch fails, the process is cancelled, or its output is inconclusive. Apply cannot reset usage. Cap decisions belong to the full preset. Forge operations and automatic retries are unsupported. New run retains prior finding identities; omission does not resolve them.
 
 Pi receives a fresh ephemeral session, explicit read-only tools, no extensions, MCP, skills, context files, prompt templates, or project approval. Its working directory and agent directory are fresh and private. Author session routing and process-injection environment variables are removed. The adapter uses environment-based provider credentials; existing Pi auth files and custom provider files are not copied or loaded. Read-only tools are not an OS sandbox. Pi gets no repository checkout. The bundle carries the committed diff and the candidate content of each changed file, with line numbers, but no other source files.
 
@@ -100,26 +100,55 @@ Apply the `full` preset, then Prepare. Prepare also reads a private `pipeline.js
  "docs_paths":["README.md"],
  "not_applicable":{},
  "repairs":["test","lint","docs"],
- "repair_limit":2}
+ "repair_limit":2,
+ "yolo":{"actor":"night-shift","cap":"final-fix"}}
 ```
 
 `pipeline` (terminal `g`) runs the stages in order on a managed private candidate worktree:
 
 - intent: loads the prepared intent, exact target and command plan. No process runs.
 - sync: runs `git merge-base --is-ancestor` and, when needed, `git merge --no-ff` of the target through the command runner. It never rebases. A conflict aborts the merge, opens a gate and parks the run. The author can resolve it in the source and start a New run, or `resolve-conflict` (terminal `m`) with the current `gate_id` authorizes the fixer to edit only the conflicted paths and commit the merge.
-- review: an independent reviewer on the exact candidate. The full contract also returns a documentation assessment. Findings park the run as a decision. Findings retained from an earlier review stay unresolved, so a later clean verdict still parks the run.
+- review: an independent reviewer on the exact candidate. The full contract also returns a documentation assessment. Actionable findings go to a repair or a decision, as the mode decides. A P3 finding or one without an action is informational: it stays visible and blocks nothing.
 - test, docs, lint: configured commands run directly in the candidate, never through an agent. Each result records argv, executable digest, exit code and the last 16 KiB of output. A command that edits the candidate fails the stage. The docs stage also requires the current review to report documentation as `documented` or `not-needed`; a passing doc build alone does not pass it.
 - push, PR, CI: shown as unsupported.
 
 A stage with no configured command is `unconfigured` and blocks. A stage listed in `not_applicable` needs a reason and is shown as not applicable. A not-applicable docs stage still fails when the review reports documentation as `missing`. An executable whose digest changed since Prepare stops its stage.
 
-In `auto` mode, a failing test, lint or docs stage listed in `repairs` starts the fixer from `fixer.json` in the private candidate. The fixer may edit only files changed since the target, plus `docs_paths` for docs. The controller commits the change as a new candidate. Every stage's evidence binds declared inputs: the candidate, plan digest, and for review the settings snapshot, reviewer configuration and rule snapshot. A new candidate therefore reruns review and every gate; a settings change reruns review only. Gate repairs use `repair_limit`, separate from the review-round limit; exhausting either parks the run. A repaired stage stays `repaired-unreviewed` until the new candidate passes review and the stage reruns.
+When the mode allows it, a failing test, lint or docs stage listed in `repairs` starts the fixer from `fixer.json` in the private candidate. The fixer may edit only files changed since the target, plus `docs_paths` for docs. The controller commits the change as a new candidate. Every stage's evidence binds declared inputs: the candidate, plan digest, and for review the preset, reviewer configuration and the selected rules with their content digests. A new candidate therefore reruns review and every gate; a rule change reruns review only. A mode or limit change reruns nothing. Gate repairs use `repair_limit`, separate from the review-round limit; exhausting either parks the run. A repaired stage stays `repaired-unreviewed` until the new candidate passes review and the stage reruns.
 
 The run ends `locally-ready` when every local stage is current for one candidate. `handback` then fast-forwards the unchanged, clean source branch to that candidate. New run is blocked while new candidate commits remain unhanded. `pipeline` again continues a parked or cancelled run without rerunning current evidence. Restart parks an interrupted step as `unknown-outcome` and never retries it. A command or Git step whose runner outcome is unknown does the same: the run requires recovery, New run is refused, and no other worktree of the repository can start a pipeline, repair or conflict fix; their inspection shows the hazard and omits those actions. The same rule covers a conflict fix whose merge or abort outcome is unknown, an ambiguous candidate worktree creation, and a handback fast-forward that leaves the source neither unchanged nor at the candidate.
 
-AXI returns everything in `run.pipeline`: status, failed stage and reason, gate, conflict paths, gate-repair usage and limit, each stage's status, inputs, candidate, runs, repairs and command results, repair records, and superseded reviews. The terminal shows the same stages with distinct markers: `[pass]`, `[pass after repair, rereviewed]`, `[REPAIRED, NOT REVIEWED]`, `[FAIL]`, `[n/a]`, `[UNCONFIGURED]`, `[DECISION]`, and `[unsupported]`.
+AXI returns everything in `run.pipeline`: status, failed stage and reason, gate, conflict paths, gate-repair usage and limit, each stage's status, inputs, candidate, runs, repairs and command results, repair records, and superseded reviews. The terminal shows the same stages with distinct markers: `[pass]`, `[pass after repair, rereviewed]`, `[REPAIRED, NOT REVIEWED]`, `[FAIL]`, `[n/a]`, `[UNCONFIGURED]`, `[DECISION]`, `[ACCEPTED RISK]`, and `[unsupported]`. A locally ready run also shows its outcome: `CLEAN PASS`, `REPAIRED PASS (rereviewed after repair)`, or `ACCEPTED RISK (review risk accepted, not a clean pass)`. AXI returns the same value in `run.pipeline.outcome`.
 
-Still unsupported in step 4: repairing review findings in the full preset, ask/YOLO decisions beyond a visible park, combined cap accounting and cap outcomes (accept-head, final-fix, rethink, discard), mechanical lint autofix, new or deleted files in gate repairs, recovery of interrupted steps, and push, PR and CI.
+### Modes and decisions
+
+The mode decides who answers a question the pipeline cannot settle alone:
+
+- `ask`: every repair waits for an answer. The actionable findings of one review form one decision of kind `findings`; one answer authorizes the whole group or a selected subset. A failing gate that the plan may repair opens a `gate-repair` decision.
+- `auto` (the default): the controller repairs actionable findings and authorized gates without asking. It parks at the review cap and for user-only authority.
+- `yolo`: as `auto`, and the `yolo` entry of `pipeline.json` names the actor that also answers the cap decision with its `cap` choice (`final-fix` or `accept-head`). Without that entry, YOLO parks the questions `auto` would have answered. The YOLO actor never answers a user-only decision, rethinks, discards or raises the cap.
+
+A finding repair runs the fixer on the files of the selected findings and commits a new candidate, which reruns review and every gate. A finding is resolved only when a committed repair selected it and a later independent review of the new candidate does not report it again. `run.pipeline.resolutions` records the repair, review and candidate of each resolution.
+
+The combined cap counts review rounds and finding-repair rounds; `budget` in every response shows `review`, `repair`, their `total`, and `limit`. Gate repairs count separately as `gate_retries` against `repair_limit`. A finding repair starts only when the cap leaves room for the repair and its rereview. Otherwise, or when another review is needed at the cap, the run opens a `cap` decision with these options:
+
+- `accept-head`: accepts the review risk for the exact candidate and review inputs. The review stage shows `[ACCEPTED RISK]` and test, docs and lint still run and can fail. A new candidate or a rule change voids the acceptance.
+- `final-fix`: grants one repair and one independent final review outside the cap, recorded in `run.pipeline.final_fix`. Without a repairable finding it runs the final review directly. It is offered once per run, survives restart, and is never an acceptance.
+- `increase-cap`: needs a `limit` above the current one. The `cap-increase` event records the old and new limits, actor, reason, and the review and repair usage at that moment. Usage never resets, and Apply refuses a limit below it.
+- `rethink`: marks the run `rethought` and creates a linked successor run (`predecessor` and `successor`) with the same settings and every finding. The old run keeps its reviews, repairs, decisions and candidate ref; `inspect` with its `run_id` shows them. The successor needs a new Prepare.
+- `discard`: marks the run `discarded` and keeps every record, the candidate branch and its worktree. It deletes nothing and releases the run's custody, so New run becomes possible.
+
+A repair that needs authority beyond the approved intent parks a user-only `authority` decision in every mode. The controller detects a deleted file (`destructive`), a changed file mode (`permissions`) and a change outside the authorized paths (`scope`). The fixer can also stop without edits and answer `{"escalate":"intent|acceptance|credentials|scope|permissions|destructive","reason":"..."}`. Nothing is committed. The only options are `rethink` and `discard`; neither a budget nor `accept-head` can answer it. Granting expanded authority to the fixer is unsupported.
+
+Answer the open decision with `decide` (terminal `d`). The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
+
+```json
+{"version":1,"op":"decide","run_id":"...","input_id":"...","gate_id":"decision id","expected":"token","action_id":"unique","choice":"final-fix","reason":"one last repair"}
+```
+
+Each answer records the choice, the actor (`terminal`, `axi`, `auto`, or `yolo:<actor>`), the reason as typed, and the action ID; no quote is generated. Replaying an action returns its receipt. An answered or superseded decision changes the gate, so a stale answer refuses. A rule or limit change supersedes an open decision that is not user-only. `pipeline` refuses while a decision is open.
+
+Still unsupported in step 4: granting expanded fixer authority, mechanical lint autofix, new or deleted files in gate repairs, recovery of interrupted steps, and push, PR and CI.
 
 ## State and compatibility
 
@@ -142,7 +171,7 @@ go build -o "$TMPDIR/greenhouse" .
 python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
 ```
 
-Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56- and 100-column PTYs through selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to local readiness, a failed gate with diagnostics, a repaired-unreviewed stage, and AXI parity, alongside lifecycle and settings flows. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
+Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56- and 100-column PTYs through selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to local readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
 
 ## Review evaluation
 
