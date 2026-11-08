@@ -384,48 +384,44 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable", Confinement: &confinement}
 	}
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, executorTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, exe, args...)
-	cmd.WaitDelay = 250 * time.Millisecond
-	cmd.Dir = tree
-	cmd.Env = env
-	cmd.Stdin = bytes.NewReader(x.Input)
-	out, stderr := &boundedBuffer{limit: 4 * 1024 * 1024}, &boundedBuffer{limit: 65536}
-	cmd.Stdout = stallWatch(out, x.Config.Backend, cancel)
-	cmd.Stderr = stderr
-	err = cmd.Run()
-	exitCode := -1
-	if cmd.ProcessState != nil {
-		exitCode = cmd.ProcessState.ExitCode()
-	}
+	out, stderr := &boundedBuffer{limit: executorStdoutLimit}, &boundedBuffer{limit: executorStderrLimit}
+	exitCode, err := runProcess(withExecutor(ctx, x.ID), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
 	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, backendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
+	done := reviewFrom(x, exitCode, out, stderr, err, ctx.Err() != nil)
+	done.Confinement = &confinement
+	if reason, failed := confinementFailed(exitCode, stderr.Bytes()); failed {
+		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; " + reason, Answer: done.Answer, Confinement: &confinement}
+	}
+	if e = verifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
+		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; candidate snapshot modified during review: " + e.Error(), Answer: done.Answer, Confinement: &confinement, Snapshot: "modified: " + e.Error()}
+	}
+	done.Snapshot = "unchanged"
+	return done
+}
+
+func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err error, cancelled bool) reviewOutcome {
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
 	usage := agentAnswer{}
 	usage.CostUSD, usage.Tokens = agentUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
-	if reason, failed := confinementFailed(exitCode, stderr.Bytes()); failed {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; " + reason, Answer: usage, Confinement: &confinement}
-	}
-	if e = verifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; candidate snapshot modified during review: " + e.Error(), Answer: usage, Confinement: &confinement, Snapshot: "modified: " + e.Error()}
-	}
 	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
-		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage, Confinement: &confinement, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage}
 	}
-	if ctx.Err() != nil {
-		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage, Confinement: &confinement, Snapshot: "unchanged"}
+	if cancelled {
+		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 	}
 	if err != nil || out.exceeded || stderr.exceeded {
-		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage, Confinement: &confinement, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage}
 	}
 	answer, e := agentReply(x, out.Bytes(), stderr.Bytes())
 	answer.CostUSD, answer.Tokens = usage.CostUSD, usage.Tokens
 	if e != nil {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer, Confinement: &confinement, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
 	}
 	result, e := verdictFrom(answer, x)
 	if e != nil {
-		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer, Confinement: &confinement, Snapshot: "unchanged"}
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
 	}
 	status := "clean-review"
 	if result.Verdict == "findings" {
@@ -434,7 +430,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if result.Verdict == "inconclusive" {
 		status = "inconclusive"
 	}
-	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer, Confinement: &confinement, Snapshot: "unchanged"}
+	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer}
 }
 func parseReview(b []byte, x *Execution) (*Verdict, error) {
 	answer, err := piAnswer(b)

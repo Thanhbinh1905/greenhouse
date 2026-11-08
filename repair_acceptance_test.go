@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -208,6 +210,60 @@ sys.exit(p.returncode)
 	if err != nil || strings.Count(string(checks), "check\n") != 1 {
 		t.Fatalf("restart duplicated check execution: %q %v", checks, err)
 	}
+	recovered = waitProbed(t, bin, repo, home)
+	rec := runOf(t, recovered)["recovery"].(map[string]any)
+	if rec["kind"] != "repair" || rec["candidate"].(map[string]any)["summary"] != "advanced past the recorded head" || fmt.Sprint(rec["options"]) != "[inspect adopt discard new-run]" || recovered["gate_id"] != rec["id"] {
+		t.Fatalf("recovery evidence incomplete: %v", rec)
+	}
+	for _, e := range rec["executors"].([]any) {
+		if e.(map[string]any)["state"] != "exited" {
+			t.Fatalf("fixer and check executors must be proven stopped: %v", rec["executors"])
+		}
+	}
+	inspected := recoverRequest(t, bin, repo, home, recovered, "inspect", "inspect-recovery")
+	if inspected["outcome"] != "ok" || !hasEvent(runOf(t, inspected), "recovery-inspect") {
+		t.Fatalf("inspect is not audited: %v", inspected)
+	}
+	if stale := recoverRequest(t, bin, repo, home, recovered, "adopt", "stale-adopt"); stale["outcome"] != "refused" {
+		t.Fatalf("stale recovery token accepted: %v", stale)
+	}
+	adopted := recoverRequest(t, bin, repo, home, inspected, "adopt", "adopt-commit")
+	run = runOf(t, adopted)
+	repair = run["repair"].(map[string]any)
+	if adopted["outcome"] != "ok" || run["status"] != "fixed-not-independently-rereviewed" || repair["handback"] != "awaiting-handback" || repair["head"] != strings.TrimSpace(git(t, candidate, "rev-parse", "HEAD")) || run["repair_used"] != float64(1) || run["review_used"] != float64(1) || run["recovery"] != nil {
+		t.Fatalf("adopted commit not recorded with retained budget: %v", adopted)
+	}
+	history := run["recoveries"].([]any)
+	if answer := history[0].(map[string]any)["answer"].(map[string]any); answer["choice"] != "adopt" || answer["actor"] != "axi" || answer["reason"] != "test recovery" {
+		t.Fatalf("adoption is not audited: %v", history)
+	}
+	if replay := recoverRequest(t, bin, repo, home, inspected, "adopt", "adopt-commit"); !reflect.DeepEqual(replay, adopted) {
+		t.Fatalf("recovery replay changed: %v", replay)
+	}
+	if handed := mutate(t, bin, repo, home, adopted, "handback", "handback-after-adopt", nil); handed["outcome"] != "refused" || !strings.Contains(handed["error"].(string), "dirty") {
+		t.Fatalf("handback ignored the dirty source after adoption: %v", handed)
+	}
+}
+
+func waitProbed(t *testing.T, bin, repo, home string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		if rec, ok := runOf(t, v)["recovery"].(map[string]any); ok && rec["probed_at"] != nil && len(rec["options"].([]any)) > 1 {
+			return v
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatal("recovery evidence was not probed")
+	return nil
+}
+
+func recoverRequest(t *testing.T, bin, repo, home string, v map[string]any, choice, action string) map[string]any {
+	t.Helper()
+	q := map[string]any{"version": 1, "op": "recover", "run_id": v["run_id"], "input_id": v["input_id"], "gate_id": v["gate_id"], "expected": v["token"], "action_id": action, "choice": choice, "reason": "test recovery"}
+	b, _ := json.Marshal(q)
+	return axi(t, bin, repo, home, string(b))
 }
 
 func quotePython(s string) string { return "'" + strings.ReplaceAll(s, "'", "\\'") + "'" }

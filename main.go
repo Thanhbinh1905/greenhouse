@@ -87,6 +87,9 @@ type Run struct {
 	Attempts      []Attempt       `json:"attempts,omitempty"`
 	AutoRetries   int             `json:"auto_retries,omitempty"`
 	PriorRepairs  []Repair        `json:"prior_repairs,omitempty"`
+	Recovery      *Recovery       `json:"recovery,omitempty"`
+	Recoveries    []Recovery      `json:"recoveries,omitempty"`
+	Inherited     *Inheritance    `json:"inherited,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -350,11 +353,10 @@ func load(h string) (*Store, error) {
 				r.Events = append(r.Events, Event{Kind: "delivery-reconcile", Actor: "daemon", Reason: "resume idempotent forge step without agent dispatch"})
 				continue
 			}
-			r.Status = "recovery-required"
 			if p := r.Pipeline; p != nil {
-				stage := ""
+				kind, stage, execution := "candidate", r.Stage, ""
 				if p.Active != nil {
-					stage = p.Active.Stage
+					kind, stage, execution = p.Active.Kind, p.Active.Stage, p.Active.ID
 					if p.Active.Kind == "review" && r.Review != nil {
 						r.Review.Status = "unknown-outcome"
 					}
@@ -363,15 +365,17 @@ func load(h string) (*Store, error) {
 						p.Repairs[len(p.Repairs)-1].Writer = "unknown"
 					}
 				}
-				holdRecovery(r, stage, "controller stopped during a pipeline step; no retry")
-			} else if r.Review != nil {
-				r.Review.Status = "unknown-outcome"
-			}
-			if r.Repair != nil && r.Repair.Status != "fixed-not-independently-rereviewed" {
+				holdRecovery(r, kind, stage, execution, "controller stopped during a pipeline step; no retry")
+			} else if r.Repair != nil && r.Repair.Status != "fixed-not-independently-rereviewed" {
 				r.Repair.Status = "unknown-outcome"
 				r.Repair.Writer = "unknown"
+				requireRecovery(r, "repair", "selected-repair", r.Repair.ID, "controller stopped during the selected repair; no retry")
+			} else if r.Review != nil {
+				r.Review.Status = "unknown-outcome"
+				requireRecovery(r, "review", "independent-review", r.Review.ID, "controller stopped during the independent review; no retry")
+			} else {
+				requireRecovery(r, "run", r.Stage, "", "controller stopped while the run was "+r.Status+"; no retry")
 			}
-			r.Token = opaque()
 			r.Events = append(r.Events, Event{Kind: "interrupted", Actor: "daemon", Reason: "unknown execution outcome; no retry"})
 		}
 	}
@@ -440,7 +444,7 @@ func view(s *Store, r *Run) Response {
 				if p := r.Pipeline; p != nil && (p.Status == "ci-ready" || p.Status == "locally-ready" && localOnlyPipeline(p)) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
 					v.Actions = append(v.Actions, "handback")
 				}
-				if r.ReviewUsed == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
+				if ownReviews(r) == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
 					v.Actions = append(v.Actions, "prepare")
 					if r.Intent != "" && r.Target != "" && r.Reviewer != nil && v.RulesReady && r.Configs[len(r.Configs)-1].Settings.Preset == "one-pass" {
 						v.Actions = append(v.Actions, "review")
@@ -490,8 +494,9 @@ func view(s *Store, r *Run) Response {
 		if r.Review != nil && r.Review.Status == "clean-review" && (e != nil || id != r.Submitted) {
 			v.Blocked = append(v.Blocked, "historical clean review only; source moved")
 		}
-		if r.Status == "recovery-required" {
-			v.Blocked = append(v.Blocked, "unknown execution or writer outcome; recovery unsupported")
+		if rec := r.Recovery; rec != nil {
+			v.Blocked = append(v.Blocked, "unknown "+rec.Kind+" outcome at "+rec.Stage+"; explicit recovery: "+strings.Join(rec.Options, ", "))
+			v.Actions = append(v.Actions, "recover")
 		}
 		if p := r.Pipeline; p != nil && p.Failed != "" && p.Status != "running" && p.open() == nil {
 			v.Blocked = append(v.Blocked, "pipeline stopped at "+p.Failed+": "+p.Reason)
@@ -525,6 +530,9 @@ func validModelSelection(backend, model string) bool {
 	return backend == "pi" && validText(model) && len(model) <= 256 && qualified && provider != "" && modelID != "" && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
 }
 func currentGate(r *Run) string {
+	if r != nil && r.Recovery != nil {
+		return r.Recovery.ID
+	}
 	if r != nil && r.Pipeline != nil && r.Pipeline.Gate != "" {
 		return r.Pipeline.Gate
 	}
@@ -614,7 +622,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "migrate" && q.Op != "trust" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "migrate" && q.Op != "trust" && q.Op != "recover" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -661,7 +669,7 @@ func handle(s *Store, q Request) Response {
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != currentGate(r) {
 		return fail("stale run/input/gate/token", r)
 	}
-	if q.Op == "new" && (r.Repair != nil && r.Repair.Handback != "handed-back" || pipelineCustody(r)) {
+	if q.Op == "new" && (repairHeld(r.Repair) || pipelineCustody(r)) {
 		return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 	}
 	handbackHead := r.Candidate
@@ -669,13 +677,13 @@ func handle(s *Store, q Request) Response {
 		handbackHead = r.Repair.Head
 	}
 	handbackReconcile := q.Op == "handback" && (r.Repair != nil || r.Pipeline != nil) && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == handbackHead
-	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted && !handbackReconcile {
+	if q.Op != "new" && q.Op != "cancel" && q.Op != "recover" && id != r.Submitted && !handbackReconcile {
 		return fail("source head or branch moved", r)
 	}
 	if q.Op == "cancel" && (r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking")) {
 		r.Status = "cancelling"
 		r.Token = opaque()
-	} else if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required" {
+	} else if q.Op != "recover" && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required") {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
 	paused := r
@@ -683,6 +691,15 @@ func handle(s *Store, q Request) Response {
 		if r.Status != "cancelling" {
 			return fail("no live execution", r)
 		}
+	} else if q.Op == "recover" {
+		next, err := recoverRun(s, r, id, Answer{Choice: q.Choice, Actor: actor, Reason: q.Reason, Action: q.Action})
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		if next != r {
+			s.Slots[slot] = next.ID
+		}
+		r = next
 	} else if q.Op == "cancel-auto-resume" {
 		if r.Pause == nil {
 			return fail("no backend pause", r)
@@ -699,7 +716,7 @@ func handle(s *Store, q Request) Response {
 		r.AutoRetries = 0
 		r.Token = opaque()
 	} else if q.Op == "prepare" {
-		if r.ReviewUsed != 0 || !validText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
+		if ownReviews(r) != 0 || !validText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
 			return fail("immutable review intent required before dispatch", r)
 		}
 		if err := prepareRun(r, q.Intent, q.Target); err != nil {
@@ -707,7 +724,7 @@ func handle(s *Store, q Request) Response {
 		}
 		r.Token = opaque()
 	} else if q.Op == "rerun-from-start" {
-		if r.Repair != nil && r.Repair.Handback != "handed-back" {
+		if repairHeld(r.Repair) {
 			return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 		}
 		r = restartRun(s, r, id, actor)
@@ -923,6 +940,8 @@ func daemon(h string) error {
 	pipelineDone := make(chan stepOutcome)
 	pipelineProgress := make(chan repairProgress)
 	reconcileHandbacks(s)
+	reconcileRecoveries(s)
+	releaseDeadLeases(s)
 	if err := persist(h, s); err != nil {
 		return err
 	}
@@ -961,7 +980,7 @@ func daemon(h string) error {
 				if err := withWriterLock(r.Submitted.Repository, func() error { return ensureCandidate(r) }); err != nil {
 					p.Active = nil
 					if errors.Is(err, errCandidateUnknown) {
-						holdRecovery(r, step.Stage, err.Error())
+						holdRecovery(r, "candidate", step.Stage, step.ID, err.Error())
 					} else {
 						park(r, p.stage(step.Stage), "needs-decision", "private candidate unavailable: "+err.Error())
 					}
@@ -977,6 +996,7 @@ func daemon(h string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			active[r.ID] = cancel
 			o := stepOutcome{Run: r.ID, Step: step.ID}
+			ctx = withExecutor(ctx, step.ID)
 			pc, target, candidate, source := *p, r.Target, r.Candidate, r.Submitted
 			var review Execution
 			if r.Review != nil {
@@ -1045,6 +1065,7 @@ func daemon(h string) error {
 				}
 				ctx, cancel := context.WithCancel(context.Background())
 				active[r.ID] = cancel
+				ctx = withExecutor(ctx, x.ID)
 				go func(runID string, repair Repair, source Identity, ctx context.Context, cancel context.CancelFunc) {
 					defer cancel()
 					executeRepair(ctx, &repair, source, func(value *Repair) bool {
@@ -1087,10 +1108,23 @@ func daemon(h string) error {
 	}
 	wake := time.NewTimer(time.Hour)
 	defer wake.Stop()
+	orphanProbe := time.NewTicker(250 * time.Millisecond)
+	defer orphanProbe.Stop()
 	for {
 		wake.Reset(untilAutoResume(s, time.Now()))
+		var probe <-chan time.Time
+		if needsProbe(s) {
+			probe = orphanProbe.C
+		}
 		var c net.Conn
 		select {
+		case <-probe:
+			if reconcileRecoveries(s) {
+				if err := persist(h, s); err != nil {
+					return err
+				}
+			}
+			continue
 		case <-wake.C:
 			if fireAutoResumes(s, time.Now()) {
 				if err := persist(h, s); err != nil {
@@ -1159,6 +1193,9 @@ func daemon(h string) error {
 				if done.repair.Head != "" {
 					r.Candidate = done.repair.Head
 				}
+				if r.Status == "unknown-outcome" {
+					requireRecovery(r, "repair", "selected-repair", done.repair.ID, "repair writer outcome unknown: "+done.repair.Log)
+				}
 				x := r.Repair
 				recordAttempt(r, Attempt{Execution: x.ID, Stage: "selected-repair", Kind: "repair", Role: "fixer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: x.Status, Reason: failureReason(x.Failure), Message: failureMessage(x.Failure), CostUSD: x.CostUSD, Tokens: x.Tokens, Partial: x.Partial})
 				if x.Status == "paused" {
@@ -1175,47 +1212,9 @@ func daemon(h string) error {
 				return errors.New("execution identity mismatch")
 			}
 			delete(active, r.ID)
-			status := done.status
 			recordReviewEvidence(r.Review, done.snapshot, done.confinement)
-			recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.failure), Message: failureMessage(done.failure), CostUSD: done.answer.CostUSD, Tokens: done.answer.Tokens})
-			if done.failure != nil && r.Status != "cancelling" {
-				r.ReviewUsed--
-				r.Review.Status, r.Review.Log = "paused", done.log
-				pauseRun(r, "independent-review", "review", "reviewer", r.Review.Config, r.Review.ID, done.failure, time.Now())
-				if err := persist(h, s); err != nil {
-					return err
-				}
-				continue
-			}
-			r.AutoRetries = 0
-			if r.Status == "cancelling" {
-				status = "cancelled"
-			}
-			id, err := resolve(r.Submitted.Worktree)
-			if err != nil || id != r.Submitted {
-				status = "stale"
-			}
-			r.Status, r.Review.Status, r.Review.Log = status, status, done.log
-			r.Review.Result = done.result
-			if done.result != nil {
-				index := map[string]int{}
-				for i, f := range r.Findings {
-					index[f.ID] = i
-				}
-				for _, f := range done.result.Findings {
-					if i, ok := index[f.ID]; ok {
-						r.Findings[i] = f
-					} else {
-						index[f.ID] = len(r.Findings)
-						r.Findings = append(r.Findings, f)
-					}
-				}
-				if status == "clean-review" && len(r.Findings) > 0 {
-					r.Status = "outstanding-findings"
-				}
-			}
-			r.Token = opaque()
-			if err = persist(h, s); err != nil {
+			finishReview(r, reviewOutcome{Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer})
+			if err := persist(h, s); err != nil {
 				return err
 			}
 			continue
@@ -1246,6 +1245,7 @@ func daemon(h string) error {
 			}
 			s = &next
 			reconcileHandbacks(s)
+			releaseDeadLeases(s)
 			if q.Op == "handback" && v.Outcome == "ok" {
 				r := s.Runs[q.RunID]
 				v = view(s, r)
@@ -1437,6 +1437,7 @@ func terminal(h, path string) error {
 		for _, b := range v.Blocked {
 			fmt.Fprintln(&page, "Blocked: "+b)
 		}
+		renderRecovery(&page, r)
 		if r.Pipeline != nil {
 			renderPipeline(&page, r, details)
 		}
@@ -1496,7 +1497,7 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[t] Trust repository  [u] Migrate config  [o] Logs\n[x] Cancel  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[t] Trust repository  [u] Migrate config  [o] Logs\n[x] Cancel  [n] New run  [e] Recover  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		terminalPrompt("> ")
@@ -1598,6 +1599,27 @@ func terminal(h, path string) error {
 			}
 			q.Reason = reader.Text()
 			q.Op = "decide"
+		}
+		if op == "e" {
+			if r.Recovery == nil {
+				message = "No open recovery"
+				continue
+			}
+			terminalPrompt("Recovery (%s):\n> ", strings.Join(r.Recovery.Options, ", "))
+			if !reader.Scan() {
+				return nil
+			}
+			q.Choice = reader.Text()
+			if !has(r.Recovery.Options, q.Choice) {
+				message = "unknown choice " + strconv.Quote(q.Choice) + "; enter an option exactly as listed; nothing submitted"
+				continue
+			}
+			terminalPrompt("Reason:\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			q.Reason = reader.Text()
+			q.Op = "recover"
 		}
 		if op == "g" {
 			q.Op = "pipeline"
@@ -1794,4 +1816,47 @@ func main() {
 		}
 		os.Exit(1)
 	}
+}
+
+func finishReview(r *Run, done reviewOutcome) {
+	status := done.Status
+	recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.Failure), Message: failureMessage(done.Failure), CostUSD: done.Answer.CostUSD, Tokens: done.Answer.Tokens})
+	if done.Failure != nil && r.Status != "cancelling" {
+		r.ReviewUsed--
+		r.Review.Status, r.Review.Log = "paused", done.Log
+		pauseRun(r, "independent-review", "review", "reviewer", r.Review.Config, r.Review.ID, done.Failure, time.Now())
+		return
+	}
+	r.AutoRetries = 0
+	if r.Status == "cancelling" {
+		status = "cancelled"
+	}
+	id, err := resolve(r.Submitted.Worktree)
+	if err != nil || id != r.Submitted {
+		status = "stale"
+	}
+	r.Status, r.Review.Status, r.Review.Log = status, status, done.Log
+	r.Review.Result = done.Result
+	if done.Result != nil {
+		index := map[string]int{}
+		for i, f := range r.Findings {
+			index[f.ID] = i
+		}
+		for _, f := range done.Result.Findings {
+			if i, ok := index[f.ID]; ok {
+				r.Findings[i] = f
+			} else {
+				index[f.ID] = len(r.Findings)
+				r.Findings = append(r.Findings, f)
+			}
+		}
+		if status == "clean-review" && len(r.Findings) > 0 {
+			r.Status = "outstanding-findings"
+		}
+	}
+	r.Token = opaque()
+}
+
+func repairHeld(x *Repair) bool {
+	return x != nil && x.Handback != "handed-back" && x.Handback != "released"
 }

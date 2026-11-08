@@ -11,7 +11,6 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -78,6 +77,7 @@ type Repair struct {
 	Confinement      *Confinement         `json:"confinement,omitempty"`
 	Authorities      []DeferralAuthority  `json:"authorities,omitempty"`
 	Responses        []ResolutionResponse `json:"responses,omitempty"`
+	LeaseEpoch       int                  `json:"lease_epoch,omitempty"`
 }
 
 func executableDigest(path string) (string, error) {
@@ -406,45 +406,6 @@ func init() {
 	}
 }
 
-func runChild(args []string) int {
-	if len(args) == 0 {
-		return 127
-	}
-	if _, _, errno := syscall.RawSyscall6(syscall.SYS_PRCTL, 36, 1, 0, 0, 0, 0); errno != 0 {
-		return 254
-	}
-	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
-	defer signal.Stop(signals)
-	child := exec.Command(args[0], args[1:]...)
-	child.Stdin, child.Stdout, child.Stderr = os.Stdin, os.Stdout, os.Stderr
-	child.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	if err := child.Start(); err != nil {
-		return 127
-	}
-	done := make(chan error, 1)
-	go func() { done <- child.Wait() }()
-	var childErr error
-	select {
-	case childErr = <-done:
-	case <-signals:
-		syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
-		childErr = <-done
-	}
-	syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
-	if !reapChildTree() {
-		return 254
-	}
-	if childErr == nil {
-		return 0
-	}
-	var exitErr *exec.ExitError
-	if errors.As(childErr, &exitErr) {
-		return exitErr.ExitCode()
-	}
-	return 127
-}
-
 func reapChildTree() bool {
 	children := filepath.Join("/proc/self/task", fmt.Sprint(os.Getpid()), "children")
 	deadline := time.Now().Add(3 * time.Second)
@@ -489,13 +450,14 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 }
 
 func runProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, executorTimeout)
 	defer cancel()
 	self, err := os.Executable()
 	if err != nil {
 		return -1, err
 	}
-	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", exe}, args...)...)
+	deadline := strconv.FormatInt(time.Now().Add(executorTimeout+30*time.Second).Unix(), 10)
+	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", nextExecutor(ctx), deadline, exe}, args...)...)
 	cmd.Dir = dir
 	cmd.WaitDelay = 5 * time.Second
 	cmd.Cancel = func() error {
@@ -523,6 +485,9 @@ func runProcess(ctx context.Context, dir, exe string, args []string, input []byt
 	}
 	if ctx.Err() != nil {
 		return code, ctx.Err()
+	}
+	if code == exitDetachedOutput && e != nil {
+		return code, errDetachedOutput
 	}
 	return code, e
 }
@@ -554,6 +519,10 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 			fail("failed", e)
 			return
 		}
+		if x.LeaseEpoch, e = acquireLease(source.Repository, x.Ref, x.LeaseEpoch); e != nil {
+			fail("refused", e)
+			return
+		}
 		x.Status = "creating-candidate"
 		if !save() {
 			return
@@ -565,6 +534,10 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	}
 	if e = candidateSafe(x, x.Base); e != nil {
 		fail("unknown-outcome", e)
+		return
+	}
+	if e = checkLease(source.Repository, x.Ref, x.LeaseEpoch); e != nil {
+		fail("refused", e)
 		return
 	}
 	if e = validateRepairPaths(x.Worktree, x.Paths); e != nil {
@@ -732,6 +705,10 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	if ctx.Err() != nil {
 		x.Status = "cancelled"
 		save()
+		return
+	}
+	if e = checkLease(source.Repository, x.Ref, x.LeaseEpoch); e != nil {
+		fail("refused", e)
 		return
 	}
 	if _, e = controllerGit(x.Worktree, append(append([]string{"--literal-pathspecs", "add", "--"}, x.Paths...), grantedPaths(x)...)...); e != nil {

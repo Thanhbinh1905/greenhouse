@@ -157,6 +157,12 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 			t.Fatalf("reviewer access %s = %q, want %q (all: %v)", k, review[k], w, review)
 		}
 	}
+	reviewID := runOf(t, v)["review"].(map[string]any)["id"].(string)
+	for _, suffix := range []string{".lease", ".out", ".err"} {
+		if _, err := os.Stat(filepath.Join(home, "executors", reviewID+".0"+suffix)); err != nil {
+			t.Fatalf("the confined reviewer did not run inside the leased executor runner: %v", err)
+		}
+	}
 	c := runOf(t, v)["review"].(map[string]any)["confinement"].(map[string]any)
 	if c["status"] != "enforced" || c["role"] != "reviewer" || c["mechanism"] != "landlock" || len(c["writable"].([]any)) != 2 || !strings.Contains(jsonText(c["writable"]), jsonText(probe)) || strings.Contains(jsonText(c["writable"]), jsonText(repo)) || !strings.Contains(jsonText(c["tcp_connect_ports"]), allowed) || strings.Contains(jsonText(c["tcp_connect_ports"]), blocked) {
 		t.Fatalf("reviewer confinement record = %v", c)

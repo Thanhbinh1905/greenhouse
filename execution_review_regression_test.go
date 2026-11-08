@@ -79,16 +79,20 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 	}
 	installFake(t, home, mode)
 	t.Cleanup(func() {
+		pid, _ := os.ReadFile(filepath.Join(root, "descendant-ready"))
 		deadline := time.Now().Add(30 * time.Second)
 		for {
-			if _, err := os.Stat(filepath.Join(root, "descendant-finished")); err == nil {
-				return
+			if _, err := os.Stat("/proc/" + string(pid)); len(pid) > 0 && os.IsNotExist(err) {
+				break
 			}
 			if time.Now().After(deadline) {
 				t.Error("fixture descendant did not exit")
 				return
 			}
 			time.Sleep(time.Millisecond)
+		}
+		if _, err := os.Stat(filepath.Join(root, "descendant-finished")); err == nil {
+			t.Error("the executor runner left a reviewer descendant running")
 		}
 	})
 	v = mutate(t, bin, repo, home, v, "review", "start", nil)
