@@ -294,10 +294,15 @@ open("sample.txt","w").write("repaired\\n")
         assert "Options: " + ", ".join(decision["options"]) in asked.replace("\n", "")
         if name == "full-ask":
             assert decision["kind"] == "findings" and "Grouped findings:" in asked
-            invalid = session(width, ["d", "repair", "zzz", "i", "q"], f"-{name}-invalid-selection")
-            unchanged = axi()
-            assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["status"] == "needs-decision", unchanged["run"]["pipeline"]
-            assert "Unknown or ambiguous finding ID: zzz; nothing submitted" in invalid
+            known = decision["findings"][0][:12]
+            for label, entry, refusal in [("unknown", "zzz", "unknown finding ID: zzz"),
+                                          ("commas", ",", "no finding ID entered"),
+                                          ("separators", " , ", "no finding ID entered"),
+                                          ("duplicate", f"{known} {known}", "duplicate finding ID: ")]:
+                refused = session(width, ["d", "repair", entry, "i", "q"], f"-{name}-selection-{label}")
+                unchanged = axi()
+                assert unchanged["decision"]["id"] == decision["id"] and unchanged["run"]["status"] == "needs-decision", (label, unchanged["run"]["pipeline"])
+                assert refusal in refused.replace("\n", "") and "nothing submitted" in refused.replace("\n", ""), label
         else:
             assert decision["kind"] == "cap" and "review cap reached" in asked
         session(width, answer + ["q"], f"-{name}-answer")

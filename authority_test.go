@@ -520,3 +520,40 @@ func TestOnePassReviewUpdatesRetainedFindingData(t *testing.T) {
 		t.Fatalf("retained finding kept data from the earlier head: %v", findings)
 	}
 }
+
+func TestParseSelection(t *testing.T) {
+	t.Parallel()
+	group := []string{"aaaa1111", "aaaa2222", "bbbb3333"}
+	for _, tc := range []struct {
+		line  string
+		ids   []string
+		whole bool
+		err   string
+	}{
+		{line: "", whole: true},
+		{line: "   ", whole: true},
+		{line: "bbbb3333", ids: []string{"bbbb3333"}},
+		{line: "aaaa1 bbbb", ids: []string{"aaaa1111", "bbbb3333"}},
+		{line: "aaaa1,bbbb", ids: []string{"aaaa1111", "bbbb3333"}},
+		{line: " aaaa2 , bbbb3333 ", ids: []string{"aaaa2222", "bbbb3333"}},
+		{line: ",", err: "no finding ID"},
+		{line: ",,,", err: "no finding ID"},
+		{line: " , ", err: "no finding ID"},
+		{line: "zzz", err: "unknown finding ID: zzz"},
+		{line: "aaaa", err: "ambiguous finding ID: aaaa"},
+		{line: "bbbb bbbb3333", err: "duplicate finding ID: bbbb3333"},
+		{line: "aaaa1, zzz", err: "unknown finding ID: zzz"},
+	} {
+		ids, whole, err := parseSelection(tc.line, group)
+		got := ""
+		if err != nil {
+			got = err.Error()
+		}
+		if whole != tc.whole || strings.Join(ids, ",") != strings.Join(tc.ids, ",") || (tc.err == "") != (err == nil) || !strings.Contains(got, tc.err) {
+			t.Errorf("parseSelection(%q) = %v, %v, %q; want %v, %v, %q", tc.line, ids, whole, got, tc.ids, tc.whole, tc.err)
+		}
+		if err != nil && ids != nil {
+			t.Errorf("parseSelection(%q) returned IDs with an error", tc.line)
+		}
+	}
+}

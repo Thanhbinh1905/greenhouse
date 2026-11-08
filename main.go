@@ -1168,31 +1168,16 @@ func terminal(h, path string) error {
 			}
 			q.Choice = strings.TrimSpace(reader.Text())
 			if q.Choice == "repair" && v.Decision.Kind == "findings" {
-				fmt.Print("Finding IDs (comma-separated; blank selects the whole group):\n> ")
+				fmt.Print("Finding IDs (separated by commas or spaces; an empty line selects the whole group):\n> ")
 				if !reader.Scan() {
 					return nil
 				}
-				invalid := ""
-				for _, entry := range strings.Split(reader.Text(), ",") {
-					if entry = strings.TrimSpace(entry); entry == "" {
-						continue
-					}
-					var matches []string
-					for _, id := range v.Decision.Findings {
-						if strings.HasPrefix(id, entry) {
-							matches = append(matches, id)
-						}
-					}
-					if len(matches) != 1 {
-						invalid = entry
-						break
-					}
-					q.Selected = append(q.Selected, matches[0])
-				}
-				if invalid != "" {
-					message = "Unknown or ambiguous finding ID: " + invalid + "; nothing submitted"
+				selected, _, err := parseSelection(reader.Text(), v.Decision.Findings)
+				if err != nil {
+					message = err.Error() + "; nothing submitted"
 					continue
 				}
+				q.Selected = selected
 			}
 			if q.Choice == "increase-cap" {
 				fmt.Print("New limit:\n> ")

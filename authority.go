@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"unicode"
 )
 
 type YoloPolicy struct {
@@ -418,4 +419,33 @@ func escalation(stdout []byte) (string, string) {
 		return "", ""
 	}
 	return answer.Escalate, answer.Reason
+}
+
+func parseSelection(line string, group []string) ([]string, bool, error) {
+	if strings.TrimSpace(line) == "" {
+		return nil, true, nil
+	}
+	entries := strings.FieldsFunc(line, func(r rune) bool { return r == ',' || unicode.IsSpace(r) })
+	if len(entries) == 0 {
+		return nil, false, errors.New("no finding ID entered; leave the line empty to select the whole group")
+	}
+	var ids []string
+	for _, entry := range entries {
+		var matches []string
+		for _, id := range group {
+			if strings.HasPrefix(id, entry) {
+				matches = append(matches, id)
+			}
+		}
+		switch {
+		case len(matches) == 0:
+			return nil, false, errors.New("unknown finding ID: " + entry)
+		case len(matches) > 1:
+			return nil, false, errors.New("ambiguous finding ID: " + entry)
+		case has(ids, matches[0]):
+			return nil, false, errors.New("duplicate finding ID: " + matches[0])
+		}
+		ids = append(ids, matches[0])
+	}
+	return ids, false, nil
 }
