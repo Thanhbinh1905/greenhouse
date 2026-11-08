@@ -227,7 +227,7 @@ func custodyHeld(s *Store, r *Run) bool {
 		if other.Repair != nil && other.Repair.Handback != "handed-back" {
 			return true
 		}
-		if other.Pipeline != nil && other.Pipeline.Worktree != "" && other.Pipeline.Handback != "handed-back" && (other.Candidate != other.Submitted.Head || other.Status == "running" || other.Status == "cancelling") {
+		if other.Pipeline != nil && other.Pipeline.Worktree != "" && other.Pipeline.Handback != "handed-back" && (other.Candidate != other.Submitted.Head || other.Status == "running" || other.Status == "cancelling" || other.Status == "recovery-required") {
 			return true
 		}
 	}
@@ -352,14 +352,6 @@ func advancePipeline(s *Store, r *Run) *Step {
 			r.ReviewUsed++
 			step.ID, step.Kind = x.ID, "review"
 		default:
-			if reason, ok := p.Plan.NotApplicable[st.Name]; ok {
-				st.Status, st.Inputs, st.Candidate, st.Reason, st.Commands = "not-applicable", in, r.Candidate, reason, nil
-				continue
-			}
-			if len(p.commands(st.Name)) == 0 {
-				park(r, st, "unconfigured", "no trusted "+st.Name+" command configured; missing commands never pass")
-				return nil
-			}
 			if st.Name == "docs" {
 				if doc := r.Review.Result.Documentation; doc.Status == "missing" {
 					st.Status, st.Inputs, st.Candidate, st.Commands = "failed", in, r.Candidate, nil
@@ -368,6 +360,14 @@ func advancePipeline(s *Store, r *Run) *Step {
 					i--
 					continue
 				}
+			}
+			if reason, ok := p.Plan.NotApplicable[st.Name]; ok {
+				st.Status, st.Inputs, st.Candidate, st.Reason, st.Commands = "not-applicable", in, r.Candidate, reason, nil
+				continue
+			}
+			if len(p.commands(st.Name)) == 0 {
+				park(r, st, "unconfigured", "no trusted "+st.Name+" command configured; missing commands never pass")
+				return nil
 			}
 			step.Kind = "commands"
 		}
@@ -507,6 +507,12 @@ func completeStep(r *Run, o stepOutcome) error {
 	switch step.Kind {
 	case "commands", "sync":
 		st.Status, st.Reason, st.Commands = o.Stage.Status, o.Stage.Reason, o.Stage.Commands
+		if st.Status == "unknown-outcome" {
+			r.Status = "recovery-required"
+			p.Status, p.Failed, p.Reason = "recovery-required", st.Name, st.Reason+"; recovery unsupported"
+			r.Token = opaque()
+			return nil
+		}
 		if o.Head != "" {
 			r.Candidate = o.Head
 			st.Inputs, st.Candidate = stageInputs(r, st.Name), r.Candidate
@@ -523,6 +529,8 @@ func completeStep(r *Run, o stepOutcome) error {
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
 		switch {
+		case o.Status == "clean-review" && len(r.Findings) > 0:
+			st.Status, st.Reason = "needs-decision", fmt.Sprintf("retained findings unresolved: %d; omission from a clean review does not resolve them", len(r.Findings))
 		case o.Status == "clean-review":
 			st.Status, st.Reason = "passed", "independent review clean with complete coverage"
 		case o.Status == "outstanding-findings":
@@ -636,8 +644,11 @@ func runStageCommands(ctx context.Context, p Pipeline, stage, candidate string) 
 		if res.Status != "passed" {
 			out.Status, out.Reason = "failed", fmt.Sprintf("%s exited %d", strings.Join(displayArgs(args), " "), res.Exit)
 			if res.Status == "authority-changed" || res.Status == "unknown-outcome" {
-				out.Status = "needs-decision"
+				out.Status = res.Status
 				out.Reason = res.Log
+			}
+			if res.Status == "authority-changed" {
+				out.Status = "needs-decision"
 			}
 			return out
 		}
@@ -667,10 +678,12 @@ func ensureCandidate(r *Run) error {
 		return e
 	}
 	if _, e = controllerGit(r.Submitted.Worktree, "worktree", "add", "-b", strings.TrimPrefix(p.Ref, "refs/heads/"), p.Worktree, r.Candidate); e != nil {
-		return errors.New("cannot create private candidate worktree")
+		return errCandidateUnknown
 	}
 	return nil
 }
+
+var errCandidateUnknown = errors.New("private candidate worktree creation outcome unknown")
 
 func gitArgv(identity CommandPlan, args ...string) []string {
 	gitPath, _ := exec.LookPath("git")
@@ -704,8 +717,18 @@ func unmergedPaths(dir string) []string {
 
 func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (StageResult, string, []string) {
 	out := StageResult{Name: "sync"}
+	settled := func(res CheckResult) bool {
+		out.Commands = append(out.Commands, res)
+		if res.Status == "unknown-outcome" || res.Status == "cancelled" {
+			out.Status, out.Reason = res.Status, "git "+res.Status+"; candidate preserved without retry"
+			return false
+		}
+		return true
+	}
 	check := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge-base", "--is-ancestor", target, "HEAD"), p.CommandDigests)
-	out.Commands = append(out.Commands, check)
+	if !settled(check) {
+		return out, "", nil
+	}
 	if check.Status == "passed" {
 		out.Status, out.Reason = "passed", "candidate already contains target"
 		return out, "", nil
@@ -715,12 +738,14 @@ func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (Stag
 		return out, "", nil
 	}
 	merge := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge", "--no-ff", "--no-edit", "-m", "Merge target "+target, target), p.CommandDigests)
-	out.Commands = append(out.Commands, merge)
+	if !settled(merge) {
+		return out, "", nil
+	}
 	if merge.Status == "passed" {
 		head, e := gitRead(p.Worktree, "rev-parse", "HEAD", "HEAD^1", "HEAD^2")
 		fields := strings.Fields(string(head))
 		if e != nil || len(fields) != 3 || fields[1] != candidate || fields[2] != target {
-			out.Status, out.Reason = "needs-decision", "unexpected merge lineage; candidate preserved"
+			out.Status, out.Reason = "unknown-outcome", "unexpected merge lineage; candidate preserved without retry"
 			return out, "", nil
 		}
 		out.Status, out.Reason = "passed", "merged target without rebase"
@@ -728,8 +753,14 @@ func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (Stag
 	}
 	conflicts := unmergedPaths(p.Worktree)
 	abort := runGateCommand(context.Background(), p.Worktree, gitArgv(p.Plan, "merge", "--abort"), p.CommandDigests)
-	out.Commands = append(out.Commands, abort)
-	if len(conflicts) == 0 || abort.Status != "passed" {
+	if !settled(abort) {
+		return out, "", nil
+	}
+	if abort.Status != "passed" {
+		out.Status, out.Reason = "unknown-outcome", "merge abort failed; candidate state ambiguous"
+		return out, "", nil
+	}
+	if len(conflicts) == 0 {
 		out.Status, out.Reason = "needs-decision", "target merge failed without a recoverable conflict: "+merge.Log
 		return out, "", nil
 	}

@@ -33,6 +33,9 @@ with open(root+'/commands.log','a') as f: f.write(name+'\n')
 if os.path.exists(root+'/sleep-'+name):
     import time
     time.sleep(float(open(root+'/sleep-'+name).read()))
+if os.path.exists(root+'/kill-'+name):
+    import signal
+    os.kill(os.getppid(), signal.SIGKILL)
 required=root+'/require-'+name
 if os.path.exists(required):
     want=open(required).read()
@@ -549,5 +552,78 @@ func TestPipelineCancellationStopsCommandAndKeepsBudget(t *testing.T) {
 	}
 	if got := countLines(t, filepath.Join(root, "review-invocations")); got["review"] != 1 {
 		t.Fatalf("continue reran current review: %v", got)
+	}
+}
+
+func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
+	bin, repo, home, v := pipelineFixture(t, repairPlan)
+	root := filepath.Dir(home)
+	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
+	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	done := waitPipeline(t, bin, repo, home)
+	run := runOf(t, done)
+	if run["status"] != "recovery-required" || stageOf(t, done, "test")["status"] != "unknown-outcome" {
+		t.Fatalf("unknown command outcome did not require recovery: %v", run["pipeline"])
+	}
+	for _, action := range done["actions"].([]any) {
+		if action == "pipeline" || action == "new" {
+			t.Fatalf("unknown outcome still offers %v", action)
+		}
+	}
+	if mutate(t, bin, repo, home, done, "new", "new-after-unknown", nil)["outcome"] != "refused" {
+		t.Fatal("unknown command outcome allowed New run")
+	}
+	stopDaemon(t, home)
+	if runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"attach"}`))["status"] != "recovery-required" {
+		t.Fatal("restart dropped the recovery hazard")
+	}
+	linked := filepath.Join(filepath.Dir(repo), "linked")
+	git(t, repo, "worktree", "add", "-q", "-b", "linked", linked, "HEAD")
+	other := axi(t, bin, linked, home, `{"version":1,"op":"attach"}`)
+	other = mutate(t, bin, linked, home, other, "apply", "linked-full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": other["run_id"], "input_id": other["input_id"], "expected": other["token"], "gate_id": other["gate_id"], "action_id": "prepare-linked", "intent": "Change the sample", "target": run["target"]}
+	b, _ := json.Marshal(q)
+	other = axi(t, bin, linked, home, string(b))
+	if other["outcome"] != "ok" {
+		t.Fatal(other)
+	}
+	if got := mutate(t, bin, linked, home, other, "pipeline", "linked-start", nil); got["outcome"] != "refused" || !strings.Contains(got["error"].(string), "custody") {
+		t.Fatalf("linked worktree ignored ambiguous custody: %v", got)
+	}
+}
+
+func TestRetainedFindingsBlockCleanFullReview(t *testing.T) {
+	bin, repo, home, v := pipelineFixture(t, repairPlan)
+	root := filepath.Dir(home)
+	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	parked := waitPipeline(t, bin, repo, home)
+	if stageOf(t, parked, "review")["status"] != "needs-decision" {
+		t.Fatal(runOf(t, parked)["pipeline"])
+	}
+	os.WriteFile(filepath.Join(root, "review-mode"), []byte("clean"), 0600)
+	changed := mutate(t, bin, repo, home, parked, "apply", "raise-limit", map[string]any{"mode": "auto", "preset": "full", "limit": 7, "rules": []string{"unslop"}})
+	mutate(t, bin, repo, home, changed, "pipeline", "continue", nil)
+	done := waitPipeline(t, bin, repo, home)
+	if got := countLines(t, filepath.Join(root, "review-invocations")); got["review"] != 2 {
+		t.Fatalf("review not rerun: %v", got)
+	}
+	if runOf(t, done)["status"] == "locally-ready" || stageOf(t, done, "review")["status"] != "needs-decision" || len(runOf(t, done)["findings"].([]any)) != 1 {
+		t.Fatalf("omitted retained finding was treated as resolved: %v", runOf(t, done)["pipeline"])
+	}
+	if got := countLines(t, filepath.Join(root, "commands.log")); got["test"] != 0 {
+		t.Fatalf("gates ran past unresolved findings: %v", got)
+	}
+}
+
+func TestNotApplicableDocsStillRequiresDocumentation(t *testing.T) {
+	bin, repo, home, v := pipelineFixture(t, repairPlan)
+	root := filepath.Dir(home)
+	os.WriteFile(filepath.Join(root, "review-mode"), []byte("docs-missing"), 0600)
+	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	done := waitPipeline(t, bin, repo, home)
+	docs := stageOf(t, done, "docs")
+	if runOf(t, done)["status"] == "locally-ready" || docs["status"] != "failed" || !strings.Contains(docs["reason"].(string), "README does not describe the new sample") {
+		t.Fatalf("not-applicable doc build hid missing documentation: %v", docs)
 	}
 }

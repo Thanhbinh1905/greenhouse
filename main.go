@@ -647,6 +647,11 @@ func daemon(h string) error {
 				if err := withWriterLock(r.Submitted.Repository, func() error { return ensureCandidate(r) }); err != nil {
 					p.Active = nil
 					park(r, p.stage(step.Stage), "needs-decision", "private candidate unavailable: "+err.Error())
+					if errors.Is(err, errCandidateUnknown) {
+						st := p.stage(step.Stage)
+						st.Status = "unknown-outcome"
+						r.Status, p.Status = "recovery-required", "recovery-required"
+					}
 					step = nil
 				}
 			}
