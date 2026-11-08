@@ -520,8 +520,11 @@ func TestOnePassReviewUpdatesRetainedFindingData(t *testing.T) {
 	mutate(t, bin, repo, home, prepared, "review", "second-review", nil)
 	done := waitReview(t, bin, repo, home)
 	findings := runOf(t, done)["findings"].([]any)
-	if len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
-		t.Fatalf("retained finding head %v, want %v: %v", findings[0].(map[string]any)["head"], head, findings)
+	if len(findings) != 1 {
+		t.Fatalf("retained finding count %d, want 1", len(findings))
+	}
+	if got := findings[0].(map[string]any)["head"]; got != head {
+		t.Fatalf("retained finding head %v, want %v", got, head)
 	}
 }
 
