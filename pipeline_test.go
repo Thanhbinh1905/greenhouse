@@ -124,7 +124,6 @@ func writePrivateJSON(t *testing.T, path string, v any) {
 	}
 }
 
-// writeConfigBytes writes per-user configuration at the current schema version.
 func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
 	if has(configFiles, filepath.Base(path)) && !strings.Contains(string(data), `"version"`) {
 		head := `{"version":2,`

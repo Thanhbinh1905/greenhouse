@@ -65,6 +65,7 @@ type Execution struct {
 	Log          string         `json:"log"`
 	Result       *Verdict       `json:"result,omitempty"`
 	Budget       string         `json:"budget,omitempty"`
+	Run          string         `json:"run,omitempty"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -251,7 +252,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", full, reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
+	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", full, reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -365,6 +366,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if cmd.ProcessState != nil {
 		exitCode = cmd.ProcessState.ExitCode()
 	}
+	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, backendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
 	usage := agentAnswer{}
 	usage.CostUSD, usage.Tokens = agentUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())

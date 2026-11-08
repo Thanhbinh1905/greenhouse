@@ -759,6 +759,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	defer stop()
 	out, stderr := &boundedBuffer{limit: limit}, &boundedBuffer{limit: 65536}
 	code, err := runProcess(runCtx, x.Worktree, x.Config.Executable, x.Args, x.Input, env, stallWatch(out, backend, stop), stderr)
+	appendTranscript(x.Run, fmt.Sprintf("fixer %s | %s %s | exit=%d", x.ID, backend, x.Config.Model, code), out.Bytes(), stderr.Bytes())
 	run := fixerRun{log: fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded), stdout: out.Bytes(), stderr: stderr.Bytes(), err: err}
 	if err == nil && (out.exceeded || stderr.exceeded) {
 		run.err = errors.New("bounded output exceeded")

@@ -68,7 +68,6 @@ func budgetUnit(name string, fields map[string]json.RawMessage) error {
 	return nil
 }
 
-// decodeConfig strictly decodes a current-version per-user file into out.
 func decodeConfig(name string, b []byte, out any) error {
 	version, fields, err := configVersion(name, b)
 	if err != nil {
@@ -157,7 +156,6 @@ type pendingMigration struct {
 	path, bak string
 }
 
-// migrateConfig upgrades every older per-user file, or changes nothing when any file cannot be migrated.
 func migrateConfig(actor, reason, action string) ([]Migration, error) {
 	h, err := home()
 	if err != nil {

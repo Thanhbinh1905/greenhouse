@@ -33,7 +33,7 @@ env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
            GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
 state_dir = root / "state"
 state_dir.mkdir(mode=0o700)
-(state_dir / "providers.json").write_text(json.dumps({"providers": {
+(state_dir / "providers.json").write_text(json.dumps({"version": 2, "providers": {
     "fixture": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY", "api": "openai-completions"},
     "openai": {"base_url": f"http://127.0.0.1:{provider.server_port}", "api_key_env": "GREENHOUSE_TEST_PROVIDER_KEY"}
 }, "models": []}))
@@ -189,7 +189,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
 ''')
     fake.chmod(0o700)
     config = root / "state" / "reviewer.json"
-    config.write_text(json.dumps({"executable":str(fake),"model":"fixture/model"}))
+    config.write_text(json.dumps({"version": 2, "executable": str(fake), "model": "fixture/model"}))
     config.chmod(0o600)
     fixer = root / "fake-fixer"
     fixer.write_text('''#!/usr/bin/python3
@@ -199,7 +199,7 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
 ''')
     fixer.chmod(0o700)
     fixer_config = root / "state" / "fixer.json"
-    fixer_config.write_text(json.dumps({"executable":str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
+    fixer_config.write_text(json.dumps({"version": 2, "executable": str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
     fixer_config.chmod(0o600)
     session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Inspect committed sample", target, "l", "c", "v", "q"], "-dispatch")
     deadline = time.monotonic() + 10
@@ -253,7 +253,7 @@ print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":
 print(json.dumps({"type":"agent_settled","aborted":False}))
 ''')
     full_reviewer.chmod(0o700)
-    config.write_text(json.dumps({"executable": str(full_reviewer), "model": "fixture/model"}))
+    config.write_text(json.dumps({"version": 2, "executable": str(full_reviewer), "model": "fixture/model"}))
     gate = root / "gate"
     gate.write_text('''#!/usr/bin/python3
 import sys
@@ -277,7 +277,7 @@ if os.path.exists(root+"/fix-cleans"):
 open("sample.txt","w").write("repaired\\n")
 ''')
     full_fixer.chmod(0o700)
-    fixer_config.write_text(json.dumps({"executable": str(full_fixer), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [["/usr/bin/true"]]}))
+    fixer_config.write_text(json.dumps({"version": 2, "executable": str(full_fixer), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [["/usr/bin/true"]]}))
 
     def full_repo(name, plan):
         global repo
@@ -293,7 +293,7 @@ open("sample.txt","w").write("repaired\\n")
         for args in [["add", "sample.txt"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate"]]:
             subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
         plan_file = root / "state" / "pipeline.json"
-        plan_file.write_text(json.dumps(dict(plan, name="Test", email="test@example.invalid", remote=str(bare), github_owner="acme", github_repo="garden", pull_base="main", required_checks=["fixture-ci"])))
+        plan_file.write_text(json.dumps(dict(plan, version=2, budget_unit="rounds", name="Test", email="test@example.invalid", remote=str(bare), github_owner="acme", github_repo="garden", pull_base="main", required_checks=["fixture-ci"])))
         plan_file.chmod(0o600)
         return base
 
@@ -414,7 +414,7 @@ open("sample.txt","w").write("repaired\\n")
         (root / f"fake-{backend}").write_text(fake_cli)
         (root / f"fake-{backend}").chmod(0o700)
     backends = root / "state" / "backends.json"
-    backends.write_text(json.dumps({"claude": {"executable": str(root / "fake-claude")},
+    backends.write_text(json.dumps({"version": 2, "claude": {"executable": str(root / "fake-claude")},
                                     "codex": {"executable": str(root / "fake-codex"), "provider": {"base_url": "http://127.0.0.1:1/v1"}}}))
     backends.chmod(0o600)
     for width in [56, 80, 100]:
@@ -442,8 +442,28 @@ open("sample.txt","w").write("repaired\\n")
         assert switch and switch[0]["actor"] == "terminal" and switch[0]["to"] == "claude claude-haiku-5-5", done["run"]["events"]
         result = session(width, ["i", "q"], f"-paused-{width}-result")
         assert "Reported model: claude/claude-haiku-5-5" in " ".join(result.split()), result
+    for width in [56, 80, 100]:
+        target = full_repo(f"trust-{width}", commands)
+        override = repo / ".greenhouse.json"
+        override.write_text('{"version":1,"mode":"ask"}\n')
+        config.write_text(json.dumps({"executable": str(full_reviewer), "model": "fixture/model"}))
+        settings = ["s", "ask one-pass 3", "pi", "fixture/model", "pi", "fixture/model", "unslop", ""]
+        trust = session(width, ["i", "u", "migrate", "t", "trust", "n", "new"] + settings + ["r"] + settings + ["a", "p", "Change the sample", target, "l", "v", "q"], f"-trust-{width}")
+        state = settle()
+        flat = " ".join(trust.split())
+        assert "reviewer.json uses schema version 1" in flat and ".greenhouse.json IGNORED: repository not trusted" in flat and "repository not trusted" in flat, trust
+        assert "Repository override: .greenhouse.json applied to new runs" in flat and "mode = ask (trusted repository override)" in flat, trust
+        assert "Sources: trusted repository override: mode" in flat, trust
+        assert json.loads(config.read_text())["version"] == 2
+        assert [m["file"] for m in state["migrations"]][-1] == "reviewer.json" and (root / "state" / state["migrations"][-1]["backup"]).exists()
+        assert state["repository"]["status"] == "applied" and state["run"]["review_used"] == 1, state["run"]["status"]
+        assert state["run"]["configs"][0]["sources"]["mode"] == "trusted repository override"
+        saved = json.loads(override.read_text())
+        assert saved["version"] == 1 and saved["budget_unit"] == "rounds" and saved["limit"] == 3, saved
+        logs = session(width, ["o", "", "q"], f"-trust-{width}-logs")
+        assert "Transcript log for run " + state["run_id"] in " ".join(logs.split()) and "=== reviewer " + state["run"]["review"]["id"] in logs, logs
     forge.shutdown()
-    print(f"PASS: 56-, 80-, and 100-column PTY backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
+    print(f"PASS: 56-, 80-, and 100-column PTY configuration migration, repository trust, value sources, repository Save, transcript logs, backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
     provider.shutdown()
     pidfile = root / "state" / "pid"

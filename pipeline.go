@@ -613,7 +613,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 		return e
 	}
 	id := opaque()
-	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name)}
+	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Stage, Reason, Diff string
 		Paths                             []string

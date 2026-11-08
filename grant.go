@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// PlanGrant is an expanded fixer authority declared in the trusted per-user pipeline.json.
 type PlanGrant struct {
 	Authority string   `json:"authority"`
 	Stages    []string `json:"stages"`
@@ -28,13 +27,11 @@ type Grant struct {
 
 var grantStages = map[string]bool{"review": true, "test": true, "lint": true, "docs": true, "ci": true}
 
-// grantAuthority maps a parked authority category to the authority a grant can give.
 var grantAuthority = map[string]string{"add-files": "add-files", "destructive": "delete-files"}
 
 func validGrantPath(name string) bool {
-	dir := strings.HasSuffix(name, "/")
 	clean := strings.TrimSuffix(name, "/")
-	return clean != "" && !filepath.IsAbs(clean) && filepath.Clean(clean) == clean && clean != "." && clean != ".." && !strings.HasPrefix(clean, "../") && (!dir || !strings.HasSuffix(clean, "/"))
+	return clean != "" && !filepath.IsAbs(clean) && filepath.Clean(clean) == clean && clean != "." && clean != ".." && !strings.HasPrefix(clean, "../")
 }
 
 func validatePlanGrants(grants []PlanGrant) error {
@@ -94,7 +91,6 @@ func covered(grants []Grant, authority, name string) bool {
 	return false
 }
 
-// grantedPaths returns the paths a repair changed under a grant.
 func grantedPaths(x *Repair) []string {
 	var out []string
 	for _, entry := range x.Granted {
@@ -131,7 +127,6 @@ func classifyGranted(x *Repair, added, deleted []string) error {
 	return nil
 }
 
-// refuseAuthority keeps the refused edits as partial evidence and restores the candidate for a later retry.
 func refuseAuthority(x *Repair) {
 	capturePartial(x)
 	x.Status = "needs-authority"

@@ -77,7 +77,6 @@ func fieldSources(s Snapshot) map[string]string {
 	return uniformSources(sourceRunLocal)
 }
 
-// nextSnapshot keeps each unchanged value's source and marks changed values run-local.
 func nextSnapshot(prev Snapshot, settings Settings, source string) Snapshot {
 	sources := fieldSources(prev)
 	before, after := settingValues(prev.Settings), settingValues(settings)
@@ -119,7 +118,6 @@ func overrideDigest(b []byte) string {
 	return bytesDigest(b)
 }
 
-// repositoryDefaults returns the per-user defaults narrowed by a trusted, unchanged and valid repository override.
 func repositoryDefaults(s *Store, id Identity) (Settings, map[string]string, RepositoryStatus) {
 	settings, sources := s.Defaults, userSources(s)
 	path, b, err := readOverride(id.Worktree)
@@ -128,12 +126,10 @@ func repositoryDefaults(s *Store, id Identity) (Settings, map[string]string, Rep
 		status.Trusted = &trust
 	}
 	switch {
-	case err != nil && b == nil:
+	case err != nil:
 		status.Status, status.Reason = "ignored", err.Error()
 	case b == nil:
 		status.Status = "absent"
-	case err != nil:
-		status.Status, status.Reason = "ignored", err.Error()
 	case status.Trusted == nil:
 		status.Status, status.Reason = "ignored", "repository not trusted; trust it to apply this file to new runs"
 	case status.Trusted.Digest != status.Digest:
@@ -154,7 +150,6 @@ func repositoryDefaults(s *Store, id Identity) (Settings, map[string]string, Rep
 
 var modeRank = map[string]int{"ask": 0, "auto": 1, "yolo": 2}
 
-// parseOverride applies an override that may only narrow or select among the per-user choices in base.
 func parseOverride(b []byte, base Settings) (Settings, []string, error) {
 	version, fields, err := configVersion(overrideName, b)
 	if err != nil {
@@ -232,7 +227,6 @@ func narrows(s, base Settings) error {
 	return nil
 }
 
-// overrideContent renders the values of settings that differ from the per-user defaults.
 func overrideContent(settings, base Settings) []byte {
 	values, defaults := settingValues(settings), settingValues(base)
 	var out strings.Builder
@@ -310,9 +304,9 @@ func settingsTable(s Snapshot) string {
 func overrideLine(o *RepositoryStatus) string {
 	switch o.Status {
 	case "absent":
-		return "Repository override: none (" + o.Path + " absent)"
+		return "Repository override: none (no " + overrideName + ")"
 	case "applied":
-		return "Repository override: applied to new runs (" + o.Path + ")"
+		return "Repository override: " + overrideName + " applied to new runs"
 	}
-	return "Repository override: IGNORED (" + o.Path + "): " + o.Reason
+	return "Repository override: " + overrideName + " IGNORED: " + o.Reason
 }

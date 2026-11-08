@@ -130,6 +130,7 @@ type Response struct {
 	Migrations  []Migration       `json:"migrations,omitempty"`
 	Sources     map[string]string `json:"defaults_sources,omitempty"`
 	Repository  *RepositoryStatus `json:"repository,omitempty"`
+	Transcript  *TranscriptView   `json:"transcript,omitempty"`
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -589,6 +590,22 @@ func handle(s *Store, q Request) Response {
 		}
 		return v
 	}
+	if q.Op == "transcript" {
+		target := r
+		if q.RunID != "" {
+			target = s.Runs[q.RunID]
+		}
+		if target == nil || target.Submitted.Repository != id.Repository {
+			return fail("unknown run for this repository", r)
+		}
+		transcript, err := readTranscript(target.ID)
+		if err != nil {
+			return fail(err.Error(), r)
+		}
+		v := view(s, r)
+		v.Transcript = transcript
+		return v
+	}
 	if q.Op == "attach" || q.Op == "inspect" {
 		if r == nil && q.Op == "attach" {
 			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "created", Actor: "client"}}}
@@ -624,7 +641,7 @@ func handle(s *Store, q Request) Response {
 		}
 		s.Trust[id.Repository] = Trust{Repository: id.Repository, Path: status.Path, Digest: status.Digest, Actor: actor, Reason: q.Reason, Action: q.Action}
 		v := view(s, r)
-		s.Receipts[q.Action] = Receipt{d, v}
+		s.Receipts[q.Action] = Receipt{d, frozen(v)}
 		return v
 	}
 	if q.Op == "migrate" {
@@ -638,7 +655,7 @@ func handle(s *Store, q Request) Response {
 		}
 		v := view(s, r)
 		v.Migrations = records
-		s.Receipts[q.Action] = Receipt{d, v}
+		s.Receipts[q.Action] = Receipt{d, frozen(v)}
 		return v
 	}
 	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != currentGate(r) {
@@ -829,6 +846,12 @@ func handle(s *Store, q Request) Response {
 	json.Unmarshal(b, &frozen)
 	s.Receipts[q.Action] = Receipt{d, frozen}
 	return v
+}
+func frozen(v Response) Response {
+	b, _ := json.Marshal(v)
+	var out Response
+	json.Unmarshal(b, &out)
+	return out
 }
 func acceptRepairProgress(r *Run, id string, value Repair) bool {
 	if r == nil || r.Repair == nil || r.Repair.ID != id || r.Status == "cancelling" && value.Status == "committing" {
@@ -1442,7 +1465,7 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[t] Trust repository  [u] Migrate config\n[x] Cancel  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[t] Trust repository  [u] Migrate config  [o] Logs\n[x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		terminalPrompt("> ")
@@ -1454,6 +1477,22 @@ func terminal(h, path string) error {
 			return nil
 		}
 		q = Request{Version: 1, Op: "inspect", Path: path}
+		if op == "o" {
+			logged, err := call(h, Request{Version: 1, Op: "transcript", Path: path, RunID: r.ID})
+			if err != nil {
+				return err
+			}
+			if logged.Transcript == nil {
+				message = logged.Outcome + " " + logged.Error
+				continue
+			}
+			screen(transcriptPage(r.ID, logged.Transcript))
+			terminalPrompt("Press Enter to return\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			continue
+		}
 		if op == "c" {
 			details = !details
 		}
@@ -1638,7 +1677,7 @@ func terminal(h, path string) error {
 			if o == nil {
 				continue
 			}
-			terminalPrompt("Trust %s with digest %s? Its values apply to new runs. Type trust:\n> ", o.Path, o.Digest)
+			terminalPrompt("Trust %s of this repository (digest %.12s)? Its values apply to new runs. Type trust:\n> ", overrideName, o.Digest)
 			if !reader.Scan() {
 				return nil
 			}
