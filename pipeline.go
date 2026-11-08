@@ -7,16 +7,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
 	"syscall"
+	"time"
 )
 
 type CommandPlan struct {
 	Name          string            `json:"name"`
+	Remote        string            `json:"remote"`
+	GitHubOwner   string            `json:"github_owner"`
+	GitHubRepo    string            `json:"github_repo"`
+	PullBase      string            `json:"pull_base"`
+	PullTitle     string            `json:"pull_title"`
 	Email         string            `json:"email"`
 	Test          [][]string        `json:"test,omitempty"`
 	Lint          [][]string        `json:"lint,omitempty"`
@@ -28,6 +35,8 @@ type CommandPlan struct {
 }
 type StageResult struct {
 	Name      string        `json:"name"`
+	URL       string        `json:"url,omitempty"`
+	Head      string        `json:"head,omitempty"`
 	Status    string        `json:"status"`
 	Inputs    string        `json:"inputs,omitempty"`
 	Candidate string        `json:"candidate,omitempty"`
@@ -63,6 +72,7 @@ type Pipeline struct {
 }
 type stepOutcome struct {
 	Run, Step string
+	URL       string
 	Stage     StageResult
 	Head      string
 	Status    string
@@ -73,7 +83,7 @@ type stepOutcome struct {
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
-var gateStages = map[string]bool{"test": true, "lint": true, "docs": true}
+var gateStages = map[string]bool{"test": true, "lint": true, "docs": true, "ci": true}
 
 func trustedPlan() (CommandPlan, map[string]string, error) {
 	var plan CommandPlan
@@ -117,14 +127,20 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 			}
 		}
 	}
+	if plan.Remote != "" && (!safeRemote(plan.Remote) || plan.GitHubOwner == "" || plan.GitHubRepo == "" || plan.PullBase == "") {
+		return plan, nil, errors.New("delivery requires a safe remote, GitHub owner, repository and pull base")
+	}
+	if plan.Remote == "" && (plan.GitHubOwner != "" || plan.GitHubRepo != "" || plan.PullBase != "") {
+		return plan, nil, errors.New("delivery settings must be configured together")
+	}
 	for stage := range plan.NotApplicable {
-		if !gateStages[stage] {
-			return plan, nil, errors.New("only test, lint and docs may be not applicable")
+		if stage != "test" && stage != "lint" && stage != "docs" && stage != "ci" {
+			return plan, nil, errors.New("only test, lint, docs and ci may be not applicable")
 		}
 	}
 	for _, stage := range plan.Repairs {
 		if !gateStages[stage] {
-			return plan, nil, errors.New("only test, lint and docs repairs may be authorized")
+			return plan, nil, errors.New("only test, lint, docs and ci repairs may be authorized")
 		}
 	}
 	for _, name := range plan.DocsPaths {
@@ -142,15 +158,21 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	return plan, digests, nil
 }
 
+func safeRemote(remote string) bool {
+	if remote == "" || strings.ContainsAny(remote, "\x00\n\r") || strings.HasPrefix(remote, "-") || !strings.ContainsAny(remote, "/:") {
+		return false
+	}
+	if strings.Contains(remote, "://") {
+		parsed, err := url.Parse(remote)
+		return err == nil && parsed.Host != "" && parsed.User == nil && parsed.RawQuery == "" && parsed.Fragment == ""
+	}
+	return true
+}
+
 func newPipeline(plan CommandPlan, digests map[string]string) *Pipeline {
 	p := &Pipeline{Status: "prepared", Plan: plan, CommandDigests: digests, PlanDigest: digest([]any{plan, digests}), RepairLimit: plan.RepairLimit}
 	for _, name := range pipelineStages {
-		status := "pending"
-		reason := ""
-		if name == "push" || name == "pr" || name == "ci" {
-			status, reason = "unsupported", "not yet supported; stops at local readiness"
-		}
-		p.Stages = append(p.Stages, StageResult{Name: name, Status: status, Reason: reason})
+		p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending"})
 	}
 	return p
 }
@@ -213,7 +235,7 @@ func invalidate(r *Run, repaired string) {
 		} else if st.Status != "repaired-unreviewed" {
 			st.Status = "stale"
 		}
-		if r.Pipeline.Status == "locally-ready" {
+		if r.Pipeline.Status == "ci-ready" || r.Pipeline.Status == "locally-ready" {
 			r.Pipeline.Status = "stale"
 		}
 	}
@@ -239,8 +261,8 @@ func admitPipeline(s *Store, r *Run) error {
 	if p == nil || r.Configs[len(r.Configs)-1].Settings.Preset != "full" {
 		return errors.New("prepare under the full preset first")
 	}
-	if p.Status == "locally-ready" || p.Handback == "handed-back" {
-		return errors.New("pipeline already reached local readiness")
+	if p.Status == "ci-ready" || p.Handback == "handed-back" {
+		return errors.New("pipeline already reached CI readiness")
 	}
 	if custodyHeld(s, r) {
 		return errors.New("repository candidate custody is already held")
@@ -292,14 +314,13 @@ func advancePipeline(s *Store, r *Run) *Step {
 	}
 	for i := 0; i < len(p.Stages); i++ {
 		st := &p.Stages[i]
-		if st.Status == "unsupported" {
-			continue
-		}
 		if st.Name == "review" && effectiveRuleSnapshot(r) == nil {
 			r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
 		}
 		in := stageInputs(r, st.Name)
-		if st.Inputs == in {
+		retryCI := st.Name == "ci" && st.Status == "needs-decision" && strings.HasPrefix(st.Reason, "CI checks did not become ready")
+		retryDelivery := st.Status == "failed" && ((st.Name == "push" && (strings.HasPrefix(st.Reason, "push failed:") || strings.HasPrefix(st.Reason, "remote ref probe failed:"))) || (st.Name == "pr" && strings.HasPrefix(st.Reason, "pull request reconciliation failed:")) || (st.Name == "ci" && strings.HasPrefix(st.Reason, "check inspection failed:")))
+		if st.Inputs == in && !retryCI && !retryDelivery {
 			switch st.Status {
 			case "passed", "not-applicable":
 				continue
@@ -351,6 +372,16 @@ func advancePipeline(s *Store, r *Run) *Step {
 			r.Review = x
 			r.ReviewUsed++
 			step.ID, step.Kind = x.ID, "review"
+		case "push", "pr", "ci":
+			if reason, ok := p.Plan.NotApplicable[st.Name]; ok {
+				st.Status, st.Inputs, st.Candidate, st.Reason = "not-applicable", in, r.Candidate, reason
+				continue
+			}
+			if p.Plan.Remote == "" {
+				park(r, st, "unconfigured", "trusted GitHub delivery settings are required; missing delivery configuration never passes")
+				return nil
+			}
+			step.Kind = "delivery"
 		default:
 			if st.Name == "docs" {
 				if doc := r.Review.Result.Documentation; doc.Status == "missing" {
@@ -378,9 +409,9 @@ func advancePipeline(s *Store, r *Run) *Step {
 		r.Token = opaque()
 		return step
 	}
-	p.Status, r.Status, r.Stage = "locally-ready", "locally-ready", "locally-ready"
+	p.Status, r.Status, r.Stage = "ci-ready", "ci-ready", "ci-ready"
 	r.Token = opaque()
-	r.Events = append(r.Events, Event{Kind: "locally-ready", Actor: "daemon", Reason: "all local stages current for candidate " + r.Candidate})
+	r.Events = append(r.Events, Event{Kind: "ci-ready", Actor: "daemon", Reason: "all required checks passed for candidate " + r.Candidate})
 	return nil
 }
 
@@ -520,6 +551,19 @@ func completeStep(r *Run, o stepOutcome) error {
 			p.Conflict = o.Conflict
 			p.Gate = opaque()
 		}
+	case "delivery":
+		st.Status, st.Reason, st.Head, st.URL = o.Status, o.Log, o.Head, o.URL
+		if o.Status == "unknown-outcome" {
+			holdRecovery(r, st.Name, o.Log)
+			return nil
+		}
+		if o.Status == "failed" && gateStages[st.Name] {
+			return nil
+		}
+		if o.Status != "passed" {
+			park(r, st, o.Status, o.Log)
+			return nil
+		}
 	case "review":
 		x := r.Review
 		if x == nil || x.ID != o.Step {
@@ -610,6 +654,126 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 		res.Status = "passed"
 	}
 	return res, nil
+}
+
+func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) (StageResult, string, string) {
+	out := StageResult{Name: stage, Status: "failed", Head: candidate}
+	if p.Plan.Remote == "" {
+		out.Status, out.Reason = "unconfigured", "trusted GitHub delivery settings are required"
+		return out, candidate, ""
+	}
+	if err := worktreeClean(p.Worktree, candidate); err != nil {
+		out.Status, out.Reason = "needs-decision", err.Error()
+		return out, candidate, ""
+	}
+	identity, err := resolve(p.Worktree)
+	if err != nil || identity.Head != candidate || identity.Branch != p.Ref {
+		out.Status, out.Reason = "needs-decision", "candidate ref identity changed; delivery refused"
+		return out, candidate, ""
+	}
+	switch stage {
+	case "push":
+		ref := strings.TrimPrefix(p.Ref, "refs/heads/")
+		probe, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "ls-remote", p.Plan.Remote, p.Ref), p.CommandDigests)
+		out.Commands = append(out.Commands, probe)
+		if err != nil || probe.Status == "unknown-outcome" {
+			out.Status, out.Reason = "unknown-outcome", "remote ref reconciliation outcome is unknown"
+			return out, candidate, ""
+		}
+		if probe.Status != "passed" {
+			out.Status, out.Reason = "failed", "remote ref probe failed: "+probe.Log
+			return out, candidate, ""
+		}
+		fields := strings.Fields(probe.Output)
+		if len(fields) >= 2 {
+			if fields[1] != p.Ref {
+				out.Status, out.Reason = "needs-decision", "remote candidate ref response was ambiguous"
+				return out, candidate, ""
+			}
+			if fields[0] == candidate {
+				out.Status, out.Reason = "passed", "remote ref already points to exact candidate; push reconciled without replay"
+				return out, candidate, ""
+			}
+			ancestor, err := runGateCommand(ctx, p.Worktree, gitArgv(p.Plan, "merge-base", "--is-ancestor", fields[0], candidate), p.CommandDigests)
+			out.Commands = append(out.Commands, ancestor)
+			if err != nil || ancestor.Status != "passed" {
+				out.Status, out.Reason = "needs-decision", "remote candidate ref is not an ancestor of the authorized candidate"
+				return out, candidate, ""
+			}
+		}
+		args := gitArgv(p.Plan, "push", p.Plan.Remote, candidate+":refs/heads/"+ref)
+		res, err := runGateCommand(ctx, p.Worktree, args, p.CommandDigests)
+		out.Commands = append(out.Commands, res)
+		if err != nil || res.Status == "unknown-outcome" {
+			out.Status, out.Reason = "unknown-outcome", "push outcome is unknown; reconcile remote ref before retry"
+			return out, candidate, ""
+		}
+		if res.Status != "passed" {
+			out.Status, out.Reason = res.Status, "push failed: "+res.Log
+			return out, candidate, ""
+		}
+		out.Status, out.Reason = "passed", "authorized candidate pushed to configured remote"
+	case "pr":
+		forge, err := configuredForge()
+		if err != nil {
+			out.Status, out.Reason = "failed", err.Error()
+			return out, candidate, ""
+		}
+		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
+		title := p.Plan.PullTitle
+		if title == "" {
+			title = "Greenhouse: " + strings.TrimSpace(strings.ReplaceAll(p.Plan.Name, "\n", " "))
+		}
+		pr, err := forge.EnsurePullRequest(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, branch, p.Plan.PullBase, candidate, title, "Validated candidate: `"+candidate+"`. Greenhouse will not merge this pull request.")
+		if err != nil {
+			out.Status, out.Reason = "failed", "pull request reconciliation failed: "+err.Error()
+			return out, candidate, ""
+		}
+		if pr.Head != candidate {
+			out.Status, out.Reason = "needs-decision", "pull request head is missing or differs from the authorized candidate"
+			return out, candidate, pr.URL
+		}
+		out.Status, out.URL, out.Reason = "passed", pr.URL, "pull request created or reconciled for exact candidate"
+	case "ci":
+		forge, err := configuredForge()
+		if err != nil {
+			out.Status, out.Reason = "failed", err.Error()
+			return out, candidate, ""
+		}
+		deadline := time.NewTimer(10 * time.Minute)
+		defer deadline.Stop()
+		for {
+			passed, reason, err := forge.Checks(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, candidate)
+			if err != nil {
+				out.Status, out.Reason = "failed", "check inspection failed: "+err.Error()
+				return out, candidate, ""
+			}
+			if passed {
+				out.Status, out.Reason = "passed", reason
+				return out, candidate, ""
+			}
+			if reason != "checks pending" && reason != "missing checks" && reason != "checks incomplete: additional pages remain" {
+				out.Status, out.Reason = "needs-decision", reason
+				if strings.HasPrefix(reason, "check failed:") {
+					out.Status = "failed"
+				}
+				return out, candidate, ""
+			}
+			poll := time.NewTimer(5 * time.Second)
+			select {
+			case <-ctx.Done():
+				poll.Stop()
+				out.Status, out.Reason = "cancelled", "CI polling cancelled"
+				return out, candidate, ""
+			case <-deadline.C:
+				poll.Stop()
+				out.Status, out.Reason = "needs-decision", "CI checks did not become ready within 10 minutes: "+reason
+				return out, candidate, ""
+			case <-poll.C:
+			}
+		}
+	}
+	return out, candidate, out.URL
 }
 
 func worktreeClean(dir, head string) error {
@@ -935,8 +1099,8 @@ func authorizePipelineHandback(r *Run) error {
 	if p.Handback == "handed-back" || p.Handback == "handback-in-progress" {
 		return nil
 	}
-	if p.Status != "locally-ready" || r.Candidate == r.Submitted.Head {
-		return errors.New("only a locally ready candidate with new commits can be handed back")
+	if p.Status != "ci-ready" || r.Candidate == r.Submitted.Head {
+		return errors.New("only a CI-ready candidate with new commits can be handed back")
 	}
 	p.Handback = "handback-in-progress"
 	return nil
@@ -1106,6 +1270,12 @@ func renderPipeline(w io.Writer, r *Run, details bool) {
 			marker = "[pass after repair, rereviewed]"
 		}
 		fmt.Fprintf(w, "%s %s\n", marker, st.Name)
+		if st.Head != "" {
+			fmt.Fprintf(w, "  head %s\n", st.Head)
+		}
+		if st.URL != "" {
+			fmt.Fprintf(w, "  PR %s\n", st.URL)
+		}
 		if st.Reason != "" {
 			fmt.Fprintln(w, "  "+st.Reason)
 		}

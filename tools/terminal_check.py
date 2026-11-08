@@ -230,7 +230,7 @@ open("sample.txt","w").write("repaired\\n")
         return axi()
 
     markers = {"passed": "[pass]", "repaired-unreviewed": "[REPAIRED, NOT REVIEWED]", "failed": "[FAIL]",
-               "not-applicable": "[n/a]", "needs-decision": "[DECISION]", "pending": "[ ]", "unsupported": "[unsupported]"}
+               "not-applicable": "[n/a]", "needs-decision": "[DECISION]", "pending": "[ ]", "unsupported": "[unsupported]", "unconfigured": "[UNCONFIGURED]"}
 
     def parity(state, text):
         for stage in state["run"]["pipeline"]["stages"]:
@@ -256,9 +256,10 @@ open("sample.txt","w").write("repaired\\n")
         session(other, ["i", "c", "q"], f"-{name}-result-wide" if other == 100 else f"-{name}-result-narrow")
         parity(state, text)
         stages = {s["name"]: s for s in state["run"]["pipeline"]["stages"]}
-        assert "[unsupported] push" in text
         if name == "full-ready":
-            assert state["run"]["status"] == "locally-ready", state["run"]["pipeline"]
+            assert "[UNCONFIGURED] push" in text
+            assert state["run"]["status"] == "needs-decision", state["run"]["pipeline"]
+            assert stages["push"]["status"] == "unconfigured"
             assert stages["test"]["repairs"] == 1 and stages["test"]["status"] == "passed"
             assert "[pass after repair, rereviewed] test" in text and "Gate repairs: 1/1" in text
             assert "[pass] review" in text and "[n/a] docs" in text

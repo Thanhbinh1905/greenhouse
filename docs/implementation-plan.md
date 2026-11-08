@@ -34,13 +34,11 @@ Task t18 delivers the local half of area D. A private per-user `pipeline.json` s
 
 Executable fake-Pi, fake-command and real-Git tests cover agent-free command stages, missing commands, bounded repair failures, invalidation by candidate and settings changes, rerun after repair, target conflicts, cancellation, and restart and reattach without duplicate work. The PTY check covers 56 and 100 columns.
 
-Step 4 still leaves unsupported: full-mode repair of review findings, ask/auto/YOLO authority beyond a visible decision park, combined cap accounting, accept-head, final-fix, rethink and discard outcomes, mechanical lint autofix, gate repairs that add or delete files, recovery of interrupted pipeline steps, and the push, PR and CI stages below.
+Step 4 still leaves unsupported: full-mode repair of review findings, ask/auto/YOLO authority beyond a visible decision park, combined cap accounting, accept-head, final-fix, rethink and discard outcomes, mechanical lint autofix, gate repairs that add or delete files, and recovery of interrupted command or writer steps.
 
-Remaining scope:
+Delivery scope in this task:
 
-Area D and standalone E: trusted intent/command plan, target synchronization, deterministic tests/lint, documentation assessment, bounded repair/CI retries, changed-input invalidation, ask/auto/YOLO authority, combined cap accounting, exact-head accept-head, final-fix/final Review, rethink lineage, and discard provenance.
-
-Add guarded push, idempotent PR creation/update, and exact-head checks against a forge fixture. Stop at CI-ready without merging. Prove that command and forge work do not dispatch agents unnecessarily. No green state can substitute for missing commands or unknown checks.
+Area D and standalone E: the trusted command plan can configure a Git remote and GitHub repository. The controller probes and pushes the candidate ref without force, reconciles an already-pushed exact head, updates or creates one branch PR, and checks completed successful GitHub check runs for the exact candidate SHA. Missing and unknown checks block. Authorized CI repairs are bounded and invalidate earlier evidence. Delivery does not dispatch an agent and never merges. Local fixtures cover CI-ready, failed CI repair, missing and stale checks, and restart reconciliation. The GitHub adapter accepts a local API base URL for isolated fixtures.
 
 ## 5. Live backend validation and host contract
 
@@ -53,6 +51,6 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
 - Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
 - Area C: full-tree review snapshots, explicit finding resolution, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; fixer evaluation is not.
-- Area D: push, PR and CI stages; full-mode review-finding repair; operational ask/YOLO decisions; combined cap accounting; acceptance, final-fix, rethink, and discard.
-- Area E and D2: publication, forge and CI, explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, provider-backed fixer evaluation, and independently exact-head review.
+- Area D: full-mode review-finding repair; operational ask/YOLO decisions; combined cap accounting; acceptance, final-fix, rethink, and discard. Delivery interruption reconciliation is limited to remote-ref probing and idempotent PR lookup.
+- Area E and D2: explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, provider-backed fixer evaluation, and independently exact-head review.
 - Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
