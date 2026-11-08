@@ -369,6 +369,7 @@ func TestAcceptedCancellationAtCommitAdmissionPreventsCommit(t *testing.T) {
 	_, repo, home, v := repairFixture(t)
 	stopDaemon(t, home)
 	t.Setenv("GREENHOUSE_HOME", home)
+	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "fixture-secret")
 	store, err := load(home)
 	if err != nil {
 		t.Fatal(err)

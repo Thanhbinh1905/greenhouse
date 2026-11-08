@@ -61,6 +61,7 @@ type Repair struct {
 	Checks           []CheckResult `json:"checks"`
 	Log              string        `json:"log"`
 	Handback         string        `json:"handback"`
+	Authority        string        `json:"authority,omitempty"`
 }
 
 func executableDigest(path string) (string, error) {
@@ -334,9 +335,6 @@ func repairScope(x *Repair) (string, error) {
 	if e := candidateSafe(x, x.Base); e != nil {
 		return "", e
 	}
-	if e := validateRepairPaths(x.Worktree, x.Paths); e != nil {
-		return "", e
-	}
 	b, e := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if e != nil {
 		return "", e
@@ -349,9 +347,19 @@ func repairScope(x *Repair) (string, error) {
 		if entry == "" {
 			continue
 		}
-		if len(entry) < 4 || !allowed[entry[3:]] || entry[:2] != " M" {
+		switch {
+		case len(entry) < 4:
+			return "", errors.New("out-of-scope, staged, deleted, renamed or new path; recovery required")
+		case entry[:2] == " D" && allowed[entry[3:]]:
+			return "", authorityError{"destructive", "the fixer deleted " + entry[3:]}
+		case !allowed[entry[3:]]:
+			return "", authorityError{"scope", "the fixer changed " + entry[3:] + " outside the authorized paths"}
+		case entry[:2] != " M":
 			return "", errors.New("out-of-scope, staged, deleted, renamed or new path; recovery required")
 		}
+	}
+	if e := validateRepairPaths(x.Worktree, x.Paths); e != nil {
+		return "", e
 	}
 	diff, e := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")
 	if e != nil {
@@ -359,6 +367,9 @@ func repairScope(x *Repair) (string, error) {
 	}
 	if bytes.Contains(diff, []byte("GIT binary patch")) || bytes.Contains(diff, []byte("Subproject commit")) {
 		return "", errors.New("binary or submodule repair unsupported")
+	}
+	if bytes.Contains(diff, []byte("\nold mode ")) {
+		return "", authorityError{"permissions", "the fixer changed a file mode"}
 	}
 	return string(diff), nil
 }
@@ -440,6 +451,11 @@ func reapChildTree() bool {
 }
 
 func runBounded(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, error) {
+	code, log, _, e := runCaptured(ctx, dir, exe, args, input, agentDir)
+	return code, log, e
+}
+
+func runCaptured(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, []byte, error) {
 	env := reviewerEnv()
 	if agentDir != "" {
 		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
@@ -450,7 +466,7 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 	if e == nil && (out.exceeded || stderr.exceeded) {
 		e = errors.New("bounded output exceeded")
 	}
-	return code, log, e
+	return code, log, out.Bytes(), e
 }
 
 func runProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {
@@ -568,7 +584,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	if !save() {
 		return
 	}
-	_, log, e := runBounded(ctx, x.Worktree, x.Config.Executable, x.Args, x.Input, filepath.Join(agentDir, "agent"))
+	_, log, stdout, e := runCaptured(ctx, x.Worktree, x.Config.Executable, x.Args, x.Input, filepath.Join(agentDir, "agent"))
 	x.Log = log
 	if errors.Is(e, ErrWriterTreeUnknown) {
 		x.Writer = "unknown"
@@ -585,7 +601,18 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("fixer-failed", e)
 		return
 	}
+	if category, reason := escalation(stdout); x.Stage != "" && category != "" {
+		x.Authority = category
+		fail("needs-authority", errors.New(reason))
+		return
+	}
 	diff, e := repairScope(x)
+	var authority authorityError
+	if errors.As(e, &authority) && x.Stage != "" {
+		x.Authority = authority.category
+		fail("needs-authority", errors.New(authority.reason))
+		return
+	}
 	if e != nil {
 		fail("scope-refused", e)
 		return

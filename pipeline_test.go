@@ -29,6 +29,9 @@ if mode=='docs-missing':
 if mode=='findings':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample is wrong','action':'Fix the sample','rule':'','head':b['Head']}]
+if mode=='mixed':
+    v['verdict']='findings'
+    v['findings']=[{'id':'x','priority':p,'origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':e,'action':'Fix the sample','rule':'','head':b['Head']} for p,e in [('P1','Sample is wrong'),('P2','Sample is vague'),('P3','Sample could be shorter')]]
 provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':provider,'model':model,'stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))
@@ -61,13 +64,24 @@ root=os.path.dirname(__file__)
 b=json.load(sys.stdin)
 with open(root+'/fix-invocations','a') as f: f.write(b['Stage']+'\n')
 with open(root+'/fix-input.json','w') as f: json.dump(b,f)
-target=open(root+'/fix-content').read() if os.path.exists(root+'/fix-content') else 'repaired\n'
+def staged(name):
+    for candidate in [root+'/fix-'+name+'-'+b['Stage'], root+'/fix-'+name]:
+        if os.path.exists(candidate):
+            return candidate
+target=open(staged('content')).read() if staged('content') else 'repaired\n'
 path=open(root+'/fix-path').read() if os.path.exists(root+'/fix-path') else 'sample.txt'
 if os.path.exists(root+'/fix-fail'):
     sys.exit(1)
-if os.path.exists(root+'/fix-then-review'):
-    open(root+'/review-mode','w').write(open(root+'/fix-then-review').read())
-if target=='APPEND':
+if staged('then-review'):
+    open(root+'/review-mode','w').write(open(staged('then-review')).read())
+if os.path.exists(root+'/fix-escalate'):
+    answer=json.dumps({'escalate':open(root+'/fix-escalate').read(),'reason':'the correct repair changes the requested behavior'})
+    print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':answer}]}}))
+    print(json.dumps({'type':'agent_settled','aborted':False}))
+    sys.exit(0)
+if target=='DELETE':
+    os.remove(path)
+elif target=='APPEND':
     with open(path,'a') as f: f.write('x\n')
 else:
     with open(path,'w') as f: f.write(target)
@@ -110,7 +124,6 @@ func installPipelineProvider(t *testing.T, home string) {
 		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}}})
 	}))
 	t.Cleanup(server.Close)
-	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "fixture-secret")
 	writePrivateJSON(t, filepath.Join(home, "providers.json"), TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}})
 }
 
@@ -176,6 +189,7 @@ func stageOf(t *testing.T, v map[string]any, name string) map[string]any {
 }
 
 func TestFullPipelineCommandStagesDispatchNoAgent(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture repository publishes no documentation"}}
 	})
@@ -222,6 +236,7 @@ func TestFullPipelineCommandStagesDispatchNoAgent(t *testing.T) {
 }
 
 func TestMissingCommandBlocksAsUnconfigured(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "not_applicable": map[string]string{"docs": "no documentation"}}
 	})
@@ -260,6 +275,7 @@ func TestMissingCommandBlocksAsUnconfigured(t *testing.T) {
 }
 
 func TestPassingDocBuildDoesNotProveDocumentation(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "docs": [][]string{gateArgv(root, "docs")}, "lint": [][]string{gateArgv(root, "lint")}}
 	})
@@ -284,6 +300,7 @@ func repairPlan(root string) map[string]any {
 }
 
 func TestGateRepairRerunsReviewAndGates(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
@@ -346,6 +363,7 @@ func TestGateRepairRerunsReviewAndGates(t *testing.T) {
 }
 
 func TestGateRepairFailuresAreBounded(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
@@ -374,10 +392,12 @@ func TestGateRepairFailuresAreBounded(t *testing.T) {
 }
 
 func TestRepairedHeadStaysUnreviewedUntilReviewPasses(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
 	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("findings"), 0600)
+	v = mutate(t, bin, repo, home, v, "apply", "no-room-for-finding-repair", map[string]any{"mode": "auto", "preset": "full", "limit": 3, "rules": []string{"unslop"}})
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
@@ -393,6 +413,7 @@ func TestRepairedHeadStaysUnreviewedUntilReviewPasses(t *testing.T) {
 }
 
 func TestRestartPreservesStageStateWithoutDuplicateWork(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
@@ -480,6 +501,7 @@ func conflictFixture(t *testing.T, env ...string) (string, string, string, strin
 }
 
 func TestTargetConflictBecomesGatedFixerAction(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, root, target, submitted, parked := conflictFixture(t)
 	run := runOf(t, parked)
 	p := run["pipeline"].(map[string]any)
@@ -523,6 +545,7 @@ func TestTargetConflictBecomesGatedFixerAction(t *testing.T) {
 }
 
 func TestChangedInputsInvalidateOnlyAffectedEvidence(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
@@ -530,7 +553,11 @@ func TestChangedInputsInvalidateOnlyAffectedEvidence(t *testing.T) {
 	if runOf(t, ready)["status"] != "locally-ready" {
 		t.Fatal(runOf(t, ready)["pipeline"])
 	}
-	changed := mutate(t, bin, repo, home, ready, "apply", "raise-limit", map[string]any{"mode": "auto", "preset": "full", "limit": 7, "rules": []string{"unslop"}})
+	raised := mutate(t, bin, repo, home, ready, "apply", "raise-limit", map[string]any{"mode": "ask", "preset": "full", "limit": 7, "rules": []string{"unslop"}})
+	if raised["outcome"] != "ok" || stageOf(t, raised, "review")["status"] != "passed" || runOf(t, raised)["pipeline"].(map[string]any)["status"] != "locally-ready" {
+		t.Fatalf("a mode or limit change invalidated review evidence: %v", runOf(t, raised)["pipeline"])
+	}
+	changed := mutate(t, bin, repo, home, raised, "apply", "change-rules", map[string]any{"mode": "auto", "preset": "full", "limit": 7, "rules": []string{"unslop", "no-comments"}})
 	if changed["outcome"] != "ok" || runOf(t, changed)["status"] == "locally-ready" || runOf(t, changed)["pipeline"].(map[string]any)["status"] == "locally-ready" {
 		t.Fatalf("configuration change kept local readiness: %v", runOf(t, changed)["pipeline"])
 	}
@@ -585,6 +612,7 @@ func TestPipelineCancellationStopsCommandAndKeepsBudget(t *testing.T) {
 }
 
 func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
@@ -636,16 +664,18 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 }
 
 func TestRetainedFindingsBlockCleanFullReview(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	v = mutate(t, bin, repo, home, v, "apply", "ask", map[string]any{"mode": "ask", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
 	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	if stageOf(t, parked, "review")["status"] != "needs-decision" {
 		t.Fatal(runOf(t, parked)["pipeline"])
 	}
 	os.WriteFile(filepath.Join(root, "review-mode"), []byte("clean"), 0600)
-	changed := mutate(t, bin, repo, home, parked, "apply", "raise-limit", map[string]any{"mode": "auto", "preset": "full", "limit": 7, "rules": []string{"unslop"}})
+	changed := mutate(t, bin, repo, home, parked, "apply", "change-rules", map[string]any{"mode": "ask", "preset": "full", "limit": 7, "rules": []string{"unslop", "no-comments"}})
 	mutate(t, bin, repo, home, changed, "pipeline", "continue", nil)
 	done := waitPipeline(t, bin, repo, home)
 	if got := countLines(t, filepath.Join(root, "review-invocations")); got["review"] != 2 {
@@ -660,6 +690,7 @@ func TestRetainedFindingsBlockCleanFullReview(t *testing.T) {
 }
 
 func TestNotApplicableDocsStillRequiresDocumentation(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "review-mode"), []byte("docs-missing"), 0600)
@@ -716,6 +747,7 @@ func assertRecoveryCustody(t *testing.T, bin, repo, home string, v map[string]an
 }
 
 func TestConflictMergeUnknownOutcomeLaunchesNothing(t *testing.T) {
+	t.Parallel()
 	scratch := t.TempDir()
 	path := gitWrapper(t, scratch)
 	bin, repo, home, root, _, _, parked := conflictFixture(t, path)
@@ -734,6 +766,7 @@ func TestConflictMergeUnknownOutcomeLaunchesNothing(t *testing.T) {
 }
 
 func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {
+	t.Parallel()
 	scratch := t.TempDir()
 	path := gitWrapper(t, scratch)
 	bin, repo, home, root, _, _, parked := conflictFixture(t, path)
