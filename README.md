@@ -115,7 +115,7 @@ Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private 
 
 `eval/` is a development command that measures independent review with a real model. It is not part of the `greenhouse` executable, and `go test ./...` never calls a model.
 
-The corpus in `eval/testdata/corpus` holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, and clean changes. Each `case.json` records the change intent, the selected rules, and every expected finding by file, candidate line range, origin, rule, severity, and acceptable priorities. `noise` lists lines that must not be flagged. `corpus.json` lists the cases and a revision number; reports also record a digest of every corpus byte. After a ground-truth change, `go run ./eval rescore docs/evidence/review-eval/*/` scores the recorded findings again and records the scoring revision.
+The corpus in `eval/testdata/corpus` holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, and clean changes. Each `case.json` records the change intent, the selected rules, and every expected finding by file, candidate line range, origin, rule, severity, and acceptable priorities. `noise` lists lines that must not be flagged. `corpus.json` lists the cases and a revision number; reports also record a digest of every corpus byte. Each expected finding has an `id`. After a ground-truth change, `go run ./eval rescore docs/evidence/review-eval/*/` scores the recorded findings again from their adjudication records.
 
 ```sh
 go run ./eval check
@@ -128,10 +128,11 @@ For each case, `run` commits the base and head trees with fixed identities and d
 
 `report.md` summarizes a run; `report.json` holds the configuration, every case record, and the summary. Each case directory holds `input.json` (the exact stdin bytes), `argv.json`, `events.jsonl` (Pi's events without streaming deltas), and `timing.json`. The metrics are:
 
-- A finding detects an expected finding when file, origin, and rule are equal, the line ranges overlap, the finding spans at most 15 lines, and its explanation or action contains one of the expected finding's `keywords`. Only the first such finding detects; later ones count as duplicates. Each case records one adjudication per finding: `detected`, `duplicate`, `wrong-defect`, or `false-positive`.
+- A finding is eligible for an expected finding when file, origin, and rule are equal, the line ranges overlap, and the finding spans at most 15 lines. Eligibility earns no credit by itself.
+- `adjudications.json` holds one record per eligible finding: finding index and digest, expected defect ID, verdict (`detects`, `different-defect`, or `duplicate`), and a one-sentence rationale quoting the finding. `run` produces it with a separate judge call per finding (`-judge-model`, default `-model`); `go run ./eval judge -model provider/id run-dir` produces it for saved runs. The judge model and prompt are recorded. An eligible finding without a record earns no credit.
 - Recall is detected over expected findings; high-severity recall counts only planted `high` findings. Precision is matching findings over all findings.
 - Priority accuracy counts detections whose priority is in the expected list.
-- A false positive detects and duplicates nothing. A wrong-defect false positive is at an expected location but names another defect. A blocking result is a P0 or P1 false positive; an inconclusive review on a clean case also blocks.
+- A false positive detects and duplicates nothing; a `different-defect` record makes it a wrong-defect false positive. A blocking result is a P0 or P1 false positive; an inconclusive review on a clean case also blocks.
 - The bar is high-severity recall of at least 80% and no blocking result on a clean case.
 - Inconclusive reviews score no findings. `model_answer` keeps the model's raw answer.
 - Cost uses Pi's catalog pricing; a proxy or subscription may bill differently. Latency is the wall time of the Pi process.

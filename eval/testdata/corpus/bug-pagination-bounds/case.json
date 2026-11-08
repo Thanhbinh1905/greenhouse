@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "unclamped-page-end",
       "file": "list/page.go",
       "start": 18,
       "end": 19,
@@ -20,14 +21,7 @@
         "P0",
         "P1"
       ],
-      "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range.",
-      "keywords": [
-        "len(items)",
-        "partial",
-        "last page",
-        "final page",
-        "clamp"
-      ]
+      "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range."
     }
   ],
   "noise": [

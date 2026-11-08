@@ -22,6 +22,11 @@ if sys.argv[1:] == ["--version"]:
     print("0.0.0-fake")
     sys.exit(0)
 b = json.load(sys.stdin)
+if "--no-tools" in sys.argv:
+    assert sys.argv[sys.argv.index("--model") + 1] == "fake/judge"
+    v = {"expected": b["expected"][0]["id"], "verdict": "detects", "rationale": 'The finding says "SQL injection" at the query.'}
+    print(json.dumps({"type": "message_end", "message": {"role": "assistant", "provider": "fake", "model": "judge", "stopReason": "stop", "usage": {"cost": {"total": 0.01}}, "content": [{"type": "text", "text": json.dumps(v)}]}}))
+    sys.exit(0)
 root = os.path.dirname(os.path.abspath(__file__))
 with open(os.path.join(root, "pi-env.json"), "w") as f:
     json.dump({"shim": "GREENHOUSE_EVAL_SHIM" in os.environ, "models": open(os.path.join(os.environ["PI_CODING_AGENT_DIR"], "models.json")).read()}, f)
@@ -46,7 +51,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	}
 	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
 	out := filepath.Join(dir, "out")
-	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, BaseURL: "http://127.0.0.1:9/v1", Label: "fake", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 2, Settle: time.Minute})
+	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, BaseURL: "http://127.0.0.1:9/v1", Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 2, Settle: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +68,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	if r.CostUSD != 0.5 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" {
 		t.Fatalf("report = %+v", r)
 	}
-	for _, name := range []string{"report.json", "report.md", "cases/bug-sql-injection/input.json", "cases/bug-sql-injection/argv.json", "cases/bug-sql-injection/events.jsonl"} {
+	for _, name := range []string{"report.json", "report.md", "adjudications.json", "cases/bug-sql-injection/input.json", "cases/bug-sql-injection/argv.json", "cases/bug-sql-injection/events.jsonl"} {
 		b, err := os.ReadFile(filepath.Join(out, name))
 		if err != nil {
 			t.Fatal(err)
@@ -71,6 +76,21 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		if strings.Contains(string(b), "sk-test-0123456789") {
 			t.Fatalf("%s leaks a credential", name)
 		}
+	}
+	a, err := loadAdjudications(out)
+	if err != nil || a == nil || len(a.Records) != 1 || a.Records[0].Verdict != "detects" || a.Judge.Model != "fake/judge" || !strings.Contains(a.Judge.Prompt, "different-defect") {
+		t.Fatalf("adjudications = %+v %v", a, err)
+	}
+	saved, err := readReport(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := LoadCorpus(filepath.Join("testdata", "corpus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rescoreReport(saved, c, a); err != nil || saved.Summary.HighDetected != 1 {
+		t.Fatalf("published report must rescore from its records: %v %+v", err, saved.Summary)
 	}
 	var argv []string
 	b, _ := os.ReadFile(filepath.Join(out, "cases/bug-sql-injection/argv.json"))

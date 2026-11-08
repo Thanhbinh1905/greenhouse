@@ -19,15 +19,16 @@ import (
 )
 
 type runOptions struct {
-	Corpus   string
-	Out      string
-	Model    string
-	Pi       string
-	BaseURL  string
-	Label    string
-	Cases    []string
-	Parallel int
-	Settle   time.Duration
+	JudgeModel string
+	Corpus     string
+	Out        string
+	Model      string
+	Pi         string
+	BaseURL    string
+	Label      string
+	Cases      []string
+	Parallel   int
+	Settle     time.Duration
 }
 
 type RunConfig struct {
@@ -293,7 +294,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	fail := func(err error) CaseRecord {
 		rec.Error = err.Error()
 		rec.Status = "eval-error"
-		rec.Score = ScoreCase(k, rec.Status, nil)
+		rec.Score, _ = ScoreCase(k, rec.Status, nil, nil)
 		return rec
 	}
 	repo, home := filepath.Join(work, "repo"), filepath.Join(work, "state")
@@ -387,8 +388,26 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if x.Result != nil {
 		rec.Findings = x.Result.Findings
 	}
-	rec.Score = ScoreCase(k, rec.Status, rec.Findings)
+	rec.Score, _ = ScoreCase(k, rec.Status, rec.Findings, nil)
 	return rec
+}
+
+func redactText(s string, secrets []string) string {
+	for _, v := range secrets {
+		s = strings.ReplaceAll(s, v, "<redacted>")
+	}
+	return s
+}
+
+// redactRecord removes credentials from the finding text before it is judged,
+// so adjudication digests match the published report.
+func redactRecord(rec *CaseRecord, secrets []string) {
+	for i := range rec.Findings {
+		rec.Findings[i].Explanation = redactText(rec.Findings[i].Explanation, secrets)
+		rec.Findings[i].Action = redactText(rec.Findings[i].Action, secrets)
+	}
+	rec.ModelAnswer = redactText(rec.ModelAnswer, secrets)
+	rec.ModelFindings = json.RawMessage(redactText(string(rec.ModelFindings), secrets))
 }
 
 func secretValues() []string {
@@ -479,6 +498,7 @@ func runLive(o runOptions) (*Report, error) {
 	}
 	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
+	secrets := secretValues()
 	jobs := make(chan int)
 	var wg sync.WaitGroup
 	for w := 0; w < o.Parallel; w++ {
@@ -488,6 +508,7 @@ func runLive(o runOptions) (*Report, error) {
 			for i := range jobs {
 				k := cases[i]
 				records[i] = runCase(o, bin, shimBin, filepath.Join(work, fmt.Sprintf("h%02d", i)), k, filepath.Join(o.Out, "cases", k.ID))
+				redactRecord(&records[i], secrets)
 				fmt.Fprintf(os.Stderr, "%s: %s detected=%d/%d false_positives=%d %dms\n", k.ID, records[i].Status, records[i].Score.Detected, records[i].Score.Expected, records[i].Score.FalsePositives, records[i].LatencyMillis)
 			}
 		}()
@@ -511,6 +532,21 @@ func runLive(o runOptions) (*Report, error) {
 	}
 	r.Cases = records
 	r.Summary = summarizeRecords(records)
+	if o.JudgeModel != "" {
+		a, err := judgeReport(r, c, judgeOptions{o.JudgeModel, o.Pi, o.BaseURL, o.Parallel})
+		if err != nil {
+			return nil, err
+		}
+		if err := rescoreReport(r, c, a); err != nil {
+			return nil, err
+		}
+		if err := os.MkdirAll(o.Out, 0o755); err != nil {
+			return nil, err
+		}
+		if err := writeAdjudications(o.Out, a); err != nil {
+			return nil, err
+		}
+	}
 	if err := writeReport(o.Out, r); err != nil {
 		return nil, err
 	}
@@ -525,10 +561,16 @@ func summarizeRecords(records []CaseRecord) Summary {
 	return Summarize(scores)
 }
 
-func rescoreReport(r *Report, c *Corpus) error {
+func rescoreReport(r *Report, c *Corpus, a *Adjudications) error {
 	cases := map[string]Case{}
 	for _, k := range c.Cases {
 		cases[k.ID] = k
+	}
+	records := map[string][]Record{}
+	if a != nil {
+		for _, rec := range a.Records {
+			records[rec.Case] = append(records[rec.Case], rec)
+		}
 	}
 	for i := range r.Cases {
 		rec := &r.Cases[i]
@@ -536,7 +578,15 @@ func rescoreReport(r *Report, c *Corpus) error {
 		if !ok {
 			return fmt.Errorf("case %s not in corpus", rec.ID)
 		}
-		rec.Score = ScoreCase(k, rec.Status, rec.Findings)
+		score, err := ScoreCase(k, rec.Status, rec.Findings, records[rec.ID])
+		if err != nil {
+			return err
+		}
+		rec.Score = score
+		delete(records, rec.ID)
+	}
+	for id := range records {
+		return fmt.Errorf("adjudication records name case %s, which the report lacks", id)
 	}
 	r.Config.ScoredRevision, r.Config.ScoredDigest = c.Revision, c.Digest
 	r.Summary = summarizeRecords(r.Cases)
@@ -579,7 +629,8 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Precision | %s (%d/%d) |\n", pct(s.Precision), s.Matched, s.Findings)
 	fmt.Fprintf(&md, "| Priority accuracy | %s (%d/%d) |\n", pct(s.PriorityAccuracy), s.PriorityCorrect, s.PriorityJudged)
 	fmt.Fprintf(&md, "| False positives (clean / noise / all) | %d / %d / %d |\n", s.CleanFalsePositives, s.NoiseFalsePositives, s.FalsePositives)
-	fmt.Fprintf(&md, "| False positives at an expected location naming another defect | %d |\n", s.WrongDefect)
+	fmt.Fprintf(&md, "| False positives judged a different defect at an expected location | %d |\n", s.WrongDefect)
+	fmt.Fprintf(&md, "| Eligible findings without an adjudication record (not credited) | %d |\n", s.Unadjudicated)
 	fmt.Fprintf(&md, "| Blocking results on clean cases | %d |\n", s.CleanBlocking)
 	fmt.Fprintf(&md, "| Inconclusive reviews | %d/%d |\n", s.Inconclusive, s.Cases)
 	fmt.Fprintf(&md, "| Cost (Pi catalog pricing) | $%.4f |\n", r.CostUSD)

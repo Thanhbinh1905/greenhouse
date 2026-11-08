@@ -11,9 +11,12 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+var expectedID = regexp.MustCompile(`^[a-z][a-z0-9-]{0,63}$`)
 
 var builtinRules = map[string][]string{
 	"unslop":      {"unslop/plain-prose"},
@@ -41,6 +44,7 @@ type Case struct {
 }
 
 type Expected struct {
+	ID         string   `json:"id"`
 	File       string   `json:"file"`
 	Start      int      `json:"start"`
 	End        int      `json:"end"`
@@ -49,7 +53,6 @@ type Expected struct {
 	Severity   string   `json:"severity"`
 	Priorities []string `json:"priorities"`
 	Defect     string   `json:"defect"`
-	Keywords   []string `json:"keywords"`
 }
 
 type Noise struct {
@@ -170,6 +173,7 @@ func loadCase(dir, id string) (*Case, error) {
 	default:
 		return nil, fmt.Errorf("unknown category %q", k.Category)
 	}
+	ids := map[string]bool{}
 	for _, e := range k.Expected {
 		if err := checkRange(k.Head, e.File, e.Start, e.End); err != nil {
 			return nil, err
@@ -194,14 +198,10 @@ func loadCase(dir, id string) (*Case, error) {
 		if strings.TrimSpace(e.Defect) == "" {
 			return nil, errors.New("defect description required")
 		}
-		if len(e.Keywords) == 0 {
-			return nil, errors.New("defect keyword required")
+		if !expectedID.MatchString(e.ID) || ids[e.ID] {
+			return nil, fmt.Errorf("expected ID %q must be unique and match %s", e.ID, expectedID)
 		}
-		for _, kw := range e.Keywords {
-			if strings.TrimSpace(kw) == "" || kw != strings.ToLower(kw) {
-				return nil, fmt.Errorf("defect keyword %q must be nonblank lower case", kw)
-			}
-		}
+		ids[e.ID] = true
 	}
 	for _, n := range k.Noise {
 		if err := checkRange(k.Head, n.File, n.Start, n.End); err != nil {

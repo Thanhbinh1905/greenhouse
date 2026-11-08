@@ -12,8 +12,8 @@
     "corpus_version": 1,
     "corpus_revision": 2,
     "corpus_digest": "4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812",
-    "scored_corpus_revision": 3,
-    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
+    "scored_corpus_revision": 4,
+    "scored_corpus_digest": "9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -47,6 +47,7 @@
     "matched": 13,
     "false_positives": 3,
     "wrong_defect": 1,
+    "unadjudicated": 0,
     "clean_false_positives": 0,
     "clean_blocking": 0,
     "noise_false_positives": 1,
@@ -146,6 +147,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -155,9 +157,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "len(values)"
+            "expected": "inclusive-loop-bound",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same inclusive loop-bound defect, explaining that \"it attempts to read `values[len(values)]`, which is always out of bounds.\""
           }
         ]
       }
@@ -243,6 +245,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -252,9 +255,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "u.name"
+            "expected": "deref-before-error-check",
+            "verdict": "detects",
+            "rationale": "The finding states \"The code dereferences u.Name before checking err\", identifying the same premature dereference that panics when Lookup returns nil for an unknown ID."
           }
         ]
       }
@@ -340,6 +343,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -349,9 +353,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "returns nil"
+            "expected": "write-error-returns-nil",
+            "verdict": "detects",
+            "rationale": "The finding states \"If os.WriteFile fails, Save returns nil\", identifying the same root cause of suppressing a write failure and falsely reporting success."
           }
         ]
       }
@@ -437,6 +441,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -446,9 +451,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "race"
+            "expected": "unsynchronized-total",
+            "verdict": "detects",
+            "rationale": "The finding states \"The goroutines update the shared variable total without synchronization\", identifying the same data race and lost-update root cause as the planted defect."
           }
         ]
       }
@@ -534,6 +539,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -543,9 +549,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "inject"
+            "expected": "email-sql-injection",
+            "verdict": "detects",
+            "rationale": "The finding states \"The email input is concatenated directly into the SQL statement\", identifying the same SQL injection root cause as the planted defect."
           }
         ]
       }
@@ -631,6 +637,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -640,9 +647,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "divides by len"
+            "expected": "empty-scores-division",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same empty-slice division-by-zero root cause, stating \"average divides by len(scores) without handling an empty score slice.\""
           }
         ]
       }
@@ -728,6 +735,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -737,9 +745,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "shell=true"
+            "expected": "branch-shell-injection",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same command-injection root cause: \"web-client-supplied branch are interpolated into a shell command while shell=True is enabled\"."
           }
         ]
       }
@@ -847,6 +855,7 @@
         "duplicates": 0,
         "false_positives": 1,
         "wrong_defect": 1,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 1,
@@ -867,14 +876,15 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "len(items)"
+            "expected": "unclamped-page-end",
+            "verdict": "detects",
+            "rationale": "The finding states \"end exceeds len(items)\", identifying the same missing end clamp that causes slicing a partial final page to panic."
           },
           {
             "finding": 1,
-            "expected": -1,
-            "verdict": "wrong-defect"
+            "expected": "unclamped-page-end",
+            "verdict": "different-defect",
+            "rationale": "The finding cites \"does not validate page or size\", which concerns invalid input indexes rather than failure to clamp the end index for a partial last page."
           }
         ]
       }
@@ -960,6 +970,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -969,9 +980,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "unlock"
+            "expected": "missing-unlock-on-miss",
+            "verdict": "detects",
+            "rationale": "The finding states \"Get returns without unlocking c.mu\", identifying the same missing unlock on the not-found path that deadlocks subsequent cache operations."
           }
         ]
       }
@@ -1101,6 +1112,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 3,
@@ -1110,21 +1122,21 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "narrat"
+            "expected": "narrating-base-delay",
+            "verdict": "detects",
+            "rationale": "The finding states \"This comment merely narrates the immediately following base-delay assignment\", identifying the same redundant-comment defect."
           },
           {
             "finding": 1,
-            "expected": 1,
-            "verdict": "detected",
-            "keyword": "narrat"
+            "expected": "narrating-loop",
+            "verdict": "detects",
+            "rationale": "The finding states \"The comments narrate the obvious loop\", identifying the same redundant loop narration as the planted defect."
           },
           {
             "finding": 2,
-            "expected": 2,
-            "verdict": "detected",
-            "keyword": "restat"
+            "expected": "narrating-return",
+            "verdict": "detects",
+            "rationale": "The finding states \"This comment merely restates that the function returns the computed delay.\", identifying the same redundant return-narrating comment as the planted defect."
           }
         ]
       }
@@ -1232,6 +1244,7 @@
         "duplicates": 0,
         "false_positives": 1,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 1,
         "blocking": 0,
         "priority_judged": 1,
@@ -1252,13 +1265,13 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "inflated"
+            "expected": "promotional-rationale",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same promotional, unsupported claims by stating that the sentence \"uses inflated promotional language\" and claims the limiter can handle any load."
           },
           {
             "finding": 1,
-            "expected": -1,
+            "expected": "",
             "verdict": "false-positive"
           }
         ]
@@ -1345,6 +1358,7 @@
         "duplicates": 0,
         "false_positives": 1,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
@@ -1365,7 +1379,7 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": -1,
+            "expected": "",
             "verdict": "false-positive"
           }
         ]
@@ -1428,6 +1442,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1494,6 +1509,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1560,6 +1576,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1626,6 +1643,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,

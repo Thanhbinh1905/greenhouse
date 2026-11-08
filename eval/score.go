@@ -1,6 +1,6 @@
 package main
 
-import "strings"
+import "fmt"
 
 // maxSpan is the longest finding range, in lines, that can match an expected
 // finding. Wider ranges do not locate a defect.
@@ -19,13 +19,13 @@ type Finding struct {
 	Action      string `json:"action"`
 }
 
-// Adjudication records why one finding scored as it did. Expected is the index
-// of the expected finding it detected or duplicated, or -1.
+// Adjudication is the scored outcome of one finding. Expected is the ID of the
+// expected finding a record judged it against, or "".
 type Adjudication struct {
-	Finding  int    `json:"finding"`
-	Expected int    `json:"expected"`
-	Verdict  string `json:"verdict"`
-	Keyword  string `json:"keyword,omitempty"`
+	Finding   int    `json:"finding"`
+	Expected  string `json:"expected"`
+	Verdict   string `json:"verdict"`
+	Rationale string `json:"rationale,omitempty"`
 }
 
 type CaseScore struct {
@@ -42,6 +42,7 @@ type CaseScore struct {
 	Duplicates      int            `json:"duplicates"`
 	FalsePositives  int            `json:"false_positives"`
 	WrongDefect     int            `json:"wrong_defect"`
+	Unadjudicated   int            `json:"unadjudicated"`
 	NoiseFlagged    int            `json:"noise_flagged"`
 	Blocking        int            `json:"blocking"`
 	PriorityJudged  int            `json:"priority_judged"`
@@ -62,6 +63,7 @@ type Summary struct {
 	Matched             int      `json:"matched"`
 	FalsePositives      int      `json:"false_positives"`
 	WrongDefect         int      `json:"wrong_defect"`
+	Unadjudicated       int      `json:"unadjudicated"`
 	CleanFalsePositives int      `json:"clean_false_positives"`
 	CleanBlocking       int      `json:"clean_blocking"`
 	NoiseFalsePositives int      `json:"noise_false_positives"`
@@ -80,66 +82,79 @@ func locates(e Expected, f Finding) bool {
 	return f.File == e.File && f.Origin == e.Origin && f.Rule == e.Rule && f.Start <= e.End && f.End >= e.Start && f.End-f.Start < maxSpan
 }
 
-func names(e Expected, f Finding) string {
-	text := strings.ToLower(f.Explanation + "\n" + f.Action)
-	for _, k := range e.Keywords {
-		if strings.Contains(text, k) {
-			return k
-		}
-	}
-	return ""
-}
-
 // ScoreCase compares the findings of one completed review with the case's
-// ground truth. A finding detects an expected finding only when it is at the
-// expected location and names the expected defect. Each expected finding is
-// detected once; later findings naming the same defect count as duplicates.
-// A finding at an expected location that names another defect is a
-// wrong-defect false positive.
-func ScoreCase(k Case, status string, findings []Finding) CaseScore {
+// ground truth. Location, file, origin and rule only make a finding eligible;
+// credit comes from the case's adjudication records. An eligible finding
+// without a record earns no credit. Records that contradict the findings or
+// each other are refused.
+func ScoreCase(k Case, status string, findings []Finding, records []Record) (CaseScore, error) {
 	s := CaseScore{ID: k.ID, Category: k.Category, Status: status, Inconclusive: status != "clean-review" && status != "outstanding-findings", Expected: len(k.Expected), Findings: len(findings), Missed: []Expected{}, Unmatched: []Finding{}, Adjudications: []Adjudication{}}
+	byFinding := map[int]Record{}
+	for _, r := range records {
+		if r.Case != k.ID || r.Finding < 0 || r.Finding >= len(findings) {
+			return s, fmt.Errorf("record for %s finding %d does not name a recorded finding of %s", r.Case, r.Finding, k.ID)
+		}
+		if _, dup := byFinding[r.Finding]; dup {
+			return s, fmt.Errorf("%s finding %d has two records", k.ID, r.Finding)
+		}
+		if r.Verdict != "detects" && r.Verdict != "different-defect" && r.Verdict != "duplicate" {
+			return s, fmt.Errorf("%s finding %d: unknown verdict %q", k.ID, r.Finding, r.Verdict)
+		}
+		byFinding[r.Finding] = r
+	}
 	detected := make([]bool, len(k.Expected))
 	for n, f := range findings {
-		hit, dup, located, keyword := -1, -1, false, ""
+		eligible := map[string]int{}
 		for i, e := range k.Expected {
-			if !locates(e, f) {
-				continue
-			}
-			located = true
-			kw := names(e, f)
-			if kw == "" {
-				continue
-			}
-			if !detected[i] {
-				hit, keyword = i, kw
-				break
-			}
-			if dup < 0 {
-				dup, keyword = i, kw
+			if locates(e, f) {
+				eligible[e.ID] = i
 			}
 		}
+		r, judged := byFinding[n]
+		credit := -1
 		switch {
-		case hit >= 0:
-			s.Adjudications = append(s.Adjudications, Adjudication{n, hit, "detected", keyword})
-			detected[hit] = true
+		case len(eligible) == 0:
+			if judged {
+				return s, fmt.Errorf("%s finding %d is not at any expected location but has a record", k.ID, n)
+			}
+			s.Adjudications = append(s.Adjudications, Adjudication{Finding: n, Verdict: "false-positive"})
+		case !judged:
+			s.Unadjudicated++
+			s.Adjudications = append(s.Adjudications, Adjudication{Finding: n, Verdict: "unadjudicated"})
+		default:
+			i, ok := eligible[r.Expected]
+			switch {
+			case r.FindingDigest != findingDigest(f):
+				return s, fmt.Errorf("%s finding %d changed since it was adjudicated", k.ID, n)
+			case !cites(r.Rationale, f):
+				return s, fmt.Errorf("%s finding %d: rationale does not quote the finding", k.ID, n)
+			case !ok:
+				return s, fmt.Errorf("%s finding %d is not at the location of expected %q", k.ID, n, r.Expected)
+			case r.Verdict == "detects" && detected[i]:
+				return s, fmt.Errorf("%s finding %d detects %q, already detected; record a duplicate", k.ID, n, r.Expected)
+			case r.Verdict == "duplicate" && !detected[i]:
+				return s, fmt.Errorf("%s finding %d duplicates %q before any detection", k.ID, n, r.Expected)
+			}
+			s.Adjudications = append(s.Adjudications, Adjudication{n, r.Expected, r.Verdict, r.Rationale})
+			credit = i
+		}
+		switch {
+		case credit >= 0 && r.Verdict == "detects":
+			detected[credit] = true
 			s.Matched++
 			s.PriorityJudged++
-			for _, p := range k.Expected[hit].Priorities {
+			for _, p := range k.Expected[credit].Priorities {
 				if p == f.Priority {
 					s.PriorityCorrect++
 				}
 			}
-		case dup >= 0:
-			s.Adjudications = append(s.Adjudications, Adjudication{n, dup, "duplicate", keyword})
+		case credit >= 0 && r.Verdict == "duplicate":
 			s.Matched++
 			s.Duplicates++
 		default:
-			verdict := "false-positive"
-			if located {
-				verdict = "wrong-defect"
+			if credit >= 0 {
 				s.WrongDefect++
 			}
-			s.Adjudications = append(s.Adjudications, Adjudication{n, -1, verdict, ""})
 			s.FalsePositives++
 			s.Unmatched = append(s.Unmatched, f)
 			if blocking(f.Priority) {
@@ -169,7 +184,7 @@ func ScoreCase(k Case, status string, findings []Finding) CaseScore {
 	if s.Inconclusive && k.Category == "clean" {
 		s.Blocking++
 	}
-	return s
+	return s, nil
 }
 
 func ratio(n, d int) *float64 {
@@ -194,6 +209,7 @@ func Summarize(scores []CaseScore) Summary {
 		m.Matched += s.Matched
 		m.FalsePositives += s.FalsePositives
 		m.WrongDefect += s.WrongDefect
+		m.Unadjudicated += s.Unadjudicated
 		m.PriorityJudged += s.PriorityJudged
 		m.PriorityCorrect += s.PriorityCorrect
 		switch s.Category {

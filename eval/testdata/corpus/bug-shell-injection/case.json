@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "branch-shell-injection",
       "file": "tools/gitinfo.py",
       "start": 17,
       "end": 19,
@@ -20,13 +21,7 @@
         "P0",
         "P1"
       ],
-      "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell.",
-      "keywords": [
-        "inject",
-        "shell=true",
-        "metacharacter",
-        "arbitrary command"
-      ]
+      "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell."
     }
   ],
   "noise": []

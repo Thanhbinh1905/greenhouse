@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "unsynchronized-total",
       "file": "text/count.go",
       "start": 20,
       "end": 23,
@@ -20,13 +21,7 @@
         "P0",
         "P1"
       ],
-      "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates.",
-      "keywords": [
-        "race",
-        "synchroniz",
-        "mutex",
-        "atomic"
-      ]
+      "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates."
     }
   ],
   "noise": []

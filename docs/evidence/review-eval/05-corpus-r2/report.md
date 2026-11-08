@@ -2,7 +2,7 @@
 
 - Model: `openai/gpt-5.6-luna` through `pi-json-v1`, Pi 1.5.0
 - Greenhouse: `bd9dd6abca7dcd3efe5517598677f7d135c5dca2`, corpus v1 revision 2 `4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812`
-- Scored with corpus revision 3 `88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619`
+- Scored with corpus revision 4 `9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b`
 - Started 2026-11-08T06:16:01Z, finished 2026-11-08T06:16:41Z, parallel 4
 
 Bar (high-severity recall >= 80%, no blocking result on clean cases): **met**
@@ -14,7 +14,8 @@ Bar (high-severity recall >= 80%, no blocking result on clean cases): **met**
 | Precision | 81% (13/16) |
 | Priority accuracy | 100% (13/13) |
 | False positives (clean / noise / all) | 0 / 1 / 3 |
-| False positives at an expected location naming another defect | 1 |
+| False positives judged a different defect at an expected location | 1 |
+| Eligible findings without an adjudication record (not credited) | 0 |
 | Blocking results on clean cases | 0 |
 | Inconclusive reviews | 0/16 |
 | Cost (Pi catalog pricing) | $0.0136 |

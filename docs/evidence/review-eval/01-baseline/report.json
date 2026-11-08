@@ -12,8 +12,8 @@
     "corpus_version": 1,
     "corpus_revision": 0,
     "corpus_digest": "77d755d3549d8dacd11d1555593a2dc02b18acaf4c580f5251a96867f06298b3",
-    "scored_corpus_revision": 3,
-    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
+    "scored_corpus_revision": 4,
+    "scored_corpus_digest": "9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -47,6 +47,7 @@
     "matched": 0,
     "false_positives": 0,
     "wrong_defect": 0,
+    "unadjudicated": 0,
     "clean_false_positives": 0,
     "clean_blocking": 3,
     "noise_false_positives": 0,
@@ -135,12 +136,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "inclusive-loop-bound",
             "file": "stats/window.go",
             "start": 19,
             "end": 20,
@@ -151,18 +154,7 @@
               "P0",
               "P1"
             ],
-            "defect": "Loop condition i \u003c= len(values) indexes values[len(values)] and panics on every call.",
-            "keywords": [
-              "len(values)",
-              "past the end",
-              "out of range",
-              "out-of-range",
-              "out of bounds",
-              "out-of-bounds",
-              "off-by-one",
-              "off by one",
-              "inclusive"
-            ]
+            "defect": "Loop condition i \u003c= len(values) indexes values[len(values)] and panics on every call."
           }
         ],
         "unmatched": [],
@@ -239,12 +231,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "deref-before-error-check",
             "file": "user/store.go",
             "start": 28,
             "end": 32,
@@ -255,15 +249,7 @@
               "P0",
               "P1"
             ],
-            "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\".",
-            "keywords": [
-              "u.name",
-              "nil user",
-              "u is nil",
-              "nil pointer",
-              "nil-pointer",
-              "dereferenc"
-            ]
+            "defect": "u.Name is read before err is checked; Lookup returns nil for unknown IDs, so DisplayName panics instead of returning \"unknown\"."
           }
         ],
         "unmatched": [],
@@ -340,12 +326,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "write-error-returns-nil",
             "file": "config/config.go",
             "start": 32,
             "end": 34,
@@ -356,16 +344,7 @@
               "P0",
               "P1"
             ],
-            "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success.",
-            "keywords": [
-              "returns nil",
-              "return nil",
-              "reports success",
-              "reporting success",
-              "swallow",
-              "discard",
-              "ignor"
-            ]
+            "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success."
           }
         ],
         "unmatched": [],
@@ -442,12 +421,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "unsynchronized-total",
             "file": "text/count.go",
             "start": 20,
             "end": 23,
@@ -458,13 +439,7 @@
               "P0",
               "P1"
             ],
-            "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates.",
-            "keywords": [
-              "race",
-              "synchroniz",
-              "mutex",
-              "atomic"
-            ]
+            "defect": "total += Words(d) runs in concurrent goroutines without a mutex or atomic; data race and lost updates."
           }
         ],
         "unmatched": [],
@@ -541,12 +516,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "email-sql-injection",
             "file": "orders/orders.go",
             "start": 19,
             "end": 19,
@@ -557,13 +534,7 @@
               "P0",
               "P1"
             ],
-            "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder.",
-            "keywords": [
-              "inject",
-              "concatenat",
-              "placeholder",
-              "parameteriz"
-            ]
+            "defect": "email from the search form is concatenated into the SQL string; SQL injection. Use a ? placeholder."
           }
         ],
         "unmatched": [],
@@ -640,12 +611,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "empty-scores-division",
             "file": "report/team.go",
             "start": 21,
             "end": 31,
@@ -656,15 +629,7 @@
               "P0",
               "P1"
             ],
-            "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero.",
-            "keywords": [
-              "divide by zero",
-              "divide-by-zero",
-              "division by zero",
-              "divides by len",
-              "dividing by len",
-              "empty"
-            ]
+            "defect": "average divides by len(scores); teams with no games have empty Scores, so Build panics with integer division by zero."
           }
         ],
         "unmatched": [],
@@ -741,12 +706,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "branch-shell-injection",
             "file": "tools/gitinfo.py",
             "start": 17,
             "end": 19,
@@ -757,13 +724,7 @@
               "P0",
               "P1"
             ],
-            "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell.",
-            "keywords": [
-              "inject",
-              "shell=true",
-              "metacharacter",
-              "arbitrary command"
-            ]
+            "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell."
           }
         ],
         "unmatched": [],
@@ -840,12 +801,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "unclamped-page-end",
             "file": "list/page.go",
             "start": 18,
             "end": 19,
@@ -856,14 +819,7 @@
               "P0",
               "P1"
             ],
-            "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range.",
-            "keywords": [
-              "len(items)",
-              "partial",
-              "last page",
-              "final page",
-              "clamp"
-            ]
+            "defect": "end is not clamped to len(items); a partial last page panics with slice bounds out of range."
           }
         ],
         "unmatched": [],
@@ -940,12 +896,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "missing-unlock-on-miss",
             "file": "cache/cache.go",
             "start": 24,
             "end": 28,
@@ -956,12 +914,7 @@
               "P0",
               "P1"
             ],
-            "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache.",
-            "keywords": [
-              "unlock",
-              "locked",
-              "deadlock"
-            ]
+            "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache."
           }
         ],
         "unmatched": [],
@@ -1074,12 +1027,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "narrating-base-delay",
             "file": "client/retry.go",
             "start": 10,
             "end": 10,
@@ -1090,16 +1045,10 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the assignment.",
-            "keywords": [
-              "narrat",
-              "restat",
-              "obvious",
-              "redundant",
-              "self-explanatory"
-            ]
+            "defect": "Comment restates the assignment."
           },
           {
+            "id": "narrating-loop",
             "file": "client/retry.go",
             "start": 12,
             "end": 12,
@@ -1110,16 +1059,10 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the loop.",
-            "keywords": [
-              "narrat",
-              "restat",
-              "obvious",
-              "redundant",
-              "self-explanatory"
-            ]
+            "defect": "Comment restates the loop."
           },
           {
+            "id": "narrating-return",
             "file": "client/retry.go",
             "start": 21,
             "end": 21,
@@ -1130,14 +1073,7 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the return.",
-            "keywords": [
-              "narrat",
-              "restat",
-              "obvious",
-              "redundant",
-              "self-explanatory"
-            ]
+            "defect": "Comment restates the return."
           }
         ],
         "unmatched": [],
@@ -1214,12 +1150,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
         "priority_correct": 0,
         "missed": [
           {
+            "id": "promotional-rationale",
             "file": "README.md",
             "start": 11,
             "end": 11,
@@ -1230,14 +1168,7 @@
               "P2",
               "P3"
             ],
-            "defect": "Promotional, inflated claims with no concrete behavior.",
-            "keywords": [
-              "inflated",
-              "promotional",
-              "superlative",
-              "marketing",
-              "unsupported claim"
-            ]
+            "defect": "Promotional, inflated claims with no concrete behavior."
           }
         ],
         "unmatched": [],
@@ -1301,6 +1232,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1367,6 +1299,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1433,6 +1366,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
@@ -1499,6 +1433,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,
@@ -1565,6 +1500,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 1,
         "priority_judged": 0,

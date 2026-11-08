@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "missing-unlock-on-miss",
       "file": "cache/cache.go",
       "start": 24,
       "end": 28,
@@ -20,12 +21,7 @@
         "P0",
         "P1"
       ],
-      "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache.",
-      "keywords": [
-        "unlock",
-        "locked",
-        "deadlock"
-      ]
+      "defect": "The not-found path returns without c.mu.Unlock(); the next Lock deadlocks the cache."
     }
   ],
   "noise": []

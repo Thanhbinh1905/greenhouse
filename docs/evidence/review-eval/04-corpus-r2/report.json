@@ -12,8 +12,8 @@
     "corpus_version": 1,
     "corpus_revision": 2,
     "corpus_digest": "4f1ccef6d618a0feed8ff79f0276c70beb1e353268979213149c4095a3c50812",
-    "scored_corpus_revision": 3,
-    "scored_corpus_digest": "88ba03b56bc40a0e621291fca524ea4cbc76ab732f85b580067c6cbf59001619",
+    "scored_corpus_revision": 4,
+    "scored_corpus_digest": "9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b",
     "cases": [
       "bug-offbyone-window",
       "bug-nil-before-error",
@@ -47,6 +47,7 @@
     "matched": 12,
     "false_positives": 1,
     "wrong_defect": 0,
+    "unadjudicated": 0,
     "clean_false_positives": 0,
     "clean_blocking": 0,
     "noise_false_positives": 0,
@@ -146,6 +147,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -155,9 +157,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "len(values)"
+            "expected": "inclusive-loop-bound",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same inclusive loop bound root cause, stating \"it always attempts to access values[len(values)]\" and explaining the resulting index-out-of-range panic."
           }
         ]
       }
@@ -243,6 +245,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -252,9 +255,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "u.name"
+            "expected": "deref-before-error-check",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same root cause: \"The code dereferences u.Name before checking err\", causing a panic for missing IDs instead of returning \"unknown\"."
           }
         ]
       }
@@ -340,6 +343,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -349,9 +353,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "returns nil"
+            "expected": "write-error-returns-nil",
+            "verdict": "detects",
+            "rationale": "The finding states \"Save returns nil when os.WriteFile fails\", identifying the same root cause of silently reporting success after a failed save."
           }
         ]
       }
@@ -437,6 +441,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -446,9 +451,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "race"
+            "expected": "unsynchronized-total",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same unsynchronized concurrent updates to total, stating \"causing a data race and potentially losing increments\"."
           }
         ]
       }
@@ -534,6 +539,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -543,9 +549,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "inject"
+            "expected": "email-sql-injection",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same SQL injection root cause, stating \"The email input is concatenated directly into the SQL statement\"."
           }
         ]
       }
@@ -631,6 +637,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -640,9 +647,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "divides by len"
+            "expected": "empty-scores-division",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same unguarded division by zero for teams with no games, stating \"average divides by len(scores) without handling an empty slice.\""
           }
         ]
       }
@@ -728,6 +735,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -737,9 +745,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "inject"
+            "expected": "branch-shell-injection",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same command-injection root cause, stating \"The branch value is interpolated into a shell command while shell=True is enabled.\""
           }
         ]
       }
@@ -825,6 +833,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -834,9 +843,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "len(items)"
+            "expected": "unclamped-page-end",
+            "verdict": "detects",
+            "rationale": "The finding states \"end is set to start + size without clamping it to len(items)\", which matches the planted defect causing a partial final page to panic."
           }
         ]
       }
@@ -922,6 +931,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 1,
@@ -931,9 +941,9 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "unlock"
+            "expected": "missing-unlock-on-miss",
+            "verdict": "detects",
+            "rationale": "The finding states \"Get returns without unlocking c.mu\", identifying the same missing unlock on the not-found path that causes subsequent cache operations to deadlock."
           }
         ]
       }
@@ -1041,12 +1051,14 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 2,
         "priority_correct": 2,
         "missed": [
           {
+            "id": "narrating-loop",
             "file": "client/retry.go",
             "start": 12,
             "end": 12,
@@ -1057,29 +1069,22 @@
               "P2",
               "P3"
             ],
-            "defect": "Comment restates the loop.",
-            "keywords": [
-              "narrat",
-              "restat",
-              "obvious",
-              "redundant",
-              "self-explanatory"
-            ]
+            "defect": "Comment restates the loop."
           }
         ],
         "unmatched": [],
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "narrat"
+            "expected": "narrating-base-delay",
+            "verdict": "detects",
+            "rationale": "The finding states that comments \"merely narrate the immediately following code\", identifying the planted defect that the base-delay comment restates the assignment."
           },
           {
             "finding": 1,
-            "expected": 2,
-            "verdict": "detected",
-            "keyword": "restat"
+            "expected": "narrating-return",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same redundant-comment defect by stating that the comment \"merely restates the return operation.\""
           }
         ]
       }
@@ -1187,6 +1192,7 @@
         "duplicates": 0,
         "false_positives": 1,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 1,
         "blocking": 0,
         "priority_judged": 1,
@@ -1207,13 +1213,13 @@
         "adjudications": [
           {
             "finding": 0,
-            "expected": 0,
-            "verdict": "detected",
-            "keyword": "inflated"
+            "expected": "promotional-rationale",
+            "verdict": "detects",
+            "rationale": "The finding identifies the same promotional, non-concrete claims by noting \"inflated promotional language and unsupported certainty\" rather than a concrete reason to use the library."
           },
           {
             "finding": 1,
-            "expected": -1,
+            "expected": "",
             "verdict": "false-positive"
           }
         ]
@@ -1276,6 +1282,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1342,6 +1349,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1408,6 +1416,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1474,6 +1483,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,
@@ -1540,6 +1550,7 @@
         "duplicates": 0,
         "false_positives": 0,
         "wrong_defect": 0,
+        "unadjudicated": 0,
         "noise_flagged": 0,
         "blocking": 0,
         "priority_judged": 0,

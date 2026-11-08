@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "promotional-rationale",
       "file": "README.md",
       "start": 11,
       "end": 11,
@@ -20,14 +21,7 @@
         "P2",
         "P3"
       ],
-      "defect": "Promotional, inflated claims with no concrete behavior.",
-      "keywords": [
-        "inflated",
-        "promotional",
-        "superlative",
-        "marketing",
-        "unsupported claim"
-      ]
+      "defect": "Promotional, inflated claims with no concrete behavior."
     }
   ],
   "noise": [

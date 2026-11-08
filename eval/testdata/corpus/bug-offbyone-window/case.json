@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "inclusive-loop-bound",
       "file": "stats/window.go",
       "start": 19,
       "end": 20,
@@ -20,18 +21,7 @@
         "P0",
         "P1"
       ],
-      "defect": "Loop condition i <= len(values) indexes values[len(values)] and panics on every call.",
-      "keywords": [
-        "len(values)",
-        "past the end",
-        "out of range",
-        "out-of-range",
-        "out of bounds",
-        "out-of-bounds",
-        "off-by-one",
-        "off by one",
-        "inclusive"
-      ]
+      "defect": "Loop condition i <= len(values) indexes values[len(values)] and panics on every call."
     }
   ],
   "noise": [

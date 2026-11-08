@@ -13,7 +13,7 @@ All runs used the same setup:
 
 ## Runs
 
-All runs below were re-scored with `go run ./eval rescore` against corpus revision 3, which adds defect keywords (see [Scoring](#scoring)). The Corpus column names the revision each run reviewed.
+All runs below are scored from adjudication records against corpus revision 4 (see [Scoring](#scoring)). The Corpus column names the revision each run reviewed.
 
 | Run | Product change | Corpus | High-severity recall | Recall | Precision | Clean blocking | Inconclusive | Cost | Mean latency | Bar |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -56,13 +56,13 @@ Runs 04 to 09 use the same product code, corpus revision 2, criteria and setting
 - `gpt-6-luna` is the cheapest and fastest. In run 09 it flagged negative page arguments in `bug-pagination-bounds` instead of the unclamped end index, missing a planted bug. Both runs raised the same P1 noise finding.
 - Recommendation: use `openai/gpt-5.6-luna` as the reviewer model. It had the best recall, found every planted bug, raised no clean-case false positive, and costs about $0.013 per 16-case pass. Its precision (86%) is within one finding of `gpt-6-luna` (88%). Re-measure with this corpus before changing models.
 
-This is not a cross-vendor comparison. The proxy behind the `openai` provider serves only OpenAI models. xAI has OAuth credentials, but its API answered `402 "You have run out of credits or need a Grok subscription."` Anthropic, Google, OpenRouter and Meta have no configured credentials on this machine. The nine recorded runs cost $0.33 at Pi catalog prices.
+This is not a cross-vendor comparison. The proxy behind the `openai` provider serves only OpenAI models. xAI has OAuth credentials, but its API answered `402 "You have run out of credits or need a Grok subscription."` Anthropic, Google, OpenRouter and Meta have no configured credentials on this machine. The nine recorded runs cost $0.33 and their adjudication $0.18 at Pi catalog prices.
 
 ## Scoring
 
-A finding detects an expected finding only when it is at the expected location and its explanation or action contains one of that finding's `keywords`. The keywords name the defect, for example `len(items)`, `partial` and `clamp` for the unclamped page end. Each report records one adjudication per finding: `detected`, `duplicate`, `wrong-defect` (expected location, different defect) or `false-positive`. A finding counts as a duplicate only when it names an already detected defect.
+File, origin, rule and an overlapping range of at most 15 lines only make a finding eligible. Credit comes from `adjudications.json` in each run directory. It holds one record per eligible finding: case, finding index, a SHA-256 digest of the finding as scored, expected defect ID, verdict (`detects`, `different-defect` or `duplicate`) and a one-sentence rationale that quotes the finding. The scorer refuses records that do not match the finding digest, do not quote the finding, name an expected defect at another location, or contradict the detection order. An eligible finding without a record earns no credit.
 
-The first scorer checked location alone. Re-scoring with revision 3 changed no detection, but four findings that had been counted as duplicates became wrong-defect false positives: negative `page` or `size` arguments in `bug-pagination-bounds` (02 and 05), and the shared temporary file in `bug-swallowed-write-error` (06 and 07). Findings recorded before the scorer kept the `action` field carry only the explanation, so these runs were scored on explanations alone.
+`go run ./eval judge` writes the records. Each eligible finding goes to a separate Pi process with no tools and no session, which sees only the eligible expected defects and the finding. The judge model, Pi version and full prompt are in each file. For these runs the judge was `openai/gpt-6.1-sol`; it judged 99 findings for $0.18 and every answer was valid. It returned 95 `detects` and 4 `different-defect`: negative `page` or `size` arguments in `bug-pagination-bounds` (02 and 05), and concurrent `Save` calls sharing a temporary file in `bug-swallowed-write-error` (06 and 07). The first scorer, which checked location alone, had credited those four as duplicates. A manual reading of all four `different-defect` records and the multi-line `detects` records agreed with each verdict. Findings recorded before the runner kept the `action` field carry only the explanation.
 
 ## Remaining weaknesses
 
@@ -75,6 +75,6 @@ These did not affect the bar but are real:
 
 ## Reproducing
 
-Commit IDs in each `report.json` identify the product code. `input.json` in each case directory holds the exact bytes Greenhouse delivered, so the review input can be replayed without the corpus. Runs 01 to 03 reviewed corpus revision 1 (digest `77d755d3…`) and 04 to 09 revision 2 (digest `4f1ccef6…`). All were scored with revision 3 (digest `88ba03b5…`), which changes only ground-truth keywords.
+Commit IDs in each `report.json` identify the product code. `input.json` in each case directory holds the exact bytes Greenhouse delivered, so the review input can be replayed without the corpus. Runs 01 to 03 reviewed corpus revision 1 (digest `77d755d3…`) and 04 to 09 revision 2 (digest `4f1ccef6…`). All are scored with revision 4 (digest `9d7a6b7e…`), which only adds expected-defect IDs.
 
 Stored `events.jsonl` files exclude Pi's `message_update` streaming deltas; the matching `message_end` events carry the same final content.

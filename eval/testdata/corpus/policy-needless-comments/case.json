@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "narrating-base-delay",
       "file": "client/retry.go",
       "start": 10,
       "end": 10,
@@ -20,16 +21,10 @@
         "P2",
         "P3"
       ],
-      "defect": "Comment restates the assignment.",
-      "keywords": [
-        "narrat",
-        "restat",
-        "obvious",
-        "redundant",
-        "self-explanatory"
-      ]
+      "defect": "Comment restates the assignment."
     },
     {
+      "id": "narrating-loop",
       "file": "client/retry.go",
       "start": 12,
       "end": 12,
@@ -40,16 +35,10 @@
         "P2",
         "P3"
       ],
-      "defect": "Comment restates the loop.",
-      "keywords": [
-        "narrat",
-        "restat",
-        "obvious",
-        "redundant",
-        "self-explanatory"
-      ]
+      "defect": "Comment restates the loop."
     },
     {
+      "id": "narrating-return",
       "file": "client/retry.go",
       "start": 21,
       "end": 21,
@@ -60,14 +49,7 @@
         "P2",
         "P3"
       ],
-      "defect": "Comment restates the return.",
-      "keywords": [
-        "narrat",
-        "restat",
-        "obvious",
-        "redundant",
-        "self-explanatory"
-      ]
+      "defect": "Comment restates the return."
     }
   ],
   "noise": [

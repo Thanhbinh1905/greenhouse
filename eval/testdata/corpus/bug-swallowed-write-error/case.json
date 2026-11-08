@@ -10,6 +10,7 @@
   ],
   "expected": [
     {
+      "id": "write-error-returns-nil",
       "file": "config/config.go",
       "start": 32,
       "end": 34,
@@ -20,16 +21,7 @@
         "P0",
         "P1"
       ],
-      "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success.",
-      "keywords": [
-        "returns nil",
-        "return nil",
-        "reports success",
-        "reporting success",
-        "swallow",
-        "discard",
-        "ignor"
-      ]
+      "defect": "os.WriteFile failure returns nil, silently dropping the save and reporting success."
     }
   ],
   "noise": [

@@ -1,0 +1,110 @@
+{
+  "schema": "greenhouse.eval.adjudications.v1",
+  "judge": {
+    "kind": "model",
+    "model": "openai/gpt-6.1-sol",
+    "backend": "pi --print --mode json --no-session --no-tools",
+    "pi_version": "1.5.0",
+    "base_url": "http://127.0.0.1:8317/v1",
+    "prompt": "system: You are an evaluation judge. Decide whether one code review finding identifies one specific planted defect. Judge only the defect named, not the location. Return only the requested JSON.\ninstructions: Input is JSON with \"expected\", the planted defects at the finding's location (id, file, start, end, defect), and \"finding\", one reviewer finding (file, start, end, priority, explanation, action).\nReturn only this JSON object: {\"expected\":\"\u003cid from expected\u003e\",\"verdict\":\"detects|different-defect\",\"rationale\":\"\u003cone sentence\u003e\"}.\nUse \"detects\" only when the finding describes the same root cause as that planted defect. A finding that shares identifiers, lines or wording but describes another root cause is \"different-defect\"; then name the closest expected id.\nThe rationale is one sentence that quotes at least 12 consecutive characters of the finding's explanation or action verbatim inside double quotes.",
+    "note": "12 eligible findings, 0 without a valid judge answer; judge cost $0.0228 at Pi catalog prices"
+  },
+  "records": [
+    {
+      "case": "bug-offbyone-window",
+      "finding": 0,
+      "finding_digest": "9da6c5f79b6535955202db82858127b89130662978ba3020c7dc4149f2169251",
+      "expected": "inclusive-loop-bound",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same off-by-one root cause: \"The inclusive loop bound allows i to equal len(values)\", causing an out-of-bounds access and panic."
+    },
+    {
+      "case": "bug-nil-before-error",
+      "finding": 0,
+      "finding_digest": "b6ae81dc5ba345bac7beddb2aa36232e017d6bad9900804f046d3121bbaaf4a1",
+      "expected": "deref-before-error-check",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same root cause: \"Accessing u.Name before checking err\" dereferences a nil result for an unknown ID instead of returning the fallback."
+    },
+    {
+      "case": "bug-swallowed-write-error",
+      "finding": 0,
+      "finding_digest": "b2d970f8388e3a0fa46c8f1701c02895c9992083d4ff179bca2f1df271855fbf",
+      "expected": "write-error-returns-nil",
+      "verdict": "detects",
+      "rationale": "The finding states \"Save returns nil when writing the temporary file fails\", identifying the same root cause of suppressing a write error and falsely reporting success."
+    },
+    {
+      "case": "bug-swallowed-write-error",
+      "finding": 1,
+      "finding_digest": "8f86a4653a41d287a1a48b7f39a8e044c4f420817da59ba7fdfb572b02097767",
+      "expected": "write-error-returns-nil",
+      "verdict": "different-defect",
+      "rationale": "The finding describes concurrent saves sharing a temporary file, stating \"All saves to a given path share the same temporary file.\", rather than an os.WriteFile failure incorrectly returning nil."
+    },
+    {
+      "case": "bug-race-word-count",
+      "finding": 0,
+      "finding_digest": "3df890d93fabfdf17564e30faec1cfc542777c2fb55d6ef4983731e52daad8ac",
+      "expected": "unsynchronized-total",
+      "verdict": "detects",
+      "rationale": "The finding states \"unsynchronized read-modify-write operations on total\", identifying the same concurrent update race and lost increments as the planted defect."
+    },
+    {
+      "case": "bug-sql-injection",
+      "finding": 0,
+      "finding_digest": "24dc88f3ba6dd77298737d2694bf03e3d0458b69fe7eb6357ac492a39dc0e7d8",
+      "expected": "email-sql-injection",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same SQL injection root cause, stating \"The search-form email is concatenated directly into SQL.\""
+    },
+    {
+      "case": "bug-empty-average",
+      "finding": 0,
+      "finding_digest": "43d0cf0cadd0f0b89a12a29b999d7eaad69935a533d6f3bba5b0c01530840e8d",
+      "expected": "empty-scores-division",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same empty-scores division-by-zero root cause, stating \"Dividing by len(scores) then panics with integer divide by zero\"."
+    },
+    {
+      "case": "bug-shell-injection",
+      "finding": 0,
+      "finding_digest": "26cff7815c99d72f12a831041205acf78b8436f9de9ff117c6c1d9e53d7254d6",
+      "expected": "branch-shell-injection",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same command-injection root cause: \"The web-client-supplied branch is interpolated into a command executed with shell=True.\""
+    },
+    {
+      "case": "bug-pagination-bounds",
+      "finding": 0,
+      "finding_digest": "bcdf6b396ac41f064803bf779a320ca001a5febe50ffb46131d3d755f9fbf644",
+      "expected": "unclamped-page-end",
+      "verdict": "detects",
+      "rationale": "The finding states \"The end index is not bounded by len(items)\", identifying the same missing clamp that causes a partial final page to panic."
+    },
+    {
+      "case": "bug-unlock-missing",
+      "finding": 0,
+      "finding_digest": "b8cf978c00a6f958bb52ce6b55cf508aa8348079eab42dad73f6997b7647d7b3",
+      "expected": "missing-unlock-on-miss",
+      "verdict": "detects",
+      "rationale": "The finding states \"Get returns without unlocking c.mu\", identifying the same missing unlock on the not-found path that deadlocks subsequent cache operations."
+    },
+    {
+      "case": "policy-needless-comments",
+      "finding": 0,
+      "finding_digest": "9e86a4f9900c04ecbf478dbe96d7f7364ee64ea7ccf76b338f071a264fbcf76a",
+      "expected": "narrating-base-delay",
+      "verdict": "detects",
+      "rationale": "The finding states that the comments \"merely narrate the immediately following initialization\", identifying the planted defect that the base-delay comment restates its assignment."
+    },
+    {
+      "case": "policy-unslop-readme",
+      "finding": 0,
+      "finding_digest": "a75e9f1b5aed8960f81c870d37cd918de15fd193285ae193ca87e3c410102d96",
+      "expected": "promotional-rationale",
+      "verdict": "detects",
+      "rationale": "The finding identifies the same root cause by describing \"inflated promotional language and unsupported claims\" rather than a concrete explanation of behavior."
+    }
+  ]
+}
