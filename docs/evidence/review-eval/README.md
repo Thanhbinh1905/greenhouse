@@ -6,7 +6,7 @@ Each directory is one live run of `go run ./eval run` over the whole corpus. See
 
 All runs used the same setup:
 
-- Reviewer: Greenhouse independent review, backend `pi-json-v1`, Pi 1.5.0. Runs 01 to 05 used `openai/gpt-5.6-luna`; runs 06 to 09 compare other models. Pi reported the requested provider and model, and thinking level `medium` (the default, because Greenhouse gives Pi an empty agent directory) for every case.
+- Reviewer: Greenhouse independent review, backend `pi-json-v1`, Pi 1.5.0. Runs 01 to 05 used `openai/gpt-5.6-luna`; runs 06 to 09 compare other models. For every case, Pi reported the requested provider and model and thinking level `medium`. Medium is Pi's default, which applies because Greenhouse gives Pi an empty agent directory.
 - Endpoint: this machine's Pi configuration routes the `openai` provider to a local proxy at `http://127.0.0.1:8317/v1`. Greenhouse loads no custom provider file, so the eval shim passed this as `-base-url`. The API key came from `pi auth print-api-key --provider openai` through `OPENAI_API_KEY`; no output file contains it.
 - Run settings: `-parallel 4`, rules `unslop` and `no-comments`, preset `one-pass`, limit 4.
 - Cost is Pi catalog pricing. The proxy may bill differently.
@@ -44,7 +44,7 @@ The review bundle now includes `Files`: the candidate content of each changed pa
 
 Runs 04 to 09 use the same product code, corpus revision 2, criteria and settings. Each model ran twice; the table totals both runs.
 
-| Model | High-severity recall | Recall | Precision | Priority accuracy | Clean false positives (blocking) | Noise false positives (blocking) | Cost per pass | Mean / max latency |
+| Model | High-severity recall | Recall | Precision | Priority accuracy | Clean false positives (blocking) | Noise false positives (blocking) | Cost per pass | Mean and max latency |
 |---|---|---|---|---|---|---|---|---|
 | `openai/gpt-5.6-luna` | 100% (18/18) | 96% (25/26) | 90% (26/29) | 100% | 0 (0) | 1 (1) | $0.0133 | 8.1s / 15.1s |
 | `openai/gpt-6.1-sol` | 100% (18/18) | 85% (22/26) | 86% (24/28) | 95% | 2 (0) | 2 (0) | $0.1163 | 8.9s / 15.8s |
