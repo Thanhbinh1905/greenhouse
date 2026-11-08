@@ -459,7 +459,11 @@ func TestUserOnlyAuthorityParksInEveryMode(t *testing.T) {
 				parked = waitPipeline(t, bin, repo, home)
 			}
 			d := decisionIn(t, parked)
-			if d["kind"] != "authority" || d["user_only"] != true || d["category"] != tc.category || strings.Join(strs(d["options"]), ",") != "rethink,discard" {
+			options := "rethink,discard"
+			if tc.category == "destructive" {
+				options = "grant,rethink,discard"
+			}
+			if d["kind"] != "authority" || d["user_only"] != true || d["category"] != tc.category || strings.Join(strs(d["options"]), ",") != options {
 				t.Fatalf("authority decision: %v", d)
 			}
 			repairs := runOf(t, parked)["pipeline"].(map[string]any)["repairs"].([]any)

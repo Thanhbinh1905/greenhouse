@@ -79,6 +79,12 @@ if os.path.exists(root+'/fix-escalate'):
     print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':answer}]}}))
     print(json.dumps({'type':'agent_settled','aborted':False}))
     sys.exit(0)
+if os.path.exists(root+'/fix-extra'):
+    extra=open(root+'/fix-extra').read()
+    os.makedirs(os.path.dirname(extra) or '.', exist_ok=True)
+    with open(extra,'w') as f: f.write('added\n')
+if os.path.exists(root+'/fix-remove'):
+    os.remove(open(root+'/fix-remove').read())
 if target=='DELETE':
     os.remove(path)
 elif target=='APPEND':

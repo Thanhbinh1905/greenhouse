@@ -77,7 +77,10 @@ type Budget struct {
 
 var authorityCategories = map[string]bool{"intent": true, "scope": true, "acceptance": true, "credentials": true, "permissions": true, "destructive": true}
 
-type authorityError struct{ category, reason string }
+type authorityError struct {
+	category, reason string
+	paths            []string
+}
 
 func (e authorityError) Error() string { return e.category + ": " + e.reason }
 
@@ -334,6 +337,17 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 			if err := admitGateRepair(r, st, a.Actor, nil); err != nil {
 				return nil, err
 			}
+		}
+	case "grant":
+		x := &p.Repairs[len(p.Repairs)-1]
+		if d.Kind != "authority" || x.Status != "needs-authority" || grantAuthority[x.Authority] == "" {
+			return nil, errors.New("no refused repair to grant")
+		}
+		p.Grants = append(p.Grants, Grant{ID: opaque(), Authority: grantAuthority[x.Authority], Stages: []string{d.Stage}, Paths: x.AuthorityPaths, Source: "run", Actor: a.Actor, Reason: a.Reason, Decision: d.ID})
+		r.Events = append(r.Events, Event{Kind: "grant", Actor: a.Actor, Reason: grantAuthority[x.Authority] + " for " + d.Stage + ": " + strings.Join(x.AuthorityPaths, ", ") + ": " + a.Reason})
+		st.Status, st.Inputs, st.Reason = "failed", stageInputs(r, st.Name), "repair retries under the granted authority"
+		if st.Name == "review" {
+			st.Status = "needs-decision"
 		}
 	case "accept-head":
 		actionable, _ := outstanding(r)
