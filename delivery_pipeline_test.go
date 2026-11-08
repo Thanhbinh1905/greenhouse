@@ -269,7 +269,7 @@ func TestInterruptedDeliveryStagesReconcileFromDurableState(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := restarted.Runs["run"]
-			if got.Status != "running" || got.Pipeline.Status != "running" || got.Pipeline.Active != nil || got.Pipeline.stage(name).Status != "pending" || got.Pipeline.stage(name).Inputs != "" {
+			if got.Status != "running" || got.Pipeline.Status != "running" || got.Pipeline.Active != nil || got.Pipeline.stage(name).Status != "pending" || got.Pipeline.stage(name).Inputs != "" || got.Pipeline.stage(name).Number != 42 || got.Pipeline.stage(name).Runs != 2 {
 				t.Fatalf("delivery not reconciled: %+v", got.Pipeline)
 			}
 		})
