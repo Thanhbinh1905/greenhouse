@@ -212,6 +212,13 @@ func TestRerunKeepsUntrackedFIFOEvidence(t *testing.T) {
 	if !strings.Contains(partial, "untracked: pipe.txt (fifo)") || strings.Contains(partial, "untracked: ignored-pipe") {
 		t.Fatalf("untracked FIFO must be recorded by name and type without recording ignored entries: %q", partial)
 	}
+	worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string)
+	if _, err := os.Lstat(filepath.Join(worktree, "pipe.txt")); !os.IsNotExist(err) {
+		t.Fatalf("rerun cleanup must remove the stopped attempt's FIFO: %v", err)
+	}
+	if _, err := os.Lstat(filepath.Join(worktree, "ignored-pipe")); err != nil {
+		t.Fatalf("rerun cleanup must preserve the ignored FIFO: %v", err)
+	}
 }
 
 func TestRerunKeepsUntrackedSymlinkTarget(t *testing.T) {

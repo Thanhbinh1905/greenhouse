@@ -813,6 +813,70 @@ func (w *evidenceWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+func gitPathIgnored(root, name string) (bool, error) {
+	cmd := exec.Command("git", "-C", root, "check-ignore", "-q", "--no-index", "--stdin", "-z")
+	for _, value := range os.Environ() {
+		if !strings.HasPrefix(value, "GIT_") {
+			cmd.Env = append(cmd.Env, value)
+		}
+	}
+	cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
+	cmd.Stdin = strings.NewReader(name + "\x00")
+	if err := cmd.Run(); err == nil {
+		return true, nil
+	} else {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, err
+	}
+}
+
+func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode os.FileMode) error) error {
+	tracked, err := gitRead(root, "ls-files", "-z")
+	if err != nil {
+		return err
+	}
+	trackedNames := make(map[string]bool)
+	for _, name := range strings.Split(string(tracked), "\x00") {
+		trackedNames[name] = true
+	}
+	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == filepath.Join(root, ".git") && entry.IsDir() {
+			return filepath.SkipDir
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		name, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if trackedNames[name] {
+			return nil
+		}
+		info, err := os.Lstat(path)
+		if err != nil {
+			return err
+		}
+		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
+			return nil
+		}
+		ignored, err := gitPathIgnored(root, name)
+		if err != nil {
+			return err
+		}
+		if ignored {
+			return nil
+		}
+		return visit(path, name, info.Mode())
+	})
+}
+
 func capturePartial(x *Repair) {
 	w := &evidenceWriter{hash: sha256.New()}
 	diff, err := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, "--")
@@ -829,57 +893,11 @@ func capturePartial(x *Repair) {
 	for _, name := range names {
 		untrackedNames[name] = true
 	}
-	tracked, trackedErr := gitRead(x.Worktree, "ls-files", "-z")
-	trackedNames := make(map[string]bool)
-	if trackedErr != nil {
-		fmt.Fprintf(w, "tracked files unavailable: %v\n", trackedErr)
-	} else {
-		for _, name := range strings.Split(string(tracked), "\x00") {
-			trackedNames[name] = true
+	walkErr := walkUntrackedSpecialFiles(x.Worktree, func(_ string, name string, _ os.FileMode) error {
+		if !untrackedNames[name] {
+			names = append(names, name)
+			untrackedNames[name] = true
 		}
-	}
-	walkErr := filepath.WalkDir(x.Worktree, func(path string, entry os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if path == filepath.Join(x.Worktree, ".git") && entry.IsDir() {
-			return filepath.SkipDir
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		name, err := filepath.Rel(x.Worktree, path)
-		if err != nil {
-			return err
-		}
-		if untrackedNames[name] || trackedNames[name] {
-			return nil
-		}
-		info, err := entry.Info()
-		if err != nil {
-			return err
-		}
-		if info.Mode().IsRegular() || info.Mode()&os.ModeSymlink != 0 {
-			return nil
-		}
-		cmd := exec.Command("git", "-C", x.Worktree, "check-ignore", "-q", "--no-index", "--stdin", "-z")
-		for _, value := range os.Environ() {
-			if !strings.HasPrefix(value, "GIT_") {
-				cmd.Env = append(cmd.Env, value)
-			}
-		}
-		cmd.Env = append(cmd.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
-		cmd.Stdin = strings.NewReader(name + "\x00")
-		if err := cmd.Run(); err == nil {
-			return nil
-		} else {
-			var exitErr *exec.ExitError
-			if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
-				return err
-			}
-		}
-		names = append(names, name)
-		untrackedNames[name] = true
 		return nil
 	})
 	if walkErr != nil {
@@ -931,6 +949,12 @@ func capturePartial(x *Repair) {
 	}
 }
 
+func removeUntrackedSpecialFiles(root string) error {
+	return walkUntrackedSpecialFiles(root, func(path, _ string, _ os.FileMode) error {
+		return os.Remove(path)
+	})
+}
+
 func pauseRepair(x *Repair, failure *BackendFailure) {
 	capturePartial(x)
 	x.Failure = failure
@@ -943,6 +967,9 @@ func pauseRepair(x *Repair, failure *BackendFailure) {
 
 func restoreCandidate(x *Repair) error {
 	if _, err := controllerGit(x.Worktree, "reset", "--hard", x.Base); err != nil {
+		return err
+	}
+	if err := removeUntrackedSpecialFiles(x.Worktree); err != nil {
 		return err
 	}
 	if _, err := controllerGit(x.Worktree, "clean", "-fd"); err != nil {
