@@ -66,6 +66,7 @@ type Execution struct {
 	Result       *Verdict       `json:"result,omitempty"`
 	Budget       string         `json:"budget,omitempty"`
 	Run          string         `json:"run,omitempty"`
+	Grant        string         `json:"grant,omitempty"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -127,6 +128,14 @@ func trustedReviewer() (ReviewerConfig, error) {
 	return cfg, nil
 }
 func admitReview(r *Run) error {
+	if r.Host != nil {
+		grant := r.Review.Grant
+		if err := admitReviewAgain(r); err != nil {
+			return err
+		}
+		r.Review.Grant = grant
+		return nil
+	}
 	if settings := r.Configs[len(r.Configs)-1].Settings; r.ReviewUsed+r.RepairUsed >= settings.Limit {
 		return errors.New("review budget exhausted")
 	}
@@ -140,10 +149,10 @@ func admitReviewAgain(r *Run) error {
 		return errors.New("explicit intent and immutable target required")
 	}
 	settings := r.Configs[len(r.Configs)-1].Settings
-	if r.ReviewUsed+r.RepairUsed >= settings.Limit {
+	if r.Host == nil && r.ReviewUsed+r.RepairUsed >= settings.Limit {
 		return errors.New("review budget exhausted")
 	}
-	if settings.Preset != "one-pass" {
+	if r.Host == nil && settings.Preset != "one-pass" {
 		return errors.New("the full preset runs through the pipeline action")
 	}
 	_, ready := effectiveRules(r)

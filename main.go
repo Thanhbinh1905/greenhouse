@@ -90,6 +90,8 @@ type Run struct {
 	Recovery      *Recovery       `json:"recovery,omitempty"`
 	Recoveries    []Recovery      `json:"recoveries,omitempty"`
 	Inherited     *Inheritance    `json:"inherited,omitempty"`
+	Host          *Host           `json:"host,omitempty"`
+	HostGrants    []string        `json:"host_grants,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -109,6 +111,11 @@ type Request struct {
 	Limit    int       `json:"limit,omitempty"`
 	Client   string    `json:"client,omitempty"`
 	Digest   string    `json:"digest,omitempty"`
+	After    uint64    `json:"after,omitempty"`
+	Stream   string    `json:"stream,omitempty"`
+	WaitMS   int       `json:"wait_ms,omitempty"`
+	Host     *Host     `json:"host,omitempty"`
+	Grant    string    `json:"grant,omitempty"`
 }
 type Response struct {
 	Models      []string          `json:"models,omitempty"`
@@ -134,6 +141,13 @@ type Response struct {
 	Sources     map[string]string `json:"defaults_sources,omitempty"`
 	Repository  *RepositoryStatus `json:"repository,omitempty"`
 	Transcript  *TranscriptView   `json:"transcript,omitempty"`
+	Protocol    *Protocol         `json:"protocol,omitempty"`
+	Stream      string            `json:"stream,omitempty"`
+	Sequence    uint64            `json:"sequence,omitempty"`
+	Events      []FeedEvent       `json:"events,omitempty"`
+	Wait        string            `json:"wait,omitempty"`
+	HostResult  *HostResult       `json:"host_result,omitempty"`
+	replayed    bool
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -479,10 +493,10 @@ func view(s *Store, r *Run) Response {
 		if safe && id == r.Submitted && r.Successor == "" && (r.Repair == nil || r.Repair.Handback == "handed-back") && (r.Pause != nil || rerunnable(r)) {
 			v.Actions = append(v.Actions, "rerun-from-start")
 		}
-		if r.ReviewUsed+r.RepairUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
+		if r.Host == nil && r.ReviewUsed+r.RepairUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
 			v.Blocked = append(v.Blocked, "combined review and repair budget exhausted")
 		}
-		if r.Status == "outstanding-findings" && r.Repair == nil && !repairable(r) {
+		if r.Host == nil && r.Status == "outstanding-findings" && r.Repair == nil && !repairable(r) {
 			v.Blocked = append(v.Blocked, "selected repair unavailable: actionable findings and private trusted fixer/check configuration are required")
 		}
 		if r.RepairUsed > 0 && r.Pipeline == nil {
@@ -504,6 +518,9 @@ func view(s *Store, r *Run) Response {
 		if p := r.Pipeline; p != nil && p.open() != nil {
 			v.Decision = p.open()
 			v.Blocked = append(v.Blocked, "decision required: "+v.Decision.Kind+" ("+strings.Join(v.Decision.Options, ", ")+")")
+		}
+		if r.Host != nil {
+			hostView(&v, r, e == nil && id == r.Submitted, safe && id == r.Submitted)
 		}
 	}
 	return v
@@ -561,9 +578,16 @@ func withModelDefaults(s Settings, defaults Settings) Settings {
 	return s
 }
 func handle(s *Store, q Request) Response {
+	v := handleRequest(s, q)
+	if v.Run != nil && v.Run.Host != nil && !sameHost(v.Run.Host, q.Host) {
+		v.Actions = []string{"attach", "inspect"}
+	}
+	return v
+}
+func handleRequest(s *Store, q Request) Response {
 	fail := func(msg string, r *Run) Response { v := view(s, r); v.Outcome = "refused"; v.Error = msg; return v }
-	if q.Version != 1 {
-		return fail("unsupported protocol version", nil)
+	if e := checkVersion(q); e != nil {
+		return fail(e.Error(), nil)
 	}
 	id, e := resolve(q.Path)
 	if e != nil {
@@ -615,8 +639,13 @@ func handle(s *Store, q Request) Response {
 		return v
 	}
 	if q.Op == "attach" || q.Op == "inspect" {
+		if q.Op == "attach" && q.Host != nil {
+			if refusal := hostRefusal(r, q); refusal != "" {
+				return fail(refusal, r)
+			}
+		}
 		if r == nil && q.Op == "attach" {
-			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "created", Actor: "client"}}}
+			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "created", Actor: "client"}}, Host: q.Host}
 			s.Runs[r.ID] = r
 			s.Slots[slot] = r.ID
 		}
@@ -628,12 +657,17 @@ func handle(s *Store, q Request) Response {
 	if q.Action == "" {
 		return fail("action_id required", r)
 	}
+	if refusal := hostRefusal(r, q); refusal != "" {
+		return fail(refusal, r)
+	}
 	d := digest(q)
 	if receipt, ok := s.Receipts[q.Action]; ok {
 		if receipt.Digest != d {
 			return fail("action_id reused with different input", r)
 		}
-		return receipt.Result
+		replay := receipt.Result
+		replay.replayed = true
+		return replay
 	}
 	actor := "axi"
 	if q.Client == "terminal" {
@@ -729,6 +763,10 @@ func handle(s *Store, q Request) Response {
 		}
 		r = restartRun(s, r, id, actor)
 		s.Slots[slot] = r.ID
+	} else if q.Op == "review" && r.Host != nil {
+		if err := admitHostReview(r, q.Grant); err != nil {
+			return fail(err.Error(), r)
+		}
 	} else if q.Op == "review" {
 		if err := admitReview(r); err != nil {
 			return fail(err.Error(), r)
@@ -852,7 +890,11 @@ func handle(s *Store, q Request) Response {
 	} else {
 		prior := r.ID
 		findings := append([]Finding(nil), r.Findings...)
-		r = &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		next := &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		if q.Host != nil {
+			hostSuccessor(r, next, q.Host)
+		}
+		r = next
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
@@ -948,6 +990,8 @@ func daemon(h string) error {
 			cancel()
 		}
 	}()
+	events := newFeed(s)
+	defer events.close()
 	checkpoint := func(runID, id string) func(*Repair) bool {
 		return func(value *Repair) bool {
 			ack := make(chan bool, 1)
@@ -1108,7 +1152,12 @@ func daemon(h string) error {
 	defer wake.Stop()
 	orphanProbe := time.NewTicker(250 * time.Millisecond)
 	defer orphanProbe.Stop()
+	subscribers := time.NewTimer(time.Hour)
+	defer subscribers.Stop()
 	for {
+		events.observe(s)
+		events.flush(s, time.Now())
+		subscribers.Reset(events.next(time.Now()))
 		wake.Reset(untilAutoResume(s, time.Now()))
 		var probe <-chan time.Time
 		if needsProbe(s) {
@@ -1116,6 +1165,8 @@ func daemon(h string) error {
 		}
 		var c net.Conn
 		select {
+		case <-subscribers.C:
+			continue
 		case <-probe:
 			if reconcileRecoveries(s) {
 				if err := persist(h, s); err != nil {
@@ -1227,7 +1278,13 @@ func daemon(h string) error {
 		dec.DisallowUnknownFields()
 		e = dec.Decode(&q)
 		var v Response
-		if e != nil {
+		committed := events.seq
+		if e == nil && q.Op == "watch" {
+			var parked bool
+			if v, parked = events.subscribe(s, c, q); parked {
+				continue
+			}
+		} else if e != nil {
 			v = Response{Version: 1, Outcome: "refused", Error: "invalid request: " + e.Error()}
 		} else {
 			b, _ := json.Marshal(s)
@@ -1259,6 +1316,13 @@ func daemon(h string) error {
 				json.Unmarshal(b, &frozen)
 				s.Receipts[q.Action] = Receipt{Digest: digest(q), Result: frozen}
 			}
+			if q.Version >= 2 && !v.replayed {
+				v.Stream, v.Sequence = events.stream, committed
+				if receipt, ok := s.Receipts[q.Action]; ok && receipt.Digest == digest(q) {
+					receipt.Result.Stream, receipt.Result.Sequence = v.Stream, v.Sequence
+					s.Receipts[q.Action] = receipt
+				}
+			}
 			if e = persist(h, s); e != nil {
 				return e
 			}
@@ -1266,15 +1330,19 @@ func daemon(h string) error {
 				return e
 			}
 		}
+		stamp(&v, q.Version)
 		json.NewEncoder(c).Encode(v)
 		c.Close()
 	}
 }
 func call(h string, q Request) (Response, error) {
+	return request(h, q, true)
+}
+func request(h string, q Request, spawn bool) (Response, error) {
 	var v Response
 	socket := filepath.Join(h, "socket")
 	c, e := net.DialTimeout("unix", socket, time.Second)
-	if e != nil {
+	if e != nil && spawn {
 		exe, x := os.Executable()
 		if x != nil {
 			return v, x
@@ -1299,7 +1367,7 @@ func call(h string, q Request) (Response, error) {
 		return v, fmt.Errorf("daemon unavailable: %w", e)
 	}
 	defer c.Close()
-	c.SetDeadline(time.Now().Add(10 * time.Second))
+	c.SetDeadline(time.Now().Add(10*time.Second + time.Duration(q.WaitMS)*time.Millisecond))
 	if e = json.NewEncoder(c).Encode(q); e != nil {
 		return v, e
 	}
@@ -1383,12 +1451,33 @@ func terminalPrompt(format string, args ...any) {
 	}
 }
 func terminal(h, path string) error {
-	q := Request{Version: 1, Op: "attach", Path: path}
+	q := Request{Version: protocolMax, Op: "attach", Path: path}
 	v, e := call(h, q)
 	if e != nil {
 		return e
 	}
-	reader := bufio.NewScanner(os.Stdin)
+	if e = protocolRefusal(v); e != nil {
+		return e
+	}
+	lines := make(chan string)
+	go func() {
+		reader := bufio.NewScanner(os.Stdin)
+		for reader.Scan() {
+			lines <- reader.Text()
+		}
+		close(lines)
+	}()
+	input := ""
+	scan := func() bool {
+		line, ok := <-lines
+		input = line
+		return ok
+	}
+	updates := make(chan liveUpdate, 1)
+	stop := make(chan struct{})
+	defer close(stop)
+	go follow(h, path, v.Stream, v.Sequence, updates, stop)
+	live := "live"
 	message := ""
 	details := false
 	for {
@@ -1403,9 +1492,17 @@ func terminal(h, path string) error {
 		} else {
 			fmt.Fprintln(&page, "Greenhouse | independent review")
 		}
+		fmt.Fprintf(&page, "Events: %s\n", live)
 		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), sourceSummary(fieldSources(s)))
 		if o := v.Repository; o != nil {
 			fmt.Fprintln(&page, overrideLine(o))
+		}
+		if x := v.HostResult; x != nil {
+			outcome := x.Verdict
+			if outcome == "" {
+				outcome = x.Status
+			}
+			fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Host: %s | grant %s | %s | current %t", hostLabel(&x.Host), x.Grant, outcome, x.Current), terminalWidth()))
 		}
 		for _, rule := range v.Rules {
 			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
@@ -1484,16 +1581,32 @@ func terminal(h, path string) error {
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		terminalPrompt("> ")
-		if !reader.Scan() {
-			return reader.Err()
+		op, entered, redraw := "", false, false
+		for !redraw && !entered {
+			select {
+			case u := <-updates:
+				if u.view != nil && u.view.Run != nil && newer(*u.view, v) && screenDigest(*u.view) != screenDigest(v) {
+					v, redraw = *u.view, true
+				}
+				if u.state != live {
+					live, redraw = u.state, true
+				}
+			case line, ok := <-lines:
+				if !ok {
+					return nil
+				}
+				op, entered = line, true
+			}
 		}
-		op := reader.Text()
+		if !entered {
+			continue
+		}
 		if op == "q" {
 			return nil
 		}
-		q = Request{Version: 1, Op: "inspect", Path: path}
+		q = Request{Version: protocolMax, Op: "inspect", Path: path}
 		if op == "o" {
-			logged, err := call(h, Request{Version: 1, Op: "transcript", Path: path, RunID: r.ID})
+			logged, err := call(h, Request{Version: protocolMax, Op: "transcript", Path: path, RunID: r.ID})
 			if err != nil {
 				return err
 			}
@@ -1503,7 +1616,7 @@ func terminal(h, path string) error {
 			}
 			screen(transcriptPage(r.ID, logged.Transcript))
 			terminalPrompt("Press Enter to return\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
 			continue
@@ -1519,14 +1632,14 @@ func terminal(h, path string) error {
 		}
 		if op == "f" {
 			terminalPrompt("Finding IDs as shown (separated by commas or spaces):\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
 			var reviewed []string
 			if r.Review != nil && r.Review.Result != nil {
 				reviewed = findingIDs(r.Review.Result.Findings)
 			}
-			selected, whole, err := parseSelection(reader.Text(), reviewed)
+			selected, whole, err := parseSelection(input, reviewed)
 			if whole {
 				err = errors.New("no finding ID entered")
 			}
@@ -1546,20 +1659,20 @@ func terminal(h, path string) error {
 				continue
 			}
 			terminalPrompt("Choice (%s):\n> ", strings.Join(v.Decision.Options, ", "))
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			q.Choice = reader.Text()
+			q.Choice = input
 			if !has(v.Decision.Options, q.Choice) {
 				message = "unknown choice " + strconv.Quote(q.Choice) + "; enter an option exactly as listed; nothing submitted"
 				continue
 			}
 			if q.Choice == "repair" && v.Decision.Kind == "findings" {
 				terminalPrompt("Finding IDs as shown (separated by commas or spaces; an empty line selects the whole group):\n> ")
-				if !reader.Scan() {
+				if !scan() {
 					return nil
 				}
-				selected, _, err := parseSelection(reader.Text(), v.Decision.Findings)
+				selected, _, err := parseSelection(input, v.Decision.Findings)
 				if err != nil {
 					message = err.Error() + "; nothing submitted"
 					continue
@@ -1568,19 +1681,19 @@ func terminal(h, path string) error {
 			}
 			if q.Choice == "increase-cap" {
 				terminalPrompt("New limit:\n> ")
-				if !reader.Scan() {
+				if !scan() {
 					return nil
 				}
-				if q.Limit, e = parseCount(reader.Text()); e != nil {
+				if q.Limit, e = parseCount(input); e != nil {
 					message = e.Error() + "; nothing submitted"
 					continue
 				}
 			}
 			terminalPrompt("Reason:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			q.Reason = reader.Text()
+			q.Reason = input
 			q.Op = "decide"
 		}
 		if op == "e" {
@@ -1589,19 +1702,19 @@ func terminal(h, path string) error {
 				continue
 			}
 			terminalPrompt("Recovery (%s):\n> ", strings.Join(r.Recovery.Options, ", "))
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			q.Choice = reader.Text()
+			q.Choice = input
 			if !has(r.Recovery.Options, q.Choice) {
 				message = "unknown choice " + strconv.Quote(q.Choice) + "; enter an option exactly as listed; nothing submitted"
 				continue
 			}
 			terminalPrompt("Reason:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			q.Reason = reader.Text()
+			q.Reason = input
 			q.Op = "recover"
 		}
 		if op == "g" {
@@ -1612,15 +1725,15 @@ func terminal(h, path string) error {
 		}
 		if op == "p" {
 			terminalPrompt("Intent:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			q.Intent = reader.Text()
+			q.Intent = input
 			terminalPrompt("Exact target commit ID:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			q.Target = reader.Text()
+			q.Target = input
 			q.Op = "prepare"
 		}
 		if op == "l" {
@@ -1633,70 +1746,70 @@ func terminal(h, path string) error {
 			q.Op = "cancel-auto-resume"
 		}
 		if op == "s" {
-			models, modelErr := call(h, Request{Version: 1, Op: "models", Path: path})
+			models, modelErr := call(h, Request{Version: protocolMax, Op: "models", Path: path})
 			modelsText := strings.Join(models.Models, ", ")
 			if modelErr != nil {
 				modelsText = "catalog unavailable: " + modelErr.Error()
 			}
 			terminalPrompt("Current values and sources:\n%s\nSettings draft (current %s %s %d)\nEnter mode preset limit, e.g. ask one-pass 6:\n> ", settingsTable(s), s.Settings.Mode, s.Settings.Preset, s.Settings.Limit)
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
 			draft := s.Settings
-			if draft.Mode, draft.Preset, draft.Limit, e = parseDraft(reader.Text()); e != nil {
+			if draft.Mode, draft.Preset, draft.Limit, e = parseDraft(input); e != nil {
 				message = "Invalid draft: " + e.Error()
 				continue
 			}
 			terminalPrompt("Reviewer backend (pi, claude, codex) [%s]:\n> ", draft.ReviewerBackend)
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if value := reader.Text(); value != "" {
+			if value := input; value != "" {
 				draft.ReviewerBackend = value
 			}
 			terminalPrompt("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if value := reader.Text(); value != "" {
+			if value := input; value != "" {
 				draft.ReviewerModel = value
 			}
 			terminalPrompt("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if value := reader.Text(); value != "" {
+			if value := input; value != "" {
 				draft.FixerBackend = value
 			}
 			terminalPrompt("Pi models: %s\nFixer model [%s]:\n> ", modelsText, draft.FixerModel)
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if value := reader.Text(); value != "" {
+			if value := input; value != "" {
 				draft.FixerModel = value
 			}
 			terminalPrompt("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
 			draft.Rules = []string{}
-			for _, rule := range strings.Split(reader.Text(), ",") {
+			for _, rule := range strings.Split(input, ",") {
 				if name := strings.TrimSpace(rule); name != "" {
 					draft.Rules = append(draft.Rules, name)
 				}
 			}
 			terminalPrompt("Auto-resume (on, off; empty keeps %s):\n> ", autoResumeLabel(draft))
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if value := reader.Text(); value != "" {
+			if value := input; value != "" {
 				draft.AutoResume = value
 			}
 			terminalPrompt("[a] Apply to run  [d] Save user defaults\n[r] Save repository override  [c] Cancel\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			switch reader.Text() {
+			switch input {
 			case "a":
 				q.Op = "apply"
 			case "d":
@@ -1714,37 +1827,37 @@ func terminal(h, path string) error {
 				continue
 			}
 			terminalPrompt("Trust %s of this repository (digest %.12s)? Its values apply to new runs. Type trust:\n> ", overrideName, o.Digest)
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if reader.Text() != "trust" {
+			if input != "trust" {
 				continue
 			}
 			q.Op, q.Digest, q.Reason = "trust", o.Digest, "terminal trust"
 		} else if op == "u" {
 			terminalPrompt("Migrate older configuration files? Each keeps a backup. Type migrate:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if reader.Text() != "migrate" {
+			if input != "migrate" {
 				continue
 			}
 			q.Op, q.Reason = "migrate", "terminal migrate"
 		} else if op == "b" {
 			terminalPrompt("Keep this run and start a linked rerun from start? Type rerun:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if reader.Text() != "rerun" {
+			if input != "rerun" {
 				continue
 			}
 			q.Op = "rerun-from-start"
 		} else if op == "n" {
 			terminalPrompt("Retain evidence and start New run? Type new:\n> ")
-			if !reader.Scan() {
+			if !scan() {
 				return nil
 			}
-			if reader.Text() != "new" {
+			if input != "new" {
 				continue
 			}
 			q.Op = "new"

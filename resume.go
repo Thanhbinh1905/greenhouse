@@ -461,7 +461,7 @@ func rerunStage(s *Store, r *Run, actor string) error {
 
 func restartRun(s *Store, r *Run, source Identity, actor string) *Run {
 	settings := r.Configs[len(r.Configs)-1].Settings
-	next := &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}}
+	next := &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}, Host: r.Host, HostGrants: r.HostGrants}
 	if r.Intent != "" && r.Target != "" {
 		if err := prepareRun(next, r.Intent, r.Target); err != nil {
 			next.Events = append(next.Events, Event{Kind: "prepare-needed", Actor: "daemon", Reason: err.Error()})

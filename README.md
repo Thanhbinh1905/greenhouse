@@ -5,7 +5,7 @@
 
 # Greenhouse
 
-Greenhouse is a standalone terminal and JSON client for a per-user local run store. It implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded handback, and a full pipeline with ask, auto and YOLO authority, review-cap decisions, and GitHub delivery to CI readiness. Review success is not test, lint, or delivery success.
+Greenhouse is a standalone terminal and JSON client for a per-user local run store. It implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded handback, a full pipeline with ask, auto and YOLO authority, review-cap decisions, and GitHub delivery to CI readiness, live event subscriptions, and a host mode for embedding. Review success is not test, lint, or delivery success.
 
 ## First review
 
@@ -61,6 +61,8 @@ cd /path/to/a/git/worktree
 
 The executable requires Linux, Git, and a committed worktree. Runtime operation requires neither Go, Posse, nor Herdr. The bare command opens a single-pane, line-oriented terminal client. Press Enter after each command. `i` refreshes inspection, `c` toggles criteria details, `l` explicitly resolves (loads) rules, `s` opens Settings, and `n` requests New run. `p` prepares intent and an exact target commit, `v` dispatches one review, `g` starts or continues the full pipeline, `m` authorizes the fixer for a target conflict, `d` answers the open decision, `x` cancels a review, fixer, check, or pipeline step, `r` reruns a paused, failed or cancelled stage, `a` cancels a scheduled automatic resume, `b` starts a linked rerun from start, `t` trusts the repository override, `u` migrates older configuration files, `o` shows the transcript log, and `q` detaches. Ctrl-C also disconnects without cancelling the daemon.
 
+The screen follows the run through [events](#events): it redraws when the daemon commits a change, without a keypress. `Events: live` shows an open subscription; `Events: reconnecting (daemon unavailable)` shows that the daemon stopped, and the screen resynchronizes from a snapshot when it returns. The terminal never starts work or restarts a daemon to follow events. `i` still refreshes on demand. A run owned by a [host](docs/embedding.md) shows `Host:` with the grant, verdict and whether it is current; the terminal can follow it but not change it.
+
 Settings edits are drafts until you select Apply or Save. Settings lists each current value with its source: `built-in default`, `per-user`, `trusted repository override` or `run-local`. Apply adds an immutable run-local snapshot. Save changes user defaults (`d`) or the trusted repository override (`r`) without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal wraps prose at word boundaries and abbreviates tokens wider than the screen. AXI retains their full values. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. See [repository overrides](#repository-overrides-and-trust).
 
 ## JSON interface
@@ -68,8 +70,10 @@ Settings edits are drafts until you select Apply or Save. Settings lists each cu
 Send one request on stdin to `greenhouse axi`. The invoking directory identifies the worktree; the CLI replaces any request `path` with that directory. Machine output is one JSON envelope on stdout.
 
 ```sh
-printf '%s\n' '{"version":1,"op":"attach"}' | /path/to/greenhouse axi
+printf '%s\n' '{"version":2,"op":"attach"}' | /path/to/greenhouse axi
 ```
+
+The daemon accepts protocol versions 1 and 2, answers in the requested version, and reports its range in `protocol`. Version 2 adds `watch` and host mode. See the [compatibility policy](docs/compatibility.md).
 
 Git identity commands discard inherited `GIT_*` variables so the daemon cannot reuse the first client's repository selection for later clients. The invoking path determines identity, including linked worktrees.
 
@@ -101,7 +105,7 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
 }
 ```
 
-Supported reads include `attach`, `inspect`, `models`, and `transcript`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `trust`, `migrate`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, and `cancel-auto-resume`, and `recover`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason; `save` takes `"target":"user"` (the default) or `"target":"repository"`. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes block replacement until an explicit [recovery](#recovery-after-interruption) answers them.
+Supported reads include `attach`, `inspect`, `watch`, `models`, and `transcript`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `trust`, `migrate`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, and `cancel-auto-resume`, and `recover`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason; `save` takes `"target":"user"` (the default) or `"target":"repository"`. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes block replacement until an explicit [recovery](#recovery-after-interruption) answers them.
 
 Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json`. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. Tool restriction is not OS confinement. Checks run directly, not through an agent.
 
@@ -118,6 +122,26 @@ The `handback` action is separate. It fast-forwards the original source branch o
 The terminal `f` action requests selected finding IDs for repair; `h` requests handback. AXI requests place the selected ID list in `selected`. All states, selected findings, check results, commit identities, handback status, and budget usage are available in the same run snapshot. There are no publication commands. An unknown repair outcome is answered with [recovery](#recovery-after-interruption).
 
 Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` and `no-comments` names. The numeric limit is provisional. Valid limits are 1 through 1000; reductions cannot erase consumed usage. Modes apply to the full preset; see [modes and decisions](#modes-and-decisions). A one-pass repair always needs an explicit selection.
+
+### Events
+
+`watch` (version 2) waits for committed run changes in the invoking repository:
+
+```json
+{"version":2,"op":"watch","stream":"from the last answer","after":17,"wait_ms":25000}
+```
+
+Each answer carries the current snapshot of the worktree's run, as `inspect` returns it, plus `stream`, `sequence` and `wait`:
+
+- `events`: `events` lists each change after `after` with its `sequence`, `run_id`, `stage`, `status` and `token`.
+- `elapsed`: nothing changed within `wait_ms` (0 to 60000; 0 answers at once). The outcome is `ok`. An elapsed wait cancels nothing and is not a failure; a review keeps running.
+- `resync`: the client's position is unusable because it sent no or another `stream` (for example after a daemon restart), a sequence ahead of the daemon, or one older than the retained 1,024 events. Treat the snapshot as authoritative and continue from its `stream` and `sequence`.
+
+Every other version-2 response also carries `stream` and `sequence`: the last event the daemon committed before it handled the request. A replay returns the values recorded with its receipt. An event with a higher sequence is newer than that response, so a client can drop a watch answer that arrives late. Pass `stream` and `sequence` from each answer into the next request. A client that loses its connection reconnects with the same values and receives either the missed events or a resync. Watching never creates a run or authorizes a gate. At most 64 watches can wait at once.
+
+### Host mode
+
+A host such as Posse can embed Greenhouse as its reviewer. Requests with `host` (version 2) create or act on a host-owned run that only reviews: the host owns author repair, candidate custody, publication, CI and cap decisions, each `review` needs a host `grant`, and `host_result` reports the exact-head verdict and findings. Other clients can only observe a host run. See the [embedding contract](docs/embedding.md).
 
 ## Independent review configuration
 
@@ -343,7 +367,7 @@ Normal use never needs a transcript: findings, verdicts and bounded summaries ar
 
 One daemon owns an advisory `flock` before reading recovery state or binding the socket. It never unlinks a live listener. Requests execute serially. Each request commits the entire version-1 store by writing and syncing a same-directory temporary file, renaming it, and syncing the directory before responding. Action receipts and run changes share that commit. Startup parks persisted `running` or `writing` states as `recovery-required` and reconciles them as described in [recovery](#recovery-after-interruption); it never reruns them. Invalid run records and unknown store versions refuse startup. Rule snapshots are an additive version-1 extension: old stores need no rewrite or counter migration. New snapshots validate source, exact bytes, digest, parsed criteria, and configuration identity on load.
 
-This design assumes a local filesystem with reliable flock, atomic rename, and fsync. It does not support network filesystems, concurrent external store editors, cross-user access, online migration, or mixed protocol versions. Disk corruption has no automatic repair. A directory-sync failure can leave an uncertain commit; inspect after restart instead of inventing another mutation. Back up the state directory while the daemon is stopped. Storage grows with retained runs, events, receipts, snapshots, and executor records; compaction is not implemented.
+This design assumes a local filesystem with reliable flock, atomic rename, and fsync. It does not support network filesystems, concurrent external store editors, cross-user access, or online migration. Protocol and configuration versions follow the [compatibility policy](docs/compatibility.md). Disk corruption has no automatic repair. A directory-sync failure can leave an uncertain commit; inspect after restart instead of inventing another mutation. Back up the state directory while the daemon is stopped. Storage grows with retained runs, events, receipts, snapshots, and executor records; compaction is not implemented.
 
 The daemon commits review or repair admission and budget consumption before starting execution. Completion returns through the serialized controller; inspection remains available during execution. Review cancellation stops its current child. Repair and check cancellation asks the Linux subreaper to terminate and reap descendants. A killed runner or unverified cleanup leaves an unknown outcome. Restart never signals stored PIDs or retries. To stop the daemon administratively, send SIGTERM to the PID recorded in the isolated state's `pid` file after verifying the process. Client exit is not daemon shutdown. Review-stage Git commands remain observational. The separately authorized one-pass repair creates a managed candidate branch/worktree and local commit; guarded handback may fast-forward the unchanged source branch. Greenhouse does not stash, reset, rebase, force-update, push, or discard source work.
 
@@ -357,9 +381,10 @@ test -z "$(gofmt -l *.go)"
 go build -o "$TMPDIR/greenhouse" .
 python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
 python3 tools/recovery_check.py "$TMPDIR/greenhouse" docs/evidence/recovery
+python3 tools/events_check.py "$TMPDIR/greenhouse" docs/evidence/events
 ```
 
-Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56-, 80- and 100-column PTYs through configuration migration, repository trust, per-value sources, a repository Save, the transcript log, a backend quota pause with its explanation, auto-resume cancellation, an agent switch and rerun, selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to CI readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. The recovery check kills the daemon right after a selected repair commits, then captures the recovery screen before and after `adopt` at 56 columns, `discard` at 80 and `new-run` at 100. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
+Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. The Python check drives actual 56-, 80- and 100-column PTYs through configuration migration, repository trust, per-value sources, a repository Save, the transcript log, a backend quota pause with its explanation, auto-resume cancellation, an agent switch and rerun, selected repair, check results, dirty-handback refusal, safe handback, full-pipeline repair to CI readiness, a failed gate with diagnostics, a repaired-unreviewed stage, grouped ask and cap decisions answered with `d`, final-fix, accepted risk, and AXI parity, alongside lifecycle and settings flows. The events check opens the terminal in 56-, 80- and 100-column PTYs, starts a review over AXI without a keypress and requires the terminal to redraw through `running` to the findings, then follows a host-owned run and requires its terminal mutation to refuse; `before` as a third argument records an older binary's behavior instead. The recovery check kills the daemon right after a selected repair commits, then captures the recovery screen before and after `adopt` at 56 columns, `discard` at 80 and `new-run` at 100. Logs are under the selected evidence directory. Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped; they are not review evidence.
 
 ## Review evaluation
 

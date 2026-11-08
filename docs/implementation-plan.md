@@ -78,12 +78,19 @@ Areas C, E, and F: validate selected real agent and forge backends, capture actu
 
 The Posse adapter belongs in the Posse Project. Embedded execution must use its author, candidate custody, grants, publication, and CI owner rather than start a competing standalone pipeline.
 
+## Events, protocol versions and host mode (t69)
+
+Areas D and F, and step 6. AXI protocol version 2 adds `watch`: the daemon numbers committed run changes within a per-process stream, parks a bounded wait, and answers with the events and the current snapshot. A new stream, a gap or a sequence ahead of the daemon answers `resync`, and the snapshot is authoritative. An elapsed wait is an `ok` answer that changes nothing. The terminal follows the run through `watch` instead of waiting for `i`, shows `Events: live` or `reconnecting`, and never starts a daemon to follow. Every response reports the supported protocol range; an out-of-range request refuses with that range, and the terminal refuses an older or newer daemon with instructions. The [compatibility policy](compatibility.md) covers the envelope, configuration files, the repository override, rule packs and the store.
+
+Host mode records a host identity on the run, accepts reviews only under unused host grants, ignores the Greenhouse limit, and refuses repair, conflict repair, pipeline delivery, handback, cap decisions and saved-configuration changes. Other clients can only observe a host run. `host_result` reports the exact-head verdict and findings and whether they are still current. A host `new` keeps usage and spent grants. See the [embedding contract](embedding.md).
+
+Executable daemon, AXI and terminal tests with isolated HOMEs, real Git and fake reviewers cover negotiation, refusal by older and newer daemons, sequenced events, elapsed waits during a review, gap and restart resynchronization, terminal redraws, and a fake host that runs two grants without a fixer, publication, candidate custody or cap reset. The PTY check covers 56, 80 and 100 columns; captures are in `evidence/events/`.
+
 ## Unsupported spec behavior in this slice
 
 - Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
 
 - Area A: a descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
 - Area C: full-tree review snapshots, explicit finding-resolution responses, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
-- Area D: cap decisions for embedded hosts.
 - Area E and D2: broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
-- Area F: finding-resolution responses, event subscriptions, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
+- Area F: finding-resolution responses and the Posse adapter, which belongs in the Posse Project. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
