@@ -27,6 +27,7 @@ All runs below are scored from adjudication records against corpus revision 4 (s
 | [08-gpt-6-luna-r1](08-gpt-6-luna-r1/report.md) | same as 03, `openai/gpt-6-luna` | rev 2 | 100% (9/9) | 92% | 92% | 0 | 0/16 | $0.0046 | 4.6s | met |
 | [09-gpt-6-luna-r2](09-gpt-6-luna-r2/report.md) | same as 08, repeated | rev 2 | 89% (8/9) | 85% | 85% | 0 | 0/16 | $0.0045 | 4.2s | met |
 | [10-claude-sonnet-5.5-r1](10-claude-sonnet-5.5-r1/report.md) | Claude backend, `claude-sonnet-5-5` | rev 4 | 100% (9/9) | 100% | 87% | 0 | 0/16 | $0.2710 | 5.8s | met |
+| [11-snapshot-confinement](11-snapshot-confinement/report.md) | full-tree snapshot, resolution responses, Landlock confinement, `openai/gpt-5.6-luna` | rev 4 | 100% (9/9) | 100% | 81% | 0 | 0/16 | n/a | 12.1s | met |
 
 Priority accuracy was 100% in every run that produced findings, except 06 (91%).
 
@@ -74,6 +75,14 @@ Run 10 reviewed the same 16 cases through the Claude backend added in t40, with 
 - Recommendation: keep `openai/gpt-5.6-luna` through Pi as the default reviewer. Configure `claude-sonnet-5-5` through the Claude backend as the reviewer `fallback` in `backends.json`, so a quota pause on the default continues on a reviewer that measured at least as well. Re-measure with two or more Claude runs before making it the default.
 
 xAI answered `402 "You have run out of credits or need a Grok subscription."` and Google, OpenRouter and Meta have no configured credentials on this machine.
+
+## Snapshot and confinement rerun
+
+Run 11 repeats the default reviewer, `openai/gpt-5.6-luna` through Pi, after t68. The reviewer now runs under Landlock in a read-only snapshot of the whole candidate tree. It found all 13 expected findings and kept 81% precision, the same as run 05 and within the 81% to 92% range of runs 04 and 05, so recall and precision did not regress. The judge (`openai/gpt-6.1-sol`) credited every eligible finding.
+
+- Its three false positives: a duration overflow in `policy-needless-comments` (P2, real but not planted), the recurring nil `*Item` speculation in `noise-legacy-context` (P2), and a `no-comments` finding on the helper's doc comment in `clean-extract-helper` (P2). None blocks, so the bar holds. Runs 04 and 05 raised no clean-case finding.
+- Mean latency rose from 8.5s (run 05) to 12.1s. The reviewer can now open files outside the diff.
+- Pi reported a cost of 0 for every message (`totalFromProvider: false`), because the provider entry Greenhouse writes carries no prices. Token usage is in each `events.jsonl`.
 
 ## Scoring
 
