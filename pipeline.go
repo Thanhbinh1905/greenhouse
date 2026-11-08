@@ -816,7 +816,7 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 				out.Status, out.Reason = "passed", reason
 				return out, candidate, ""
 			}
-			if reason != "checks pending" && reason != "missing checks" && reason != "checks incomplete: additional pages remain" && !strings.HasPrefix(reason, "checks pending:") {
+			if reason != "checks pending" && reason != "missing checks" && reason != "checks incomplete: additional pages remain" && !strings.HasPrefix(reason, "checks pending:") && !strings.HasPrefix(reason, "missing required check:") {
 				out.Status, out.Reason = "needs-decision", reason
 				if strings.HasPrefix(reason, "check failed:") {
 					out.Status = "failed"

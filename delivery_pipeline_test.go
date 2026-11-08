@@ -8,7 +8,11 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
@@ -71,13 +75,145 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 	verifyDeliveryEvidence(t, home, bare, run)
 }
 
+func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
+	var bare string
+	var mu sync.Mutex
+	exists, prHead := false, ""
+	var creates, updates atomic.Int32
+	postStarted, releasePost, postFinished := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
+			mu.Lock()
+			found, head := exists, prHead
+			mu.Unlock()
+			if !found {
+				w.Write([]byte(`[]`))
+				return
+			}
+			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": head}}})
+		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
+			creates.Add(1)
+			var request struct {
+				Head string `json:"head"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode PR request: %v", err)
+				return
+			}
+			branch := strings.TrimPrefix(request.Head, "acme:")
+			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
+			if err != nil {
+				t.Errorf("read pushed head: %v", err)
+				return
+			}
+			mu.Lock()
+			exists, prHead = true, strings.TrimSpace(string(head))
+			mu.Unlock()
+			close(postStarted)
+			<-releasePost
+			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			close(postFinished)
+		case r.URL.Path == "/repos/acme/garden/pulls/12" && r.Method == http.MethodPatch:
+			updates.Add(1)
+			mu.Lock()
+			head := prHead
+			mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": head}})
+		case r.URL.Path == "/repos/acme/garden/pulls/12" && r.Method == http.MethodGet:
+			mu.Lock()
+			head := prHead
+			mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": head}})
+		case strings.HasSuffix(r.URL.Path, "/check-runs"):
+			sha := strings.Split(r.URL.Path, "/")
+			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+		default:
+			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	setForgeAPI(t, server.URL)
+	bin, repo, home, attached := pipelineFixture(t, func(root string) map[string]any {
+		bare = filepath.Join(root, "remote.git")
+		if err := exec.Command("git", "init", "--bare", bare).Run(); err != nil {
+			t.Fatal(err)
+		}
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
+	})
+	started := mutate(t, bin, repo, home, attached, "pipeline", "start", nil)
+	if started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
+	select {
+	case <-postStarted:
+	case <-time.After(30 * time.Second):
+		t.Fatal("PR creation did not start")
+	}
+	pidBytes, err := os.ReadFile(filepath.Join(home, "pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pid int
+	if err := json.Unmarshal(pidBytes, &pid); err != nil || pid <= 0 {
+		t.Fatalf("invalid daemon pid %q: %v", pidBytes, err)
+	}
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
+		if time.Now().After(deadline) {
+			lock.Close()
+			t.Fatal("interrupted daemon retained its lock")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	_ = lock.Close()
+	close(releasePost)
+	select {
+	case <-postFinished:
+	case <-time.After(10 * time.Second):
+		t.Fatal("fixture PR mutation did not finish")
+	}
+	state := waitPipeline(t, bin, repo, home)
+	assertDeliveryReady(t, state)
+	if creates.Load() != 1 || updates.Load() != 1 {
+		t.Fatalf("PR effects duplicated or not reconciled: creates=%d updates=%d", creates.Load(), updates.Load())
+	}
+	pushCommands := stageOf(t, state, "push")["commands"].([]any)
+	pushCount := 0
+	for _, item := range pushCommands {
+		args := item.(map[string]any)["args"].([]any)
+		for _, arg := range args {
+			if arg == "push" {
+				pushCount++
+			}
+		}
+	}
+	if pushCount != 1 {
+		t.Fatalf("push replayed across restart: commands=%v", pushCommands)
+	}
+	if stageOf(t, state, "pr")["url"] != "https://example.invalid/acme/garden/pull/12" || stageOf(t, state, "ci")["head"] != runOf(t, state)["candidate"] {
+		t.Fatalf("delivery identity was not reconciled: %v", runOf(t, state)["pipeline"])
+	}
+}
+
 func TestFullPipelineReportsMissingAndStaleChecksThroughAXI(t *testing.T) {
-	for _, tc := range []struct{ name, payload, reason string }{
-		{"missing", `{"total_count":0,"check_runs":[]}`, "missing required check: fixture-ci"},
-		{"stale", `{"total_count":1,"check_runs":[{"name":"fixture-ci","status":"completed","conclusion":"success","head_sha":"stale-head"}]}`, "stale check: fixture-ci"},
+	for _, tc := range []struct{ name, payload, want string }{
+		{"missing", `{"total_count":0,"check_runs":[]}`, "ci-ready"},
+		{"stale", `{"total_count":1,"check_runs":[{"name":"fixture-ci","status":"completed","conclusion":"success","head_sha":"stale-head"}]}`, "needs-decision"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var bare, branch string
+			var checkCalls atomic.Int32
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
@@ -103,6 +239,11 @@ func TestFullPipelineReportsMissingAndStaleChecksThroughAXI(t *testing.T) {
 					}
 					json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
 				case strings.HasSuffix(r.URL.Path, "/check-runs"):
+					if tc.name == "missing" && checkCalls.Add(1) > 1 {
+						sha := strings.Split(r.URL.Path, "/")
+						json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+						return
+					}
 					w.Write([]byte(tc.payload))
 				default:
 					t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
@@ -123,10 +264,75 @@ func TestFullPipelineReportsMissingAndStaleChecksThroughAXI(t *testing.T) {
 				t.Fatal(started)
 			}
 			state := waitPipeline(t, bin, repo, home)
-			if runOf(t, state)["status"] != "needs-decision" || stageOf(t, state, "ci")["reason"] != tc.reason {
-				t.Fatalf("AXI did not report blocked check: %v", runOf(t, state)["pipeline"])
+			if runOf(t, state)["status"] != tc.want {
+				t.Fatalf("unexpected AXI delivery status: %v", runOf(t, state)["pipeline"])
+			}
+			if tc.name == "missing" && (checkCalls.Load() < 2 || stageOf(t, state, "ci")["head"] != runOf(t, state)["candidate"]) {
+				t.Fatalf("missing check was not polled to exact-head readiness: calls=%d pipeline=%v", checkCalls.Load(), runOf(t, state)["pipeline"])
+			}
+			if tc.name == "stale" && stageOf(t, state, "ci")["reason"] != "stale check: fixture-ci" {
+				t.Fatalf("stale check not reported through AXI: %v", runOf(t, state)["pipeline"])
 			}
 		})
+	}
+}
+
+func TestFullPipelineWaitsForRequiredCheckToAppear(t *testing.T) {
+	var bare, branch string
+	var checks atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
+			w.Write([]byte(`[]`))
+		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
+			var request struct {
+				Head string `json:"head"`
+			}
+			json.NewDecoder(r.Body).Decode(&request)
+			branch = strings.TrimPrefix(request.Head, "acme:")
+			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
+			if err != nil {
+				t.Errorf("read pushed head: %v", err)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+		case r.URL.Path == "/repos/acme/garden/pulls/12":
+			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
+			if err != nil {
+				t.Errorf("read PR head: %v", err)
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+		case strings.HasSuffix(r.URL.Path, "/check-runs"):
+			sha := strings.Split(r.URL.Path, "/")
+			if checks.Add(1) == 1 {
+				json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "optional-lint", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+				return
+			}
+			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+		default:
+			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	setForgeAPI(t, server.URL)
+	bin, repo, home, attached := pipelineFixture(t, func(root string) map[string]any {
+		bare = filepath.Join(root, "remote.git")
+		if err := exec.Command("git", "init", "--bare", bare).Run(); err != nil {
+			t.Fatal(err)
+		}
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
+	})
+	started := mutate(t, bin, repo, home, attached, "pipeline", "start", nil)
+	if started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
+	state := waitPipeline(t, bin, repo, home)
+	assertDeliveryReady(t, state)
+	if checks.Load() < 2 {
+		t.Fatalf("pipeline passed without polling for the required check: calls=%d", checks.Load())
 	}
 }
 

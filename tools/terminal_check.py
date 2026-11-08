@@ -307,7 +307,9 @@ open("sample.txt","w").write("repaired\\n")
             assert stages["pr"]["url"] == "https://example.invalid/acme/garden/pull/12"
             assert stages["ci"]["head"] == state["run"]["candidate"]
             assert "Pipeline: ci-ready" in text and "https://example.invalid/acme/garden/pull/12" in text
+            assert state["run"]["candidate"] in text
             assert "Pipeline: ci-ready" in delivery_text and "https://example.invalid/acme/garden/pull/12" in delivery_text
+            assert state["run"]["candidate"] in delivery_text
             assert stages["test"]["repairs"] == 1 and stages["test"]["status"] == "passed"
             assert "[pass after repair, rereviewed] test" in text and "Gate repairs: 1/1" in text
             assert "[pass] review" in text and "[n/a] docs" in text
