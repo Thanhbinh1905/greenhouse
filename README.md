@@ -5,7 +5,7 @@
 
 # Greenhouse
 
-Greenhouse is a standalone terminal and JSON client for a per-user local run store. This slice implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded local handback, and a local full pipeline with ask, auto and YOLO authority and review-cap decisions that stops at local readiness. Review success is not test, lint, or delivery success.
+Greenhouse is a standalone terminal and JSON client for a per-user local run store. It implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded handback, and a full pipeline with ask, auto and YOLO authority, review-cap decisions, and GitHub delivery to CI readiness. Review success is not test, lint, or delivery success.
 
 ## Build and open
 
