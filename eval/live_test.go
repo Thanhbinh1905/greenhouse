@@ -86,3 +86,10 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		t.Fatalf("pi environment = %s", b)
 	}
 }
+
+func TestCompactEventsDropsStreamingDeltas(t *testing.T) {
+	in := "{\"type\":\"message_start\"}\n{\"type\":\"message_update\",\"x\":1}\n{\"type\":\"message_end\"}\nnot json\n"
+	if got := string(compactEvents([]byte(in))); got != "{\"type\":\"message_start\"}\n{\"type\":\"message_end\"}\nnot json\n" {
+		t.Fatalf("compacted = %q", got)
+	}
+}

@@ -33,10 +33,6 @@ type shimTiming struct {
 	ExitCode int       `json:"exit_code"`
 }
 
-// runShim stands in for Pi as the configured reviewer executable. It records
-// the exact argv and stdin Greenhouse delivers, optionally routes the provider
-// to a base URL inside Greenhouse's private agent directory, runs the real Pi
-// with the same arguments and input, and records its stdout.
 func runShim(configPath string) int {
 	b, err := os.ReadFile(configPath)
 	if err != nil {

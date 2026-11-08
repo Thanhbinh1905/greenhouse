@@ -15,7 +15,6 @@ import (
 	"strings"
 )
 
-// builtinRules lists the criteria IDs of the packs Greenhouse resolves by name.
 var builtinRules = map[string][]string{
 	"unslop":      {"unslop/plain-prose"},
 	"no-comments": {"no-comments/necessary-comments"},
@@ -71,8 +70,6 @@ func strictDecode(b []byte, v any) error {
 	return nil
 }
 
-// LoadCorpus reads and validates the manifest, every listed case and its base
-// and head trees. The digest covers every file byte under root.
 func LoadCorpus(root string) (*Corpus, error) {
 	b, err := os.ReadFile(filepath.Join(root, "corpus.json"))
 	if err != nil {

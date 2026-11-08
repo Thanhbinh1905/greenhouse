@@ -4,7 +4,6 @@ package main
 // finding. Wider ranges do not locate a defect.
 const maxSpan = 15
 
-// barHighRecall is the minimum recall of planted high-severity defects.
 const barHighRecall = 0.8
 
 type Finding struct {
@@ -137,8 +136,6 @@ func ratio(n, d int) *float64 {
 	return &r
 }
 
-// Summarize totals case scores. The bar requires high-severity recall of at
-// least barHighRecall and no blocking result on any clean case.
 func Summarize(scores []CaseScore) Summary {
 	m := Summary{Cases: len(scores)}
 	for _, s := range scores {

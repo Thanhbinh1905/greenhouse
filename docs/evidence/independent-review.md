@@ -4,7 +4,7 @@
 
 The standalone controller admits one explicit Pi invocation per run. Prepare binds intent, a full target commit ID, selected committed diff, and trusted per-user executable/model configuration. Dispatch binds resolved rule bytes and consumes usage before launch. The reviewer has an ephemeral session, private working and agent directories, read-only tools, and disabled project resources. No author transcript, auth file, custom provider file, or project instructions are loaded automatically.
 
-The finding ID hashes origin, path, range, rule, and normalized explanation. New runs inherit outstanding findings. Omission never resolves them. This is deterministic normalization, not semantic root-cause matching. Review is patch-based, not a complete source-tree assessment. Read-only tools are not an OS sandbox.
+The finding ID hashes origin, path, range, rule, and normalized explanation. New runs inherit outstanding findings. Omission never resolves them. This is deterministic normalization, not semantic root-cause matching. Review covers the diff and the candidate content of changed files, not the complete source tree. Read-only tools are not an OS sandbox.
 
 ## Executable evidence
 
@@ -22,6 +22,6 @@ The finding ID hashes origin, path, range, rule, and normalized explanation. New
 
 ## Limits
 
-No paid model or live provider compliance evaluation ran. The adapter targets Pi 1.5.0 flags and JSON events observed locally. Credentials must already be available through provider environment variables. Raw transcripts and stderr are bounded in memory and withheld from durable logs; execution summaries expose byte counts and status. Orphan execution after a daemon crash remains unknown and blocks replacement; the controller never signals a stored PID or relaunches it.
+Live provider runs are recorded in [the review evaluation](review-eval/README.md). The adapter targets Pi 1.5.0 flags and JSON events observed locally. Credentials must already be available through provider environment variables. Raw transcripts and stderr are bounded in memory and withheld from durable logs; execution summaries expose byte counts and status. Orphan execution after a daemon crash remains unknown and blocks replacement; the controller never signals a stored PID or relaunches it.
 
 Repairs, finding resolution, full-pipeline automation, acceptance, cap decisions, recovery, repository executable authority, publication, forge operations, and the Posse adapter remain unsupported. An independent exact-head review of this implementation belongs to the subsequent Review Task; deterministic fake responses are not that review.

@@ -210,8 +210,6 @@ type reviewFile struct {
 	Path, Lines string
 }
 
-// candidateFiles returns the candidate content of each changed path that
-// still exists, with candidate line numbers, so findings cite exact lines.
 func candidateFiles(worktree, candidate string, names []string) ([]reviewFile, error) {
 	listing, e := gitRead(worktree, append([]string{"--literal-pathspecs", "ls-tree", "-r", "-z", "--full-tree", candidate, "--"}, names...)...)
 	if e != nil {
@@ -231,7 +229,7 @@ func candidateFiles(worktree, candidate string, names []string) ([]reviewFile, e
 		var numbered strings.Builder
 		for i, line := range strings.SplitAfter(string(content), "\n") {
 			if line != "" {
-				fmt.Fprintf(&numbered, "%d: %s", i+1, strings.TrimSuffix(line, "\n")+"\n")
+				fmt.Fprintf(&numbered, "%d: %s\n", i+1, strings.TrimSuffix(line, "\n"))
 			}
 		}
 		files = append(files, reviewFile{path, numbered.String()})

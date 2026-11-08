@@ -209,7 +209,6 @@ func stopDaemon(home string) {
 type piEvents struct {
 	Answer, Provider, Model, Thinking string
 	Usage                             Usage
-	Millis                            int64
 }
 
 func parseEvents(b []byte) piEvents {
@@ -224,7 +223,6 @@ func parseEvents(b []byte) piEvents {
 				Provider string `json:"provider"`
 				Model    string `json:"model"`
 				Thinking string `json:"thinkingLevel"`
-				Duration int64  `json:"durationMs"`
 				Content  []struct {
 					Type string `json:"type"`
 					Text string `json:"text"`
@@ -246,7 +244,6 @@ func parseEvents(b []byte) piEvents {
 		}
 		m := ev.Message
 		p.Provider, p.Model, p.Thinking = m.Provider, m.Model, m.Thinking
-		p.Millis += m.Duration
 		p.Usage.Input += m.Usage.Input
 		p.Usage.Output += m.Usage.Output
 		p.Usage.CacheRead += m.Usage.CacheRead
@@ -263,6 +260,22 @@ func parseEvents(b []byte) piEvents {
 	return p
 }
 
+// compactEvents drops message_update events. They stream deltas whose final
+// content the matching message_end event repeats.
+func compactEvents(b []byte) []byte {
+	var out bytes.Buffer
+	for _, line := range bytes.SplitAfter(b, []byte("\n")) {
+		var ev struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(line, &ev) == nil && ev.Type == "message_update" {
+			continue
+		}
+		out.Write(line)
+	}
+	return out.Bytes()
+}
+
 func modelFindings(answer string) json.RawMessage {
 	var v struct {
 		Findings json.RawMessage `json:"findings"`
@@ -273,8 +286,6 @@ func modelFindings(answer string) json.RawMessage {
 	return v.Findings
 }
 
-// runCase reviews one case through an isolated Greenhouse daemon and returns
-// its record. Capture files stay in capture for the caller to publish.
 func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) CaseRecord {
 	rec := CaseRecord{ID: k.ID}
 	fail := func(err error) CaseRecord {
@@ -360,6 +371,9 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	rec.InputVerified = err == nil && bytes.Equal(delivered, x.Input)
 	events, _ := os.ReadFile(filepath.Join(capture, "events.jsonl"))
 	p := parseEvents(events)
+	if err := os.WriteFile(filepath.Join(capture, "events.jsonl"), compactEvents(events), 0o600); err != nil {
+		return fail(err)
+	}
 	rec.ReportedProvider, rec.ReportedModel, rec.ThinkingLevel, rec.Usage = p.Provider, p.Model, p.Thinking, p.Usage
 	rec.ModelAnswer = p.Answer
 	rec.ModelFindings = modelFindings(p.Answer)
@@ -387,8 +401,6 @@ func secretValues() []string {
 	return out
 }
 
-// redactTree replaces every credential-like environment value found in files
-// under dir.
 func redactTree(dir string) error {
 	secrets := secretValues()
 	return filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {

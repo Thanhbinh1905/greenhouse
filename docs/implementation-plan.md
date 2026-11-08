@@ -44,7 +44,7 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
 - Area B: raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.
-- Area C: provider-backed behavioral evaluations, full-tree review snapshots, explicit finding resolution, and OS confinement. Pi review is patch-based with fresh context and read-only tools.
+- Area C: full-tree review snapshots, explicit finding resolution, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; fixer evaluation is not.
 - Area D: pipeline stages other than independent review and explicitly authorized one-pass repair/check/commit; operational ask/auto/YOLO decisions; automatic retries; acceptance, final-fix, rethink, and discard.
 - Area E and D2: publication, forge and CI, explicit recovery for unknown candidate outcomes, persistent cross-daemon ref-lease reconciliation, provider-backed fixer evaluation, and independently exact-head review.
 - Area F: finding-resolution responses, transcript logs, event subscriptions, recovery, and the Posse adapter. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
