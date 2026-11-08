@@ -284,14 +284,11 @@ func parseReview(b []byte, x *Execution) (*Verdict, error) {
 			Type    string `json:"type"`
 			Aborted *bool  `json:"aborted"`
 			Message struct {
-				Role     string `json:"role"`
-				Provider string `json:"provider"`
-				Model    string `json:"model"`
-				Stop     string `json:"stopReason"`
-				Content  []struct {
-					Type string `json:"type"`
-					Text string `json:"text"`
-				} `json:"content"`
+				Role     string          `json:"role"`
+				Provider string          `json:"provider"`
+				Model    string          `json:"model"`
+				Stop     string          `json:"stopReason"`
+				Content  json.RawMessage `json:"content"`
 			} `json:"message"`
 		}
 		if err := uniqueJSON(json.NewDecoder(bytes.NewReader(scanner.Bytes()))); err != nil {
@@ -313,7 +310,14 @@ func parseReview(b []byte, x *Execution) (*Verdict, error) {
 			if ev.Message.Stop != "stop" {
 				continue
 			}
-			for _, c := range ev.Message.Content {
+			var content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			}
+			if json.Unmarshal(ev.Message.Content, &content) != nil {
+				return nil, errors.New("malformed assistant content")
+			}
+			for _, c := range content {
 				if c.Type == "text" {
 					text += c.Text
 				}
