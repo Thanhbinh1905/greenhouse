@@ -833,7 +833,7 @@ func gitPathIgnored(root, name string) (bool, error) {
 	}
 }
 
-func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode os.FileMode) error) error {
+func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode os.FileMode, walkErr error) error) error {
 	tracked, err := gitRead(root, "ls-files", "-z")
 	if err != nil {
 		return err
@@ -844,7 +844,25 @@ func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode o
 	}
 	return filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
-			return err
+			name, relErr := filepath.Rel(root, path)
+			if relErr != nil {
+				return relErr
+			}
+			info, statErr := os.Lstat(path)
+			if statErr != nil {
+				return err
+			}
+			if !info.IsDir() {
+				return err
+			}
+			ignored, ignoreErr := gitPathIgnored(root, name)
+			if ignoreErr != nil {
+				return ignoreErr
+			}
+			if ignored {
+				return filepath.SkipDir
+			}
+			return visit(path, name, info.Mode(), err)
 		}
 		if path == filepath.Join(root, ".git") && entry.IsDir() {
 			return filepath.SkipDir
@@ -883,7 +901,7 @@ func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode o
 		if ignored {
 			return nil
 		}
-		return visit(path, name, info.Mode())
+		return visit(path, name, info.Mode(), nil)
 	})
 }
 
@@ -903,7 +921,11 @@ func capturePartial(x *Repair) {
 	for _, name := range names {
 		untrackedNames[name] = true
 	}
-	walkErr := walkUntrackedSpecialFiles(x.Worktree, func(_ string, name string, _ os.FileMode) error {
+	walkErr := walkUntrackedSpecialFiles(x.Worktree, func(_, name string, _ os.FileMode, walkErr error) error {
+		if walkErr != nil {
+			fmt.Fprintf(w, "untracked: %s (directory unavailable: %v)\n", name, walkErr)
+			return filepath.SkipDir
+		}
 		if !untrackedNames[name] {
 			names = append(names, name)
 			untrackedNames[name] = true
@@ -960,7 +982,18 @@ func capturePartial(x *Repair) {
 }
 
 func removeUntrackedSpecialFiles(root string) error {
-	return walkUntrackedSpecialFiles(root, func(path, _ string, _ os.FileMode) error {
+	if err := walkUntrackedSpecialFiles(root, func(path, _ string, mode os.FileMode, walkErr error) error {
+		if walkErr != nil {
+			return os.Chmod(path, mode.Perm()|0700)
+		}
+		return nil
+	}); err != nil {
+		return err
+	}
+	return walkUntrackedSpecialFiles(root, func(path, _ string, _ os.FileMode, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
 		return os.Remove(path)
 	})
 }
