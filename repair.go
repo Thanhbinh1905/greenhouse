@@ -20,6 +20,7 @@ import (
 )
 
 type FixerConfig struct {
+	Backend    string         `json:"backend,omitempty"`
 	Executable string         `json:"executable"`
 	Model      string         `json:"model"`
 	Provider   ProviderConfig `json:"provider"`
@@ -36,32 +37,38 @@ type CheckResult struct {
 	Status           string   `json:"status"`
 }
 type Repair struct {
-	ID               string        `json:"id"`
-	Stage            string        `json:"stage,omitempty"`
-	Actor            string        `json:"actor"`
-	Binding          string        `json:"binding"`
-	Config           FixerConfig   `json:"config"`
-	ConfigDigest     string        `json:"config_digest"`
-	ExecutableDigest string        `json:"executable_digest"`
-	CheckDigests     []string      `json:"check_executable_digests"`
-	Selected         []Finding     `json:"selected"`
-	Paths            []string      `json:"paths"`
-	Args             []string      `json:"args"`
-	Input            []byte        `json:"input"`
-	InputDigest      string        `json:"input_digest"`
-	Rules            InputIdentity `json:"rules"`
-	Worktree         string        `json:"worktree"`
-	Ref              string        `json:"ref"`
-	Base             string        `json:"base"`
-	Head             string        `json:"head"`
-	Parent           string        `json:"parent"`
-	Diff             string        `json:"diff"`
-	Status           string        `json:"status"`
-	Writer           string        `json:"writer"`
-	Checks           []CheckResult `json:"checks"`
-	Log              string        `json:"log"`
-	Handback         string        `json:"handback"`
-	Authority        string        `json:"authority,omitempty"`
+	ID               string          `json:"id"`
+	Stage            string          `json:"stage,omitempty"`
+	Actor            string          `json:"actor"`
+	Binding          string          `json:"binding"`
+	Config           FixerConfig     `json:"config"`
+	ConfigDigest     string          `json:"config_digest"`
+	ExecutableDigest string          `json:"executable_digest"`
+	CheckDigests     []string        `json:"check_executable_digests"`
+	Selected         []Finding       `json:"selected"`
+	Paths            []string        `json:"paths"`
+	Args             []string        `json:"args"`
+	Input            []byte          `json:"input"`
+	InputDigest      string          `json:"input_digest"`
+	Rules            InputIdentity   `json:"rules"`
+	Worktree         string          `json:"worktree"`
+	Ref              string          `json:"ref"`
+	Base             string          `json:"base"`
+	Head             string          `json:"head"`
+	Parent           string          `json:"parent"`
+	Diff             string          `json:"diff"`
+	Status           string          `json:"status"`
+	Writer           string          `json:"writer"`
+	Checks           []CheckResult   `json:"checks"`
+	Log              string          `json:"log"`
+	Handback         string          `json:"handback"`
+	Authority        string          `json:"authority,omitempty"`
+	Budget           string          `json:"budget,omitempty"`
+	Failure          *BackendFailure `json:"failure,omitempty"`
+	Partial          string          `json:"partial,omitempty"`
+	Resumed          bool            `json:"resumed,omitempty"`
+	CostUSD          float64         `json:"cost_usd,omitempty"`
+	Tokens           int             `json:"tokens,omitempty"`
 }
 
 func executableDigest(path string) (string, error) {
@@ -171,21 +178,8 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	if custodyHeld(s, r) {
 		return errors.New("repository candidate custody is already held")
 	}
-	cfg, e := trustedFixer()
+	cfg, e := admitFixer(settings.FixerBackend, settings.FixerModel)
 	if e != nil {
-		return e
-	}
-	providers, e := trustedProviders()
-	if e != nil {
-		return e
-	}
-	provider, _, ok := strings.Cut(settings.FixerModel, "/")
-	if !ok || providers.Providers[provider].BaseURL == "" {
-		return errors.New("fixer model provider is unconfigured")
-	}
-	cfg.Model = settings.FixerModel
-	cfg.Provider = providers.Providers[provider]
-	if e = preflightModel(settings.FixerModel); e != nil {
 		return e
 	}
 	if e = gitHazards(r.Submitted.Worktree); e != nil {
@@ -247,7 +241,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 		}
 	}
 	id := opaque()
-	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Paths: names, Args: fixerArgs(cfg.Model), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready"}
+	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready"}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Diff string
 		Paths              []string
@@ -526,17 +520,11 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("refused", errors.New("source moved before writer start"))
 		return
 	}
-	trusted, err := trustedFixer()
-	trusted.Model = x.Config.Model
-	providers, providerErr := trustedProviders()
-	provider, _, _ := strings.Cut(x.Config.Model, "/")
-	trusted.Provider = providers.Providers[provider]
-	fixerDigest, digestErr := executableDigest(x.Config.Executable)
-	if err != nil || providerErr != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
+	if !fixerUnchanged(x) {
 		fail("refused", errors.New("trusted fixer or checks changed after authorization"))
 		return
 	}
-	if x.Stage == "" {
+	if x.Stage == "" && !x.Resumed {
 		if e = os.MkdirAll(filepath.Dir(x.Worktree), 0700); e != nil {
 			fail("failed", e)
 			return
@@ -569,14 +557,8 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	defer os.RemoveAll(agentDir)
-	piConfig := ReviewerConfig{Executable: x.Config.Executable, Model: x.Config.Model, Provider: x.Config.Provider}
-	_, err = trustedReviewer()
-	if err != nil {
-		fail("unconfigured", errors.New("trusted Pi installation unavailable"))
-		return
-	}
-	if err := writeAgentModels(filepath.Join(agentDir, "agent"), piConfig); err != nil {
-		fail("unconfigured", errors.New("trusted fixer provider configuration unavailable"))
+	if e = prepareFixerAgent(x, agentDir); e != nil {
+		fail("unconfigured", e)
 		return
 	}
 	x.Writer = "unknown"
@@ -584,14 +566,20 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	if !save() {
 		return
 	}
-	_, log, stdout, e := runCaptured(ctx, x.Worktree, x.Config.Executable, x.Args, x.Input, filepath.Join(agentDir, "agent"))
-	x.Log = log
+	run := runFixer(ctx, x, filepath.Join(agentDir, "agent"))
+	stdout, e := run.stdout, run.err
+	x.Log = run.log
 	if errors.Is(e, ErrWriterTreeUnknown) {
 		x.Writer = "unknown"
 		fail("unknown-outcome", e)
 		return
 	}
 	x.Writer = "stopped"
+	if run.failure != nil {
+		pauseRepair(x, run.failure)
+		save()
+		return
+	}
 	if errors.Is(e, context.Canceled) {
 		x.Status = "cancelled"
 		save()
@@ -601,7 +589,11 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("fixer-failed", e)
 		return
 	}
-	if category, reason := escalation(stdout); x.Stage != "" && category != "" {
+	if e = fixerModelReported(x, run); e != nil {
+		fail("fixer-failed", e)
+		return
+	}
+	if category, reason := fixerEscalation(x, stdout, run.stderr); x.Stage != "" && category != "" {
 		x.Authority = category
 		fail("needs-authority", errors.New(reason))
 		return
@@ -674,13 +666,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 			return
 		}
 	}
-	trusted, err = trustedFixer()
-	trusted.Model = x.Config.Model
-	providers, providerErr = trustedProviders()
-	provider, _, _ = strings.Cut(x.Config.Model, "/")
-	trusted.Provider = providers.Providers[provider]
-	fixerDigest, digestErr = executableDigest(x.Config.Executable)
-	if err != nil || providerErr != nil || digest(trusted) != x.ConfigDigest || digestErr != nil || fixerDigest != x.ExecutableDigest {
+	if !fixerUnchanged(x) {
 		fail("authority-changed", errors.New("trusted fixer or check configuration changed before commit"))
 		return
 	}

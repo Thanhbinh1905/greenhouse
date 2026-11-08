@@ -213,3 +213,17 @@ func writeAgentModels(agentDir string, config ReviewerConfig) error {
 	}
 	return os.WriteFile(filepath.Join(agentDir, "models.json"), data, 0600)
 }
+
+func preflightPi(config ReviewerConfig) error {
+	if config.Backend != "" && config.Backend != backendPi {
+		return nil
+	}
+	catalog, err := providerModelCatalog(config.Executable)
+	if err != nil {
+		return err
+	}
+	if !catalog[config.Model] {
+		return errors.New("model is not reported by Pi; add custom models to private providers.json")
+	}
+	return preflightModel(config.Model)
+}

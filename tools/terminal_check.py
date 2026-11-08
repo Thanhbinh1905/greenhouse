@@ -103,12 +103,12 @@ def session(width, commands, label=""):
 
 
 try:
-    narrow = session(56, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "a", "q"])
+    narrow = session(56, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "", "a", "q"])
     state = axi()
     assert state["run"]["configs"][-1]["settings"]["mode"] == "ask"
     assert state["defaults"]["mode"] == "auto"
     assert state["run"]["configs"][-1]["settings"]["rules"] == ["unslop"]
-    wide = session(100, ["i", "s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "d", ":commit", "i", "n", "new", "q"])
+    wide = session(100, ["i", "s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "", "d", ":commit", "i", "n", "new", "q"])
     next_state = axi()
     assert state["run_id"] != next_state["run_id"]
     assert state["run"]["candidate"] != next_state["run"]["candidate"]
@@ -116,18 +116,18 @@ try:
     assert "Mode: ask" in wide
     session(56, ["q"], "-reattach")
     for width in [56, 100]:
-        rules = session(width, ["r", "c", "q"], "-rules")
+        rules = session(width, ["l", "c", "q"], "-rules")
         resolved = axi()
         assert resolved["rules_ready"]
         assert resolved["rules"][0]["status"] == "resolved"
         assert "Digest:" in rules and "[advisory]" in rules
         assert "Flag inflated prose" in rules
-        failures = session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "missing,?optional", "a", "r", "c", "q"], "-failures")
+        failures = session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "missing,?optional", "", "a", "l", "c", "q"], "-failures")
         failed = axi()
         assert not failed["rules_ready"]
         assert all(rule["status"] == "failed" for rule in failed["rules"])
         assert "Load error:" in failures
-        session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "a", "q"], "-restore")
+        session(width, ["s", "ask one-pass 7", "pi", "openai/gpt-5.6-luna", "pi", "openai/gpt-5.6-luna", "unslop", "", "a", "q"], "-restore")
     assert axi()["run_id"] == next_state["run_id"]
     target = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=repo, env=env, text=True).strip()
     (repo / "sample.txt").write_text("candidate\n")
@@ -161,7 +161,7 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     fixer_config = root / "state" / "fixer.json"
     fixer_config.write_text(json.dumps({"executable":str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
     fixer_config.chmod(0o600)
-    session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Inspect committed sample", target, "r", "c", "v", "q"], "-dispatch")
+    session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Inspect committed sample", target, "l", "c", "v", "q"], "-dispatch")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and axi()["run"]["status"] == "running":
         time.sleep(0.02)
@@ -282,7 +282,7 @@ open("sample.txt","w").write("repaired\\n")
         target = full_repo(name, dict(commands, **extra))
         width = widths[name]
         limit = 3 if name == "full-unreviewed" else 6
-        session(width, ["s", f"auto full {limit}", "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        session(width, ["s", f"auto full {limit}", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
         state = settle()
         other = 100 if width == 56 else 56
         text = session(width, ["i", "q"], f"-{name}-result")
@@ -315,7 +315,7 @@ open("sample.txt","w").write("repaired\\n")
         if cleans:
             (root / "fix-cleans").write_text("1")
         target = full_repo(name, commands)
-        session(width, ["s", settings, "pi", "fixture/model", "pi", "fixture/model", "unslop", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        session(width, ["s", settings, "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
         parked = settle()
         decision = parked["decision"]
         asked = session(width, ["i", "q"], f"-{name}-decision")
@@ -359,7 +359,41 @@ open("sample.txt","w").write("repaired\\n")
             assert state["run"]["status"] != "locally-ready" and "Outcome:" not in text
         if name == "full-cap-final-fix":
             assert "Final-fix by terminal: repair 1/1, final review 1/1" in text
-    print(f"PASS: 56- and 100-column PTY selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
+    fixtures = Path(__file__).resolve().parent.parent / "testdata" / "backends"
+    fake_cli = (fixtures / "fake-cli.py").read_text().replace("FIXTURES", repr(str(fixtures)))
+    for backend in ["claude", "codex"]:
+        (root / f"fake-{backend}").write_text(fake_cli)
+        (root / f"fake-{backend}").chmod(0o700)
+    backends = root / "state" / "backends.json"
+    backends.write_text(json.dumps({"claude": {"executable": str(root / "fake-claude")},
+                                    "codex": {"executable": str(root / "fake-codex"), "provider": {"base_url": "http://127.0.0.1:1/v1"}}}))
+    backends.chmod(0o600)
+    for width in [56, 100]:
+        target = full_repo(f"paused-{width}", commands)
+        (root / "codex-modes").write_text("quota")
+        session(width, ["s", "auto one-pass 4", "codex", "gpt-5.6-luna", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "l", "v", "q"], f"-paused-{width}")
+        paused = settle()
+        assert paused["run"]["status"] == "paused" and paused["run"]["review_used"] == 0, paused["run"]
+        sentence = paused["explanation"]
+        assert sentence.startswith("Codex quota exhausted; it resets at ") and "Auto mode will resume at" in sentence, sentence
+        assert sentence.endswith("Press r to rerun now, a to cancel auto-resume, s to change agent."), sentence
+        status = session(width, ["i", "q"], f"-paused-{width}-status")
+        flat = " ".join(status.split())
+        assert "PAUSED: " + sentence in flat and "backend quota" in flat and "Scheduled resume:" in flat, status
+        assert "age\nnt" not in status and "rerun\n now" not in status, status
+        session(width, ["a", "q"], f"-paused-{width}-cancel-auto")
+        held = axi()
+        assert held["run"]["pause"].get("auto_resume_at") is None and "cancelled by terminal" in held["run"]["pause"]["auto_note"], held["run"]["pause"]
+        assert "Automatic resume cancelled by terminal. Press r to rerun now, s to change agent." in held["explanation"], held["explanation"]
+        switched = session(width, ["s", "auto one-pass 4", "claude", "claude-haiku-5-5", "pi", "fixture/model", "unslop", "", "a", "l", "r", "q"], f"-paused-{width}-switch-rerun")
+        done = settle()
+        assert done["run"]["status"] == "clean-review", done["run"]
+        assert done["run"]["review"]["result"]["reported_model"] == "claude-haiku-5-5" and done["run"]["review_used"] == 1
+        switch = [e for e in done["run"]["events"] if e["kind"] == "backend-switch" and e["from"] == "codex gpt-5.6-luna"]
+        assert switch and switch[0]["actor"] == "terminal" and switch[0]["to"] == "claude claude-haiku-5-5", done["run"]["events"]
+        result = session(width, ["i", "q"], f"-paused-{width}-result")
+        assert "Reported model: claude/claude-haiku-5-5" in result.replace("\n", ""), result
+    print(f"PASS: 56- and 100-column PTY backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
     provider.shutdown()
     pidfile = root / "state" / "pid"

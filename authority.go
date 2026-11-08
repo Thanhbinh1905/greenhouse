@@ -412,6 +412,10 @@ func escalation(stdout []byte) (string, string) {
 			}
 		}
 	}
+	return escalationText(text)
+}
+
+func escalationText(text string) (string, string) {
 	var answer struct {
 		Escalate string `json:"escalate"`
 		Reason   string `json:"reason"`

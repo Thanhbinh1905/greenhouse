@@ -24,6 +24,8 @@ type runOptions struct {
 	Out        string
 	Model      string
 	Pi         string
+	Backend    string
+	Agent      string
 	BaseURL    string
 	Label      string
 	Cases      []string
@@ -263,6 +265,40 @@ func parseEvents(b []byte) piEvents {
 	return p
 }
 
+func parseClaudeEvents(b []byte) piEvents {
+	p := piEvents{Provider: "claude"}
+	sc := bufio.NewScanner(bytes.NewReader(b))
+	sc.Buffer(make([]byte, 4096), 8*1024*1024)
+	for sc.Scan() {
+		var ev struct {
+			Type       string          `json:"type"`
+			Result     string          `json:"result"`
+			Structured json.RawMessage `json:"structured_output"`
+			Cost       float64         `json:"total_cost_usd"`
+			Usage      map[string]struct {
+				Input      int `json:"inputTokens"`
+				Output     int `json:"outputTokens"`
+				CacheRead  int `json:"cacheReadInputTokens"`
+				CacheWrite int `json:"cacheCreationInputTokens"`
+				Thinking   int `json:"thinkingTokens"`
+			} `json:"modelUsage"`
+		}
+		if json.Unmarshal(sc.Bytes(), &ev) != nil || ev.Type != "result" {
+			continue
+		}
+		p.Answer = ev.Result
+		if len(ev.Structured) > 0 && string(ev.Structured) != "null" {
+			p.Answer = string(ev.Structured)
+		}
+		p.Usage.CostUSD = ev.Cost
+		for model, u := range ev.Usage {
+			p.Model = model
+			p.Usage.Input, p.Usage.Output, p.Usage.CacheRead, p.Usage.CacheWrite, p.Usage.Reasoning = u.Input, u.Output, u.CacheRead, u.CacheWrite, u.Thinking
+		}
+	}
+	return p
+}
+
 // compactEvents drops message_update events. They stream deltas whose final
 // content the matching message_end event repeats.
 func compactEvents(b []byte) []byte {
@@ -310,7 +346,15 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	}
 	rec.Target, rec.Candidate = target, head
 	provider, _, _ := strings.Cut(o.Model, "/")
-	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture})
+	executable := o.Pi
+	if o.Backend == "claude" {
+		executable = o.Agent
+		backends, _ := json.Marshal(map[string]any{"claude": map[string]string{"executable": shimBin}})
+		if err := os.WriteFile(filepath.Join(home, "backends.json"), backends, 0o600); err != nil {
+			return fail(err)
+		}
+	}
+	cfg, _ := json.Marshal(shimConfig{Pi: executable, Capture: capture})
 	cfgPath := filepath.Join(work, "shim.json")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
@@ -339,7 +383,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if err != nil {
 		return fail(err)
 	}
-	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": k.Rules, "reviewer_backend": "pi", "reviewer_model": o.Model, "fixer_backend": "pi", "fixer_model": o.Model}
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": k.Rules, "reviewer_backend": o.Backend, "reviewer_model": o.Model, "fixer_backend": "pi", "fixer_model": "openai/gpt-5.6-luna"}
 	if v, err = a.mutate(v, "apply", map[string]any{"settings": settings, "reason": "evaluation case " + k.ID}); err != nil {
 		return fail(err)
 	}
@@ -388,6 +432,9 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	rec.InputVerified = err == nil && bytes.Equal(delivered, x.Input)
 	events, _ := os.ReadFile(filepath.Join(capture, "events.jsonl"))
 	p := parseEvents(events)
+	if o.Backend == "claude" {
+		p = parseClaudeEvents(events)
+	}
 	if err := os.WriteFile(filepath.Join(capture, "events.jsonl"), compactEvents(events), 0o600); err != nil {
 		return fail(err)
 	}
@@ -502,7 +549,11 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	piVersion, err := command("", nil, o.Pi, "--version")
+	agent, backend := o.Pi, "pi-json-v1"
+	if o.Backend == "claude" {
+		agent, backend = o.Agent, "claude-stream-json-v1"
+	}
+	piVersion, err := command("", nil, agent, "--version")
 	if err != nil {
 		return nil, err
 	}
@@ -510,7 +561,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	secrets := secretValues()
 	jobs := make(chan int)
@@ -628,7 +679,11 @@ func writeReport(dir string, r *Report) error {
 	var md strings.Builder
 	s := r.Summary
 	fmt.Fprintf(&md, "# Review evaluation: %s\n\n", r.Config.Label)
-	fmt.Fprintf(&md, "- Model: `%s` through `%s`, Pi %s\n", r.Config.Model, r.Config.Backend, r.Config.PiVersion)
+	agent, pricing := "Pi "+r.Config.PiVersion, "Pi catalog pricing"
+	if r.Config.Backend == "claude-stream-json-v1" {
+		agent, pricing = "Claude Code "+strings.TrimSuffix(r.Config.PiVersion, " (Claude Code)"), "Claude Code list pricing"
+	}
+	fmt.Fprintf(&md, "- Model: `%s` through `%s`, %s\n", r.Config.Model, r.Config.Backend, agent)
 	fmt.Fprintf(&md, "- Greenhouse: `%s`, corpus v%d revision %d `%s`\n", r.Config.GreenhouseVersion, r.Config.CorpusVersion, r.Config.CorpusRevision, r.Config.CorpusDigest)
 	fmt.Fprintf(&md, "- Scored with corpus revision %d `%s`\n", r.Config.ScoredRevision, r.Config.ScoredDigest)
 	fmt.Fprintf(&md, "- Started %s, finished %s, parallel %d\n\n", r.Config.Started.Format(time.RFC3339), r.Config.Finished.Format(time.RFC3339), r.Config.Parallel)
@@ -647,7 +702,7 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Eligible findings without an adjudication record (not credited) | %d |\n", s.Unadjudicated)
 	fmt.Fprintf(&md, "| Blocking results on clean cases | %d |\n", s.CleanBlocking)
 	fmt.Fprintf(&md, "| Inconclusive reviews | %d/%d |\n", s.Inconclusive, s.Cases)
-	fmt.Fprintf(&md, "| Cost (Pi catalog pricing) | $%.4f |\n", r.CostUSD)
+	fmt.Fprintf(&md, "| Cost (%s) | $%.4f |\n", pricing, r.CostUSD)
 	fmt.Fprintf(&md, "| Latency total / mean / max | %.1fs / %.1fs / %.1fs |\n\n", float64(r.LatencyMillis.Total)/1000, float64(r.LatencyMillis.Mean)/1000, float64(r.LatencyMillis.Max)/1000)
 	fmt.Fprintf(&md, "| Case | Status | Detected | False positives | Blocking | Priority | Cost | Latency |\n|---|---|---|---|---|---|---|---|\n")
 	recs := append([]CaseRecord(nil), r.Cases...)
@@ -655,6 +710,6 @@ func writeReport(dir string, r *Report) error {
 	for _, c := range recs {
 		fmt.Fprintf(&md, "| %s | %s | %d/%d | %d | %d | %d/%d | $%.4f | %.1fs |\n", c.ID, c.Status, c.Score.Detected, c.Score.Expected, c.Score.FalsePositives, c.Score.Blocking, c.Score.PriorityCorrect, c.Score.PriorityJudged, c.Usage.CostUSD, float64(c.LatencyMillis)/1000)
 	}
-	md.WriteString("\nPer-case `input.json` holds the exact bytes Greenhouse delivered to Pi on stdin, `argv.json` the exact arguments, and `events.jsonl` Pi's raw JSON event stream.\n")
+	fmt.Fprintf(&md, "\nPer-case `input.json` holds the exact bytes Greenhouse delivered to the reviewer on stdin, `argv.json` the exact arguments, and `events.jsonl` the reviewer's raw JSON event stream through `%s`.\n", r.Config.Backend)
 	return os.WriteFile(filepath.Join(dir, "report.md"), []byte(md.String()), 0o644)
 }

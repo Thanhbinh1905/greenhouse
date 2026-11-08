@@ -135,6 +135,8 @@ func dispatch(sub string, args []string) error {
 		fs.StringVar(&o.Label, "label", "", "short description recorded in the report")
 		fs.StringVar(&o.Pi, "pi", "", "absolute Pi executable (default: pi on PATH)")
 		fs.StringVar(&o.BaseURL, "base-url", "", "route the model's provider to this base URL inside the reviewer's private agent directory")
+		fs.StringVar(&o.Backend, "backend", "pi", "reviewer backend: pi or claude")
+		fs.StringVar(&o.Agent, "agent", "", "absolute executable of a non-Pi backend (default: the backend name on PATH)")
 		cases := fs.String("cases", "", "comma-separated case IDs (default: all)")
 		fs.IntVar(&o.Parallel, "parallel", 1, "cases reviewed concurrently")
 		fs.StringVar(&o.JudgeModel, "judge-model", "", "judge model for adjudication records (default: -model)")
@@ -144,6 +146,16 @@ func dispatch(sub string, args []string) error {
 		o.Corpus = *corpus
 		if o.Model == "" || o.Out == "" || o.Parallel < 1 {
 			return fmt.Errorf("-model, -out and a positive -parallel are required\n%s", usage)
+		}
+		if o.Backend != "pi" && o.Backend != "claude" {
+			return fmt.Errorf("-backend must be pi or claude\n%s", usage)
+		}
+		if o.Backend == "claude" && o.Agent == "" {
+			p, err := exec.LookPath("claude")
+			if err != nil {
+				return err
+			}
+			o.Agent = p
 		}
 		if o.JudgeModel == "" {
 			o.JudgeModel = o.Model

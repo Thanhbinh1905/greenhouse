@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -19,6 +18,7 @@ import (
 )
 
 type ReviewerConfig struct {
+	Backend    string         `json:"backend,omitempty"`
 	Executable string         `json:"executable"`
 	Model      string         `json:"model"`
 	Provider   ProviderConfig `json:"provider"`
@@ -64,6 +64,7 @@ type Execution struct {
 	Status       string         `json:"status"`
 	Log          string         `json:"log"`
 	Result       *Verdict       `json:"result,omitempty"`
+	Budget       string         `json:"budget,omitempty"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -124,15 +125,21 @@ func trustedReviewer() (ReviewerConfig, error) {
 	return cfg, nil
 }
 func admitReview(r *Run) error {
+	if settings := r.Configs[len(r.Configs)-1].Settings; r.ReviewUsed+r.RepairUsed >= settings.Limit {
+		return errors.New("review budget exhausted")
+	}
+	if r.ReviewUsed > 0 {
+		return errors.New("one-pass review already consumed")
+	}
+	return admitReviewAgain(r)
+}
+func admitReviewAgain(r *Run) error {
 	if r.Intent == "" || r.Target == "" {
 		return errors.New("explicit intent and immutable target required")
 	}
 	settings := r.Configs[len(r.Configs)-1].Settings
 	if r.ReviewUsed+r.RepairUsed >= settings.Limit {
 		return errors.New("review budget exhausted")
-	}
-	if r.ReviewUsed > 0 {
-		return errors.New("one-pass review already consumed")
 	}
 	if settings.Preset != "one-pass" {
 		return errors.New("the full preset runs through the pipeline action")
@@ -165,21 +172,14 @@ const fullReviewContract = reviewContract + ` Also include "documentation":{"sta
 
 func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, error) {
 	settings := r.Configs[len(r.Configs)-1].Settings
-	cfg, e := trustedReviewerFor(settings.ReviewerModel)
+	cfg, e := trustedAgent(settings.ReviewerBackend, settings.ReviewerModel)
 	if e != nil {
 		return nil, e
 	}
 	if r.Reviewer == nil || cfg != *r.Reviewer {
 		return nil, errors.New("trusted reviewer changed; prepare with a current token required")
 	}
-	catalog, e := providerModelCatalog(cfg.Executable)
-	if e != nil {
-		return nil, e
-	}
-	if !catalog[settings.ReviewerModel] {
-		return nil, errors.New("model is not reported by Pi; add custom models to private providers.json")
-	}
-	if e = preflightModel(settings.ReviewerModel); e != nil {
+	if e = preflightPi(cfg); e != nil {
 		return nil, e
 	}
 	diff, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", r.Target, r.Candidate, "--")
@@ -239,7 +239,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: "pi-json-v1", Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: reviewerArgs(cfg.Model), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
+	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", full, reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Status: "running", Log: "admitted; output and stderr are bounded and not persisted as transcripts"}, nil
 }
 
 type reviewFile struct {
@@ -301,33 +301,52 @@ func reviewerEnv() []string {
 	}
 	return env
 }
-func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string) {
-	trusted, trustErr := trustedReviewerFor(x.Config.Model)
+
+type reviewOutcome struct {
+	Status  string
+	Result  *Verdict
+	Log     string
+	Failure *BackendFailure
+	Answer  agentAnswer
+}
+
+func executeReview(ctx context.Context, x *Execution) reviewOutcome {
+	trusted, trustErr := trustedAgent(x.Config.Backend, x.Config.Model)
 	if trustErr != nil || reviewerConfigDigest(trusted) != x.ConfigDigest {
-		return "unconfigured", nil, "trusted reviewer or provider configuration changed; prepare again"
+		return reviewOutcome{Status: "unconfigured", Log: "trusted reviewer or provider configuration changed; prepare again"}
 	}
 	current, err := resolve(x.Source.Worktree)
 	if err != nil || current != x.Source {
-		return "stale", nil, "source moved before process start"
+		return reviewOutcome{Status: "stale", Log: "source moved before process start"}
 	}
 	dir, e := os.MkdirTemp("", "greenhouse-review-")
 	if e != nil {
-		return "inconclusive", nil, "private execution directory unavailable"
+		return reviewOutcome{Status: "inconclusive", Log: "private execution directory unavailable"}
 	}
 	defer os.RemoveAll(dir)
-	agentDir := filepath.Join(dir, "agent")
-	if e = writeAgentModels(agentDir, x.Config); e != nil {
-		return "inconclusive", nil, "trusted provider configuration unavailable"
+	env := agentEnv(x.Config.Backend)
+	switch x.Config.Backend {
+	case backendCodex:
+		if e = os.WriteFile(filepath.Join(dir, "schema.json"), []byte(verdictSchema(x.Full)), 0600); e != nil {
+			return reviewOutcome{Status: "inconclusive", Log: "private execution directory unavailable"}
+		}
+	case backendClaude:
+	default:
+		agentDir := filepath.Join(dir, "agent")
+		if e = writeAgentModels(agentDir, x.Config); e != nil {
+			return reviewOutcome{Status: "inconclusive", Log: "trusted provider configuration unavailable"}
+		}
+		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, x.Config.Executable, x.Args...)
 	cmd.WaitDelay = 250 * time.Millisecond
 	cmd.Dir = dir
-	cmd.Env = append(reviewerEnv(), "PI_CODING_AGENT_DIR="+agentDir)
+	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(x.Input)
 	out, stderr := &boundedBuffer{limit: 4 * 1024 * 1024}, &boundedBuffer{limit: 65536}
-	cmd.Stdout = out
+	cmd.Stdout = stallWatch(out, x.Config.Backend, cancel)
 	cmd.Stderr = stderr
 	err = cmd.Run()
 	exitCode := -1
@@ -335,15 +354,22 @@ func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string)
 		exitCode = cmd.ProcessState.ExitCode()
 	}
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
+	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
+		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message}
+	}
 	if ctx.Err() != nil {
-		return "cancelled", nil, log
+		return reviewOutcome{Status: "cancelled", Log: log}
 	}
 	if err != nil || out.exceeded || stderr.exceeded {
-		return "inconclusive", nil, log
+		return reviewOutcome{Status: "inconclusive", Log: log}
 	}
-	result, e := parseReview(out.Bytes(), x)
+	answer, e := agentReply(x, out.Bytes(), stderr.Bytes())
 	if e != nil {
-		return "inconclusive", nil, log + "; " + e.Error()
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
+	}
+	result, e := verdictFrom(answer, x)
+	if e != nil {
+		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
 	}
 	status := "clean-review"
 	if result.Verdict == "findings" {
@@ -352,61 +378,17 @@ func executeReview(ctx context.Context, x *Execution) (string, *Verdict, string)
 	if result.Verdict == "inconclusive" {
 		status = "inconclusive"
 	}
-	return status, result, log
+	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer}
 }
 func parseReview(b []byte, x *Execution) (*Verdict, error) {
-	scanner := bufio.NewScanner(bytes.NewReader(b))
-	scanner.Buffer(make([]byte, 4096), 4*1024*1024)
-	var text, provider, model string
-	settled := false
-	for scanner.Scan() {
-		var ev struct {
-			Type    string `json:"type"`
-			Aborted *bool  `json:"aborted"`
-			Message struct {
-				Role     string          `json:"role"`
-				Provider string          `json:"provider"`
-				Model    string          `json:"model"`
-				Stop     string          `json:"stopReason"`
-				Content  json.RawMessage `json:"content"`
-			} `json:"message"`
-		}
-		if err := uniqueJSON(json.NewDecoder(bytes.NewReader(scanner.Bytes()))); err != nil {
-			return nil, errors.New("ambiguous JSON event")
-		}
-		if json.Unmarshal(scanner.Bytes(), &ev) != nil || ev.Type == "" {
-			return nil, errors.New("malformed JSON event")
-		}
-		if ev.Type == "agent_settled" {
-			if ev.Aborted == nil {
-				return nil, errors.New("missing settled outcome")
-			}
-			settled = !*ev.Aborted
-		}
-		if ev.Type == "message_end" && ev.Message.Role == "assistant" {
-			text = ""
-			settled = false
-			provider, model = ev.Message.Provider, ev.Message.Model
-			if ev.Message.Stop != "stop" {
-				continue
-			}
-			var content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			}
-			if json.Unmarshal(ev.Message.Content, &content) != nil {
-				return nil, errors.New("malformed assistant content")
-			}
-			for _, c := range content {
-				if c.Type == "text" {
-					text += c.Text
-				}
-			}
-		}
+	answer, err := piAnswer(b)
+	if err != nil {
+		return nil, err
 	}
-	if scanner.Err() != nil || !settled || text == "" {
-		return nil, errors.New("missing settled final answer")
-	}
+	return verdictFrom(answer, x)
+}
+func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
+	text, provider, model := answer.Text, answer.Provider, answer.Model
 	if err := uniqueJSON(json.NewDecoder(strings.NewReader(text))); err != nil {
 		return nil, errors.New("ambiguous verdict JSON")
 	}
@@ -486,7 +468,11 @@ func parseReview(b []byte, x *Execution) (*Verdict, error) {
 	if (v.Verdict == "clean" && len(v.Findings) != 0) || (v.Verdict == "findings" && len(v.Findings) == 0) {
 		return nil, errors.New("inconsistent verdict")
 	}
-	if provider == "" || model == "" || (x.Config.Model != "" && provider+"/"+model != x.Config.Model) {
+	reported := provider + "/" + model
+	if x.Config.Backend == backendClaude || x.Config.Backend == backendCodex {
+		reported = model
+	}
+	if provider == "" || model == "" || (x.Config.Model != "" && reported != x.Config.Model) {
 		return nil, errors.New("actual model identity does not match configured exact model")
 	}
 	v.ReportedProvider, v.ReportedModel = provider, model

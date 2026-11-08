@@ -1,0 +1,5 @@
+No API key found for fixture.
+
+Use /login to log into a provider via OAuth or API key. See:
+  /home/user/.pi/agent/install/releases/1.5.0/node_modules/@earendil-works/pi-coding-agent/docs/providers.md
+  /home/user/.pi/agent/install/releases/1.5.0/node_modules/@earendil-works/pi-coding-agent/docs/models.md

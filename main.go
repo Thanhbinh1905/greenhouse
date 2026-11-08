@@ -33,6 +33,7 @@ type Settings struct {
 	ReviewerModel   string   `json:"reviewer_model"`
 	FixerBackend    string   `json:"fixer_backend"`
 	FixerModel      string   `json:"fixer_model"`
+	AutoResume      string   `json:"auto_resume,omitempty"`
 }
 type Identity struct {
 	Repository string `json:"repository"`
@@ -55,6 +56,8 @@ type Event struct {
 	After  int    `json:"after"`
 	Review int    `json:"review,omitempty"`
 	Repair int    `json:"repair,omitempty"`
+	From   string `json:"from,omitempty"`
+	To     string `json:"to,omitempty"`
 }
 type Run struct {
 	Intent        string          `json:"intent,omitempty"`
@@ -79,6 +82,9 @@ type Run struct {
 	Events        []Event         `json:"events"`
 	Predecessor   string          `json:"predecessor,omitempty"`
 	Successor     string          `json:"successor,omitempty"`
+	Pause         *BackendPause   `json:"pause,omitempty"`
+	Attempts      []Attempt       `json:"attempts,omitempty"`
+	AutoRetries   int             `json:"auto_retries,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`
@@ -99,23 +105,24 @@ type Request struct {
 	Client   string    `json:"client,omitempty"`
 }
 type Response struct {
-	Models     []string       `json:"models,omitempty"`
-	RuleScope  string         `json:"rule_scope,omitempty"`
-	Rules      []RuleEvidence `json:"rules,omitempty"`
-	RulesReady bool           `json:"rules_ready"`
-	Version    int            `json:"version"`
-	Outcome    string         `json:"outcome"`
-	Error      string         `json:"error,omitempty"`
-	RunID      string         `json:"run_id,omitempty"`
-	Input      string         `json:"input_id,omitempty"`
-	Gate       string         `json:"gate_id,omitempty"`
-	Token      string         `json:"token,omitempty"`
-	Run        *Run           `json:"run,omitempty"`
-	Defaults   Settings       `json:"defaults"`
-	Blocked    []string       `json:"blocked"`
-	Actions    []string       `json:"actions"`
-	Decision   *Decision      `json:"decision,omitempty"`
-	Budget     *Budget        `json:"budget,omitempty"`
+	Models      []string       `json:"models,omitempty"`
+	RuleScope   string         `json:"rule_scope,omitempty"`
+	Rules       []RuleEvidence `json:"rules,omitempty"`
+	RulesReady  bool           `json:"rules_ready"`
+	Version     int            `json:"version"`
+	Outcome     string         `json:"outcome"`
+	Error       string         `json:"error,omitempty"`
+	RunID       string         `json:"run_id,omitempty"`
+	Input       string         `json:"input_id,omitempty"`
+	Gate        string         `json:"gate_id,omitempty"`
+	Token       string         `json:"token,omitempty"`
+	Run         *Run           `json:"run,omitempty"`
+	Defaults    Settings       `json:"defaults"`
+	Blocked     []string       `json:"blocked"`
+	Actions     []string       `json:"actions"`
+	Decision    *Decision      `json:"decision,omitempty"`
+	Budget      *Budget        `json:"budget,omitempty"`
+	Explanation string         `json:"explanation,omitempty"`
 }
 type Receipt struct {
 	Digest string   `json:"digest"`
@@ -159,7 +166,7 @@ func snapshotDigestMatches(s Snapshot, expected string) bool {
 	return expected == digest(s) || (s.LegacyDigest != "" && s.LegacyDigest == legacySnapshotDigest(s) && expected == s.LegacyDigest)
 }
 func reviewerConfigDigest(config ReviewerConfig) string {
-	if config.Provider == (ProviderConfig{}) {
+	if config.Provider == (ProviderConfig{}) && config.Backend == "" {
 		return digest(struct {
 			Executable string `json:"executable"`
 			Model      string `json:"model"`
@@ -295,7 +302,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
+			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", x.Full, reviewerPrompt)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -407,6 +414,21 @@ func view(s *Store, r *Run) Response {
 		if r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking") {
 			v.Actions = append(v.Actions, "cancel")
 		}
+		if r.Pause != nil {
+			v.Explanation = pauseSentence(r)
+			v.Blocked = append(v.Blocked, "paused: backend "+r.Pause.Reason)
+			if safe && id == r.Submitted {
+				v.Actions = append(v.Actions, "resume", "rerun")
+				if r.Pause.AutoResumeAt != "" {
+					v.Actions = append(v.Actions, "cancel-auto-resume")
+				}
+			}
+		} else if safe && id == r.Submitted && rerunnable(r) {
+			v.Actions = append(v.Actions, "rerun")
+		}
+		if safe && id == r.Submitted && r.Successor == "" && (r.Repair == nil || r.Repair.Handback == "handed-back") && (r.Pause != nil || rerunnable(r)) {
+			v.Actions = append(v.Actions, "rerun-from-start")
+		}
 		if r.ReviewUsed+r.RepairUsed >= r.Configs[len(r.Configs)-1].Settings.Limit {
 			v.Blocked = append(v.Blocked, "combined review and repair budget exhausted")
 		}
@@ -435,7 +457,24 @@ func view(s *Store, r *Run) Response {
 	}
 	return v
 }
+func backendOf(config ReviewerConfig) string {
+	if config.Backend == "" {
+		return backendPi
+	}
+	return config.Backend
+}
 func validModelSelection(backend, model string) bool {
+	if backend == backendClaude || backend == backendCodex {
+		if model == "" || len(model) > 128 || model[0] == '-' || model[0] == '.' {
+			return false
+		}
+		for _, c := range model {
+			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_') {
+				return false
+			}
+		}
+		return true
+	}
 	provider, modelID, qualified := strings.Cut(model, "/")
 	return backend == "pi" && validText(model) && len(model) <= 256 && qualified && provider != "" && modelID != "" && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
 }
@@ -450,7 +489,7 @@ func pipelineCustody(r *Run) bool {
 	return p != nil && p.Worktree != "" && !released(p) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back"
 }
 func valid(s Settings) bool {
-	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel)
+	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel) && (s.AutoResume == "" || s.AutoResume == "on" || s.AutoResume == "off")
 }
 func withModelDefaults(s Settings, defaults Settings) Settings {
 	if s.ReviewerBackend == "" {
@@ -513,7 +552,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -546,49 +585,44 @@ func handle(s *Store, q Request) Response {
 	} else if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required" {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
+	actor := "axi"
+	if q.Client == "terminal" {
+		actor = "terminal"
+	}
+	paused := r
 	if q.Op == "cancel" {
 		if r.Status != "cancelling" {
 			return fail("no live execution", r)
 		}
+	} else if q.Op == "cancel-auto-resume" {
+		if r.Pause == nil {
+			return fail("no backend pause", r)
+		}
+		r.Token = opaque()
+	} else if q.Op == "resume" || q.Op == "rerun" && r.Pause != nil {
+		if err := resumeRun(s, r, actor); err != nil {
+			return fail(err.Error(), r)
+		}
+	} else if q.Op == "rerun" {
+		if err := rerunStage(s, r, actor); err != nil {
+			return fail(err.Error(), r)
+		}
+		r.AutoRetries = 0
+		r.Token = opaque()
 	} else if q.Op == "prepare" {
 		if r.ReviewUsed != 0 || !validText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
 			return fail("immutable review intent required before dispatch", r)
 		}
-		target, err := committedTarget(r.Submitted.Worktree, q.Target)
-		if err != nil {
+		if err := prepareRun(r, q.Intent, q.Target); err != nil {
 			return fail(err.Error(), r)
 		}
-		diff, err := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", target, r.Candidate, "--")
-		if err != nil {
-			return fail("cannot capture complete bounded diff", r)
-		}
-		model := r.Configs[len(r.Configs)-1].Settings.ReviewerModel
-		cfg, err := trustedReviewerFor(model)
-		if err != nil {
-			return fail(err.Error(), r)
-		}
-		catalog, err := providerModelCatalog(cfg.Executable)
-		if err != nil {
-			return fail(err.Error(), r)
-		}
-		if !catalog[model] {
-			return fail("model is not reported by Pi; add custom models to private providers.json", r)
-		}
-		if err = preflightModel(model); err != nil {
-			return fail(err.Error(), r)
-		}
-		r.Pipeline = nil
-		if r.Configs[len(r.Configs)-1].Settings.Preset == "full" {
-			plan, digests, err := trustedPlan()
-			if err != nil {
-				return fail(err.Error(), r)
-			}
-			r.Pipeline = newPipeline(plan, digests)
-		}
-		r.Reviewer = &cfg
-		r.SelectedDiff = string(diff)
-		r.Intent, r.Target = q.Intent, target
 		r.Token = opaque()
+	} else if q.Op == "rerun-from-start" {
+		if r.Repair != nil && r.Repair.Handback != "handed-back" {
+			return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
+		}
+		r = restartRun(s, r, id, actor)
+		s.Slots[slot] = r.ID
 	} else if q.Op == "review" {
 		if err := admitReview(r); err != nil {
 			return fail(err.Error(), r)
@@ -644,7 +678,7 @@ func handle(s *Store, q Request) Response {
 		if r.Repair != nil {
 			return fail("repair inputs are immutable after authorization", r)
 		}
-		if r.Review != nil {
+		if r.Review != nil && r.Pause == nil {
 			r.Status = "stale"
 		}
 		r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
@@ -666,20 +700,33 @@ func handle(s *Store, q Request) Response {
 			return fail("reason required", r)
 		}
 		if q.Op == "apply" {
-			if r.Repair != nil {
+			if r.Repair != nil && r.Pause == nil {
 				return fail("repair inputs and authority are immutable after authorization", r)
 			}
-			if r.Review != nil {
+			if r.Review != nil && r.Pause == nil {
 				r.Status = "stale"
 			}
 			old := r.Configs[len(r.Configs)-1].Settings
-			if r.Reviewer != nil && old.ReviewerModel != q.Settings.ReviewerModel {
-				r.Reviewer.Model = q.Settings.ReviewerModel
-				if r.Review != nil {
+			if r.Reviewer != nil && (old.ReviewerModel != q.Settings.ReviewerModel || old.ReviewerBackend != q.Settings.ReviewerBackend) {
+				cfg, err := trustedAgent(q.Settings.ReviewerBackend, q.Settings.ReviewerModel)
+				if err != nil && q.Settings.ReviewerBackend != backendPi {
+					return fail(err.Error(), r)
+				}
+				if err != nil {
+					cfg = *r.Reviewer
+					cfg.Model = q.Settings.ReviewerModel
+				}
+				r.Reviewer = &cfg
+				if r.Review != nil && r.Review.Status != "paused" {
 					r.Review.Status = "stale"
 				}
 			}
 			r.Configs = append(r.Configs, Snapshot{ID: opaque(), Settings: *q.Settings, Source: "run-local"})
+			for _, role := range []struct{ name, fromBackend, fromModel, toBackend, toModel string }{{"reviewer", old.ReviewerBackend, old.ReviewerModel, q.Settings.ReviewerBackend, q.Settings.ReviewerModel}, {"fixer", old.FixerBackend, old.FixerModel, q.Settings.FixerBackend, q.Settings.FixerModel}} {
+				if role.fromBackend != role.toBackend || role.fromModel != role.toModel {
+					r.Events = append(r.Events, Event{Kind: "backend-switch", Actor: actor, Reason: role.name + ": " + q.Reason, From: role.fromBackend + " " + role.fromModel, To: role.toBackend + " " + role.toModel})
+				}
+			}
 			invalidate(r, "")
 			supersede(r)
 			r.Events = append(r.Events, Event{Kind: q.Op, Actor: "client", Reason: q.Reason, Used: r.ReviewUsed + r.RepairUsed, Before: old.Limit, After: q.Settings.Limit, Review: r.ReviewUsed, Repair: r.RepairUsed})
@@ -696,6 +743,7 @@ func handle(s *Store, q Request) Response {
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
+	cancelAutoResume(paused, actor)
 	v := view(s, r)
 	b, _ := json.Marshal(v)
 	var frozen Response
@@ -757,6 +805,8 @@ func daemon(h string) error {
 		run, execution, status, log string
 		result                      *Verdict
 		repair                      *Repair
+		failure                     *BackendFailure
+		answer                      agentAnswer
 	}
 	type repairProgress struct {
 		run, id string
@@ -844,7 +894,8 @@ func daemon(h string) error {
 				case "commands":
 					o.Stage = runStageCommands(ctx, pc, step.Stage, candidate)
 				case "review":
-					o.Status, o.Result, o.Log = executeReview(ctx, &review)
+					reviewed := executeReview(ctx, &review)
+					o.Status, o.Result, o.Log, o.Failure, o.Answer = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer
 				case "repair":
 					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
 					o.Repair = &repair
@@ -875,9 +926,78 @@ func daemon(h string) error {
 			}
 		}
 	}()
+	launch := func() error {
+		for _, r := range s.Runs {
+			if r.Status == "cancelling" {
+				if cancel := active[r.ID]; cancel != nil {
+					cancel()
+				}
+				continue
+			}
+			if r.Status == "writing" && r.Repair != nil && r.Repair.Status == "admitted" {
+				x := *r.Repair
+				r.Repair.Status = "running"
+				if err := persist(h, s); err != nil {
+					return err
+				}
+				ctx, cancel := context.WithCancel(context.Background())
+				active[r.ID] = cancel
+				go func(runID string, repair Repair, source Identity, ctx context.Context, cancel context.CancelFunc) {
+					defer cancel()
+					executeRepair(ctx, &repair, source, func(value *Repair) bool {
+						ack := make(chan bool, 1)
+						select {
+						case repairProgresses <- repairProgress{run: runID, id: repair.ID, value: *value, ack: ack}:
+						case <-stopped:
+							return false
+						}
+						select {
+						case ok := <-ack:
+							return ok
+						case <-stopped:
+							return false
+						}
+					})
+					select {
+					case repairCompleted <- completion{run: runID, execution: repair.ID, repair: &repair}:
+					case <-stopped:
+					}
+				}(r.ID, x, r.Submitted, ctx, cancel)
+				continue
+			}
+			if r.Status != "running" || r.Review == nil || active[r.ID] != nil || r.Pipeline != nil {
+				continue
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			active[r.ID] = cancel
+			runID, x := r.ID, *r.Review
+			go func() {
+				reviewed := executeReview(ctx, &x)
+				cancel()
+				select {
+				case completed <- completion{run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer}:
+				case <-stopped:
+				}
+			}()
+		}
+		return schedule()
+	}
+	wake := time.NewTimer(time.Hour)
+	defer wake.Stop()
 	for {
+		wake.Reset(untilAutoResume(s, time.Now()))
 		var c net.Conn
 		select {
+		case <-wake.C:
+			if fireAutoResumes(s, time.Now()) {
+				if err := persist(h, s); err != nil {
+					return err
+				}
+				if err := launch(); err != nil {
+					return err
+				}
+			}
+			continue
 		case progress := <-pipelineProgress:
 			ok := acceptPipelineProgress(s.Runs[progress.run], progress.id, progress.value)
 			if ok {
@@ -936,6 +1056,12 @@ func daemon(h string) error {
 				if done.repair.Head != "" {
 					r.Candidate = done.repair.Head
 				}
+				x := r.Repair
+				recordAttempt(r, Attempt{Execution: x.ID, Stage: "selected-repair", Kind: "repair", Role: "fixer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: x.Status, Reason: failureReason(x.Failure), Message: failureMessage(x.Failure), CostUSD: x.CostUSD, Tokens: x.Tokens, Partial: x.Partial})
+				if x.Status == "paused" {
+					refundRepair(r, x)
+					pauseRun(r, "selected-repair", "repair", "fixer", fixerAgent(x.Config), x.ID, x.Failure, time.Now())
+				}
 				r.Token = opaque()
 				if err := persist(h, s); err != nil {
 					return err
@@ -947,6 +1073,17 @@ func daemon(h string) error {
 			}
 			delete(active, r.ID)
 			status := done.status
+			recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.failure), Message: failureMessage(done.failure), CostUSD: done.answer.CostUSD, Tokens: done.answer.Tokens})
+			if done.failure != nil && r.Status != "cancelling" {
+				r.ReviewUsed--
+				r.Review.Status, r.Review.Log = "paused", done.log
+				pauseRun(r, "independent-review", "review", "reviewer", r.Review.Config, r.Review.ID, done.failure, time.Now())
+				if err := persist(h, s); err != nil {
+					return err
+				}
+				continue
+			}
+			r.AutoRetries = 0
 			if r.Status == "cancelling" {
 				status = "cancelled"
 			}
@@ -1024,60 +1161,7 @@ func daemon(h string) error {
 			if e = persist(h, s); e != nil {
 				return e
 			}
-			for _, r := range s.Runs {
-				if r.Status == "cancelling" {
-					if cancel := active[r.ID]; cancel != nil {
-						cancel()
-					}
-					continue
-				}
-				if r.Status == "writing" && r.Repair != nil && r.Repair.Status == "admitted" {
-					x := *r.Repair
-					r.Repair.Status = "running"
-					if err := persist(h, s); err != nil {
-						return err
-					}
-					ctx, cancel := context.WithCancel(context.Background())
-					active[r.ID] = cancel
-					go func(runID string, repair Repair, source Identity, ctx context.Context, cancel context.CancelFunc) {
-						defer cancel()
-						executeRepair(ctx, &repair, source, func(value *Repair) bool {
-							ack := make(chan bool, 1)
-							select {
-							case repairProgresses <- repairProgress{run: runID, id: repair.ID, value: *value, ack: ack}:
-							case <-stopped:
-								return false
-							}
-							select {
-							case ok := <-ack:
-								return ok
-							case <-stopped:
-								return false
-							}
-						})
-						select {
-						case repairCompleted <- completion{run: runID, execution: repair.ID, repair: &repair}:
-						case <-stopped:
-						}
-					}(r.ID, x, r.Submitted, ctx, cancel)
-					continue
-				}
-				if r.Status != "running" || r.Review == nil || active[r.ID] != nil || r.Pipeline != nil {
-					continue
-				}
-				ctx, cancel := context.WithCancel(context.Background())
-				active[r.ID] = cancel
-				runID, x := r.ID, *r.Review
-				go func() {
-					status, result, log := executeReview(ctx, &x)
-					cancel()
-					select {
-					case completed <- completion{run: runID, execution: x.ID, status: status, log: log, result: result}:
-					case <-stopped:
-					}
-				}()
-			}
-			if e = schedule(); e != nil {
+			if e = launch(); e != nil {
 				return e
 			}
 		}
@@ -1121,12 +1205,29 @@ func call(h string, q Request) (Response, error) {
 	e = json.NewDecoder(c).Decode(&v)
 	return v, e
 }
-func screen(text string) {
+func terminalWidth() int {
 	size := [4]uint16{}
-	width := 80
 	if _, _, err := syscall.Syscall(syscall.SYS_IOCTL, os.Stdout.Fd(), syscall.TIOCGWINSZ, uintptr(unsafe.Pointer(&size))); err == 0 && size[1] > 1 {
-		width = int(size[1]) - 1
+		return int(size[1]) - 1
 	}
+	return 80
+}
+func wrapWords(text string, width int) string {
+	var out, line strings.Builder
+	for _, word := range strings.Fields(text) {
+		if line.Len() > 0 && line.Len()+1+len([]rune(word)) > width {
+			out.WriteString(line.String() + "\n")
+			line.Reset()
+		}
+		if line.Len() > 0 {
+			line.WriteString(" ")
+		}
+		line.WriteString(word)
+	}
+	return out.String() + line.String()
+}
+func screen(text string) {
+	width := terminalWidth()
 	fmt.Print("\033[2J\033[H")
 	for _, line := range strings.Split(text, "\n") {
 		clean := strings.Map(func(r rune) rune {
@@ -1181,6 +1282,18 @@ func terminal(h, path string) error {
 				}
 			}
 		}
+		fmt.Fprintf(&page, "Auto-resume: %s\n", autoResumeLabel(s.Settings))
+		if p := r.Pause; p != nil {
+			width := terminalWidth()
+			fmt.Fprintln(&page, wrapWords("PAUSED: "+v.Explanation, width))
+			fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Paused stage: %s | agent %s %s | backend %s", p.Stage, p.Backend, p.Model, p.Reason), width))
+			if p.ResetAt != "" {
+				fmt.Fprintf(&page, "Reset: %s\n", clock(p.ResetAt))
+			}
+			if p.AutoResumeAt != "" {
+				fmt.Fprintf(&page, "Scheduled %s: %s\n", p.AutoAction, clock(p.AutoResumeAt))
+			}
+		}
 		for _, b := range v.Blocked {
 			fmt.Fprintln(&page, "Blocked: "+b)
 		}
@@ -1229,7 +1342,7 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[x] Cancel  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [l] Load rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [d] Decide\n[m] Resolve conflict  [f] Selected repair  [h] Handback\n[r] Rerun  [a] Cancel auto-resume  [b] Rerun from start\n[x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		fmt.Print("> ")
@@ -1335,8 +1448,14 @@ func terminal(h, path string) error {
 			q.Target = reader.Text()
 			q.Op = "prepare"
 		}
-		if op == "r" {
+		if op == "l" {
 			q.Op = "resolve-rules"
+		}
+		if op == "r" {
+			q.Op = "rerun"
+		}
+		if op == "a" {
+			q.Op = "cancel-auto-resume"
 		}
 		if op == "s" {
 			models, modelErr := call(h, Request{Version: 1, Op: "models", Path: path})
@@ -1353,28 +1472,28 @@ func terminal(h, path string) error {
 				message = "Invalid draft: " + e.Error()
 				continue
 			}
-			fmt.Printf("Reviewer backend (pi only) [%s]:\n> ", draft.ReviewerBackend)
+			fmt.Printf("Reviewer backend (pi, claude, codex) [%s]:\n> ", draft.ReviewerBackend)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.ReviewerBackend = value
 			}
-			fmt.Printf("Reviewer models reported by Pi: %s\nReviewer model (provider/model) [%s]:\n> ", modelsText, draft.ReviewerModel)
+			fmt.Printf("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.ReviewerModel = value
 			}
-			fmt.Printf("Fixer backend (pi only) [%s]:\n> ", draft.FixerBackend)
+			fmt.Printf("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
 			if !reader.Scan() {
 				return nil
 			}
 			if value := reader.Text(); value != "" {
 				draft.FixerBackend = value
 			}
-			fmt.Printf("Fixer models reported by Pi: %s\nFixer model (provider/model) [%s]:\n> ", modelsText, draft.FixerModel)
+			fmt.Printf("Pi models: %s\nFixer model [%s]:\n> ", modelsText, draft.FixerModel)
 			if !reader.Scan() {
 				return nil
 			}
@@ -1391,6 +1510,13 @@ func terminal(h, path string) error {
 					draft.Rules = append(draft.Rules, name)
 				}
 			}
+			fmt.Printf("Auto-resume (on, off; empty keeps %s):\n> ", autoResumeLabel(draft))
+			if !reader.Scan() {
+				return nil
+			}
+			if value := reader.Text(); value != "" {
+				draft.AutoResume = value
+			}
 			fmt.Print("[a] Apply to run  [d] Save user defaults  [c] Cancel\n> ")
 			if !reader.Scan() {
 				return nil
@@ -1405,6 +1531,15 @@ func terminal(h, path string) error {
 			}
 			q.Settings = &draft
 			q.Reason = "terminal Settings"
+		} else if op == "b" {
+			fmt.Print("Keep this run and start a linked rerun from start? Type rerun:\n> ")
+			if !reader.Scan() {
+				return nil
+			}
+			if reader.Text() != "rerun" {
+				continue
+			}
+			q.Op = "rerun-from-start"
 		} else if op == "n" {
 			fmt.Print("Retain evidence and start New run? Type new:\n> ")
 			if !reader.Scan() {
