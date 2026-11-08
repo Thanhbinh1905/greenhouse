@@ -72,7 +72,13 @@ Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` an
 
 ## Independent review configuration
 
-Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600. The executable is the trusted per-user authority; Settings selects the model independently. Configure custom provider endpoints in a separate private `providers.json` in `GREENHOUSE_HOME`:
+Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600. The executable is the trusted per-user authority; Settings selects the model independently:
+
+```json
+{"executable":"/absolute/path/to/pi","model":"openai/gpt-5.6-luna"}
+```
+
+Configure custom provider endpoints in a separate private `providers.json` in `GREENHOUSE_HOME`:
 
 ```json
 {"providers":{"openai":{"base_url":"http://127.0.0.1:8317/v1","api_key_env":"OPENAI_API_KEY","api":"openai-completions"}},"models":[]}
