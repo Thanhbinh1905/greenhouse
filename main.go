@@ -71,6 +71,7 @@ type Run struct {
 	ReviewUsed    int             `json:"review_used"`
 	RepairUsed    int             `json:"repair_used"`
 	Repair        *Repair         `json:"repair,omitempty"`
+	Pipeline      *Pipeline       `json:"pipeline,omitempty"`
 	Events        []Event         `json:"events"`
 }
 type Request struct {
@@ -253,7 +254,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
+			if r.ReviewUsed < 1 || x.ID == "" || x.Backend != "pi-json-v1" || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != digest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(reviewerArgs(x.Config.Model)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -267,7 +268,20 @@ func load(h string) (*Store, error) {
 		}
 		if r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" {
 			r.Status = "recovery-required"
-			if r.Review != nil {
+			if p := r.Pipeline; p != nil {
+				stage := ""
+				if p.Active != nil {
+					stage = p.Active.Stage
+					if p.Active.Kind == "review" && r.Review != nil {
+						r.Review.Status = "unknown-outcome"
+					}
+					if (p.Active.Kind == "repair" || p.Active.Kind == "conflict") && len(p.Repairs) > 0 {
+						p.Repairs[len(p.Repairs)-1].Status = "unknown-outcome"
+						p.Repairs[len(p.Repairs)-1].Writer = "unknown"
+					}
+				}
+				holdRecovery(r, stage, "controller stopped during a pipeline step; no retry")
+			} else if r.Review != nil {
 				r.Review.Status = "unknown-outcome"
 			}
 			if r.Repair != nil && r.Repair.Status != "fixed-not-independently-rereviewed" {
@@ -289,7 +303,7 @@ func load(h string) (*Store, error) {
 	return s, nil
 }
 func view(s *Store, r *Run) Response {
-	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"full pipeline, push, PR and CI unsupported", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
+	v := Response{Version: 1, Outcome: "ok", Defaults: s.Defaults, Blocked: []string{"push, PR and CI unsupported; the full pipeline stops at local readiness", "repository overrides unsupported; repository configuration is untrusted"}, Actions: []string{"attach", "inspect"}}
 	if r != nil {
 		v.RuleScope = effectiveRuleScope(r)
 		v.Rules, v.RulesReady = effectiveRules(r)
@@ -303,19 +317,32 @@ func view(s *Store, r *Run) Response {
 		v.RunID = r.ID
 		v.Input = r.Input
 		v.Token = r.Token
-		v.Gate = "none"
+		v.Gate = currentGate(r)
 		id, e := resolve(r.Submitted.Worktree)
 		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "cancelling" && r.Status != "writing" && r.Status != "recovery-required"
+		held := custodyHeld(s, r)
+		if held {
+			v.Blocked = append(v.Blocked, "another run holds unpublished or ambiguous repository candidate custody; writer actions blocked")
+		}
 		if safe {
 			if id == r.Submitted {
 				v.Actions = append(v.Actions, "apply", "save", "resolve-rules")
-				if r.Status == "outstanding-findings" && r.Repair == nil && r.RepairUsed == 0 && r.ReviewUsed+r.RepairUsed < r.Configs[len(r.Configs)-1].Settings.Limit && repairable(r) {
+				if !held && r.Status == "outstanding-findings" && r.Repair == nil && r.RepairUsed == 0 && r.ReviewUsed+r.RepairUsed < r.Configs[len(r.Configs)-1].Settings.Limit && repairable(r) {
 					v.Actions = append(v.Actions, "repair")
 				}
 				if r.Repair != nil && r.Repair.Status == "fixed-not-independently-rereviewed" && (r.Repair.Handback == "awaiting-handback" || r.Repair.Handback == "handback-in-progress") {
 					v.Actions = append(v.Actions, "handback")
 				}
-				if r.ReviewUsed == 0 {
+				if p := r.Pipeline; !held && p != nil && r.Configs[len(r.Configs)-1].Settings.Preset == "full" && p.Status != "locally-ready" {
+					v.Actions = append(v.Actions, "pipeline")
+				}
+				if p := r.Pipeline; !held && p != nil && p.Gate != "" {
+					v.Actions = append(v.Actions, "resolve-conflict")
+				}
+				if p := r.Pipeline; p != nil && p.Status == "locally-ready" && r.Candidate != r.Submitted.Head && p.Handback != "handed-back" {
+					v.Actions = append(v.Actions, "handback")
+				}
+				if r.ReviewUsed == 0 && (r.Pipeline == nil || r.Pipeline.Worktree == "") {
 					v.Actions = append(v.Actions, "prepare")
 					if r.Intent != "" && r.Target != "" && r.Reviewer != nil && v.RulesReady && r.Configs[len(r.Configs)-1].Settings.Preset == "one-pass" {
 						v.Actions = append(v.Actions, "review")
@@ -353,12 +380,25 @@ func view(s *Store, r *Run) Response {
 		if r.Status == "recovery-required" {
 			v.Blocked = append(v.Blocked, "unknown execution or writer outcome; recovery unsupported")
 		}
+		if p := r.Pipeline; p != nil && p.Failed != "" && p.Status != "running" {
+			v.Blocked = append(v.Blocked, "pipeline stopped at "+p.Failed+": "+p.Reason)
+		}
 	}
 	return v
 }
 func validModelSelection(backend, model string) bool {
 	provider, modelID, qualified := strings.Cut(model, "/")
 	return backend == "pi" && validText(model) && len(model) <= 256 && qualified && provider != "" && modelID != "" && !strings.ContainsAny(model, "*?[] \t\r\n:") && !strings.HasPrefix(model, "-")
+}
+func currentGate(r *Run) string {
+	if r != nil && r.Pipeline != nil && r.Pipeline.Gate != "" {
+		return r.Pipeline.Gate
+	}
+	return "none"
+}
+func pipelineCustody(r *Run) bool {
+	p := r.Pipeline
+	return p != nil && p.Worktree != "" && r.Candidate != r.Submitted.Head && p.Handback != "handed-back"
 }
 func valid(s Settings) bool {
 	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel)
@@ -413,7 +453,7 @@ func handle(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -426,13 +466,17 @@ func handle(s *Store, q Request) Response {
 		}
 		return receipt.Result
 	}
-	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != "none" {
+	if r == nil || q.RunID != r.ID || q.Expected != r.Token || q.Input != r.Input || q.Gate != currentGate(r) {
 		return fail("stale run/input/gate/token", r)
 	}
-	if q.Op == "new" && r.Repair != nil && r.Repair.Handback != "handed-back" {
+	if q.Op == "new" && (r.Repair != nil && r.Repair.Handback != "handed-back" || pipelineCustody(r)) {
 		return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 	}
-	handbackReconcile := q.Op == "handback" && r.Repair != nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == r.Repair.Head
+	handbackHead := r.Candidate
+	if r.Repair != nil {
+		handbackHead = r.Repair.Head
+	}
+	handbackReconcile := q.Op == "handback" && (r.Repair != nil || r.Pipeline != nil) && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == handbackHead
 	if q.Op != "new" && q.Op != "cancel" && id != r.Submitted && !handbackReconcile {
 		return fail("source head or branch moved", r)
 	}
@@ -447,7 +491,7 @@ func handle(s *Store, q Request) Response {
 			return fail("no live execution", r)
 		}
 	} else if q.Op == "prepare" {
-		if r.ReviewUsed != 0 || !validText(q.Intent) {
+		if r.ReviewUsed != 0 || !validText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
 			return fail("immutable review intent required before dispatch", r)
 		}
 		target, err := committedTarget(r.Submitted.Worktree, q.Target)
@@ -473,6 +517,14 @@ func handle(s *Store, q Request) Response {
 		if err = preflightModel(model); err != nil {
 			return fail(err.Error(), r)
 		}
+		r.Pipeline = nil
+		if r.Configs[len(r.Configs)-1].Settings.Preset == "full" {
+			plan, digests, err := trustedPlan()
+			if err != nil {
+				return fail(err.Error(), r)
+			}
+			r.Pipeline = newPipeline(plan, digests)
+		}
 		r.Reviewer = &cfg
 		r.SelectedDiff = string(diff)
 		r.Intent, r.Target = q.Intent, target
@@ -485,8 +537,26 @@ func handle(s *Store, q Request) Response {
 		if err := admitRepair(s, r, q); err != nil {
 			return fail(err.Error(), r)
 		}
+	} else if q.Op == "pipeline" {
+		if err := admitPipeline(s, r); err != nil {
+			return fail(err.Error(), r)
+		}
+		r.Token = opaque()
+	} else if q.Op == "resolve-conflict" {
+		if custodyHeld(s, r) {
+			return fail("repository candidate custody is already held", r)
+		}
+		if err := admitConflictRepair(r, q); err != nil {
+			return fail(err.Error(), r)
+		}
+		r.Events = append(r.Events, Event{Kind: "resolve-conflict", Actor: "client", Reason: "authorized fixer for target conflict"})
+		r.Token = opaque()
 	} else if q.Op == "handback" {
-		if err := authorizeHandback(r); err != nil {
+		authorize := authorizeHandback
+		if r.Repair == nil && r.Pipeline != nil {
+			authorize = authorizePipelineHandback
+		}
+		if err := authorize(r); err != nil {
 			return fail(err.Error(), r)
 		}
 		r.Token = opaque()
@@ -498,6 +568,7 @@ func handle(s *Store, q Request) Response {
 			r.Status = "stale"
 		}
 		r.RuleSnapshots = append(r.RuleSnapshots, resolveRules(r))
+		invalidate(r, "")
 		r.Token = opaque()
 	} else if q.Op == "apply" || q.Op == "save" {
 		if q.Settings != nil {
@@ -528,6 +599,7 @@ func handle(s *Store, q Request) Response {
 				}
 			}
 			r.Configs = append(r.Configs, Snapshot{opaque(), *q.Settings, "run-local"})
+			invalidate(r, "")
 			r.Events = append(r.Events, Event{q.Op, "client", q.Reason, r.ReviewUsed + r.RepairUsed, old.Limit, q.Settings.Limit})
 		} else {
 			s.Defaults = *q.Settings
@@ -616,14 +688,9 @@ func daemon(h string) error {
 	stopped := make(chan struct{})
 	defer close(stopped)
 	active := map[string]context.CancelFunc{}
-	for _, r := range s.Runs {
-		if r.Repair != nil && r.Repair.Handback == "handback-in-progress" {
-			if err := handback(r); err != nil {
-				r.Repair.Handback = "awaiting-handback"
-				r.Repair.Log = err.Error()
-			}
-		}
-	}
+	pipelineDone := make(chan stepOutcome)
+	pipelineProgress := make(chan repairProgress)
+	reconcileHandbacks(s)
 	if err := persist(h, s); err != nil {
 		return err
 	}
@@ -632,6 +699,85 @@ func daemon(h string) error {
 			cancel()
 		}
 	}()
+	checkpoint := func(runID, id string) func(*Repair) bool {
+		return func(value *Repair) bool {
+			ack := make(chan bool, 1)
+			select {
+			case pipelineProgress <- repairProgress{run: runID, id: id, value: *value, ack: ack}:
+			case <-stopped:
+				return false
+			}
+			select {
+			case ok := <-ack:
+				return ok
+			case <-stopped:
+				return false
+			}
+		}
+	}
+	schedule := func() error {
+		for _, r := range s.Runs {
+			p := r.Pipeline
+			if p == nil || r.Status != "running" || active[r.ID] != nil {
+				continue
+			}
+			if p.Active == nil {
+				advancePipeline(s, r)
+			}
+			step := p.Active
+			if step != nil && step.Kind == "sync" {
+				if err := withWriterLock(r.Submitted.Repository, func() error { return ensureCandidate(r) }); err != nil {
+					p.Active = nil
+					if errors.Is(err, errCandidateUnknown) {
+						holdRecovery(r, step.Stage, err.Error())
+					} else {
+						park(r, p.stage(step.Stage), "needs-decision", "private candidate unavailable: "+err.Error())
+					}
+					step = nil
+				}
+			}
+			if err := persist(h, s); err != nil {
+				return err
+			}
+			if step == nil {
+				continue
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			active[r.ID] = cancel
+			o := stepOutcome{Run: r.ID, Step: step.ID}
+			pc, target, candidate, source := *p, r.Target, r.Candidate, r.Submitted
+			var review Execution
+			if r.Review != nil {
+				review = *r.Review
+			}
+			var repair Repair
+			if len(p.Repairs) > 0 {
+				repair = p.Repairs[len(p.Repairs)-1]
+			}
+			go func() {
+				defer cancel()
+				switch step.Kind {
+				case "sync":
+					o.Stage, o.Head, o.Conflict = syncTarget(ctx, pc, target, candidate)
+				case "commands":
+					o.Stage = runStageCommands(ctx, pc, step.Stage, candidate)
+				case "review":
+					o.Status, o.Result, o.Log = executeReview(ctx, &review)
+				case "repair":
+					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
+					o.Repair = &repair
+				case "conflict":
+					executeConflictRepair(ctx, &repair, pc, target, source, checkpoint(o.Run, repair.ID))
+					o.Repair = &repair
+				}
+				select {
+				case pipelineDone <- o:
+				case <-stopped:
+				}
+			}()
+		}
+		return nil
+	}
 	go func() {
 		for {
 			c, err := l.Accept()
@@ -650,6 +796,32 @@ func daemon(h string) error {
 	for {
 		var c net.Conn
 		select {
+		case progress := <-pipelineProgress:
+			ok := acceptPipelineProgress(s.Runs[progress.run], progress.id, progress.value)
+			if ok {
+				if err := persist(h, s); err != nil {
+					progress.ack <- false
+					return err
+				}
+			}
+			progress.ack <- ok
+			continue
+		case o := <-pipelineDone:
+			delete(active, o.Run)
+			r := s.Runs[o.Run]
+			if r == nil {
+				return errors.New("pipeline run identity mismatch")
+			}
+			if err := completeStep(r, o); err != nil {
+				return err
+			}
+			if err := persist(h, s); err != nil {
+				return err
+			}
+			if err := schedule(); err != nil {
+				return err
+			}
+			continue
 		case progress := <-repairProgresses:
 			r := s.Runs[progress.run]
 			ok := acceptRepairProgress(r, progress.id, progress.value)
@@ -748,20 +920,17 @@ func daemon(h string) error {
 				return e
 			}
 			s = &next
-			for _, r := range s.Runs {
-				if r.Repair != nil && r.Repair.Handback == "handback-in-progress" {
-					if err := handback(r); err != nil {
-						r.Repair.Handback = "awaiting-handback"
-						r.Repair.Log = err.Error()
-					}
-				}
-			}
+			reconcileHandbacks(s)
 			if q.Op == "handback" && v.Outcome == "ok" {
 				r := s.Runs[q.RunID]
 				v = view(s, r)
 				if r != nil && r.Repair != nil && r.Repair.Handback == "awaiting-handback" {
 					v.Outcome = "refused"
 					v.Error = r.Repair.Log
+				}
+				if r != nil && r.Repair == nil && r.Pipeline != nil && (r.Pipeline.Handback == "awaiting-handback" || r.Pipeline.Handback == "unknown-outcome") {
+					v.Outcome = "refused"
+					v.Error = r.Pipeline.HandbackError
 				}
 				b, _ := json.Marshal(v)
 				var frozen Response
@@ -809,7 +978,7 @@ func daemon(h string) error {
 					}(r.ID, x, r.Submitted, ctx, cancel)
 					continue
 				}
-				if r.Status != "running" || r.Review == nil || active[r.ID] != nil {
+				if r.Status != "running" || r.Review == nil || active[r.ID] != nil || r.Pipeline != nil {
 					continue
 				}
 				ctx, cancel := context.WithCancel(context.Background())
@@ -823,6 +992,9 @@ func daemon(h string) error {
 					case <-stopped:
 					}
 				}()
+			}
+			if e = schedule(); e != nil {
+				return e
 			}
 		}
 		json.NewEncoder(c).Encode(v)
@@ -902,12 +1074,16 @@ func terminal(h, path string) error {
 	details := false
 	for {
 		var page strings.Builder
-		fmt.Fprintln(&page, "Greenhouse | independent review")
 		if v.Run == nil {
 			return errors.New(v.Error)
 		}
 		r := v.Run
 		s := r.Configs[len(r.Configs)-1]
+		if s.Settings.Preset == "full" {
+			fmt.Fprintln(&page, "Greenhouse | full pipeline")
+		} else {
+			fmt.Fprintln(&page, "Greenhouse | independent review")
+		}
 		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s (%s)\nFixer: %s / %s (%s)\nBudget: review %d + repair %d\nRules: %s\nSettings source: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Source, s.Settings.FixerBackend, s.Settings.FixerModel, s.Source, r.ReviewUsed, r.RepairUsed, strings.Join(s.Settings.Rules, ", "), s.Source)
 		for _, rule := range v.Rules {
 			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
@@ -923,6 +1099,9 @@ func terminal(h, path string) error {
 		}
 		for _, b := range v.Blocked {
 			fmt.Fprintln(&page, "Blocked: "+b)
+		}
+		if r.Pipeline != nil {
+			renderPipeline(&page, r, details)
 		}
 		if details && r.SelectedDiff != "" {
 			fmt.Fprintln(&page, "Selected committed diff:", r.SelectedDiff)
@@ -954,7 +1133,7 @@ func terminal(h, path string) error {
 				}
 			}
 		}
-		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [f] Selected repair  [h] Handback  [x] Cancel  [n] New run  [q] Detach")
+		fmt.Fprintln(&page, "\n[i] Inspect  [c] Criteria/diff  [r] Resolve rules  [s] Settings\n[p] Intent/target  [v] Review  [g] Pipeline  [m] Resolve conflict\n[f] Selected repair  [h] Handback  [x] Cancel  [n] New run  [q] Detach")
 		fmt.Fprint(&page, message)
 		screen(page.String())
 		fmt.Print("> ")
@@ -989,6 +1168,12 @@ func terminal(h, path string) error {
 		}
 		if op == "h" {
 			q.Op = "handback"
+		}
+		if op == "g" {
+			q.Op = "pipeline"
+		}
+		if op == "m" {
+			q.Op = "resolve-conflict"
 		}
 		if op == "p" {
 			fmt.Print("Intent:\n> ")
