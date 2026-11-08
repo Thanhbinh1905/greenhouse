@@ -66,7 +66,7 @@ The Posse adapter belongs in the Posse Project. Embedded execution must use its 
 
 ## Unsupported spec behavior in this slice
 
-- Manual acceptance: the recorded bare-command sessions use scripted real PTYs. A person has not manually repeated them.
+- Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
 
 - Area A: reconciliation of orphan executors and authorized recovery. Unknown outcomes park without retry or PID-based signalling.
 - Area B: versioned configuration schemas and migration, raw transcript logs, repository trust, and overrides. Findings and bounded execution summaries are available.

@@ -1,6 +1,6 @@
 # Live standalone validation
 
-Recorded on 2026-11-09 UTC. This record covers the standalone human terminal and AXI paths. The terminal interactions were scripted through real PTYs, using `greenhouse` without arguments. No person manually typed the recorded sessions; a manual acceptance run is still outstanding. The complete SPEC.md remains unfinished; see [the implementation plan](../../implementation-plan.md#unsupported-spec-behavior-in-this-slice).
+Recorded on 2026-11-09 UTC. This record covers the standalone human terminal and AXI paths. The terminal interactions were scripted through real PTYs, using `greenhouse` without arguments. No person manually typed the recorded sessions. The scripted real-PTY sessions were accepted as proof for this Task. The [manual acceptance checklist](manual-acceptance.md) remains available for a later human run. The complete SPEC.md remains unfinished; see [the implementation plan](../../implementation-plan.md#unsupported-spec-behavior-in-this-slice).
 
 ## Versions and configuration
 
