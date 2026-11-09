@@ -232,6 +232,21 @@ func TestFixerInputConfinesEditsToSelectedFindings(t *testing.T) {
 	}
 }
 
+func TestFixedResponseWithoutEditRefusesTheRepair(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := repairFixture(t)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "fake-fixer"), []byte("#!/usr/bin/python3\n"+respondFixed), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if started := repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v)); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
+	repair := runOf(t, waitRepair(t, bin, repo, home))["repair"].(map[string]any)
+	if repair["status"] != "fixer-failed" || repair["head"] != "" || !strings.Contains(repair["log"].(string), "without editing sample.txt") {
+		t.Fatalf("a fixed response without an edit must refuse the repair: %v", repair)
+	}
+}
+
 const respondFixed = `
 import json as _json, sys as _sys
 try:

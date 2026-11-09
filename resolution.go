@@ -103,6 +103,27 @@ func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
 	return out, nil
 }
 
+func fixedResponsesEdited(x *Repair) error {
+	out, err := gitRead(x.Worktree, "diff", "--name-only", "-z", "HEAD", "--")
+	if err != nil {
+		return err
+	}
+	edited := map[string]bool{}
+	for _, name := range strings.Split(string(out), "\x00") {
+		edited[name] = true
+	}
+	files := map[string]string{}
+	for _, f := range x.Selected {
+		files[f.ID] = f.File
+	}
+	for _, r := range x.Responses {
+		if r.Response == "fixed" && !edited[files[r.Finding]] {
+			return fmt.Errorf("resolution response fixed for %s without editing %s", r.Finding, files[r.Finding])
+		}
+	}
+	return nil
+}
+
 func anyFixed(responses []ResolutionResponse) bool {
 	for _, r := range responses {
 		if r.Response == "fixed" {

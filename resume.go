@@ -36,6 +36,7 @@ type Attempt struct {
 	Message   string  `json:"message,omitempty"`
 	CostUSD   float64 `json:"cost_usd"`
 	Tokens    int     `json:"tokens"`
+	Thinking  string  `json:"thinking,omitempty"`
 	Partial   string  `json:"partial,omitempty"`
 	At        string  `json:"at"`
 }

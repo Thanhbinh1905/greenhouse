@@ -74,6 +74,7 @@ type Repair struct {
 	Resumed          bool                 `json:"resumed,omitempty"`
 	CostUSD          float64              `json:"cost_usd,omitempty"`
 	Tokens           int                  `json:"tokens,omitempty"`
+	Thinking         string               `json:"thinking,omitempty"`
 	Confinement      *Confinement         `json:"confinement,omitempty"`
 	Authorities      []DeferralAuthority  `json:"authorities,omitempty"`
 	Responses        []ResolutionResponse `json:"responses,omitempty"`
@@ -613,6 +614,10 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	}
 	if len(x.Selected) > 0 {
 		if x.Responses, e = parseResponses(run.answer.Text, x); e != nil {
+			fail("fixer-failed", e)
+			return
+		}
+		if e = fixedResponsesEdited(x); e != nil {
 			fail("fixer-failed", e)
 			return
 		}

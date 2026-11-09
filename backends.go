@@ -442,6 +442,7 @@ func agentEnv(backend string) []string {
 
 type agentAnswer struct {
 	Text, Provider, Model string
+	Thinking              string
 	CostUSD               float64
 	Tokens                int
 }
@@ -459,6 +460,7 @@ func piAnswer(b []byte) (agentAnswer, error) {
 				Role     string          `json:"role"`
 				Provider string          `json:"provider"`
 				Model    string          `json:"model"`
+				Thinking string          `json:"thinkingLevel"`
 				Stop     string          `json:"stopReason"`
 				Content  json.RawMessage `json:"content"`
 			} `json:"message"`
@@ -478,7 +480,7 @@ func piAnswer(b []byte) (agentAnswer, error) {
 		if ev.Type == "message_end" && ev.Message.Role == "assistant" {
 			answer.Text = ""
 			settled = false
-			answer.Provider, answer.Model = ev.Message.Provider, ev.Message.Model
+			answer.Provider, answer.Model, answer.Thinking = ev.Message.Provider, ev.Message.Model, ev.Message.Thinking
 			if ev.Message.Stop != "stop" {
 				continue
 			}
@@ -809,6 +811,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 		run.err = fmt.Errorf("%s fixer: %w", backend, answerErr)
 	}
 	x.CostUSD, x.Tokens = agentUsage(backend, run.stdout, run.stderr)
+	x.Thinking = run.answer.Thinking
 	return run
 }
 

@@ -1248,7 +1248,7 @@ func daemon(h string) error {
 					requireRecovery(r, "repair", "selected-repair", done.repair.ID, "repair writer outcome unknown: "+done.repair.Log)
 				}
 				x := r.Repair
-				recordAttempt(r, Attempt{Execution: x.ID, Stage: "selected-repair", Kind: "repair", Role: "fixer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: x.Status, Reason: failureReason(x.Failure), Message: failureMessage(x.Failure), CostUSD: x.CostUSD, Tokens: x.Tokens, Partial: x.Partial})
+				recordAttempt(r, Attempt{Execution: x.ID, Stage: "selected-repair", Kind: "repair", Role: "fixer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: x.Status, Reason: failureReason(x.Failure), Message: failureMessage(x.Failure), CostUSD: x.CostUSD, Tokens: x.Tokens, Thinking: x.Thinking, Partial: x.Partial})
 				if x.Status == "paused" {
 					refundRepair(r, x)
 					pauseRun(r, "selected-repair", "repair", "fixer", fixerAgent(x.Config), x.ID, x.Failure, time.Now())
@@ -1956,7 +1956,8 @@ func main() {
 
 func finishReview(r *Run, done reviewOutcome) {
 	status := done.Status
-	recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.Failure), Message: failureMessage(done.Failure), CostUSD: done.Answer.CostUSD, Tokens: done.Answer.Tokens})
+	r.Review.Thinking = done.Answer.Thinking
+	recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.Failure), Message: failureMessage(done.Failure), CostUSD: done.Answer.CostUSD, Tokens: done.Answer.Tokens, Thinking: done.Answer.Thinking})
 	if done.Failure != nil && r.Status != "cancelling" {
 		r.ReviewUsed--
 		r.Review.Status, r.Review.Log = "paused", done.Log

@@ -65,6 +65,7 @@ type Execution struct {
 	Snapshot     *TreeSnapshot        `json:"snapshot,omitempty"`
 	Responses    []ResolutionResponse `json:"responses,omitempty"`
 	Confinement  *Confinement         `json:"confinement,omitempty"`
+	Thinking     string               `json:"thinking,omitempty"`
 	Status       string               `json:"status"`
 	Log          string               `json:"log"`
 	Result       *Verdict             `json:"result,omitempty"`

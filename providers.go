@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 )
@@ -117,6 +118,25 @@ func providerModelCatalog(executable string) (map[string]bool, error) {
 	return catalog, nil
 }
 
+// Pi forces thinking off when a custom provider entry omits reasoning.
+func catalogReasoning(executable, model string) bool {
+	command := exec.Command(executable, "--list-models")
+	command.Env = reviewerEnv()
+	output, _ := command.Output()
+	column := -1
+	for _, line := range strings.Split(string(output), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) >= 2 && strings.EqualFold(fields[0], "provider") && strings.EqualFold(fields[1], "model") {
+			column = slices.Index(fields, "thinking")
+			continue
+		}
+		if column >= 0 && len(fields) > column && fields[0]+"/"+fields[1] == model {
+			return fields[column] == "yes"
+		}
+	}
+	return false
+}
+
 func preflightModel(model string) error {
 	provider, modelID, found := strings.Cut(model, "/")
 	if !found {
@@ -199,7 +219,7 @@ func writeAgentModels(agentDir string, config ReviewerConfig) error {
 		BaseURL: config.Provider.BaseURL,
 		APIKey:  "$" + config.Provider.APIKeyEnv,
 		API:     api,
-		Models:  []PiModelConfig{{ID: modelID, Name: modelID, API: api, Input: []string{"text"}, ContextWindow: 128000, MaxTokens: 16384}},
+		Models:  []PiModelConfig{{ID: modelID, Name: modelID, API: api, Reasoning: catalogReasoning(config.Executable, config.Model), Input: []string{"text"}, ContextWindow: 128000, MaxTokens: 16384}},
 	}
 	if err := os.MkdirAll(agentDir, 0700); err != nil {
 		return err
