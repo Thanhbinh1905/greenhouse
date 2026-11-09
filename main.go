@@ -475,7 +475,7 @@ func view(s *Store, r *Run) Response {
 			}
 			v.Blocked = append(v.Blocked, "source head or branch moved; old-run advancement blocked")
 		}
-		if r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking") {
+		if r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking" || r.Repair.Status == "creating-candidate" || r.Repair.Status == "running") {
 			v.Actions = append(v.Actions, "cancel")
 		}
 		if r.Pause != nil {
@@ -714,7 +714,7 @@ func handleRequest(s *Store, q Request) Response {
 	if q.Op != "new" && q.Op != "cancel" && q.Op != "recover" && id != r.Submitted && !handbackReconcile {
 		return fail("source head or branch moved", r)
 	}
-	if q.Op == "cancel" && (r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking")) {
+	if q.Op == "cancel" && (r.Status == "running" || r.Status == "writing" && r.Repair != nil && (r.Repair.Status == "fixing" || r.Repair.Status == "checking" || r.Repair.Status == "creating-candidate" || r.Repair.Status == "running")) {
 		r.Status = "cancelling"
 		r.Token = opaque()
 	} else if q.Op != "recover" && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required") {

@@ -87,10 +87,20 @@ func adoptRecorded(r *Run, observed []observedExecutor) bool {
 	switch rec.Kind {
 	case "review":
 		x := r.Review
-		if x == nil || x.ID != rec.Execution || len(observed) != 1 || observed[0].State != "exited" || observed[0].record.InputDigest != x.InputDigest {
+		var verdicts []observedExecutor
+		for _, o := range observed {
+			if strings.HasPrefix(o.ID, rec.Execution+".catalog.") {
+				if o.State != "exited" {
+					return false
+				}
+			} else {
+				verdicts = append(verdicts, o)
+			}
+		}
+		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || verdicts[0].State != "exited" || verdicts[0].record.InputDigest != x.InputDigest {
 			return false
 		}
-		o := observed[0]
+		o := verdicts[0]
 		var runErr error
 		if o.Exit != 0 {
 			runErr = fmt.Errorf("exit status %d", o.Exit)

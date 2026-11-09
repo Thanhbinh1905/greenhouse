@@ -743,14 +743,18 @@ func fixerUnchanged(x *Repair) bool {
 	return err == nil && digestErr == nil && digest(trusted) == x.ConfigDigest && fixerDigest == x.ExecutableDigest
 }
 
-func prepareFixerAgent(x *Repair, agentDir string) error {
+func prepareFixerAgent(ctx context.Context, x *Repair, agentDir string) error {
 	if backendOf(fixerAgent(x.Config)) != backendPi {
 		return nil
 	}
 	if _, err := trustedReviewer(); err != nil {
 		return errors.New("trusted Pi installation unavailable")
 	}
-	if err := writeAgentModels(filepath.Join(agentDir, "agent"), fixerAgent(x.Config)); err != nil {
+	reasoning, err := catalogReasoning(withExecutor(ctx, x.ID+".catalog"), agentDir, fixerAgent(x.Config))
+	if err != nil {
+		return err
+	}
+	if err := writeAgentModels(filepath.Join(agentDir, "agent"), fixerAgent(x.Config), reasoning); err != nil {
 		return errors.New("trusted fixer provider configuration unavailable")
 	}
 	return nil

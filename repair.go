@@ -556,8 +556,16 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	defer os.RemoveAll(agentDir)
-	if e = prepareFixerAgent(x, agentDir); e != nil {
-		fail("unconfigured", e)
+	if e = prepareFixerAgent(ctx, x, agentDir); e != nil {
+		status := "unconfigured"
+		if errors.Is(e, context.Canceled) {
+			status = "cancelled"
+		}
+		if errors.Is(e, ErrWriterTreeUnknown) {
+			status = "unknown-outcome"
+			x.Writer = "unknown"
+		}
+		fail(status, e)
 		return
 	}
 	x.Writer = "unknown"

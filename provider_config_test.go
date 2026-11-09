@@ -57,7 +57,7 @@ func TestProviderCatalogUsesPrivateConfigAndEnvironmentCredentials(t *testing.T)
 		t.Fatal(err)
 	}
 	agent := filepath.Join(homeDir, "agent")
-	if err := writeAgentModels(agent, ReviewerConfig{Executable: "/bin/true", Model: "openai/gpt-5.6-luna", Provider: provider}); err != nil {
+	if err := writeAgentModels(agent, ReviewerConfig{Executable: "/bin/true", Model: "openai/gpt-5.6-luna", Provider: provider}, false); err != nil {
 		t.Fatal(err)
 	}
 	content, err := os.ReadFile(filepath.Join(agent, "models.json"))

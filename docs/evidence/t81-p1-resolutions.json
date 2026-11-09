@@ -1,0 +1,10 @@
+{
+  "schema": "posse.review-resolutions.v1",
+  "patterns": [
+    {
+      "pattern": "P-1",
+      "status": "fixed",
+      "note": "Run catalog discovery through the tracked process-tree runner with a four-second deadline and the active execution context. Admit Cancel during provider preparation for normal repairs; propagate cancellation through reviewer and conflict-repair preparation. Preserve separate catalog executor records during restart reconciliation. Executable AXI checks cover blocked reviewer/fixer lookup cancellation, timeout and stopped/reaped descendants."
+    }
+  ]
+}

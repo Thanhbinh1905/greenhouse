@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -119,22 +120,29 @@ func providerModelCatalog(executable string) (map[string]bool, error) {
 }
 
 // Pi forces thinking off when a custom provider entry omits reasoning.
-func catalogReasoning(executable, model string) bool {
-	command := exec.Command(executable, "--list-models")
-	command.Env = reviewerEnv()
-	output, _ := command.Output()
+func catalogReasoning(ctx context.Context, dir string, config ReviewerConfig) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, 4*time.Second)
+	defer cancel()
+	out, stderr := &boundedBuffer{limit: 65536}, &boundedBuffer{limit: 65536}
+	_, err := runProcess(ctx, dir, config.Executable, []string{"--list-models"}, nil, reviewerEnv(), out, stderr)
+	if errors.Is(err, ErrWriterTreeUnknown) || errors.Is(err, errDetachedOutput) {
+		return false, err
+	}
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 	column := -1
-	for _, line := range strings.Split(string(output), "\n") {
+	for _, line := range strings.Split(out.String(), "\n") {
 		fields := strings.Fields(line)
 		if len(fields) >= 2 && strings.EqualFold(fields[0], "provider") && strings.EqualFold(fields[1], "model") {
 			column = slices.Index(fields, "thinking")
 			continue
 		}
-		if column >= 0 && len(fields) > column && fields[0]+"/"+fields[1] == model {
-			return fields[column] == "yes"
+		if column >= 0 && len(fields) > column && fields[0]+"/"+fields[1] == config.Model {
+			return fields[column] == "yes", nil
 		}
 	}
-	return false
+	return false, nil
 }
 
 func preflightModel(model string) error {
@@ -206,7 +214,7 @@ func trustedReviewerFor(model string) (ReviewerConfig, error) {
 	return config, nil
 }
 
-func writeAgentModels(agentDir string, config ReviewerConfig) error {
+func writeAgentModels(agentDir string, config ReviewerConfig, reasoning bool) error {
 	provider, modelID, ok := strings.Cut(config.Model, "/")
 	if !ok || config.Provider.BaseURL == "" {
 		return errors.New("model provider configuration is unavailable")
@@ -219,7 +227,7 @@ func writeAgentModels(agentDir string, config ReviewerConfig) error {
 		BaseURL: config.Provider.BaseURL,
 		APIKey:  "$" + config.Provider.APIKeyEnv,
 		API:     api,
-		Models:  []PiModelConfig{{ID: modelID, Name: modelID, API: api, Reasoning: catalogReasoning(config.Executable, config.Model), Input: []string{"text"}, ContextWindow: 128000, MaxTokens: 16384}},
+		Models:  []PiModelConfig{{ID: modelID, Name: modelID, API: api, Reasoning: reasoning, Input: []string{"text"}, ContextWindow: 128000, MaxTokens: 16384}},
 	}
 	if err := os.MkdirAll(agentDir, 0700); err != nil {
 		return err

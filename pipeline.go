@@ -1246,7 +1246,13 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			return e
 		}
 		defer os.RemoveAll(agentDir)
-		if err = prepareFixerAgent(x, agentDir); err != nil {
+		if err = prepareFixerAgent(ctx, x, agentDir); err != nil {
+			if errors.Is(err, context.Canceled) {
+				x.Status = "cancelled"
+			}
+			if errors.Is(err, ErrWriterTreeUnknown) {
+				x.Status = "unknown-outcome"
+			}
 			return err
 		}
 		run := runFixer(ctx, x, filepath.Join(agentDir, "agent"))

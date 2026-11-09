@@ -200,7 +200,7 @@ Each invocation is a fresh session with no inherited author context:
 - Codex: `--ephemeral --ignore-user-config --ignore-rules`, with shell, hooks, plugins, apps, memories, multi-agent, browser, image and web-search tools disabled and `project_doc_max_bytes=0`. Reviewers run in the `read-only` sandbox, which Greenhouse checks in the session's permission profile; fixers run in `workspace-write` with only Codex's patch tool.
 - Reviewers run in the read-only candidate snapshot; fixers run in the private candidate worktree. Both run under OS confinement, and the controller still checks the fixer's scope before committing.
 
-Pi provider entries preserve the trusted model catalog's reasoning flag. Review and repair executions and attempts record Pi's reported effective thinking level as `thinking`.
+Pi provider entries preserve the trusted model catalog's reasoning flag. Review and repair executions and attempts record Pi's reported effective thinking level as `thinking`. Runtime catalog discovery uses a tracked process-tree runner with a four-second deadline and follows execution cancellation. Cancel is available during repair provider preparation. Catalog executor records remain separate from review verdict records during restart reconciliation.
 
 ## Review snapshot and OS confinement
 

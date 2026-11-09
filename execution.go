@@ -384,7 +384,15 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	case backendClaude:
 	default:
 		agentDir := filepath.Join(dir, "agent")
-		if e = writeAgentModels(agentDir, x.Config); e != nil {
+		reasoning, catalogErr := catalogReasoning(withExecutor(ctx, x.ID+".catalog"), dir, x.Config)
+		if catalogErr != nil {
+			status := "inconclusive"
+			if errors.Is(catalogErr, context.Canceled) {
+				status = "cancelled"
+			}
+			return reviewOutcome{Status: status, Log: "model catalog: " + catalogErr.Error()}
+		}
+		if e = writeAgentModels(agentDir, x.Config, reasoning); e != nil {
 			return reviewOutcome{Status: "inconclusive", Log: "trusted provider configuration unavailable"}
 		}
 		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
