@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "fix-empty-average",
+  "description": "Mean divides by Count, which is zero for an empty Summary.",
+  "intent": "Report the mean and maximum of score samples.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "mean-zero-count",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "stats/stats.go",
+      "start": 19,
+      "end": 20,
+      "explanation": "Mean divides by s.Count, so an empty Summary panics with integer division by zero although the doc comment promises 0.",
+      "action": "Return 0 when Count is zero before dividing."
+    },
+    {
+      "label": "narrating-loop-comment",
+      "selected": false,
+      "priority": "P2",
+      "origin": "policy",
+      "rule": "no-comments/necessary-comments",
+      "file": "stats/stats.go",
+      "start": 26,
+      "end": 26,
+      "explanation": "The comment narrates the loop below it.",
+      "action": "Remove the comment."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "stats/stats.go",
+      "start": 18,
+      "end": 21
+    }
+  ]
+}

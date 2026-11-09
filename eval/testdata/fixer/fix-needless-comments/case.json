@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-needless-comments",
+  "description": "Backoff carries three comments that narrate the code.",
+  "intent": "Add exponential retry backoff.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "narrating-comments",
+      "selected": true,
+      "priority": "P2",
+      "origin": "policy",
+      "rule": "no-comments/necessary-comments",
+      "file": "retry/retry.go",
+      "start": 13,
+      "end": 19,
+      "explanation": "The comments inside Backoff restate the statements that follow them.",
+      "action": "Remove the three narrating comments inside Backoff and keep the code unchanged."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "retry/retry.go",
+      "start": 13,
+      "end": 19
+    }
+  ]
+}

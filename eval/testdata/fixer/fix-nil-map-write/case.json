@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-nil-map-write",
+  "description": "Add writes to a nil map on the zero value.",
+  "intent": "Let callers count words with a zero-value Tally.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "zero-value-panics",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "tally/tally.go",
+      "start": 10,
+      "end": 10,
+      "explanation": "The type doc says the zero value is ready to use, but Add writes to the nil counts map and panics on a zero-value Tally.",
+      "action": "Initialize counts in Add when it is nil."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "tally/tally.go",
+      "start": 8,
+      "end": 11
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-pagination-bounds",
+  "description": "Page slices past the end of the last partial page.",
+  "intent": "Paginate search results.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "unclamped-end",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "page/page.go",
+      "start": 17,
+      "end": 17,
+      "explanation": "start+size is not clamped to len(items), so the last page panics with slice bounds out of range when it holds fewer than size items.",
+      "action": "Clamp the end index to len(items)."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "page/page.go",
+      "start": 11,
+      "end": 18
+    }
+  ]
+}

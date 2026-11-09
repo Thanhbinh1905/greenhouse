@@ -18,7 +18,9 @@ const usage = `usage:
   go run ./eval check [-corpus dir]
   go run ./eval judge -model provider/id [-pi path] [-base-url url] [-parallel n] [-corpus dir] run-dir...
   go run ./eval rescore [-corpus dir] run-dir...
-  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-base-url url] [-judge-model provider/id] [-cases a,b] [-parallel n]`
+  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-base-url url] [-judge-model provider/id] [-cases a,b] [-parallel n]
+  go run ./eval fix-check [-corpus dir]
+  go run ./eval fix-run -base-url url -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
 
 func main() {
 	if cfg := os.Getenv(shimEnv); cfg != "" {
@@ -36,8 +38,68 @@ func main() {
 
 func dispatch(sub string, args []string) error {
 	fs := flag.NewFlagSet(sub, flag.ContinueOnError)
-	corpus := fs.String("corpus", "eval/testdata/corpus", "corpus directory")
+	defaultCorpus := "eval/testdata/corpus"
+	if strings.HasPrefix(sub, "fix-") {
+		defaultCorpus = "eval/testdata/fixer"
+	}
+	corpus := fs.String("corpus", defaultCorpus, "corpus directory")
 	switch sub {
+	case "fix-check":
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		c, err := LoadFixCorpus(*corpus)
+		if err != nil {
+			return err
+		}
+		work, err := os.MkdirTemp("", "gfc")
+		if err != nil {
+			return err
+		}
+		defer os.RemoveAll(work)
+		for _, k := range c.Cases {
+			if err := checkFixCase(k, filepath.Join(work, k.ID)); err != nil {
+				return fmt.Errorf("%s: %w", k.ID, err)
+			}
+		}
+		fmt.Printf("fixer corpus v%d revision %d %s: %d cases; seeded heads fail and reference repairs pass the hidden tests\n", c.Version, c.Revision, c.Digest, len(c.Cases))
+		return nil
+	case "fix-run":
+		o := fixOptions{Settle: 15 * time.Minute}
+		fs.StringVar(&o.Model, "model", "openai/gpt-5.6-luna", "exact provider/model of the fixer (default: the Greenhouse default fixer)")
+		fs.StringVar(&o.Out, "out", "", "new directory for the report and captures")
+		fs.StringVar(&o.Label, "label", "", "short description recorded in the report")
+		fs.StringVar(&o.Pi, "pi", "", "absolute Pi executable (default: pi on PATH)")
+		fs.StringVar(&o.BaseURL, "base-url", "", "route the model's provider to this base URL")
+		price := fs.String("price", "0.2,1.2,0.02,0.25", "USD per million input, output, cache-read and cache-write tokens, used when Pi reports no cost")
+		cases := fs.String("cases", "", "comma-separated case IDs (default: all)")
+		fs.IntVar(&o.Parallel, "parallel", 1, "cases repaired concurrently")
+		if err := fs.Parse(args); err != nil {
+			return err
+		}
+		o.Corpus = *corpus
+		if o.Out == "" || o.Parallel < 1 {
+			return fmt.Errorf("-out and a positive -parallel are required\n%s", usage)
+		}
+		if _, err := fmt.Sscanf(*price, "%g,%g,%g,%g", &o.Price.Input, &o.Price.Output, &o.Price.CacheRead, &o.Price.CacheWrite); err != nil {
+			return fmt.Errorf("-price: %w", err)
+		}
+		if *cases != "" {
+			o.Cases = strings.Split(*cases, ",")
+		}
+		if o.Pi == "" {
+			p, err := exec.LookPath("pi")
+			if err != nil {
+				return err
+			}
+			o.Pi = p
+		}
+		r, err := runFixLive(o)
+		if err != nil {
+			return err
+		}
+		fmt.Printf("bar met: %t; report: %s/report.md\n", r.Summary.BarMet, o.Out)
+		return nil
 	case "check":
 		if err := fs.Parse(args); err != nil {
 			return err

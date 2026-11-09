@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-case-insensitive",
+  "description": "Find looks up the raw address although Add stores it lowercased.",
+  "intent": "Look up users by email address, ignoring case.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "find-not-normalized",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "users/users.go",
+      "start": 22,
+      "end": 22,
+      "explanation": "Add stores lowercased addresses, but Find looks up the address as given, so any address with an uppercase letter is never found.",
+      "action": "Lowercase email with strings.ToLower before the lookup."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "users/users.go",
+      "start": 20,
+      "end": 24
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 	"time"
@@ -20,8 +21,9 @@ import (
 const shimEnv = "GREENHOUSE_EVAL_SHIM"
 
 type shimConfig struct {
-	Pi      string `json:"pi"`
-	Capture string `json:"capture"`
+	Pi      string          `json:"pi"`
+	Capture string          `json:"capture"`
+	Review  []SeededFinding `json:"review,omitempty"`
 }
 
 type shimTiming struct {
@@ -62,6 +64,9 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	input, err := io.ReadAll(stdin)
 	if err != nil {
 		return 2, err
+	}
+	if cfg.Review != nil && slices.Contains(args, "read,grep,find,ls") {
+		return seededReview(cfg.Review, args, input, stdout)
 	}
 	argv, _ := json.Marshal(args)
 	if err := os.WriteFile(filepath.Join(cfg.Capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
@@ -111,4 +116,29 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		return 2, err
 	}
 	return 0, nil
+}
+
+// seededReview answers a reviewer invocation with the case's seeded findings
+// in Pi's event format, so the fixer evaluation repairs a fixed review.
+func seededReview(seeded []SeededFinding, args []string, input []byte, stdout io.Writer) (int, error) {
+	var in struct {
+		Head  string
+		Paths []string
+	}
+	if err := json.Unmarshal(input, &in); err != nil {
+		return 2, err
+	}
+	var provider, model string
+	if i := slices.Index(args, "--model"); i >= 0 && i+1 < len(args) {
+		provider, model, _ = strings.Cut(args[i+1], "/")
+	}
+	findings := []map[string]any{}
+	for _, f := range seeded {
+		findings = append(findings, map[string]any{"id": f.Label, "priority": f.Priority, "origin": f.Origin, "file": f.File, "start": f.Start, "end": f.End, "explanation": f.Explanation, "action": f.Action, "rule": f.Rule, "head": in.Head})
+	}
+	verdict, _ := json.Marshal(map[string]any{"head": in.Head, "verdict": "findings", "coverage": in.Paths, "findings": findings})
+	end, _ := json.Marshal(map[string]any{"type": "message_end", "message": map[string]any{"role": "assistant", "provider": provider, "model": model, "stopReason": "stop", "content": []map[string]string{{"type": "text", "text": string(verdict)}}}})
+	settled, _ := json.Marshal(map[string]any{"type": "agent_settled", "aborted": false})
+	_, err := fmt.Fprintf(stdout, "%s\n%s\n", end, settled)
+	return 0, err
 }

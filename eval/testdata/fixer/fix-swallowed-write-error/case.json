@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-swallowed-write-error",
+  "description": "WriteCSV ignores the writer's errors.",
+  "intent": "Export usage records as CSV.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "write-error-ignored",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "export/export.go",
+      "start": 17,
+      "end": 17,
+      "explanation": "WriteCSV discards the error from fmt.Fprintf and always returns nil, so a failed export is reported as success, contrary to its doc comment.",
+      "action": "Return the first error from fmt.Fprintf."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "export/export.go",
+      "start": 14,
+      "end": 20
+    }
+  ]
+}

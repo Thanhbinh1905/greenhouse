@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "dispute-guarded-division",
+  "description": "The selected finding claims a division by zero that the guard above already prevents.",
+  "intent": "Report the cache hit rate.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "claimed-zero-division",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "ratio/ratio.go",
+      "start": 13,
+      "end": 13,
+      "explanation": "Rate divides by requests, which panics with integer division by zero when there are no requests.",
+      "action": "Guard against requests being zero before dividing."
+    }
+  ],
+  "expected_response": "disputed",
+  "scope": [
+    {
+      "file": "ratio/ratio.go",
+      "start": 8,
+      "end": 14
+    }
+  ]
+}

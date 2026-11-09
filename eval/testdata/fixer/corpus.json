@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "revision": 1,
+  "cases": [
+    "fix-empty-average",
+    "fix-offbyone-window",
+    "fix-swallowed-write-error",
+    "fix-unlock-missing",
+    "fix-nil-map-write",
+    "fix-pagination-bounds",
+    "fix-case-insensitive",
+    "fix-needless-comments",
+    "dispute-guarded-division",
+    "fix-dropped-decode-error"
+  ]
+}

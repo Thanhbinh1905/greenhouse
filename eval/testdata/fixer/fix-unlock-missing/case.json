@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "fix-unlock-missing",
+  "description": "Get returns on a miss without unlocking the mutex.",
+  "intent": "Count cache misses for the hit-rate metric.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "miss-keeps-lock",
+      "selected": true,
+      "priority": "P0",
+      "origin": "correctness",
+      "rule": "",
+      "file": "cache/cache.go",
+      "start": 29,
+      "end": 30,
+      "explanation": "On a miss Get returns while still holding c.mu, so the next Set, Get or Misses call deadlocks.",
+      "action": "Release the mutex on every return path, for example with defer c.mu.Unlock() after locking."
+    },
+    {
+      "label": "promotional-doc",
+      "selected": false,
+      "priority": "P2",
+      "origin": "policy",
+      "rule": "unslop/plain-prose",
+      "file": "cache/cache.go",
+      "start": 24,
+      "end": 24,
+      "explanation": "The doc comment makes promotional claims instead of stating what Get returns.",
+      "action": "State that Get returns the value stored under key and whether it was present."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "cache/cache.go",
+      "start": 25,
+      "end": 34
+    }
+  ]
+}

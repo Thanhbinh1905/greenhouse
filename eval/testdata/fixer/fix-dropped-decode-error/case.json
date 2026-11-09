@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-dropped-decode-error",
+  "description": "Load returns nil when the JSON is invalid.",
+  "intent": "Load the service configuration from a JSON file.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "decode-error-dropped",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "config/config.go",
+      "start": 21,
+      "end": 23,
+      "explanation": "When json.Unmarshal fails, Load returns a nil error, so a malformed configuration silently loads as zero values.",
+      "action": "Return the decode error."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "config/config.go",
+      "start": 14,
+      "end": 25
+    }
+  ]
+}

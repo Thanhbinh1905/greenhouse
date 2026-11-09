@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "id": "fix-offbyone-window",
+  "description": "The window loop stops one window early.",
+  "intent": "Add rolling window sums for the dashboard chart.",
+  "rules": [
+    "unslop",
+    "no-comments"
+  ],
+  "findings": [
+    {
+      "label": "last-window-skipped",
+      "selected": true,
+      "priority": "P1",
+      "origin": "correctness",
+      "rule": "",
+      "file": "window/window.go",
+      "start": 14,
+      "end": 14,
+      "explanation": "The loop condition i+k < len(xs) skips the final window, so Sums returns one fewer sum than Sizes reports and nothing for an input of exactly k values.",
+      "action": "Iterate while i+k <= len(xs)."
+    }
+  ],
+  "expected_response": "fixed",
+  "scope": [
+    {
+      "file": "window/window.go",
+      "start": 11,
+      "end": 22
+    }
+  ]
+}
