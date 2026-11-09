@@ -348,12 +348,10 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 		return fail(err)
 	}
 	rec.Target, rec.Candidate = target, head
-	provider, _, _ := strings.Cut(o.Model, "/")
 	executable := o.Pi
 	backends := map[string]any{"version": 2, "writable": map[string][]string{"reviewer": {capture}}}
 	if o.Backend == "claude" {
 		executable = o.Agent
-		backends["claude"] = map[string]string{"executable": shimBin}
 	}
 	backendsJSON, _ := json.Marshal(backends)
 	if err := os.WriteFile(filepath.Join(home, "backends.json"), backendsJSON, 0o600); err != nil {
@@ -364,26 +362,19 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
 	}
-	reviewer, _ := json.Marshal(map[string]any{"version": 2, "executable": shimBin, "model": o.Model})
-	if err := os.WriteFile(filepath.Join(home, "reviewer.json"), reviewer, 0o600); err != nil {
+	native := filepath.Join(work, "bin")
+	if err := os.MkdirAll(native, 0700); err != nil {
 		return fail(err)
 	}
-	if o.BaseURL == "" {
-		return fail(errors.New("evaluation provider base URL required"))
+	name := o.Backend
+	if name == "" {
+		name = "pi"
 	}
-	keyEnv := strings.ToUpper(provider) + "_API_KEY"
-	if provider == "fake" {
-		keyEnv = "EVAL_TEST_API_KEY"
-	}
-	providerConfig, _ := json.Marshal(map[string]any{
-		"version":   2,
-		"providers": map[string]any{provider: map[string]string{"base_url": o.BaseURL, "api_key_env": keyEnv, "api": "openai-completions"}},
-		"models":    []string{o.Model},
-	})
-	if err := os.WriteFile(filepath.Join(home, "providers.json"), providerConfig, 0o600); err != nil {
+	if err := os.Symlink(shimBin, filepath.Join(native, name)); err != nil {
 		return fail(err)
 	}
-	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath}}
+	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
+
 	defer stopDaemon(home)
 	v, err := a.call(map[string]any{"op": "attach"})
 	if err != nil {
@@ -511,6 +502,9 @@ func redactTree(dir string) error {
 }
 
 func runLive(o runOptions) (*Report, error) {
+	if o.BaseURL != "" {
+		return nil, errors.New("configure evaluation routing in native agent settings; -base-url is retired")
+	}
 	c, err := LoadCorpus(o.Corpus)
 	if err != nil {
 		return nil, err

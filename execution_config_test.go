@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,18 +10,16 @@ import (
 func TestChangedReviewerAndStaleRuleTokenRefuse(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
-	path := filepath.Join(home, "reviewer.json")
-	b, _ := os.ReadFile(path)
-	var cfg ReviewerConfig
-	json.Unmarshal(b, &cfg)
-	cfg.Executable = "/bin/true"
-	changed, _ := json.Marshal(cfg)
-	writeConfigBytes(path, changed, 0600)
+	path := filepath.Join(filepath.Dir(home), "native-bin", "pi")
+	saved := path + ".saved"
+	if err := os.Rename(path, saved); err != nil {
+		t.Fatal(err)
+	}
 	refused := mutate(t, bin, repo, home, v, "review", "changed-config", nil)
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "trusted reviewer changed") {
 		t.Fatal(refused)
 	}
-	writeConfigBytes(path, b, 0600)
+	os.Rename(saved, path)
 	updated := mutate(t, bin, repo, home, v, "resolve-rules", "new-resolution", nil)
 	refused = mutate(t, bin, repo, home, v, "review", "old-rule-token", nil)
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "stale") {

@@ -153,7 +153,7 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 	}
 	v = waitReview(t, bin, repo, home)
 	review := readProbe(t, filepath.Join(probe, "review.json"))
-	want := map[string]string{"home": "denied", "repo": "denied", "snapshot": "denied", "blocked": "denied", "provider": "allowed"}
+	want := map[string]string{"home": "denied", "repo": "denied", "snapshot": "denied", "blocked": "allowed", "provider": "allowed"}
 	for k, w := range want {
 		if review[k] != w {
 			t.Fatalf("reviewer access %s = %q, want %q (all: %v)", k, review[k], w, review)
@@ -166,7 +166,7 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 		}
 	}
 	c := runOf(t, v)["review"].(map[string]any)["confinement"].(map[string]any)
-	if c["status"] != "enforced" || c["role"] != "reviewer" || c["mechanism"] != "landlock" || len(c["writable"].([]any)) != 2 || !strings.Contains(jsonText(c["writable"]), jsonText(probe)) || strings.Contains(jsonText(c["writable"]), jsonText(repo)) || !strings.Contains(jsonText(c["tcp_connect_ports"]), allowed) || strings.Contains(jsonText(c["tcp_connect_ports"]), blocked) {
+	if c["status"] != "degraded" || c["role"] != "reviewer" || c["mechanism"] != "landlock" || len(c["writable"].([]any)) != 1 || !strings.Contains(jsonText(c["writable"]), jsonText(probe)) || strings.Contains(jsonText(c["writable"]), jsonText(repo)) || !strings.Contains(c["network"].(string), "unrestricted outbound TCP") {
 		t.Fatalf("reviewer confinement record = %v", c)
 	}
 
@@ -176,14 +176,14 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 	}
 	v = waitRepair(t, bin, repo, home)
 	fix := readProbe(t, filepath.Join(probe, "fix.json"))
-	for k, w := range map[string]string{"candidate": "allowed", "home": "denied", "repo": "denied", "blocked": "denied"} {
+	for k, w := range map[string]string{"candidate": "allowed", "home": "denied", "repo": "denied", "blocked": "allowed"} {
 		if fix[k] != w {
 			t.Fatalf("fixer access %s = %q, want %q (all: %v)", k, fix[k], w, fix)
 		}
 	}
 	repair := runOf(t, v)["repair"].(map[string]any)
 	fc := repair["confinement"].(map[string]any)
-	if fc["status"] != "enforced" || fc["role"] != "fixer" || !strings.Contains(jsonText(fc["writable"]), jsonText(repair["worktree"])) || strings.Contains(jsonText(fc["writable"]), jsonText(repo)) {
+	if fc["status"] != "degraded" || fc["role"] != "fixer" || !strings.Contains(jsonText(fc["writable"]), jsonText(repair["worktree"])) || strings.Contains(jsonText(fc["writable"]), jsonText(repo)) {
 		t.Fatalf("fixer confinement record = %v", fc)
 	}
 	for _, name := range []string{"review-escape", "fix-escape"} {
@@ -194,7 +194,7 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 		}
 	}
 	screen := terminalOutput(t, bin, repo, home, "q\n")
-	if !strings.Contains(screen, "Confinement: reviewer landlock enforced") || !strings.Contains(screen, "Confinement: fixer landlock enforced") {
+	if !strings.Contains(screen, "Confinement: reviewer DEGRADED") || !strings.Contains(screen, "Confinement: fixer DEGRADED") {
 		t.Fatalf("terminal must show confinement:\n%s", screen)
 	}
 }
@@ -247,7 +247,7 @@ func axiWithoutLandlock(t *testing.T, bin, repo, home, request string) map[strin
 	t.Helper()
 	c := exec.Command(os.Args[0])
 	c.Dir = repo
-	c.Env = append(os.Environ(), "GREENHOUSE_TEST_WITHOUT_LANDLOCK="+jsonText([]string{bin, "axi"}), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret")
+	c.Env = append(os.Environ(), "GREENHOUSE_TEST_WITHOUT_LANDLOCK="+jsonText([]string{bin, "axi"}), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PATH="+filepath.Join(filepath.Dir(home), "native-bin")+":"+os.Getenv("PATH"), "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
 	c.Stdin = strings.NewReader(request)
 	b, err := c.CombinedOutput()
 	if err != nil {

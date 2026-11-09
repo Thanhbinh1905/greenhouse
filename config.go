@@ -130,6 +130,10 @@ func configStatuses() []ConfigStatus {
 				status.Status = "current"
 			}
 		}
+		if (name == "providers.json" || name == "reviewer.json") && status.Status != "absent" {
+			status.Status = "retired"
+			status.Error = "Preserved for legacy evidence. Native agents own login, provider routing and executable discovery; this file is not used for new reviews."
+		}
 		out = append(out, status)
 	}
 	return out
@@ -163,6 +167,9 @@ func migrateConfig(actor, reason, action string) ([]Migration, error) {
 	}
 	var pending []pendingMigration
 	for _, name := range configFiles {
+		if name == "providers.json" || name == "reviewer.json" {
+			continue
+		}
 		path := filepath.Join(h, name)
 		b, err := os.ReadFile(path)
 		if os.IsNotExist(err) {

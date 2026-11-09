@@ -31,6 +31,11 @@ provider = HTTPServer(("127.0.0.1", 0), ModelHandler)
 threading.Thread(target=provider.serve_forever, daemon=True).start()
 env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
            GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
+native_bin = root / "native-bin"
+native_bin.mkdir()
+(native_bin / "pi").write_text("#!/usr/bin/python3\nimport json,os,sys\nstate=os.environ['GREENHOUSE_HOME']\nrole='fixer' if any('read,edit,write' in a for a in sys.argv) else 'reviewer'\nwith open(os.path.join(state,role+'.json')) as f: target=json.load(f)['executable']\nos.execv(target,[target]+sys.argv[1:])\n")
+(native_bin / "pi").chmod(0o700)
+env["PATH"] = f"{native_bin}:{env['PATH']}"
 state_dir = root / "state"
 state_dir.mkdir(mode=0o700)
 (state_dir / "providers.json").write_text(json.dumps({"version": 2, "providers": {
@@ -201,7 +206,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
         (repo / "sample.txt").write_text("candidate\n")
         for args in [["add", "sample.txt"], ["-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate"]]:
             subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
-        session(width, ["s", "auto full 6", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "g", "q"], f"-responses-{width}-start")
+        session(width, ["s", "auto full 6", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "", "Change the sample", target, "g", "q"], f"-responses-{width}-start")
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and axi()["run"]["status"] in ("running", "cancelling"):
             time.sleep(0.05)
@@ -215,7 +220,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
         assert done["review"]["result"]["resolutions"][0]["check"] == "confirmed"
         for want in ["Resolved (fixed)", "Response fixed: rewrote the selected line", "Review check confirmed: the line now reads repaired",
                      "Snapshot: unchanged | 1 file | tree " + done["review"]["snapshot"]["tree"],
-                     "Confinement: reviewer landlock enforced", "Confinement: fixer landlock enforced", "Outcome: REPAIRED PASS"]:
+                     "Confinement: reviewer DEGRADED", "Confinement: fixer DEGRADED", "Outcome: REPAIRED PASS"]:
             assert want in flat, (want, text)
 
 
@@ -282,7 +287,7 @@ with open("sample.txt", "w") as f: f.write("repaired\\n")
     fixer_config = root / "state" / "fixer.json"
     fixer_config.write_text(json.dumps({"version": 2, "executable": str(fixer),"model":"fixture/model","name":"Test","email":"test@example.invalid","checks":[["/usr/bin/python3","-c","from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"]] }))
     fixer_config.chmod(0o600)
-    session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Inspect committed sample", target, "l", "c", "v", "q"], "-dispatch")
+    session(56, ["n", "new", "s", "ask one-pass 7", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "", "Inspect committed sample", target, "l", "c", "v", "q"], "-dispatch")
     deadline = time.monotonic() + 10
     while time.monotonic() < deadline and axi()["run"]["status"] == "running":
         time.sleep(0.02)
@@ -409,7 +414,7 @@ open("sample.txt","w").write("repaired\\n")
         target = full_repo(name, dict(commands, **extra))
         width = widths[name]
         limit = 3 if name == "full-unreviewed" else 6
-        session(width, ["s", f"auto full {limit}", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        session(width, ["s", f"auto full {limit}", "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "", "Change the sample", target, "g", "q"], "-" + name)
         state = settle()
         other = 100 if width == 56 else 56
         text = session(width, ["i", "q"], f"-{name}-result")
@@ -453,7 +458,7 @@ open("sample.txt","w").write("repaired\\n")
         if cleans:
             (root / "fix-cleans").write_text("1")
         target = full_repo(name, commands)
-        session(width, ["s", settings, "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "g", "q"], "-" + name)
+        session(width, ["s", settings, "pi", "fixture/model", "pi", "fixture/model", "unslop", "", "a", "p", "", "Change the sample", target, "g", "q"], "-" + name)
         parked = settle()
         decision = parked["decision"]
         asked = session(width, ["i", "q"], f"-{name}-decision")
@@ -502,6 +507,7 @@ open("sample.txt","w").write("repaired\\n")
     for backend in ["claude", "codex"]:
         (root / f"fake-{backend}").write_text(fake_cli)
         (root / f"fake-{backend}").chmod(0o700)
+        (native_bin / backend).symlink_to(root / f"fake-{backend}")
     backends = root / "state" / "backends.json"
     backends.write_text(json.dumps({"version": 2, "writable": fixture_writes, "claude": {"executable": str(root / "fake-claude")},
                                     "codex": {"executable": str(root / "fake-codex"), "provider": {"base_url": "http://127.0.0.1:1/v1"}}}))
@@ -509,7 +515,7 @@ open("sample.txt","w").write("repaired\\n")
     for width in [56, 80, 100]:
         target = full_repo(f"paused-{width}", commands)
         (root / "codex-modes").write_text("quota")
-        session(width, ["s", "auto one-pass 4", "codex", "gpt-5.6-luna", "pi", "fixture/model", "unslop", "", "a", "p", "Change the sample", target, "l", "v", "q"], f"-paused-{width}")
+        session(width, ["s", "auto one-pass 4", "codex", "gpt-5.6-luna", "pi", "fixture/model", "unslop", "", "a", "p", "", "Change the sample", target, "l", "v", "q"], f"-paused-{width}")
         paused = settle()
         assert paused["run"]["status"] == "paused" and paused["run"]["review_used"] == 0, paused["run"]
         sentence = paused["explanation"]
@@ -537,14 +543,13 @@ open("sample.txt","w").write("repaired\\n")
         override.write_text('{"version":1,"mode":"ask"}\n')
         config.write_text(json.dumps({"executable": str(full_reviewer), "model": "fixture/model"}))
         settings = ["s", "ask one-pass 3", "pi", "fixture/model", "pi", "fixture/model", "unslop", ""]
-        trust = session(width, ["i", "u", "migrate", "t", "trust", "n", "new"] + settings + ["r"] + settings + ["a", "p", "Change the sample", target, "l", "v", "q"], f"-trust-{width}")
+        trust = session(width, ["i", "u", "migrate", "t", "trust", "n", "new"] + settings + ["r"] + settings + ["a", "p", "", "Change the sample", target, "l", "v", "q"], f"-trust-{width}")
         state = settle()
         flat = " ".join(trust.split())
-        assert "reviewer.json uses schema version 1" in flat and ".greenhouse.json IGNORED: repository not trusted" in flat and "repository not trusted" in flat, trust
+        assert "retired" in flat and ".greenhouse.json IGNORED: repository not trusted" in flat and "repository not trusted" in flat, trust
         assert "Repository override: .greenhouse.json applied to new runs" in flat and "mode = ask (trusted repository override)" in flat, trust
         assert "Sources: trusted repository override: mode" in flat, trust
-        assert json.loads(config.read_text())["version"] == 2
-        assert [m["file"] for m in state["migrations"]][-1] == "reviewer.json" and (root / "state" / state["migrations"][-1]["backup"]).exists()
+        assert json.loads(config.read_text()).get("version") is None
         assert state["repository"]["status"] == "applied" and state["run"]["review_used"] == 1, state["run"]["status"]
         assert state["run"]["configs"][0]["sources"]["mode"] == "trusted repository override"
         saved = json.loads(override.read_text())

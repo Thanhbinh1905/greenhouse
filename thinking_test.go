@@ -21,7 +21,7 @@ print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':
 print(json.dumps({'type':'agent_settled','aborted':False}))
 `
 
-func TestPiReviewerRunsWithTheCatalogThinkingSetting(t *testing.T) {
+func TestPiReviewerReusesNativeReasoningConfiguration(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	root := filepath.Dir(home)
@@ -34,7 +34,7 @@ func TestPiReviewerRunsWithTheCatalogThinkingSetting(t *testing.T) {
 	run := runOf(t, waitReview(t, bin, repo, home))
 	models, err := os.ReadFile(filepath.Join(root, "models.json"))
 	if err != nil || !strings.Contains(string(models), `"reasoning":true`) {
-		t.Fatalf("the provider entry drops the catalog's reasoning flag: %s %v", models, err)
+		t.Fatalf("native provider reasoning configuration was not reused: %s %v", models, err)
 	}
 	if got := run["review"].(map[string]any)["thinking"]; got != "medium" {
 		t.Fatalf("review thinking = %v, want the level Pi reported", got)

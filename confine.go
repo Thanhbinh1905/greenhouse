@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 	"syscall"
@@ -23,6 +21,7 @@ type Confinement struct {
 	Role      string   `json:"role"`
 	Writable  []string `json:"writable"`
 	Ports     []int    `json:"tcp_connect_ports,omitempty"`
+	LockDirs  []string `json:"native_auth_lock_dirs,omitempty"`
 	Network   string   `json:"network"`
 	Reason    string   `json:"reason,omitempty"`
 }
@@ -31,7 +30,7 @@ type confinePolicy struct {
 	ABI      int      `json:"abi"`
 	Writable []string `json:"writable"`
 	Files    []string `json:"files"`
-	Ports    []int    `json:"ports"`
+	Locks    []string `json:"locks,omitempty"`
 }
 
 const (
@@ -39,14 +38,13 @@ const (
 	landlockAddRule       = 445
 	landlockRestrictSelf  = 446
 
-	fsExecute    = 1 << 0
-	fsWriteFile  = 1 << 1
-	fsReadFile   = 1 << 2
-	fsReadDir    = 1 << 3
-	fsRefer      = 1 << 13
-	fsTruncate   = 1 << 14
-	netBindTCP   = 1 << 0
-	netConnectTC = 1 << 1
+	fsExecute   = 1 << 0
+	fsWriteFile = 1 << 1
+	fsReadFile  = 1 << 2
+	fsReadDir   = 1 << 3
+	fsRefer     = 1 << 13
+	fsTruncate  = 1 << 14
+	netBindTCP  = 1 << 0
 
 	oPath          = 0x200000
 	prSetNoNewPriv = 38
@@ -72,36 +70,6 @@ func handledFS(abi int) uint64 {
 		mask |= fsTruncate
 	}
 	return mask
-}
-
-func agentPorts(config ReviewerConfig) []int {
-	set := map[int]bool{}
-	add := func(raw string) {
-		u, err := url.Parse(raw)
-		if err != nil || u.Host == "" {
-			return
-		}
-		port := u.Port()
-		if port == "" {
-			port = map[string]string{"http": "80", "https": "443", "socks5": "1080", "socks5h": "1080"}[u.Scheme]
-		}
-		if n, err := strconv.Atoi(port); err == nil && n > 0 && n < 65536 {
-			set[n] = true
-		}
-	}
-	add(config.Provider.BaseURL)
-	if config.Backend == backendClaude || config.Backend == backendCodex {
-		set[443] = true
-	}
-	for _, key := range []string{"HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"} {
-		add(os.Getenv(key))
-	}
-	var ports []int
-	for p := range set {
-		ports = append(ports, p)
-	}
-	sort.Ints(ports)
-	return ports
 }
 
 func backendDegradedReason(backend string) string {
@@ -134,6 +102,18 @@ func confinementFor(role string, config ReviewerConfig, writable []string) (*con
 	}
 	c.ABI = abi
 	policy := &confinePolicy{ABI: abi, Writable: c.Writable, Files: []string{"/dev/null"}}
+	if backendOf(config) == backendPi {
+		nativeDir := os.Getenv("PI_CODING_AGENT_DIR")
+		if nativeDir == "" {
+			if userHome, err := os.UserHomeDir(); err == nil {
+				nativeDir = filepath.Join(userHome, ".pi", "agent")
+			}
+		}
+		if info, err := os.Stat(nativeDir); err == nil && info.IsDir() && filepath.IsAbs(nativeDir) {
+			policy.Locks = []string{nativeDir}
+			c.LockDirs = policy.Locks
+		}
+	}
 	c.Status = "enforced"
 	if degraded != "" {
 		c.Status, c.Reason = "degraded", degraded
@@ -142,9 +122,9 @@ func confinementFor(role string, config ReviewerConfig, writable []string) (*con
 		c.Status, c.Network = "degraded", "unrestricted"
 		c.Reason = strings.TrimPrefix(c.Reason+fmt.Sprintf("; Landlock ABI %d cannot restrict TCP; filesystem writes are confined, network is not", abi), "; ")
 	} else {
-		policy.Ports = agentPorts(config)
-		c.Ports = policy.Ports
-		c.Network = "TCP connect only to the listed ports; no listening sockets"
+		c.Status = "degraded"
+		c.Network = "unrestricted outbound TCP for native provider routing; listening sockets denied"
+		c.Reason = strings.TrimPrefix(c.Reason+"; filesystem writes remain confined; provider routing belongs to the native agent", "; ")
 	}
 	return policy, c
 }
@@ -184,7 +164,7 @@ func enforce(policy confinePolicy) error {
 	attr := make([]byte, 8, 16)
 	binary.LittleEndian.PutUint64(attr, handled)
 	if policy.ABI >= 4 {
-		attr = binary.LittleEndian.AppendUint64(attr, netBindTCP|netConnectTC)
+		attr = binary.LittleEndian.AppendUint64(attr, netBindTCP)
 	}
 	fd, _, errno := syscall.Syscall(landlockCreateRuleset, uintptr(unsafe.Pointer(&attr[0])), uintptr(len(attr)), 0)
 	if errno != 0 {
@@ -213,6 +193,11 @@ func enforce(policy confinePolicy) error {
 			return err
 		}
 	}
+	for _, dir := range policy.Locks {
+		if err := addPath(dir, fsReadDir|fsReadFile|1<<7|1<<4); err != nil {
+			return err
+		}
+	}
 	fileAccess := uint64(fsReadFile | fsWriteFile)
 	if policy.ABI >= 3 {
 		fileAccess |= fsTruncate
@@ -220,16 +205,6 @@ func enforce(policy confinePolicy) error {
 	for _, file := range policy.Files {
 		if err := addPath(file, fileAccess); err != nil {
 			return err
-		}
-	}
-	if policy.ABI >= 4 {
-		for _, port := range policy.Ports {
-			rule := make([]byte, 16)
-			binary.LittleEndian.PutUint64(rule, netConnectTC)
-			binary.LittleEndian.PutUint64(rule[8:], uint64(port))
-			if _, _, errno := syscall.Syscall6(landlockAddRule, fd, 2, uintptr(unsafe.Pointer(&rule[0])), 0, 0, 0); errno != 0 {
-				return fmt.Errorf("port rule %d: %v", port, errno)
-			}
 		}
 	}
 	if _, _, errno := syscall.RawSyscall6(syscall.SYS_PRCTL, prSetNoNewPriv, 1, 0, 0, 0, 0); errno != 0 {

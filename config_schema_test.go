@@ -29,6 +29,7 @@ func legacyConfigFixture(t *testing.T) (string, string, string, string, map[stri
 	installPipelineProvider(t, home)
 	writeExecutable(t, filepath.Join(root, "fake-pi"), fullReviewer)
 	writeExecutable(t, filepath.Join(root, "gate"), gateCommand)
+	writePrivateJSON(t, filepath.Join(home, "reviewer.json"), ReviewerConfig{Executable: filepath.Join(root, "fake-pi"), Model: "fixture/model"})
 	legacy := map[string]string{
 		"reviewer.json": `{"executable":"` + filepath.Join(root, "fake-pi") + `","model":"fixture/model"}`,
 		"pipeline.json": `{ "name":"Test","email":"test@example.invalid","test":[["` + filepath.Join(root, "gate") + `","test"]],"repair_limit":2,"not_applicable":{"lint":"none","docs":"none","push":"local","pr":"local","ci":"local"} }`,
@@ -69,10 +70,10 @@ func TestLegacyConfigurationMigratesExplicitlyWithBackup(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, target, legacy := legacyConfigFixture(t)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	if entry := configEntry(t, v, "reviewer.json"); entry["status"] != "older" || entry["version"] != 1.0 || entry["current"] != 2.0 {
-		t.Fatalf("legacy reviewer.json not reported as older: %v", entry)
+	if entry := configEntry(t, v, "pipeline.json"); entry["status"] != "older" || entry["version"] != 1.0 || entry["current"] != 2.0 {
+		t.Fatalf("legacy pipeline.json not reported as older: %v", entry)
 	}
-	if !has(strs(v["actions"]), "migrate") || !strings.Contains(strings.Join(strs(v["blocked"]), "\n"), "reviewer.json uses schema version 1") {
+	if !has(strs(v["actions"]), "migrate") || !strings.Contains(strings.Join(strs(v["blocked"]), "\n"), "pipeline.json uses schema version 1") {
 		t.Fatalf("migration not offered: %v %v", v["actions"], v["blocked"])
 	}
 	v = mutate(t, bin, repo, home, v, "apply", "full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
@@ -91,7 +92,7 @@ func TestLegacyConfigurationMigratesExplicitlyWithBackup(t *testing.T) {
 		t.Fatalf("migration refused: %v", migrated)
 	}
 	records := migrated["migrations"].([]any)
-	if len(records) != 3 {
+	if len(records) != 1 {
 		t.Fatalf("want one record per legacy file: %v", records)
 	}
 	for _, item := range records {
@@ -124,11 +125,11 @@ func TestLegacyConfigurationMigratesExplicitlyWithBackup(t *testing.T) {
 			t.Fatalf("pipeline.json budget unit not made explicit: %s", after)
 		}
 	}
-	if replay := axi(t, bin, repo, home, request); replay["outcome"] != "ok" || len(replay["migrations"].([]any)) != 3 {
+	if replay := axi(t, bin, repo, home, request); replay["outcome"] != "ok" || len(replay["migrations"].([]any)) != 1 {
 		t.Fatalf("replay changed the recorded migration: %v", replay)
 	}
 	v = axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	if configEntry(t, v, "reviewer.json")["status"] != "current" || has(strs(v["actions"]), "migrate") {
+	if configEntry(t, v, "pipeline.json")["status"] != "current" || has(strs(v["actions"]), "migrate") {
 		t.Fatalf("migrated configuration still reported as older: %v", v["config"])
 	}
 	if prepared := axi(t, bin, repo, home, prepareRequest(v, "prepare-current", target)); prepared["outcome"] != "ok" {
@@ -140,22 +141,23 @@ func TestNewerConfigurationVersionRefusesClearly(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, target, _ := legacyConfigFixture(t)
 	root := filepath.Dir(home)
-	newer := `{"version":3,"executable":"` + filepath.Join(root, "fake-pi") + `","model":"fixture/model","sandbox":"strict"}`
-	writeRaw(t, filepath.Join(home, "reviewer.json"), newer)
+	newer := `{"version":3,"budget_unit":"rounds","name":"` + filepath.Base(root) + `"}`
+	writeRaw(t, filepath.Join(home, "pipeline.json"), newer)
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	if entry := configEntry(t, v, "reviewer.json"); entry["status"] != "newer" || !strings.Contains(entry["error"].(string), "newer than this Greenhouse supports (2)") {
+	if entry := configEntry(t, v, "pipeline.json"); entry["status"] != "newer" || !strings.Contains(entry["error"].(string), "newer than this Greenhouse supports (2)") {
 		t.Fatalf("newer version not reported: %v", entry)
 	}
 	refused := axi(t, bin, repo, home, `{"version":1,"op":"migrate","action_id":"migrate-newer","reason":"try"}`)
-	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "reviewer.json: schema version 3 is newer") {
+	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "pipeline.json: schema version 3 is newer") {
 		t.Fatalf("migration accepted a newer file: %v", refused)
 	}
-	if b, _ := os.ReadFile(filepath.Join(home, "reviewer.json")); string(b) != newer {
+	if b, _ := os.ReadFile(filepath.Join(home, "pipeline.json")); string(b) != newer {
 		t.Fatal("refused migration changed the newer file")
 	}
 	if b, _ := os.ReadFile(filepath.Join(home, "providers.json")); strings.Contains(string(b), `"version"`) {
 		t.Fatal("a refused migration still migrated another file")
 	}
+	v = mutate(t, bin, repo, home, v, "apply", "full-newer", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
 	refused = axi(t, bin, repo, home, prepareRequest(v, "prepare-newer", target))
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "newer than this Greenhouse supports") {
 		t.Fatalf("newer configuration was read: %v", refused)

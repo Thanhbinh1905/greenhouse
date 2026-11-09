@@ -9,47 +9,19 @@ Greenhouse is a standalone terminal and JSON client for a per-user local run sto
 
 ## First review
 
-Use Linux with Git, Go 1.23 or later, Pi 1.5.0, and the GitHub CLI. Run these commands from the Greenhouse checkout:
+Install Greenhouse on Linux with Git, then install and sign in to Pi, Claude Code, or Codex using that CLI's instructions. Greenhouse uses the installed agent's login, provider routing, and default model.
+
+From a feature branch with committed changes, run:
 
 ```sh
-mkdir -p "$HOME/.local/bin"
-GOBIN="$HOME/.local/bin" go install .
-export PATH="$HOME/.local/bin:$PATH"
-gh auth login
-gh auth setup-git
-```
-
-Create a private configuration directory and select Pi's executable and model:
-
-```sh
-export GREENHOUSE_HOME="$HOME/.local/state/greenhouse"
-mkdir -p "$GREENHOUSE_HOME"
-chmod 700 "$GREENHOUSE_HOME"
-python3 - <<'PYCONFIG'
-import json, os, pathlib, shutil
-state = pathlib.Path(os.environ["GREENHOUSE_HOME"])
-pi = shutil.which("pi")
-assert pi, "Install Pi 1.5.0 and put pi on PATH"
-config = state / "reviewer.json"
-config.write_text(json.dumps({"version": 2, "executable": pi, "model": "openai/gpt-5.6-luna"}))
-config.chmod(0o600)
-PYCONFIG
-```
-
-Set `OPENAI_API_KEY` in your environment. For an existing Pi login, `export OPENAI_API_KEY="$(pi auth print-api-key --provider openai)"` loads it without printing it. For a custom OpenAI-compatible endpoint, configure [providers.json](#independent-review-configuration) before continuing. Greenhouse does not import Pi's saved provider or credential files.
-
-From a Git worktree with a committed change, record the full target SHA with `git rev-parse main`. Then run:
-
-```sh
-cd /path/to/your/worktree
 greenhouse
 ```
 
-Press `p`, enter the intended behavior and target SHA, then `l` to load rules and `v` to review. Press `i` to refresh; `q` detaches. Reopening `greenhouse` attaches to the same review. Settings (`s`) selects a different reviewer or fixer. Apply affects this run; Save changes future defaults.
+Press `p` to choose an installed agent, enter the change intent, and confirm the suggested Git target. Press `l` to load rules, then `v` to start an independent review. Press `c` to inspect the committed diff. Dirty files are excluded. Settings (`s`) changes the reviewer, fixer, and model. Enter `default` for a model to use the agent's own selection.
 
-The first run uses one-pass review. An optional selected repair requires [fixer.json](#json-interface), passing checks, and explicit `f` authorization. It creates a local commit and stops as `fixed-not-independently-rereviewed`. Press `h` for guarded handback. Full delivery requires the [full pipeline plan](#full-pipeline) and `GH_TOKEN` in the launch environment; `export GH_TOKEN="$(gh auth token)"` uses your existing GitHub login. Configure a single CI trigger, such as `pull_request`, for each required check name. Duplicate checks block readiness.
+No `reviewer.json`, `providers.json`, `backends.json`, copied keys, or executable paths are needed for the first review. Missing authentication reports the native login action. Greenhouse never runs login or changes credential files.
 
-The [live validation record](docs/evidence/v1-live/README.md) includes an isolated-HOME installation, both presets, and their remaining limits.
+Selected repair still requires explicitly trusted checks in `fixer.json`. Full delivery still requires a trusted `pipeline.json` command plan and forge authorization. These approve commands, not providers.
 
 ## Build and open
 
@@ -63,7 +35,7 @@ The executable requires Linux, Git, and a committed worktree. Runtime operation 
 
 The screen follows the run through [events](#events): it redraws when the daemon commits a change, without a keypress. `Events: live` shows an open subscription; `Events: reconnecting (daemon unavailable)` shows that the daemon stopped, and the screen resynchronizes from a snapshot when it returns. The terminal never starts work or restarts a daemon to follow events. `i` still refreshes on demand. A run owned by a [host](docs/embedding.md) shows `Host:` with the grant, verdict and whether it is current; the terminal can follow it but not change it.
 
-Settings edits are drafts until you select Apply or Save. Settings lists each current value with its source: `built-in default`, `per-user`, `trusted repository override` or `run-local`. Apply adds an immutable run-local snapshot. Save changes user defaults (`d`) or the trusted repository override (`r`) without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal wraps prose at word boundaries and abbreviates tokens wider than the screen. AXI retains their full values. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). Pi models are exact provider-qualified IDs. The default reviewer is Pi with `openai/gpt-5.6-luna`, selected from the measured review-quality evaluation. Executables remain controlled by private per-user `reviewer.json`, `fixer.json` and `backends.json`; model selections cannot change executable authority. See [repository overrides](#repository-overrides-and-trust).
+Settings edits are drafts until you select Apply or Save. Settings lists each current value with its source: `built-in default`, `per-user`, `trusted repository override` or `run-local`. Apply adds an immutable run-local snapshot. Save changes user defaults (`d`) or the trusted repository override (`r`) without changing the current run. Use Settings twice to do both. Rule selection does not load bytes. Explicit resolution snapshots content; dispatch retains the exact emitted criteria and committed diff. The terminal wraps prose at word boundaries and abbreviates tokens wider than the screen. AXI retains their full values. The terminal supports mode, preset, combined review/repair limit, separate reviewer and fixer backend/model selections, rule selection, and the auto-resume switch. Each role uses `pi`, `claude` or `codex`; see [agent backends](#agent-backends). An empty model uses the native default. Explicit Pi models use provider-qualified IDs. Executables come from absolute PATH directories; repository overrides cannot name executables. See [repository overrides](#repository-overrides-and-trust).
 
 ## JSON interface
 
@@ -107,12 +79,12 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
 
 Supported reads include `attach`, `inspect`, `watch`, `models`, and `transcript`. `models` queries the trusted Pi executable's catalog. Supported mutations are `apply`, `save`, `trust`, `migrate`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, and `cancel-auto-resume`, and `recover`. Mutations use the same run, input, gate, token, and action fields. `resolve-rules`, `review`, and `cancel` require no settings or reason. `apply` and `save` require a complete settings object and a reason; `save` takes `"target":"user"` (the default) or `"target":"repository"`. `new` retains previous evidence and uses saved defaults. Source branch/head movement blocks Apply and Save on the old run. A current token-bound New request can capture the moved source when no writer or unknown-outcome hazard exists. Old evidence remains unchanged. Unknown executor or writer outcomes block replacement until an explicit [recovery](#recovery-after-interruption) answers them.
 
-Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json`. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. The fixer runs under [OS confinement](#review-snapshot-and-os-confinement) and must answer each selected finding with a [resolution response](#resolution-responses). Checks run directly, not through an agent.
+Replay an identical mutation with the same action ID to obtain its recorded result, even after reconnect or restart. Reusing an ID with different input refuses. New action IDs require current tokens. Inspect the active run after replay: a recorded result may describe an older snapshot. An outcome of `ok` means the lifecycle request succeeded, never that a validation stage passed. Errors and unsupported operations have `refused` or `error` outcomes. The one-pass `repair` action requires `selected` finding IDs and a private per-user `fixer.json` containing trusted checks. It admits one repair after a completed finding review, requires at least one configured trusted check, and binds the action to the exact review, intent, candidate, rules, selected findings, fixer, and check argv. Admission consumes repair budget durably. Replay returns its receipt; a second repair is refused. The controller creates a managed private worktree and branch, gives Pi only read/edit/write tools with extensions, MCP, skills, project context, and sessions disabled, then runs configured checks and creates a local commit. The fixer runs under [OS confinement](#review-snapshot-and-os-confinement) and must answer each selected finding with a [resolution response](#resolution-responses). Checks run directly, not through an agent.
 
 Create `fixer.json` in `GREENHOUSE_HOME` with mode 0600:
 
 ```json
-{"version":2,"executable":"/absolute/path/to/pi","model":"provider/exact-model-id","name":"Greenhouse","email":"greenhouse@example.invalid","checks":[["/absolute/path/to/check","--verify"]]}
+{"version":2,"name":"Greenhouse","email":"greenhouse@example.invalid","checks":[["/absolute/path/to/check","--verify"]]}
 ```
 
 Each check is an argv array with an absolute executable path. No shell is inserted. Missing checks are unconfigured. Changed fixer/check configuration refuses execution. The controller records check exit codes and bounded output summaries, verifies candidate scope, and commits only authorized paths. Binary changes, submodules, executable Git hooks, configured Git filters, fsmonitor, attributes, or signing requirements are unsupported and refuse rather than being bypassed. Failed or ambiguous candidates remain available in their managed worktree for recovery.
@@ -145,62 +117,19 @@ A host such as Posse can embed Greenhouse as its reviewer. Requests with `host` 
 
 ## Independent review configuration
 
-Create a private `reviewer.json` in `GREENHOUSE_HOME` (or the default state directory), with mode 0600. The executable is the trusted per-user authority; Settings selects the model independently:
+Greenhouse discovers `pi`, `claude`, and `codex` on PATH. The selected executable is bound during Prepare. Relative PATH entries are ignored. Model and agent choices remain ordinary Greenhouse preferences. Native CLIs own authentication, model discovery, and provider routing.
 
-```json
-{"version":2,"executable":"/absolute/path/to/pi","model":"openai/gpt-5.6-luna"}
-```
-
-Configure custom provider endpoints in a separate private `providers.json` in `GREENHOUSE_HOME`:
-
-```json
-{"version":2,"providers":{"openai":{"base_url":"http://127.0.0.1:8317/v1","api_key_env":"OPENAI_API_KEY","api":"openai-completions"}},"models":[]}
-```
-
-Set both files to mode 0600. Pi-reported models appear in Settings. Add custom provider-qualified IDs to `models` when Pi does not report them. Prepare checks the provider's `/models` endpoint and the configured key environment variable before any review. Greenhouse writes only the endpoint and `$ENV_VAR` reference into Pi's private temporary agent directory. It never reads Pi's `models.json` or stores credentials.
-
-Only per-user configuration grants executable authority. There are no arbitrary arguments or session selectors, and a repository override cannot set an executable. Models require an exact provider-qualified ID without a thinking suffix or wildcard. A successful response must report the same provider and model. The adapter targets the installed Pi 1.5.0 CLI; incompatible flags or event output yield an inconclusive result.
-
-Prepare (`p`, or AXI `prepare` with `intent` and `target`) captures a full commit object ID, the current candidate, selected committed diff, and reviewer configuration. Inspect `run.selected_diff` or toggle `c` before dispatch. Resolve rules, then request `review` with current mutation tokens. Review rejects changed reviewer configuration until another explicit Prepare. Dirty files are neither included nor changed. Empty diffs, binary patches, submodules, and inputs exceeding 1 MiB refuse; the encoded bundle is capped at 2 MiB.
-
-A one-pass run permits one invocation. Admission consumes review usage even if launch fails, the process is cancelled, or its output is inconclusive. Apply cannot reset usage. Cap decisions belong to the full preset. Forge operations and automatic retries are unsupported. New run retains prior finding identities; omission does not resolve them.
-
-Pi receives a fresh ephemeral session, explicit read-only tools, no extensions, MCP, skills, context files, prompt templates, or project approval. Its working directory and agent directory are fresh and private. Author session routing and process-injection environment variables are removed. The adapter uses environment-based provider credentials; existing Pi auth files and custom provider files are not copied or loaded. Pi's working directory is a read-only snapshot of the complete candidate tree, described in [Review snapshot and OS confinement](#review-snapshot-and-os-confinement). The bundle also carries the committed diff and the candidate content of each changed file, with line numbers. Findings must still fall within changed hunks.
-
-`run.review` exposes backend, requested and reported model, deterministic argv, configuration digest, exact emitted input and criteria digests, the tree snapshot, the confinement record, coverage, findings, status, and bounded execution summaries. Output is capped at 4 MiB, stderr at 64 KiB, and runtime at ten minutes. Review uses `exec.CommandContext` with a 250 ms pipe-wait grace; it does not verify descendant cleanup. Repair and check commands use a Linux subreaper that terminates and reaps descendants after completion or cancellation. If that runner dies or cannot verify cleanup, Greenhouse parks the writer outcome. Raw output goes only to the redacted [transcript log](#transcript-logs). The terminal displays the same findings, provenance, and summary; `c` also shows the diff. A successful verdict certifies only the bound independent-review input. Config changes and source movement mark current evidence stale; historical verdicts remain inspectable.
+Prepare resolves a Git branch or commit to an immutable full commit ID and records the candidate, intent, and committed diff. Settings changes do not rewrite old evidence. Review requires current rules and a matching prepared agent configuration. An explicit model must match the model reported by the agent; an empty selection records the native default's reported identity.
 
 ## Agent backends
 
-The reviewer and the fixer each run on one of three backends, selected per role in Settings or in the AXI `settings` object:
+Each review and repair starts a fresh session without an author conversation.
 
-| Backend | Invocation | Model ID | Reported model check |
-|---|---|---|---|
-| `pi` | `pi --print --mode json` | `provider/model`, for example `openai/gpt-5.6-luna` | provider and model of the final assistant message |
-| `claude` | `claude -p --output-format stream-json` with `--json-schema` for reviews | exact Claude model, for example `claude-sonnet-5-5`; aliases such as `sonnet` fail the check | the session `init` model and the single `modelUsage` model |
-| `codex` | `codex exec --json` with `--output-schema` for reviews | exact Codex model, for example `gpt-5.6-luna` | the `model` in Codex's `SessionConfiguredEvent` log line |
+- Pi uses ephemeral JSON mode with extensions, MCP, skills, context files, prompt templates, themes, and project approval disabled. Native `PI_CODING_AGENT_DIR` remains available for login and routing; inherited session variables are removed.
+- Claude uses safe mode, explicit read tools for review, strict MCP configuration, and no session persistence. Native user settings retain authentication and routing. Unexpected tools refuse the result.
+- Codex retains native user configuration, disables hooks, plugins, shell tools, web search, and author context, and uses an ephemeral session. Greenhouse asks `codex mcp list --json` for server names and disables each server explicitly. An unreadable server list refuses preparation. Review uses the read-only sandbox; repair uses workspace-write.
 
-A run whose backend reports a different model is `inconclusive` for a review and `fixer-failed` for a repair.
-
-Claude Code and Codex use the User's existing CLI logins. Greenhouse runs the installed CLI with the environment it already strips for Pi, minus author-session variables (`CLAUDECODE`, `CLAUDE_CODE_*`, `CODEX_*` except `CODEX_HOME`). It never reads, copies or stores credential files, and it stores only a redacted one-line failure message. Declare the executables in a private `backends.json` (mode 0600) in `GREENHOUSE_HOME`:
-
-```json
-{"version": 2,
- "claude": {"executable": "/home/me/.local/bin/claude"},
- "codex": {"executable": "/home/me/.local/bin/codex",
-           "provider": {"base_url": "http://127.0.0.1:8317/v1"}},
- "fallback": {"reviewer": [{"backend": "claude", "model": "claude-sonnet-5-5"}]},
- "auto_resume": {"max_attempts": 3, "base_seconds": 60, "max_seconds": 3600}}
-```
-
-Codex runs with `--ignore-user-config`, so its `config.toml`, hooks and MCP servers do not load. When the Codex login works only through a custom endpoint, `provider.base_url` routes the session there and still uses the stored login; `provider.env_key` names an API-key environment variable instead. Pi keeps `reviewer.json`, `fixer.json` and `providers.json`. The fixer of every backend uses the name, email and checks of `fixer.json`.
-
-Each invocation is a fresh session with no inherited author context:
-
-- Claude: `--no-session-persistence --safe-mode --restricted --strict-mcp-config --disable-slash-commands --setting-sources ""`. Reviewers get `--tools Read,Grep,Glob --permission-mode dontAsk`; fixers get `--tools Read,Edit,Write,Grep,Glob --permission-mode acceptEdits`. Greenhouse refuses a session whose `init` event lists a tool outside that set.
-- Codex: `--ephemeral --ignore-user-config --ignore-rules`, with shell, hooks, plugins, apps, memories, multi-agent, browser, image and web-search tools disabled and `project_doc_max_bytes=0`. Reviewers run in the `read-only` sandbox, which Greenhouse checks in the session's permission profile; fixers run in `workspace-write` with only Codex's patch tool.
-- Reviewers run in the read-only candidate snapshot; fixers run in the private candidate worktree. Both run under OS confinement, and the controller still checks the fixer's scope before committing.
-
-Pi provider entries preserve the trusted model catalog's reasoning flag. Review and repair executions and attempts record Pi's reported effective thinking level as `thinking`. Runtime catalog discovery uses a tracked process-tree runner with a four-second deadline and follows execution cancellation. Cancel is available during repair provider preparation. Catalog executor records remain separate from review verdict records during restart reconciliation.
+The controller verifies snapshots after review and checks repair scope before committing. Child processes have bounded lifetimes and cancellation retains existing writer custody rules. Raw output is kept only in the redacted transcript log.
 
 ## Review snapshot and OS confinement
 
@@ -208,12 +137,12 @@ Each review admission records `run.review.snapshot`: the candidate commit, its G
 
 On Linux, reviewers and fixers run under Landlock. Greenhouse probes the kernel's Landlock ABI, records the policy in `run.review.confinement` or the repair's `confinement`, and applies it in the agent process before exec:
 
-- The whole file system stays readable and executable. A Pi reviewer may write only its private per-run agent directory. Claude Code and Codex receive no write access to their real config directories or credentials. Greenhouse records these roles as `degraded` because the CLIs may require writable session state; config, hooks, skills, plugins, MCP settings and credentials remain read-only. No reviewer can write the snapshot, the repository or any other path.
+- The whole file system stays readable and executable. Pi may create and remove authentication lock directories; native credential files remain read-only. Claude Code and Codex receive no write access to their real config directories or credentials. Greenhouse records these roles as `degraded` because the CLIs may require writable session state; config, hooks, skills, plugins, MCP settings and credentials remain read-only. No reviewer can write the snapshot, the repository or any other path.
 - A fixer may also write its private candidate worktree and a private scratch directory, which becomes its `TMPDIR`. The repository's Git metadata stays read-only.
-- From ABI 4 on, TCP is limited to connecting to the ports the backend needs: the provider `base_url` port, 443 for Claude Code and Codex, and the port of any `HTTPS_PROXY`, `HTTP_PROXY` or `ALL_PROXY`. Listening sockets are refused.
+- From ABI 4 on, listening sockets are refused. Outbound TCP is unrestricted because native agents own provider routing. This is recorded as degraded network confinement; filesystem write restrictions still apply.
 - `backends.json` can add writable directories per role, for example for a wrapper that keeps its own logs: `"writable": {"reviewer": ["/abs/dir"], "fixer": ["/abs/dir"]}`. Paths must be absolute and cannot be `/`.
 
-The record lists the mechanism, ABI, writable directories (`writable`) and allowed ports. When Landlock is unavailable, the record's `status` is `degraded`, the network is `unrestricted`, and `reason` says why; the agent then runs without OS confinement. A Landlock ABI below 4 confines writes but not the network and is also `degraded`. The terminal prints each record as `Confinement: reviewer landlock enforced (ABI 6)` or `Confinement: reviewer DEGRADED: <reason>`, followed by the writable paths and the network rule. If the policy cannot be applied, the agent does not start and the review is `inconclusive` or the repair `fixer-failed`.
+The record lists the mechanism, ABI, writable directories (`writable`), authentication lock directories, and network policy. When Landlock is unavailable, the record's `status` is `degraded`, the network is `unrestricted`, and `reason` says why; the agent then runs without OS confinement. A Landlock ABI below 4 confines writes but not the network and is also `degraded`. The terminal prints each record as `Confinement: reviewer landlock enforced (ABI 6)` or `Confinement: reviewer DEGRADED: <reason>`, followed by the writable paths and the network rule. If the policy cannot be applied, the agent does not start and the review is `inconclusive` or the repair `fixer-failed`.
 
 ## Resolution responses
 
@@ -375,7 +304,7 @@ A candidate ref is guarded by a lease file in the repository's common Git direct
 
 ## Configuration versions
 
-Each per-user file (`reviewer.json`, `fixer.json`, `providers.json`, `backends.json` and `pipeline.json`) carries `"version": 2`. A file without `version` is version 1. Greenhouse refuses to use an older file and names it in `blocked` and in the AXI `config` list. A file newer than this Greenhouse supports is refused with an upgrade message and left unchanged.
+`fixer.json`, `backends.json`, and `pipeline.json` carry `"version": 2`. Retired `reviewer.json` and `providers.json` files remain on disk and appear as `retired` in configuration inspection. They do not route new reviews. Migration skips them. Legacy executable and provider fields in `backends.json`, and executable/model/provider fields in `fixer.json`, do not control new invocations. Retained review inputs keep their original configuration and arguments; resuming requires explicit preparation through the native agent boundary.
 
 `migrate` (terminal `u`) upgrades every older file in one action. It checks that the new file decodes to exactly the old values, saves the original bytes as `<file>.v1-<digest>.bak` with mode 0600, and replaces the file atomically. Each migration is recorded in `migrations` with the file, versions, backup, before and after digests, actor, reason, and action ID. If any file is newer or invalid, nothing changes.
 
@@ -418,6 +347,7 @@ go vet ./...
 test -z "$(gofmt -l *.go)"
 go build -o "$TMPDIR/greenhouse" .
 python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
+python3 tools/native_start_check.py "$TMPDIR/greenhouse" docs/evidence/native
 python3 tools/recovery_check.py "$TMPDIR/greenhouse" docs/evidence/recovery
 python3 tools/events_check.py "$TMPDIR/greenhouse" docs/evidence/events
 ```
@@ -432,14 +362,13 @@ The corpus in `eval/testdata/corpus` holds small Git changes with known findings
 
 ```sh
 go run ./eval check
-export OPENAI_API_KEY="$(pi auth print-api-key --provider openai)"
-go run ./eval run -model openai/gpt-5.6-luna -base-url http://127.0.0.1:8317/v1 \
+go run ./eval run -model openai/gpt-5.6-luna \
   -parallel 4 -label "what changed" -out docs/evidence/review-eval/NN-name
 ```
 
 Add `-backend claude -model claude-sonnet-5-5` to review through the Claude backend; `-agent` names the `claude` executable (default: `claude` on `PATH`). The judge still runs on Pi with `-judge-model`.
 
-For each case, `run` commits the base and head trees with fixed identities and dates, starts an isolated daemon, and sends `attach`, `apply`, `resolve-rules`, `prepare`, and `review` over AXI. `reviewer.json` names the eval binary, which records the exact argv and stdin Greenhouse delivers, then runs real Pi with the same arguments and input and captures its JSON events. The eval writes a trusted `providers.json` with the configured base URL and credential environment-variable name. Greenhouse creates Pi's temporary provider configuration and reads credentials only from the environment. Credential-like environment values are redacted from the output. Runs are paid model calls.
+For each case, `run` commits fixed base and head trees and drives Greenhouse through AXI. A PATH-installed recording shim forwards the emitted arguments and input to the native CLI. Configure evaluation routing in that CLI. Greenhouse provider files are not created. Runs are paid model calls.
 
 `report.md` summarizes a run; `report.json` holds the configuration, every case record, and the summary. Each case directory holds `input.json` (the exact stdin bytes), `argv.json`, `events.jsonl` (Pi's events without streaming deltas), and `timing.json`. The metrics are:
 
@@ -462,12 +391,11 @@ For each case, `run` commits the base and head trees with fixed identities and d
 
 ```sh
 go run ./eval fix-check
-export OPENAI_API_KEY="$(pi auth print-api-key --provider openai)"
-go run ./eval fix-run -base-url http://127.0.0.1:8317/v1 -parallel 4 \
+go run ./eval fix-run -parallel 4 \
   -label "what changed" -out docs/evidence/fixer-eval/NN-name
 ```
 
-For each case, `fix-run` commits the trees, starts an isolated daemon and sends `attach`, `apply`, `resolve-rules`, `prepare`, `review` and `repair` over AXI. `reviewer.json` names the eval binary, which answers with the case's seeded findings, so every run repairs the same review. `fixer.json` names the eval binary too; it records the exact argv and stdin Greenhouse delivers to the fixer, then runs real Pi with the default fixer model (`-model` to change it). Greenhouse runs `go vet ./...` and `go test ./...` as checks and commits the repair. The harness then adds the hidden tests to the committed tree and runs them. The metrics are:
+For each case, `fix-run` seeds a fixed review, records the native fixer invocation, runs trusted checks, and evaluates the resulting commit with hidden tests. The native CLI owns login and routing. The metrics are:
 
 - A case is fixed when the response matches the expected one, every acceptance test passes, no other test fails, and the repair has no scope violation.
 - A regression is a failing `TestRegress` or candidate test.

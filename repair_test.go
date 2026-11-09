@@ -412,6 +412,8 @@ func TestAcceptedCancellationAtCommitAdmissionPreventsCommit(t *testing.T) {
 	stopDaemon(t, home)
 	t.Setenv("GREENHOUSE_HOME", home)
 	t.Setenv("GREENHOUSE_TEST_PROVIDER_KEY", "fixture-secret")
+	t.Setenv("PATH", filepath.Join(filepath.Dir(home), "native-bin")+":"+os.Getenv("PATH"))
+	t.Setenv("PI_CODING_AGENT_DIR", filepath.Join(filepath.Dir(home), "native-agent"))
 	store, err := load(home)
 	if err != nil {
 		t.Fatal(err)

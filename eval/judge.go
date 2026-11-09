@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -43,16 +42,8 @@ func judgeOnce(o judgeOptions, t judgeTask) (judgeVerdict, Usage, error) {
 		return v, Usage{}, err
 	}
 	defer os.RemoveAll(dir)
-	agent := filepath.Join(dir, "agent")
-	if err := os.MkdirAll(agent, 0o700); err != nil {
-		return v, Usage{}, err
-	}
 	if o.BaseURL != "" {
-		provider, _, _ := strings.Cut(o.Model, "/")
-		models, _ := json.Marshal(map[string]any{"providers": map[string]any{provider: map[string]string{"baseUrl": o.BaseURL}}})
-		if err := os.WriteFile(filepath.Join(agent, "models.json"), models, 0o600); err != nil {
-			return v, Usage{}, err
-		}
+		return v, Usage{}, fmt.Errorf("configure judge routing in native Pi settings; -base-url is retired")
 	}
 	type expected struct {
 		ID     string `json:"id"`
@@ -73,11 +64,10 @@ func judgeOnce(o judgeOptions, t judgeTask) (judgeVerdict, Usage, error) {
 	cmd := exec.Command(o.Pi, "--print", "--mode", "json", "--no-session", "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-themes", "--no-approve", "--offline", "--model", o.Model, "--system-prompt", judgeSystem)
 	cmd.Dir = dir
 	for _, kv := range os.Environ() {
-		if !strings.HasPrefix(kv, "PI_") && !strings.HasPrefix(kv, shimEnv+"=") {
+		if (!strings.HasPrefix(kv, "PI_") || strings.HasPrefix(kv, "PI_CODING_AGENT_DIR=")) && !strings.HasPrefix(kv, shimEnv+"=") {
 			cmd.Env = append(cmd.Env, kv)
 		}
 	}
-	cmd.Env = append(cmd.Env, "PI_CODING_AGENT_DIR="+agent)
 	cmd.Stdin = bytes.NewReader(input)
 	out, err := cmd.Output()
 	p := parseEvents(out)

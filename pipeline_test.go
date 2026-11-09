@@ -162,6 +162,30 @@ func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
 		data = []byte(strings.Replace(string(data), "{", `{"writable":{"reviewer":[`+string(root)+`],"fixer":[`+string(root)+`]},`, 1))
 		data = []byte(strings.Replace(string(data), ",}", "}", 1))
 	}
+	if name := filepath.Base(path); name == "reviewer.json" || name == "fixer.json" {
+		var cfg struct {
+			Executable string `json:"executable"`
+		}
+		json.Unmarshal(data, &cfg)
+		if cfg.Executable != "" {
+			root := filepath.Dir(filepath.Dir(path))
+			native := filepath.Join(root, "native-bin")
+			os.MkdirAll(native, 0700)
+			role := "reviewer"
+			if name == "fixer.json" {
+				role = "fixer"
+			}
+			os.WriteFile(filepath.Join(native, role), []byte(cfg.Executable), 0600)
+			script := `#!/usr/bin/python3
+import os,sys
+root=os.path.dirname(__file__)
+role='fixer' if any('read,edit,write' in x for x in sys.argv) else 'reviewer'
+with open(root+'/'+role) as f: target=f.read()
+os.execv(target,[target]+sys.argv[1:])
+`
+			os.WriteFile(filepath.Join(native, "pi"), []byte(script), 0700)
+		}
+	}
 	return os.WriteFile(path, data, perm)
 }
 

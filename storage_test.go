@@ -84,8 +84,14 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 	}{run.Review.Config.Executable, run.Review.Config.Model}
 	run.Review.ConfigDigest = digest(legacyConfig)
 	run.Review.Config.Provider = ProviderConfig{}
+	run.Review.Config.Native = false
+	run.Review.Config.DisabledMCP = ""
+	run.Review.Config.Backend = ""
+	run.Review.Args = legacyAgentArgs(run.Review.Config, "reviewer", verdictSchema(run.Review.Full, len(run.Review.Responses) > 0), reviewerPrompt)
 	if run.Reviewer != nil {
 		run.Reviewer.Provider = ProviderConfig{}
+		run.Reviewer.Native = false
+		run.Reviewer.Backend = ""
 	}
 	for i := range run.Configs {
 		run.Configs[i].Settings.ReviewerBackend = ""

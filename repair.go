@@ -19,13 +19,16 @@ import (
 )
 
 type FixerConfig struct {
-	Backend    string         `json:"backend,omitempty"`
-	Executable string         `json:"executable"`
-	Model      string         `json:"model"`
-	Provider   ProviderConfig `json:"provider"`
-	Name       string         `json:"name"`
-	Email      string         `json:"email"`
-	Checks     [][]string     `json:"checks"`
+	Native           bool           `json:"native,omitempty"`
+	DisabledMCP      string         `json:"disabled_mcp,omitempty"`
+	InstructionsFile string         `json:"instructions_file,omitempty"`
+	Backend          string         `json:"backend,omitempty"`
+	Executable       string         `json:"executable"`
+	Model            string         `json:"model"`
+	Provider         ProviderConfig `json:"provider"`
+	Name             string         `json:"name"`
+	Email            string         `json:"email"`
+	Checks           [][]string     `json:"checks"`
 }
 type CheckResult struct {
 	Args             []string `json:"args"`
@@ -116,13 +119,16 @@ func trustedFixer() (FixerConfig, error) {
 	if e = decodeConfig("fixer.json", b, &cfg); e != nil {
 		return cfg, configFailure(e, "invalid trusted fixer configuration or missing required checks")
 	}
-	if !filepath.IsAbs(cfg.Executable) || !validText(cfg.Model) || !strings.Contains(cfg.Model, "/") || strings.ContainsAny(cfg.Model, "*?[] \t\r\n:") || !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
-		return cfg, errors.New("invalid trusted fixer configuration or missing required checks")
+	if cfg.Name == "" {
+		cfg.Name = "Greenhouse"
 	}
-	info, e = os.Stat(cfg.Executable)
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0111 == 0 {
-		return cfg, errors.New("fixer executable unavailable")
+	if cfg.Email == "" {
+		cfg.Email = "greenhouse@example.invalid"
 	}
+	if !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
+		return cfg, errors.New("repair requires explicitly trusted check commands in fixer.json")
+	}
+
 	for _, args := range cfg.Checks {
 		if len(args) == 0 || len(args) > 64 || !filepath.IsAbs(args[0]) {
 			return cfg, errors.New("checks require bounded absolute executable argv")
@@ -556,18 +562,6 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	defer os.RemoveAll(agentDir)
-	if e = prepareFixerAgent(ctx, x, agentDir); e != nil {
-		status := "unconfigured"
-		if errors.Is(e, context.Canceled) {
-			status = "cancelled"
-		}
-		if errors.Is(e, ErrWriterTreeUnknown) {
-			status = "unknown-outcome"
-			x.Writer = "unknown"
-		}
-		fail(status, e)
-		return
-	}
 	x.Writer = "unknown"
 	x.Status = "fixing"
 	if !save() {

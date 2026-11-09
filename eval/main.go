@@ -16,11 +16,11 @@ import (
 
 const usage = `usage:
   go run ./eval check [-corpus dir]
-  go run ./eval judge -model provider/id [-pi path] [-base-url url] [-parallel n] [-corpus dir] run-dir...
+  go run ./eval judge -model provider/id [-pi path] [-parallel n] [-corpus dir] run-dir...
   go run ./eval rescore [-corpus dir] run-dir...
-  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-base-url url] [-judge-model provider/id] [-cases a,b] [-parallel n]
+  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-parallel n]
   go run ./eval fix-check [-corpus dir]
-  go run ./eval fix-run -base-url url -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
+  go run ./eval fix-run -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
 
 func main() {
 	if cfg := os.Getenv(shimEnv); cfg != "" {
@@ -66,11 +66,11 @@ func dispatch(sub string, args []string) error {
 		return nil
 	case "fix-run":
 		o := fixOptions{Settle: 15 * time.Minute}
-		fs.StringVar(&o.Model, "model", "openai/gpt-5.6-luna", "exact provider/model of the fixer (default: the Greenhouse default fixer)")
+		fs.StringVar(&o.Model, "model", "openai/gpt-5.6-luna", "exact provider/model of the evaluation fixer")
 		fs.StringVar(&o.Out, "out", "", "new directory for the report and captures")
 		fs.StringVar(&o.Label, "label", "", "short description recorded in the report")
 		fs.StringVar(&o.Pi, "pi", "", "absolute Pi executable (default: pi on PATH)")
-		fs.StringVar(&o.BaseURL, "base-url", "", "route the model's provider to this base URL")
+		fs.StringVar(&o.BaseURL, "base-url", "", "retired; use native agent provider settings")
 		price := fs.String("price", "0.2,1.2,0.02,0.25", "USD per million input, output, cache-read and cache-write tokens, used when Pi reports no cost")
 		cases := fs.String("cases", "", "comma-separated case IDs (default: all)")
 		fs.IntVar(&o.Parallel, "parallel", 1, "cases repaired concurrently")
@@ -124,7 +124,7 @@ func dispatch(sub string, args []string) error {
 		o := judgeOptions{}
 		fs.StringVar(&o.Model, "model", "", "exact provider/model of the judge")
 		fs.StringVar(&o.Pi, "pi", "", "absolute Pi executable (default: pi on PATH)")
-		fs.StringVar(&o.BaseURL, "base-url", "", "route the judge model's provider to this base URL")
+		fs.StringVar(&o.BaseURL, "base-url", "", "retired; use native Pi provider settings")
 		fs.IntVar(&o.Parallel, "parallel", 4, "concurrent judge calls")
 		if err := fs.Parse(args); err != nil {
 			return err
@@ -192,11 +192,11 @@ func dispatch(sub string, args []string) error {
 		return nil
 	case "run":
 		o := runOptions{Settle: 12 * time.Minute}
-		fs.StringVar(&o.Model, "model", "", "exact provider/model for reviewer.json")
+		fs.StringVar(&o.Model, "model", "", "exact native agent model; provider/model for Pi")
 		fs.StringVar(&o.Out, "out", "", "new directory for the report and captures")
 		fs.StringVar(&o.Label, "label", "", "short description recorded in the report")
 		fs.StringVar(&o.Pi, "pi", "", "absolute Pi executable (default: pi on PATH)")
-		fs.StringVar(&o.BaseURL, "base-url", "", "route the model's provider to this base URL inside the reviewer's private agent directory")
+		fs.StringVar(&o.BaseURL, "base-url", "", "retired; use native agent provider settings")
 		fs.StringVar(&o.Backend, "backend", "pi", "reviewer backend: pi or claude")
 		fs.StringVar(&o.Agent, "agent", "", "absolute executable of a non-Pi backend (default: the backend name on PATH)")
 		cases := fs.String("cases", "", "comma-separated case IDs (default: all)")

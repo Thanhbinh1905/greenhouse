@@ -292,7 +292,7 @@ func persist(h string, s *Store) error {
 	return d.Sync()
 }
 func load(h string) (*Store, error) {
-	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
+	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: defaultAgent(), FixerBackend: defaultAgent()}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
 	b, e := os.ReadFile(filepath.Join(h, "state.json"))
 	if os.IsNotExist(e) {
 		return s, nil
@@ -332,7 +332,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)) {
+			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || !reviewArgsMatch(x) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -423,7 +423,7 @@ func view(s *Store, r *Run) Response {
 			v.Blocked = append(v.Blocked, "required rules unresolved or failed; use resolve-rules and inspect errors")
 		}
 		if r.Intent == "" || r.Target == "" || r.Reviewer == nil {
-			v.Blocked = append(v.Blocked, "prepare requires explicit intent, exact target commit and private reviewer.json")
+			v.Blocked = append(v.Blocked, "prepare requires intent, a Git target and an installed authenticated agent")
 		}
 		v.Run = r
 		v.Budget = budgetOf(r)
@@ -531,9 +531,20 @@ func backendOf(config ReviewerConfig) string {
 	}
 	return config.Backend
 }
+func defaultAgent() string {
+	agents := installedAgents()
+	if len(agents) > 0 {
+		return agents[0]
+	}
+	return backendPi
+}
 func validModelSelection(backend, model string) bool {
+	if model == "" {
+		_, ok := executionBackends[backend]
+		return ok
+	}
 	if backend == backendClaude || backend == backendCodex {
-		if model == "" || len(model) > 128 || model[0] == '-' || model[0] == '.' {
+		if len(model) > 128 || model[0] == '-' || model[0] == '.' {
 			return false
 		}
 		for _, c := range model {
@@ -565,15 +576,15 @@ func valid(s Settings) bool {
 func withModelDefaults(s Settings, defaults Settings) Settings {
 	if s.ReviewerBackend == "" {
 		s.ReviewerBackend = defaults.ReviewerBackend
-	}
-	if s.ReviewerModel == "" {
-		s.ReviewerModel = defaults.ReviewerModel
+		if s.ReviewerModel == "" {
+			s.ReviewerModel = defaults.ReviewerModel
+		}
 	}
 	if s.FixerBackend == "" {
 		s.FixerBackend = defaults.FixerBackend
-	}
-	if s.FixerModel == "" {
-		s.FixerModel = defaults.FixerModel
+		if s.FixerModel == "" {
+			s.FixerModel = defaults.FixerModel
+		}
 	}
 	return s
 }
@@ -598,7 +609,7 @@ func handleRequest(s *Store, q Request) Response {
 		if err != nil {
 			return fail(err.Error(), nil)
 		}
-		models, err := providerModelCatalog(config.Executable)
+		models, err := nativeModelCatalog(config.Executable)
 		if err != nil {
 			return fail(err.Error(), nil)
 		}
@@ -1515,8 +1526,16 @@ func terminal(h, path string) error {
 		}
 		fmt.Fprintf(&page, "Events: %s\n", live)
 		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), sourceSummary(fieldSources(s)))
+		if r.Target != "" {
+			fmt.Fprintf(&page, "Target: %s\nIntent: %s\nScope: committed target-to-candidate diff; dirty files excluded\n", r.Target, r.Intent)
+		}
 		if o := v.Repository; o != nil {
 			fmt.Fprintln(&page, overrideLine(o))
+		}
+		for _, cfg := range v.Config {
+			if cfg.Status == "retired" {
+				fmt.Fprintf(&page, "Configuration: %s retired; preserved, not used for new reviews\n", cfg.File)
+			}
 		}
 		if x := v.HostResult; x != nil {
 			outcome := x.Verdict
@@ -1764,16 +1783,54 @@ func terminal(h, path string) error {
 			q.Op = "resolve-conflict"
 		}
 		if op == "p" {
+			agents := installedAgents()
+			if len(agents) == 0 {
+				message = "No supported agent installed. Install pi, claude or codex on PATH and use its native login."
+				continue
+			}
+			terminalPrompt("Installed agents: %s\nReviewer agent [%s] (Enter keeps current):\n> ", strings.Join(agents, ", "), s.Settings.ReviewerBackend)
+			if !scan() {
+				return nil
+			}
+			if input != "" && input != s.Settings.ReviewerBackend {
+				if !has(agents, input) {
+					message = "Choose an installed agent: " + strings.Join(agents, ", ")
+					continue
+				}
+				draft := s.Settings
+				draft.ReviewerBackend = input
+				draft.FixerBackend = input
+				draft.ReviewerModel = ""
+				draft.FixerModel = ""
+				applied, err := call(h, Request{Version: protocolMax, Op: "apply", Path: path, RunID: r.ID, Input: r.Input, Gate: currentGate(r), Expected: r.Token, Action: opaque(), Reason: "select installed agent", Settings: &draft})
+				if err != nil {
+					return err
+				}
+				v = applied
+				if v.Outcome != "ok" {
+					message = v.Error
+					continue
+				}
+				r = v.Run
+				q.RunID = r.ID
+				q.Input = r.Input
+				q.Expected = r.Token
+				q.Gate = currentGate(r)
+			}
 			terminalPrompt("Intent:\n> ")
 			if !scan() {
 				return nil
 			}
 			q.Intent = input
-			terminalPrompt("Exact target commit ID:\n> ")
+			suggestion := suggestTarget(path)
+			terminalPrompt("Review committed changes against Git target [%s]:\n> ", suggestion)
 			if !scan() {
 				return nil
 			}
 			q.Target = input
+			if q.Target == "" {
+				q.Target = suggestion
+			}
 			q.Op = "prepare"
 		}
 		if op == "l" {
@@ -1807,12 +1864,15 @@ func terminal(h, path string) error {
 			if value := input; value != "" {
 				draft.ReviewerBackend = value
 			}
-			terminalPrompt("Pi models: %s\nClaude and Codex take an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
+			terminalPrompt("Pi models: %s\nEnter default to use the native model. Claude and Codex also accept an exact model ID.\nReviewer model [%s]:\n> ", modelsText, draft.ReviewerModel)
 			if !scan() {
 				return nil
 			}
 			if value := input; value != "" {
 				draft.ReviewerModel = value
+				if value == "default" {
+					draft.ReviewerModel = ""
+				}
 			}
 			terminalPrompt("Fixer backend (pi, claude, codex) [%s]:\n> ", draft.FixerBackend)
 			if !scan() {
@@ -1827,6 +1887,9 @@ func terminal(h, path string) error {
 			}
 			if value := input; value != "" {
 				draft.FixerModel = value
+				if value == "default" {
+					draft.FixerModel = ""
+				}
 			}
 			terminalPrompt("Selected rules (comma-separated; ? means optional; file:/absolute/path):\n> ")
 			if !scan() {
@@ -1996,4 +2059,12 @@ func finishReview(r *Run, done reviewOutcome) {
 
 func repairHeld(x *Repair) bool {
 	return x != nil && x.Handback != "handed-back" && x.Handback != "released"
+}
+
+func reviewArgsMatch(x *Execution) bool {
+	expected := agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	if !x.Config.Native {
+		expected = legacyAgentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	}
+	return digest(x.Args) == digest(expected)
 }

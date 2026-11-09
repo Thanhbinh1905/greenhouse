@@ -1,9 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -46,12 +43,8 @@ func TestRunFixLiveDrivesGreenhouseRepairWithoutNetwork(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
-	endpoint := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "m1"}}})
-	}))
-	defer endpoint.Close()
 	out := filepath.Join(dir, "out")
-	r, err := runFixLive(fixOptions{Corpus: filepath.Join("testdata", "fixer"), Out: out, Model: "fake/m1", Pi: pi, BaseURL: endpoint.URL + "/v1", Label: "fake", Cases: []string{"fix-offbyone-window", "fix-empty-average", "dispute-guarded-division"}, Parallel: 3, Settle: 2 * time.Minute, Price: Price{Input: 0.2, Output: 1.2}})
+	r, err := runFixLive(fixOptions{Corpus: filepath.Join("testdata", "fixer"), Out: out, Model: "fake/m1", Pi: pi, Label: "fake", Cases: []string{"fix-offbyone-window", "fix-empty-average", "dispute-guarded-division"}, Parallel: 1, Settle: 2 * time.Minute, Price: Price{Input: 0.2, Output: 1.2}})
 	if err != nil {
 		t.Fatal(err)
 	}

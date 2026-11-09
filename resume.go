@@ -405,9 +405,6 @@ func prepareRun(r *Run, intent, requested string) error {
 	if err != nil {
 		return err
 	}
-	if err = preflightPi(cfg); err != nil {
-		return err
-	}
 	r.Pipeline = nil
 	if settings.Preset == "full" {
 		plan, digests, err := trustedPlan()
@@ -546,4 +543,13 @@ func autoResumeLabel(s Settings) string {
 		return "on"
 	}
 	return "on (default in " + s.Mode + " mode)"
+}
+
+func suggestTarget(path string) string {
+	for _, name := range []string{"refs/remotes/origin/HEAD", "main", "master", "HEAD^"} {
+		if _, err := committedTarget(path, name); err == nil {
+			return name
+		}
+	}
+	return ""
 }

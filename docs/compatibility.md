@@ -42,13 +42,15 @@ A `watch` stream ID identifies one daemon process. Sequence numbers increase wit
 
 ## Configuration files
 
-`reviewer.json`, `fixer.json`, `providers.json`, `backends.json` and `pipeline.json` carry `"version": 2`; a file without `version` is version 1.
+`fixer.json`, `backends.json` and `pipeline.json` carry `"version": 2`; a file without `version` is version 1.
 
 - An older file is refused and listed under `config` until `migrate` upgrades it. Migration is lossless: it checks that the new file decodes to the same values and keeps the original bytes as a mode-0600 backup.
 - A newer file is refused with an upgrade message and left unchanged.
 - A new configuration version may add keys with defaults that keep the old behavior. Any change to an existing key's meaning, such as a budget unit, needs a new version and a recorded migration; Greenhouse never converts silently.
 
 `.greenhouse.json` and rule packs carry version 1 and refuse a newer version with an upgrade message.
+
+`reviewer.json` and `providers.json` are retired. Inspection reports them without using or migrating their contents. They remain on disk. Native CLIs own executable discovery, login, and provider routing for new invocations. Existing stored inputs retain their original arguments and provider metadata for inspection. Explicit Prepare binds a new native agent without resetting usage or rewriting old reviews.
 
 ## Run store
 

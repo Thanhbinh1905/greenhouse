@@ -38,6 +38,9 @@ func fixture(t *testing.T) (string, string, string) {
 	git(t, repo, "init", "-b", "main")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial")
 	home := filepath.Join(root, "state")
+	nativeHome := filepath.Join(root, "native-agent")
+	os.Mkdir(nativeHome, 0700)
+	os.WriteFile(filepath.Join(nativeHome, "models.json"), []byte(`{"providers":{"fixture":{"models":[{"id":"model","reasoning":true}]}}}`), 0600)
 	t.Cleanup(func() {
 		b, _ := os.ReadFile(filepath.Join(home, "pid"))
 		var pid int
@@ -52,8 +55,16 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	t.Helper()
 	c := exec.Command(bin, "axi")
 	c.Dir = repo
-	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret")
+	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
 	c.Env = append(c.Env, env...)
+	fixturePath := os.Getenv("PATH")
+	for _, entry := range env {
+		if strings.HasPrefix(entry, "PATH=") {
+			fixturePath = strings.TrimPrefix(entry, "PATH=")
+		}
+	}
+	c.Env = append(c.Env, "PATH="+filepath.Join(filepath.Dir(home), "native-bin")+":"+fixturePath)
+
 	// Race-enabled clients otherwise delay timed snapshots by one second at exit.
 	c.Env = append(c.Env, "GORACE="+os.Getenv("GORACE")+" atexit_sleep_ms=0")
 	c.Stdin = strings.NewReader(request)

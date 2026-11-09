@@ -88,6 +88,11 @@ def fixture(width):
     wrapper.chmod(0o700)
     env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(state), PATH=f"{bindir}:{os.environ['PATH']}",
                GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
+    native_bin = root / "native-bin"
+    native_bin.mkdir()
+    (native_bin / "pi").write_text("#!/usr/bin/python3\nimport json,os,sys\nstate=os.environ['GREENHOUSE_HOME']\nrole='fixer' if any('read,edit,write' in a for a in sys.argv) else 'reviewer'\nwith open(os.path.join(state,role+'.json')) as f: target=json.load(f)['executable']\nos.execv(target,[target]+sys.argv[1:])\n")
+    (native_bin / "pi").chmod(0o700)
+    env["PATH"] = f"{native_bin}:{env['PATH']}"
     for name, body in [("fake-pi", REVIEWER), ("fake-fixer", FIXER)]:
         (root / name).write_text(body)
         (root / name).chmod(0o700)

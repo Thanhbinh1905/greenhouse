@@ -52,7 +52,7 @@ func runShim(configPath string) int {
 }
 
 func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writer) (int, error) {
-	if len(args) == 1 && args[0] == "--list-models" {
+	if slices.Contains(args, "--list-models") {
 		command := exec.Command(cfg.Pi, args...)
 		command.Env = os.Environ()
 		command.Stdout, command.Stderr = stdout, stderr

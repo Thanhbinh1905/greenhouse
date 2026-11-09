@@ -1,9 +1,11 @@
 #!/usr/bin/python3
 import json,os,sys
-root=os.path.dirname(os.path.abspath(__file__))
-backend=os.path.basename(__file__).replace('fake-','')
+root=os.path.dirname(os.path.realpath(__file__))
+backend=os.path.basename(os.path.realpath(__file__)).replace('fake-','')
 fixtures=FIXTURES+'/'+backend
 args=sys.argv[1:]
+if args[:2]==["mcp","list"]:
+ print("[]");sys.exit(0)
 stdin=sys.stdin.read()
 try:
     with open(root+'/'+backend+'-calls.jsonl','a') as f:
@@ -56,7 +58,8 @@ def verdict():
         v['verdict']='findings'
         v['findings']=[{'id':'x','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample is wrong','action':'Fix the sample','rule':'','head':b['Head']}]
     return json.dumps(v)
-model=args[args.index('--model' if '--model' in args else '-m')+1]
+model='claude-haiku-5-5' if backend=='claude' else 'gpt-5.6-luna'
+if '--model' in args or '-m' in args: model=args[args.index('--model' if '--model' in args else '-m')+1]
 if os.path.exists(root+'/report-model-'+backend):
     model=open(root+'/report-model-'+backend).read()
 text=verdict()

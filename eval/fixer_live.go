@@ -163,21 +163,14 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 		return fail(err)
 	}
 	rec.Target, rec.Candidate = target, head
-	provider, _, _ := strings.Cut(o.Model, "/")
-	keyEnv := strings.ToUpper(provider) + "_API_KEY"
-	if provider == "fake" {
-		keyEnv = "EVAL_TEST_API_KEY"
-	}
 	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Review: k.Findings})
 	cfgPath := filepath.Join(work, "shim.json")
 	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
 		return fail(err)
 	}
 	files := map[string]any{
-		"backends.json":  map[string]any{"version": 2, "writable": map[string][]string{"fixer": {capture}}},
-		"reviewer.json":  map[string]any{"version": 2, "executable": shimBin, "model": o.Model},
-		"fixer.json":     map[string]any{"version": 2, "executable": shimBin, "model": o.Model, "name": "Eval Fixer", "email": "fixer@example.invalid", "checks": checks},
-		"providers.json": map[string]any{"version": 2, "providers": map[string]any{provider: map[string]string{"base_url": o.BaseURL, "api_key_env": keyEnv, "api": "openai-completions"}}, "models": []string{o.Model}},
+		"backends.json": map[string]any{"version": 2, "writable": map[string][]string{"fixer": {capture}}},
+		"fixer.json":    map[string]any{"version": 2, "name": "Eval Fixer", "email": "fixer@example.invalid", "checks": checks},
 	}
 	for name, body := range files {
 		b, _ := json.Marshal(body)
@@ -185,7 +178,14 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 			return fail(err)
 		}
 	}
-	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath}}
+	native := filepath.Join(work, "bin")
+	if err := os.MkdirAll(native, 0700); err != nil {
+		return fail(err)
+	}
+	if err := os.Symlink(shimBin, filepath.Join(native, "pi")); err != nil {
+		return fail(err)
+	}
+	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
 	defer stopDaemon(home)
 	v, err := a.call(map[string]any{"op": "attach"})
 	if err != nil {
@@ -319,8 +319,8 @@ func runFixLive(o fixOptions) (*FixReport, error) {
 			cases = append(cases, k)
 		}
 	}
-	if o.BaseURL == "" {
-		return nil, errors.New("evaluation provider base URL required")
+	if o.BaseURL != "" {
+		return nil, errors.New("configure provider routing in the native Pi configuration; -base-url is retired")
 	}
 	if o.Out, err = filepath.Abs(o.Out); err != nil {
 		return nil, err
