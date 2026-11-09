@@ -458,7 +458,7 @@ For each case, `run` commits the base and head trees with fixed identities and d
 
 `go run ./eval fix-run` measures selected-finding repair with a real model through the product's one-pass repair path. Like the review evaluation, it is development-only, and `go test ./...` never calls a model.
 
-Each case in `eval/testdata/fixer` holds a base and head tree whose head seeds a defect, the findings a review reports, which of them are selected, the expected resolution response (`fixed` or `disputed`), the head line ranges a correct repair may change, a reference repair in `fix/`, and hidden tests in `hidden/`. Hidden `TestAccept` tests check the selected finding; `TestRegress` tests and the candidate's own tests check behavior that must survive. The fixer never sees the hidden tests. `go run ./eval fix-check`, also run by `go test ./eval`, proves that every acceptance test of a fixed case fails on the head while the other tests pass, and that the reference repair passes every test inside the scope.
+`eval/testdata/fixer` holds nine defect cases and one dispute case. Each records base and head trees, findings, selected findings, the expected response (`fixed` or `disputed`), and the allowed edit ranges. Defect cases include a reference repair in `fix/`; every case has hidden tests in `hidden/`. Hidden `TestAccept` tests check the selected finding; `TestRegress` tests and the candidate's own tests check behavior that must survive. The fixer never sees the hidden tests. `go run ./eval fix-check`, also run by `go test ./eval`, proves that every acceptance test of a fixed case fails on the head while the other tests pass, and that the reference repair passes every test inside the scope.
 
 ```sh
 go run ./eval fix-check

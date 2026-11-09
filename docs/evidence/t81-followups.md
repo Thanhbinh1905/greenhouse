@@ -11,6 +11,8 @@ The regression tests exercise the executable through AXI with real Git and fixtu
 
 Both pass after the changes. `TestPiFixerRecordsTheEffectiveThinkingLevel` also verifies the fixer's private model entry and the effective level in both its repair and attempt records. The existing pipeline tests exercise review and repair completion through full pipelines. No network or model call is part of these tests.
 
+The first full-suite run exposed four specialized fake Pi fixers that ignored `--list-models`. They executed their kill, delayed-write, or shared-writer behavior during model discovery. Those fixtures now answer the Pi catalog command before running the behavior under test. All four custody and cancellation tests pass together afterward. The earlier thinking-test draft also expected `committed`; the established one-pass status is `fixed-not-independently-rereviewed`, which the final assertion checks.
+
 ## Real product path
 
 [Fixer run 05](fixer-eval/05-reasoning-and-response-validation/report.md) uses the real Pi backend and the default fixer on all ten cases. It fixes 9/10, with no regression or scope violation, for $0.0130 at the recorded token prices. Mean fixer latency is 14.3s. Every hidden acceptance test passes. The dispute case falsely answers `fixed` without an edit and now fails explicitly: `resolution response fixed ... without editing ratio/ratio.go`. Its repair head is empty. Response accuracy remains 9/10; the contradiction is visible as a failure.
