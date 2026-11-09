@@ -200,6 +200,8 @@ Each invocation is a fresh session with no inherited author context:
 - Codex: `--ephemeral --ignore-user-config --ignore-rules`, with shell, hooks, plugins, apps, memories, multi-agent, browser, image and web-search tools disabled and `project_doc_max_bytes=0`. Reviewers run in the `read-only` sandbox, which Greenhouse checks in the session's permission profile; fixers run in `workspace-write` with only Codex's patch tool.
 - Reviewers run in the read-only candidate snapshot; fixers run in the private candidate worktree. Both run under OS confinement, and the controller still checks the fixer's scope before committing.
 
+Pi provider entries preserve the trusted model catalog's reasoning flag. Review and repair executions and attempts record Pi's reported effective thinking level as `thinking`.
+
 ## Review snapshot and OS confinement
 
 Each review admission records `run.review.snapshot`: the candidate commit, its Git tree ID, the number of entries and bytes, and `digest`, the SHA-256 of `git ls-tree -r -l --full-tree` for that commit. The digest is part of the review input, so the input digest binds it. Before launch, Greenhouse writes every blob of that listing from the object store into a private directory, without Git attributes or filters, and makes files and directories read-only. The reviewer runs there. After the reviewer exits, Greenhouse compares every file, mode and symlink with the listing. A missing, extra or changed path makes the review `inconclusive`, and `snapshot.check` records `modified: <path>`; otherwise it is `unchanged`. When restart adopts an interrupted review, Greenhouse lists the candidate tree from the object store again and compares it with the bound digest, then checks the reviewer's copy if it survived. The check reads `verified after restart: ...` or `failed: ...`, and a failed check makes the review `inconclusive`. It reads `unverified` only when the candidate tree is no longer available. The snapshot holds at most 100,000 entries and 512 MiB.
@@ -474,8 +476,8 @@ For each case, `fix-run` commits the trees, starts an isolated daemon and sends 
 - Cost uses Pi's reported cost, or the reported tokens at `-price` when Pi reports none. Latency is the wall time of the fixer process.
 - The bar is at least 75% of cases fixed, with no regression and no scope violation on any case.
 
-[The recorded runs](docs/evidence/fixer-eval/README.md) show the default fixer meeting the bar at 90% after the response contract put unselected findings out of scope.
+[The recorded runs](docs/evidence/fixer-eval/README.md) show the default fixer meeting the bar at 90% with no regression or scope violation. A `fixed` response without an edit to the finding's file now fails the repair. The latest run uses Pi's `medium` thinking level; the remaining dispute case fails honestly.
 
 See [the rule contract](docs/rules.md) for selection, validation, provenance, and fixture delivery limits.
 
-See [the implementation sequence](docs/implementation-plan.md) for the unsupported spec areas.
+See [the implementation sequence](docs/implementation-plan.md) for v1 status and known limits.

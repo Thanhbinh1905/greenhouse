@@ -118,8 +118,6 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	return 0, nil
 }
 
-// seededReview answers a reviewer invocation with the case's seeded findings
-// in Pi's event format, so the fixer evaluation repairs a fixed review.
 func seededReview(seeded []SeededFinding, args []string, input []byte, stdout io.Writer) (int, error) {
 	var in struct {
 		Head  string

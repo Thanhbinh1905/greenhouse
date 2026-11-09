@@ -212,9 +212,6 @@ func (k FixCase) selectedLabels() []string {
 	return out
 }
 
-// checkFixCase proves the case discriminates: on the seeded head every
-// acceptance test of a fixed case fails while regression and visible tests
-// pass, and the reference repair passes every test inside the scope.
 func checkFixCase(k FixCase, work string) error {
 	before, out, err := runTests(filepath.Join(work, "head"), k.Head, k.Hidden)
 	if err != nil {

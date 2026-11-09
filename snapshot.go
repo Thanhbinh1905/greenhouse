@@ -299,9 +299,6 @@ func reviewDir(execution string) string {
 	return filepath.Join(os.TempDir(), "greenhouse-review-"+execution)
 }
 
-// reverifySnapshot checks an adopted review after a controller restart: the
-// candidate tree in the object store against the bound digest, then the
-// reviewer's copy when it survived.
 func reverifySnapshot(x *Execution) string {
 	dir := reviewDir(x.ID)
 	defer removeSnapshot(dir)

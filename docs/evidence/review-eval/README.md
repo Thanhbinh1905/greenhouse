@@ -84,6 +84,12 @@ Run 11 repeats the default reviewer, `openai/gpt-5.6-luna` through Pi, after t68
 - Mean latency rose from 8.5s (run 05) to 12.1s. The reviewer can now open files outside the diff.
 - Pi reported a cost of 0 for every message (`totalFromProvider: false`), because the provider entry Greenhouse writes carries no prices. Token usage is in each `events.jsonl`.
 
+## Reasoning restored
+
+[Run 12](12-reasoning-restored/report.md) repeats the default reviewer at `f281495` after Greenhouse carries Pi's trusted catalog reasoning flag into its private provider entry. Pi reported `medium` for all 16 cases, matching runs before the provider override. The execution and attempt records now retain that effective level.
+
+Recall remains 100% (13/13), high-severity recall remains 100% (9/9), and precision is 93% (13/14), compared with 81% in run 11. No clean case blocks, and no review is inconclusive. The sole false positive is another P2 `no-comments` finding on the helper's doc comment in `clean-extract-helper`. Mean latency is 14.4s, with a 26.6s maximum. Pi still reports zero catalog cost because the private provider entry has no prices; the event captures retain token usage. One rerun establishes no observed regression on this corpus, not an estimate of variance.
+
 ## Scoring
 
 File, origin, rule and an overlapping range of at most 15 lines only make a finding eligible. Credit comes from `adjudications.json` in each run directory. It holds one record per eligible finding: case, finding index, a SHA-256 digest of the finding as scored, expected defect ID, verdict (`detects`, `different-defect` or `duplicate`) and a one-sentence rationale that quotes the finding. The scorer refuses records that do not match the finding digest, do not quote the finding, name an expected defect at another location, or contradict the detection order. An eligible finding without a record earns no credit.

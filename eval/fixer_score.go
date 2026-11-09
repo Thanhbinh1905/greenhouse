@@ -39,9 +39,6 @@ type FixSummary struct {
 
 type TestOutcomes map[string]string
 
-// runTests writes tree and the hidden tests into dir and runs every package's
-// tests. A test that never reported a result, for example because its
-// package did not build, counts as failed.
 func runTests(dir string, tree, hidden map[string]string) (TestOutcomes, string, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, "", err
@@ -92,8 +89,6 @@ func runTests(dir string, tree, hidden map[string]string) (TestOutcomes, string,
 	return results, output.String(), nil
 }
 
-// runOneTest reruns a test that reported nothing because another test in its
-// package panicked or timed out.
 func runOneTest(dir, name string) string {
 	c := exec.Command("go", "test", "-count=1", "-run", "^"+name+"$", "./...")
 	c.Dir = dir
@@ -104,10 +99,6 @@ func runOneTest(dir, name string) string {
 	return "pass"
 }
 
-// changedLines aligns two versions of a file by longest common subsequence.
-// It returns the old line numbers that were removed or modified and, for each
-// line inserted without replacing one, the old line after which it was
-// inserted (0 for the top).
 func changedLines(old, new string) (removed, insertedAfter []int) {
 	a, b := splitLines(old), splitLines(new)
 	n, m := len(a), len(b)
@@ -153,8 +144,6 @@ func splitLines(s string) []string {
 	return strings.Split(strings.TrimSuffix(s, "\n"), "\n")
 }
 
-// scopeViolations lists edits outside the case scope. A removed or modified
-// line must lie inside a scope range; an inserted line must border one.
 func scopeViolations(head, repaired map[string]string, scope []LineRange) []string {
 	inScope := func(file string, line int) bool {
 		for _, r := range scope {
