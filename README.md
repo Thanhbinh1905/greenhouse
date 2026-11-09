@@ -5,7 +5,7 @@
 
 # Greenhouse
 
-Greenhouse is a standalone terminal and JSON client for a per-user local run store. It implements lifecycle, settings, immutable rule resolution, independent Pi review, selected one-pass repair, configured checks, guarded handback, a full pipeline with ask, auto and YOLO authority, review-cap decisions, and GitHub delivery to CI readiness, live event subscriptions, and a host mode for embedding. Review success is not test, lint, or delivery success.
+Greenhouse is a standalone terminal and JSON client for a per-user local run store. It implements lifecycle, settings with repository trust and versioned configuration, immutable rule resolution, independent review and selected-finding repair through Pi, Claude Code or Codex under OS confinement, resolution responses, configured checks, guarded handback, a full pipeline with ask, auto and YOLO authority, review-cap decisions, GitHub delivery to CI readiness, explicit recovery after interruption, live event subscriptions, and a host mode for embedding. Development evaluations measure review and repair quality with real models. Review success is not test, lint, or delivery success.
 
 ## First review
 
@@ -202,7 +202,7 @@ Each invocation is a fresh session with no inherited author context:
 
 ## Review snapshot and OS confinement
 
-Each review admission records `run.review.snapshot`: the candidate commit, its Git tree ID, the number of entries and bytes, and `digest`, the SHA-256 of `git ls-tree -r -l --full-tree` for that commit. The digest is part of the review input, so the input digest binds it. Before launch, Greenhouse writes every blob of that listing from the object store into a private directory, without Git attributes or filters, and makes files and directories read-only. The reviewer runs there. After the reviewer exits, Greenhouse compares every file, mode and symlink with the listing. A missing, extra or changed path makes the review `inconclusive`, and `snapshot.check` records `modified: <path>`; otherwise it is `unchanged`. The snapshot holds at most 100,000 entries and 512 MiB.
+Each review admission records `run.review.snapshot`: the candidate commit, its Git tree ID, the number of entries and bytes, and `digest`, the SHA-256 of `git ls-tree -r -l --full-tree` for that commit. The digest is part of the review input, so the input digest binds it. Before launch, Greenhouse writes every blob of that listing from the object store into a private directory, without Git attributes or filters, and makes files and directories read-only. The reviewer runs there. After the reviewer exits, Greenhouse compares every file, mode and symlink with the listing. A missing, extra or changed path makes the review `inconclusive`, and `snapshot.check` records `modified: <path>`; otherwise it is `unchanged`. When restart adopts an interrupted review, Greenhouse lists the candidate tree from the object store again and compares it with the bound digest, then checks the reviewer's copy if it survived. The check reads `verified after restart: ...` or `failed: ...`, and a failed check makes the review `inconclusive`. It reads `unverified` only when the candidate tree is no longer available. The snapshot holds at most 100,000 entries and 512 MiB.
 
 On Linux, reviewers and fixers run under Landlock. Greenhouse probes the kernel's Landlock ABI, records the policy in `run.review.confinement` or the repair's `confinement`, and applies it in the agent process before exec:
 
@@ -451,6 +451,30 @@ For each case, `run` commits the base and head trees with fixed identities and d
 - Cost uses Pi's catalog pricing; a proxy or subscription may bill differently. Latency is the wall time of the Pi process.
 
 [The recorded runs](docs/evidence/review-eval/README.md) document each reviewer change, its measured effect, and a model comparison. On this corpus, `openai/gpt-5.6-luna` through Pi stays the recommended default reviewer. One run of `claude-sonnet-5-5` through the Claude backend matched or beat it on recall and precision at about 20 times the cost, so it is the recommended reviewer `fallback`. `xai` answered `402` (no credits), and `google`, `openrouter`, and `meta` had no credentials.
+
+## Fixer evaluation
+
+`go run ./eval fix-run` measures selected-finding repair with a real model through the product's one-pass repair path. Like the review evaluation, it is development-only, and `go test ./...` never calls a model.
+
+Each case in `eval/testdata/fixer` holds a base and head tree whose head seeds a defect, the findings a review reports, which of them are selected, the expected resolution response (`fixed` or `disputed`), the head line ranges a correct repair may change, a reference repair in `fix/`, and hidden tests in `hidden/`. Hidden `TestAccept` tests check the selected finding; `TestRegress` tests and the candidate's own tests check behavior that must survive. The fixer never sees the hidden tests. `go run ./eval fix-check`, also run by `go test ./eval`, proves that every acceptance test of a fixed case fails on the head while the other tests pass, and that the reference repair passes every test inside the scope.
+
+```sh
+go run ./eval fix-check
+export OPENAI_API_KEY="$(pi auth print-api-key --provider openai)"
+go run ./eval fix-run -base-url http://127.0.0.1:8317/v1 -parallel 4 \
+  -label "what changed" -out docs/evidence/fixer-eval/NN-name
+```
+
+For each case, `fix-run` commits the trees, starts an isolated daemon and sends `attach`, `apply`, `resolve-rules`, `prepare`, `review` and `repair` over AXI. `reviewer.json` names the eval binary, which answers with the case's seeded findings, so every run repairs the same review. `fixer.json` names the eval binary too; it records the exact argv and stdin Greenhouse delivers to the fixer, then runs real Pi with the default fixer model (`-model` to change it). Greenhouse runs `go vet ./...` and `go test ./...` as checks and commits the repair. The harness then adds the hidden tests to the committed tree and runs them. The metrics are:
+
+- A case is fixed when the response matches the expected one, every acceptance test passes, no other test fails, and the repair has no scope violation.
+- A regression is a failing `TestRegress` or candidate test.
+- A scope violation is a changed line outside the case's scope ranges, an insertion that borders none, an added or deleted file, or an edit to another path that Greenhouse refused. Unselected findings lie outside the scope ranges.
+- Resolution-response accuracy counts cases whose responses match the expected ones.
+- Cost uses Pi's reported cost, or the reported tokens at `-price` when Pi reports none. Latency is the wall time of the fixer process.
+- The bar is at least 75% of cases fixed, with no regression and no scope violation on any case.
+
+[The recorded runs](docs/evidence/fixer-eval/README.md) show the default fixer meeting the bar at 90% after one instruction change.
 
 See [the rule contract](docs/rules.md) for selection, validation, provenance, and fixture delivery limits.
 

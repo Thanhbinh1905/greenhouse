@@ -10,7 +10,7 @@ Runs remain at intent/unconfigured. Target is an empty unconfigured identity, no
 
 The implementation uses a single serialized daemon and atomic whole-store replacement rather than a database or generic workflow engine. Limits and compatibility assumptions are in README.md. No dependency on an orchestrator is required.
 
-Still unsupported within these areas: live event subscriptions, explicit recovery, and an embedding contract. Task t67 adds configuration migration and repository trust. Task t7 adds finding views, execution summaries, and cancellation. Terminal clients refresh through Inspect rather than receive live events. Settings cannot start work.
+Later tasks complete these areas: t7 adds finding views, execution summaries and cancellation, t66 explicit recovery, t67 configuration migration and repository trust, and t69 live event subscriptions and the embedding contract. Settings cannot start work.
 
 ## 2. Rule snapshots and independent review: delivered for review
 
@@ -26,7 +26,7 @@ Area D one-pass, E, and D2: AXI and terminal expose explicit selected-finding re
 
 The red-before executable test rejected `repair` as `json: unknown field "selected"`. The green executable/real-Git fixtures prove one selected repair, immutable rule delivery, passing and failing configured checks, local commit identity, retained failed candidate and budget, source dirty preservation, dirty-candidate and moved-source handback refusal, safe fast-forward handback, interrupted-handback reconciliation, replay idempotency, no second review, and restart evidence retention. Runner and daemon tests cover descendant cleanup, live fixer/check cancellation, killed-runner ambiguity, and restart after an active-writer crash. A completed repair commit also survives an abrupt daemon restart.
 
-The slice rejects missing trusted checks and unsupported Git hooks, filters, signing, binary/submodule changes, and non-clean source handback. Executable real-Git regressions prove missing checks refuse admission without spending repair budget, changed check authority refuses before execution or commit, and hook/signing hazards refuse before fixer execution. A fake Git wrapper kills the real daemon immediately after the candidate commit; restart preserves candidate refs and consumed budget, parks the outcome as unknown, and does not rerun the fixer, check, or commit. Recovery after interruption parks unknown writer outcomes without retry or cleanup. The 56/100-column PTY exercise covers selected repair, check results, dirty handback refusal, safe handback, and AXI parity. A real linked-worktree race test verifies the shared repository lock admits only one writer. Broader stale-action coverage and interruption points outside the tested commit boundary remain unsupported. This is not complete acceptance of SPEC.md.
+The slice rejects missing trusted checks and unsupported Git hooks, filters, signing, binary/submodule changes, and non-clean source handback. Executable real-Git regressions prove missing checks refuse admission without spending repair budget, changed check authority refuses before execution or commit, and hook/signing hazards refuse before fixer execution. A fake Git wrapper kills the real daemon immediately after the candidate commit; restart preserves candidate refs and consumed budget, parks the outcome as unknown, and does not rerun the fixer, check, or commit. Recovery after interruption parks unknown writer outcomes without retry or cleanup. The 56/100-column PTY exercise covers selected repair, check results, dirty handback refusal, safe handback, and AXI parity. A real linked-worktree race test verifies the shared repository lock admits only one writer. Task t20 extends stale-action refusal to decisions, and task t66 extends restart recovery to every executor.
 
 ## 4. Bounded full pipeline, authority modes and forge delivery
 
@@ -36,7 +36,7 @@ Executable fake-Pi, fake-command and real-Git tests cover agent-free command sta
 
 Task t20 adds authority modes and review-cap outcomes. Ask groups the actionable findings of a review into one `findings` decision and asks before gate repairs; informational findings stay visible without a question. Auto repairs findings and authorized gates. YOLO adds a configured actor from `pipeline.json` that also answers the cap decision with `final-fix` or `accept-head`. Repairs that delete files, change file modes, leave the authorized paths, or that the fixer escalates as intent, acceptance or credentials changes park a user-only `authority` decision in every mode. The combined cap counts review and finding-repair rounds separately and as a total; gate retries count apart. The `decide` action answers accept-head, final-fix, increase-cap, rethink and discard with token-bound, replayable receipts that record the actor and reason. Accept-head binds the exact candidate and review inputs and never passes a failing gate. Final-fix is a separate, restart-safe, single grant. Rethink links a successor run; discard keeps every record and ref. Executable fake-Pi and real-Git tests cover each mode, user-only refusal, cap exhaustion, cap increase with retained usage, acceptance binding, final-fix replay and restart, rethink, discard, and stale or duplicate answers. The PTY check answers decisions at 56 and 100 columns.
 
-Step 4 still leaves unsupported: mechanical lint autofix. Task t67 adds expanded fixer authority grants.
+Mechanical lint autofix is not supported; the authorized gate fixer repairs lint failures. Task t67 adds expanded fixer authority grants.
 
 Delivery scope in step 4:
 
@@ -56,7 +56,7 @@ A fresh isolated HOME installed Greenhouse and ran the bare-command Pi one-pass 
 
 The live exercise exposed empty-diff rereview refusal when a repair restores the target tree. The fix retains the preceding paths, captures current committed contents, and invokes independent review again. Word wrapping now covers screens and prompts at 56, 80, and 100 columns. Only long finding IDs are abbreviated, and a unique displayed finding ID is selectable; URLs, refs, and other long values are printed whole on their own line. Cancelled repair progress now remains `cancelling` until final completion, avoiding a stale-token window on rerun. The unused `runCaptured` stdout return is removed. The AXI test helper disables Go race-runtime exit delay so scheduled-retry snapshots do not arrive one second late.
 
-V1 is not complete against every SPEC.md item. The missing work is listed below. This validation does not implement the Posse adapter, repository trust, or event subscriptions.
+Explicit recovery (t66), repository trust (t67) and event subscriptions (t69) followed this validation.
 
 ## Restart reconciliation and explicit recovery (t66)
 
@@ -96,11 +96,31 @@ Host mode records a host identity on the run, accepts reviews only under unused 
 
 Executable daemon, AXI and terminal tests with isolated HOMEs, real Git and fake reviewers cover negotiation, refusal by older and newer daemons, sequenced events, elapsed waits during a review, gap and restart resynchronization, terminal redraws, and a fake host that runs two grants without a fixer, publication, candidate custody or cap reset. The PTY check covers 56, 80 and 100 columns; captures are in `evidence/events/`.
 
-## Unsupported spec behavior in this slice
+## Fixer evaluation and adopted-review verification (t81)
 
-- Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
+Areas C, D and E. `eval/testdata/fixer` holds ten seeded defects, each with a reference repair and hidden acceptance and regression tests; `go test ./eval` proves every seeded head fails and every reference repair passes. `go run ./eval fix-run` drives the one-pass repair over AXI with a seeded review and the default Pi fixer, then scores hidden tests, regressions, edits outside the case scope, resolution responses, cost and latency. The baseline fixed 8 of 10 cases but deleted an unselected finding's comment in two. The response contract now puts unselected findings out of scope, and the recorded run fixed 9 of 10 with no regression or scope violation. See the [fixer evaluation runs](evidence/fixer-eval/README.md).
 
-- Area A: a descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
-- Area C: vendor agents may require writable session state. Greenhouse keeps their config and credentials read-only and records Claude Code and Codex roles as `degraded`. OS confinement is unavailable on non-Linux platforms. A review adopted after a controller restart keeps its verdict, but its snapshot check reads `unverified`. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
-- Area E and D2: broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
-- Area F: the Posse adapter belongs in the Posse Project.
+A review adopted after a controller restart now re-lists its candidate tree from the object store, compares it with the bound digest and verifies the reviewer's copy when it survived. Its snapshot check reads verified or failed, and a failed check makes the review inconclusive. It reads `unverified` only when the candidate tree is gone. The restart test covers an intact copy, a modified copy and a removed copy.
+
+## V1 status
+
+V1 of standalone Greenhouse is complete: every SPEC.md "Done when" item is met.
+
+| SPEC.md "Done when" | Evidence |
+|---|---|
+| Bare command, one-pane run and findings, Settings changes that the next run uses without flags | Steps 1 and 2, t67; PTY checks at 56, 80 and 100 columns |
+| TUI and AXI share findings and gates; reconnect, concurrent launch, cancellation and retry neither duplicate work nor lose custody | Steps 1 to 4, t66, t69 |
+| Tests for one-pass, cap exhaustion, exact-head acceptance, final repair and Review, rethink, configuration snapshots and stale-action refusal; provider-backed evaluations separate from prompt-delivery tests | Steps 2 to 4; [review evaluation](evidence/review-eval/README.md); [fixer evaluation](evidence/fixer-eval/README.md) |
+| Standalone delivery stops at CI-ready without merging; an embedding host keeps author and PR custody and its gates | [Live validation](evidence/v1-live/README.md); host mode and the [embedding contract](embedding.md) |
+
+### Known limits
+
+- Vendor agents may require writable session state. Greenhouse keeps their config and credentials read-only and records Claude Code and Codex roles as `degraded`.
+- OS confinement is implemented only on Linux; other platforms record `degraded`.
+- A descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
+- Mechanical lint autofix is not supported; lint failures go to the authorized gate fixer.
+
+### Outside standalone Greenhouse
+
+- The Posse adapter belongs to the Posse Project. It uses host mode and the embedding contract.
+- Manual acceptance: the recorded bare-command sessions use scripted real PTYs. A person may repeat them with the [manual checklist](evidence/v1-live/manual-acceptance.md); this is optional.
