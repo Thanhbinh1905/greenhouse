@@ -212,6 +212,26 @@ func TestOnePassRepairShowsResponses(t *testing.T) {
 	}
 }
 
+func TestFixerInputConfinesEditsToSelectedFindings(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := repairFixture(t)
+	if started := repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v)); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
+	waitRepair(t, bin, repo, home)
+	var captured struct {
+		Input struct {
+			Respond string
+		} `json:"input"`
+	}
+	if err := json.Unmarshal(mustRead(t, filepath.Join(filepath.Dir(home), "fix-input.json")), &captured); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(captured.Input.Respond, "Unselected findings are out of scope") {
+		t.Fatalf("the fixer is not told to leave unselected findings alone: %q", captured.Input.Respond)
+	}
+}
+
 const respondFixed = `
 import json as _json, sys as _sys
 try:
