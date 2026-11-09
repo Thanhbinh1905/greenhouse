@@ -57,8 +57,11 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
 '''
 FIXER = '''#!/usr/bin/python3
 import json,sys
-json.load(sys.stdin)
+b=json.load(sys.stdin)
 with open("sample.txt", "w") as f: f.write("repaired\\n")
+answer={"responses":[{"finding":f["id"],"response":"fixed","reason":"repaired the sample"} for f in b["Selected"]]}
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(answer)}]}}))
+print(json.dumps({"type":"agent_settled","aborted":False}))
 '''
 GIT_WRAPPER = '''#!/usr/bin/python3
 import json,os,subprocess,sys

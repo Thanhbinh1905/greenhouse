@@ -260,8 +260,26 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 				if err = os.WriteFile(filepath.Join(root, "release-review"), nil, 0600); err != nil {
 					t.Fatal(err)
 				}
-				done := hostSettle(t, bin, repo, home)
-				assertHostGrant(t, done, "round-1", 1)
+				var adopted map[string]any
+				for time.Now().Before(deadline.Add(15 * time.Second)) {
+					adopted = axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`)
+					run := runOf(t, adopted)
+					if run != nil {
+						if recoveries, _ := run["recoveries"].([]any); len(recoveries) > 0 {
+							break
+						}
+					}
+					time.Sleep(20 * time.Millisecond)
+				}
+				run := runOf(t, adopted)
+				if run == nil {
+					t.Fatalf("review recovery did not settle: %v", adopted)
+				}
+				recoveries, ok := run["recoveries"].([]any)
+				if !ok || len(recoveries) != 1 || recoveries[0].(map[string]any)["answer"].(map[string]any)["choice"] != "adopt" {
+					t.Fatalf("complete review was not adopted during recovery reconciliation: %v", adopted)
+				}
+				assertHostGrant(t, adopted, "round-1", 1)
 				return
 			}
 			if err = syscall.Kill(runnerPID, syscall.SIGKILL); err != nil {

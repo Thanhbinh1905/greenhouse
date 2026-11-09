@@ -48,7 +48,9 @@ func TestFixedResponseIsCheckedByTheNextIndependentReview(t *testing.T) {
 	bin, repo, home, v := resolutionPipeline(t, "auto")
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
-	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
 	p := run["pipeline"].(map[string]any)
@@ -93,7 +95,9 @@ func TestDisputeIsNeverCountedAsAFix(t *testing.T) {
 			if check == "rejected" {
 				os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("findings"), 0600)
 			}
-			v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+			if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
+				t.Fatal(started)
+			}
 			done := waitPipeline(t, bin, repo, home)
 			run := runOf(t, done)
 			p := run["pipeline"].(map[string]any)
@@ -149,7 +153,9 @@ func TestInvalidResolutionResponsesRefuseTheRepair(t *testing.T) {
 			bin, repo, home, v := resolutionPipeline(t, "auto")
 			root := filepath.Dir(home)
 			os.WriteFile(filepath.Join(root, "fix-response"), []byte(response), 0600)
-			v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+			if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
+				t.Fatal(started)
+			}
 			done := waitPipeline(t, bin, repo, home)
 			repair := runOf(t, done)["pipeline"].(map[string]any)["repairs"].([]any)[0].(map[string]any)
 			if repair["status"] != "fixer-failed" || repair["head"] != "" || !strings.Contains(repair["log"].(string), "resolution response") {
@@ -165,7 +171,9 @@ func TestDeferralCitesAnsweredDecision(t *testing.T) {
 	root := filepath.Dir(home)
 	os.WriteFile(filepath.Join(root, "fix-response"), []byte("deferred"), 0600)
 	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
-	v = mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
 	v = waitPipeline(t, bin, repo, home)
 	gate, _ := v["gate_id"].(string)
 	if v = decide(t, bin, repo, home, v, "repair-ask", "repair", nil); v["outcome"] != "ok" {
@@ -189,7 +197,9 @@ func TestDeferralCitesAnsweredDecision(t *testing.T) {
 func TestOnePassRepairShowsResponses(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
-	v = repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v))
+	if started := repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v)); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
 	v = waitRepair(t, bin, repo, home)
 	repair := runOf(t, v)["repair"].(map[string]any)
 	responses, _ := repair["responses"].([]any)

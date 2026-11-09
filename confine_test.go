@@ -148,7 +148,9 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 	confinedFakes(t, repo, home, probe, blocked, allowed, "")
 	v = reprepare(t, bin, repo, home, v, func(q string) map[string]any { return axi(t, bin, repo, home, q) })
 
-	v = mutate(t, bin, repo, home, v, "review", "review", nil)
+	if started := mutate(t, bin, repo, home, v, "review", "review", nil); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
 	v = waitReview(t, bin, repo, home)
 	review := readProbe(t, filepath.Join(probe, "review.json"))
 	want := map[string]string{"home": "denied", "repo": "denied", "snapshot": "denied", "blocked": "denied", "provider": "allowed"}
@@ -260,10 +262,11 @@ func axiWithoutLandlock(t *testing.T, bin, repo, home, request string) map[strin
 
 func TestUnavailableConfinementIsVisibleAndSnapshotTamperingDetected(t *testing.T) {
 	t.Parallel()
-	bin, repo, home, v := prepareFixture(t)
+	bin, repo, home, _ := prepareFixture(t)
 	stopDaemon(t, home)
-	if v = axiWithoutLandlock(t, bin, repo, home, `{"version":1,"op":"inspect"}`); v["outcome"] != "ok" {
-		t.Fatal(v)
+	current := axiWithoutLandlock(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	if current["outcome"] != "ok" {
+		t.Fatal(current)
 	}
 	probe := filepath.Join(filepath.Dir(home), "probe")
 	os.Mkdir(probe, 0700)
@@ -272,12 +275,14 @@ func TestUnavailableConfinementIsVisibleAndSnapshotTamperingDetected(t *testing.
 os.chmod(cwd,0o755)
 os.chmod(cwd+'/sample.txt',0o644)
 open(cwd+'/sample.txt','w').write('tampered\n')`)
-	v = reprepare(t, bin, repo, home, v, func(q string) map[string]any { return axiWithoutLandlock(t, bin, repo, home, q) })
-	v = mutate(t, bin, repo, home, v, "review", "review", nil)
+	v := reprepare(t, bin, repo, home, current, func(q string) map[string]any { return axiWithoutLandlock(t, bin, repo, home, q) })
+	if started := mutate(t, bin, repo, home, v, "review", "review", nil); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
 	v = waitReview(t, bin, repo, home)
 	review := runOf(t, v)["review"].(map[string]any)
 	c := review["confinement"].(map[string]any)
-	if c["status"] != "degraded" || c["network"] != "unrestricted" || !strings.Contains(c["reason"].(string), "Landlock unavailable") {
+	if c["status"] != "degraded" || c["network"] != "unrestricted" || !strings.Contains(c["reason"].(string), "landlock unavailable") {
 		t.Fatalf("missing degraded confinement record: %v", c)
 	}
 	snapshot := review["snapshot"].(map[string]any)
@@ -288,7 +293,7 @@ open(cwd+'/sample.txt','w').write('tampered\n')`)
 		t.Fatalf("candidate changed: %q", got)
 	}
 	screen := terminalOutput(t, bin, repo, home, "q\n")
-	if !strings.Contains(screen, "Confinement: reviewer DEGRADED") || !strings.Contains(screen, "Landlock unavailable") || !strings.Contains(screen, "Snapshot:") {
+	if !strings.Contains(screen, "Confinement: reviewer DEGRADED") || !strings.Contains(screen, "landlock unavailable") || !strings.Contains(screen, "Snapshot:") {
 		t.Fatalf("terminal must show degraded confinement:\n%s", screen)
 	}
 }
@@ -315,7 +320,9 @@ func TestVendorReviewersCannotWriteBackendConfig(t *testing.T) {
 				"codex":    map[string]any{"executable": filepath.Join(root, "fake-codex"), "provider": map[string]any{"base_url": "http://127.0.0.1:1/v1"}},
 				"writable": map[string][]string{"reviewer": {probe}},
 			})
-			v = mutate(t, bin, repo, home, v, "review", "review-"+c.backend, nil)
+			if started := mutate(t, bin, repo, home, v, "review", "review-"+c.backend, nil); started["outcome"] != "ok" {
+				t.Fatal(started)
+			}
 			v = waitReview(t, bin, repo, home)
 			got := readProbe(t, filepath.Join(probe, c.backend+".json"))
 			review := runOf(t, v)["review"].(map[string]any)
