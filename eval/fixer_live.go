@@ -360,7 +360,7 @@ func runFixLive(o fixOptions) (*FixReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	checks := [][]string{{goBin, "vet", "./..."}, {goBin, "test", "./..."}}
+	checks := [][]string{{goBin, "vet", "./..."}, {goBin, "test", "-p", "1", "-parallel", "1", "./..."}}
 	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "reviewer_backend": "pi", "reviewer_model": o.Model, "fixer_backend": "pi", "fixer_model": o.Model}
 	r := &FixReport{Config: FixConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: "pi-json-v1", PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, Parallel: o.Parallel, Settings: settings, Checks: checks, Price: o.Price, BarFixedRate: barFixedRate}}
 	records := make([]FixRecord, len(cases))

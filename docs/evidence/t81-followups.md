@@ -26,3 +26,25 @@ Pi reports `medium` thinking for every fixer and reviewer case. Each run records
 The cumulative branch adds the ten-case fixer corpus and harness, adopted-review snapshot verification after restart, the t80 error-string correction, and the v1 status documentation. The follow-up changes preserve those results. Slop and comment checks apply only to branch changes; narrating comments were removed from the added harness functions.
 
 The corpus has one dispute case. One reasoning-enabled pass cannot estimate model variance. The file-edit check detects contradictory responses, but only independent review and tests can establish whether an edit resolves a finding.
+
+## Resource bounds and reused evidence
+
+The host overloaded during overlapping unrestricted verification runs. Those runs stopped; three surviving events-PTY daemons received SIGTERM and exited. A process scan found no remaining t81 test-owned processes. The Lead's HTTP 400 `unsupported websocket request type: response.interrupt` was a harness control-path failure, separate from Greenhouse results.
+
+Verification resumed with CPU affinity limited to logical CPUs 10 and 11, niceness 15, `GOMAXPROCS=2`, and `GOFLAGS=-p=1`. Go tests also use `-p 1 -parallel 1`. The fixer evaluation's hidden-test commands preserve `GOFLAGS`. Those commands and its product check pass the serialization flags. No product behavior changed, so the successful paid evaluations above are reused.
+
+The small host-review recovery check passed twice under these limits. The [affinity capture](t81-affinity.json) records `go test`, `greenhouse.test`, an AXI client, and a daemon restricted to CPUs 10 and 11. The cleanup scan after the check found no remaining test-owned processes. The earlier non-race failure involved reading a fixture PID while empty and reconnecting to a killed listener under overload; the bounded checks passed without changes to that fixture.
+
+The successful terminal, recovery, and events PTY checks at 56, 80, and 100 columns are reused. Their logs are in the task scratch directory as `terminal-followups.log`, `recovery-followups.log`, and `events-followups.log`. The PTY captures are in `pty-followups/`. The three daemon leaks came from the events check and were reported and stopped before bounded verification resumed.
+
+## Final bounded checks
+
+Each command below ran sequentially with the prefix `taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS='-p=1'`:
+
+- `go test -p 1 -parallel 1 -timeout 30m ./...`: passed, Greenhouse 373.855s and eval 18.777s.
+- `go test -race -p 1 -parallel 1 -timeout 30m ./...`: passed, Greenhouse 395.983s and eval 25.754s.
+- `go vet ./...`: passed.
+- `staticcheck ./...`: passed.
+- `gofmt -l eval/fixer_score.go eval/fixer_live.go`: no output. The earlier whole-tree formatting check also passed.
+
+`git diff --check` passes. The suite logs are `bounded-suite.log` and `bounded-race.log` in the task scratch directory. No timeout occurred. Process scans after both full suites found no remaining t81 test-owned processes. A live scan during the race suite confirmed that its test binary and daemon retained CPUs 10 and 11. No verification jobs ran concurrently after the resume. The only changes since the recorded live runs are documentation, comment removal, fixture catalog handling, and test-resource settings; product code is unchanged.

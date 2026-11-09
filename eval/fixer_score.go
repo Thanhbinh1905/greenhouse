@@ -49,9 +49,9 @@ func runTests(dir string, tree, hidden map[string]string) (TestOutcomes, string,
 	if err := writeTree(dir, hidden); err != nil {
 		return nil, "", err
 	}
-	c := exec.Command("go", "test", "-json", "-count=1", "./...")
+	c := exec.Command("go", "test", "-p", "1", "-parallel", "1", "-json", "-count=1", "./...")
 	c.Dir = dir
-	c.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "GOTOOLCHAIN=local")
+	c.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=local")
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
 	c.Run()
@@ -90,9 +90,9 @@ func runTests(dir string, tree, hidden map[string]string) (TestOutcomes, string,
 }
 
 func runOneTest(dir, name string) string {
-	c := exec.Command("go", "test", "-count=1", "-run", "^"+name+"$", "./...")
+	c := exec.Command("go", "test", "-p", "1", "-parallel", "1", "-count=1", "-run", "^"+name+"$", "./...")
 	c.Dir = dir
-	c.Env = append(os.Environ(), "GOWORK=off", "GOFLAGS=", "GOTOOLCHAIN=local")
+	c.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=local")
 	if c.Run() != nil {
 		return "fail"
 	}
