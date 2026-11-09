@@ -195,7 +195,6 @@ func loadFixCase(dir, id string) (*FixCase, error) {
 	return &k, nil
 }
 
-// repaired returns the head tree with the reference repair applied.
 func (k FixCase) repaired() map[string]string {
 	out := maps.Clone(k.Head)
 	maps.Copy(out, k.Fix)

@@ -37,7 +37,6 @@ type FixSummary struct {
 	BarMet           bool     `json:"bar_met"`
 }
 
-// TestOutcomes maps each Go test name to pass or fail.
 type TestOutcomes map[string]string
 
 // runTests writes tree and the hidden tests into dir and runs every package's

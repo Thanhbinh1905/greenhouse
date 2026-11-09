@@ -170,8 +170,10 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 	}
 	cfg, _ := json.Marshal(shimConfig{Pi: o.Pi, Capture: capture, Review: k.Findings})
 	cfgPath := filepath.Join(work, "shim.json")
+	if err := os.WriteFile(cfgPath, cfg, 0o600); err != nil {
+		return fail(err)
+	}
 	files := map[string]any{
-		"shim.json":      json.RawMessage(cfg),
 		"backends.json":  map[string]any{"version": 2, "writable": map[string][]string{"fixer": {capture}}},
 		"reviewer.json":  map[string]any{"version": 2, "executable": shimBin, "model": o.Model},
 		"fixer.json":     map[string]any{"version": 2, "executable": shimBin, "model": o.Model, "name": "Eval Fixer", "email": "fixer@example.invalid", "checks": checks},
@@ -179,11 +181,7 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 	}
 	for name, body := range files {
 		b, _ := json.Marshal(body)
-		dir := home
-		if name == "shim.json" {
-			dir = work
-		}
-		if err := os.WriteFile(filepath.Join(dir, name), b, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(home, name), b, 0o600); err != nil {
 			return fail(err)
 		}
 	}
