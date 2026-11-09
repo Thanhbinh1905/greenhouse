@@ -96,7 +96,11 @@ func adoptRecorded(r *Run, observed []observedExecutor) bool {
 			runErr = fmt.Errorf("exit status %d", o.Exit)
 		}
 		done := reviewFrom(x, o.Exit, outputBuffer(o.stdout, executorStdoutLimit), outputBuffer(o.stderr, executorStderrLimit), runErr, false)
-		recordReviewEvidence(x, "unverified: the controller restarted before the snapshot check", nil)
+		check := reverifySnapshot(x)
+		if strings.HasPrefix(check, "failed") {
+			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}
+		}
+		recordReviewEvidence(x, check, nil)
 		r.Status = "running"
 		if r.Pipeline == nil {
 			finishReview(r, done)

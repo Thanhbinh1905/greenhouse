@@ -359,7 +359,8 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if err != nil || current != x.Source {
 		return reviewOutcome{Status: "stale", Log: "source moved before process start"}
 	}
-	dir, e := os.MkdirTemp("", "greenhouse-review-")
+	dir := reviewDir(x.ID)
+	e := os.Mkdir(dir, 0700)
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "private execution directory unavailable"}
 	}

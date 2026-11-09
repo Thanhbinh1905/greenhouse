@@ -295,6 +295,40 @@ func removeSnapshot(root string) {
 	os.RemoveAll(root)
 }
 
+func reviewDir(execution string) string {
+	return filepath.Join(os.TempDir(), "greenhouse-review-"+execution)
+}
+
+// reverifySnapshot checks an adopted review after a controller restart: the
+// candidate tree in the object store against the bound digest, then the
+// reviewer's copy when it survived.
+func reverifySnapshot(x *Execution) string {
+	dir := reviewDir(x.ID)
+	defer removeSnapshot(dir)
+	if x.Snapshot == nil {
+		return "unverified: the review has no bound snapshot"
+	}
+	listing, _, err := treeListing(x.Source.Worktree, x.Snapshot.Commit)
+	if err != nil {
+		return "unverified: the candidate tree is unavailable"
+	}
+	if bytesDigest(listing) != x.Snapshot.Digest {
+		return "failed: the candidate tree differs from the bound digest"
+	}
+	tree := filepath.Join(dir, "tree")
+	info, err := os.Lstat(tree)
+	if os.IsNotExist(err) {
+		return "verified after restart: the candidate tree matches the bound digest; the review copy was already removed"
+	}
+	if err != nil || !info.IsDir() {
+		return "failed: the review copy is unreadable"
+	}
+	if err := verifySnapshot(x.Source.Worktree, x.Snapshot, tree); err != nil {
+		return "failed: the review copy was modified: " + err.Error()
+	}
+	return "verified after restart: the review copy matches the bound digest"
+}
+
 func recordReviewEvidence(x *Execution, check string, confinement *Confinement) {
 	if confinement != nil {
 		x.Confinement = confinement

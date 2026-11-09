@@ -54,7 +54,7 @@ const (
 
 func landlockABI() (int, error) {
 	if runtime.GOOS != "linux" {
-		return 0, errors.New("confinement is available only on Linux")
+		return 0, errors.New("OS confinement is implemented only on Linux")
 	}
 	abi, _, errno := syscall.Syscall(landlockCreateRuleset, 0, 0, 1)
 	if errno != 0 {

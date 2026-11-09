@@ -12,14 +12,14 @@ import (
 
 func TestReviewMovementAndUnknownRestart(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"movement", "restart"} {
+	for _, scenario := range []string{"movement", "restart", "restart-modified", "restart-copy-removed"} {
 		t.Run(scenario, func(t *testing.T) {
 			bin, repo, home, v := prepareFixture(t)
-			invocation := installFake(t, home, "while not os.path.exists(root+'/release'): time.sleep(0.01)\nwith open(root+'/released','w') as f: f.write('released')")
+			invocation := installFake(t, home, "with open(root+'/cwd','w') as f: f.write(os.getcwd())\nwhile not os.path.exists(root+'/release'): time.sleep(0.01)\nwith open(root+'/released','w') as f: f.write('released')")
 			mutate(t, bin, repo, home, v, "review", "start", nil)
 			deadline := time.Now().Add(30 * time.Second)
 			for {
-				if b, _ := os.ReadFile(invocation); len(b) > 0 {
+				if b, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "cwd")); len(b) > 0 {
 					break
 				}
 				if time.Now().After(deadline) {
@@ -65,6 +65,18 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 				if mutate(t, bin, repo, home, v, "review", "retry", nil)["outcome"] != "refused" {
 					t.Fatal("unknown outcome retried")
 				}
+				cwd, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "cwd"))
+				copyRoot := string(cwd)
+				switch scenario {
+				case "restart-modified":
+					os.Chmod(copyRoot, 0700)
+					os.Chmod(filepath.Join(copyRoot, "sample.txt"), 0600)
+					if err := os.WriteFile(filepath.Join(copyRoot, "sample.txt"), []byte("altered\n"), 0600); err != nil {
+						t.Fatal(err)
+					}
+				case "restart-copy-removed":
+					removeSnapshot(copyRoot)
+				}
 			}
 			os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600)
 			for {
@@ -76,14 +88,18 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 				}
 				time.Sleep(time.Millisecond)
 			}
-			if scenario == "restart" {
+			if strings.HasPrefix(scenario, "restart") {
 				adopted := waitLeave(t, bin, repo, home, "recovery-required")
 				run := runOf(t, adopted)
-				if run["status"] != "outstanding-findings" || run["review"].(map[string]any)["status"] != "outstanding-findings" || run["review_used"] != float64(1) {
+				want, prefix := "outstanding-findings", "verified"
+				if scenario == "restart-modified" {
+					want, prefix = "inconclusive", "failed"
+				}
+				if run["status"] != want || run["review"].(map[string]any)["status"] != want || run["review_used"] != float64(1) {
 					t.Fatalf("orphaned reviewer verdict was not adopted after restart: %v", adopted)
 				}
-				if check := run["review"].(map[string]any)["snapshot"].(map[string]any)["check"]; !strings.HasPrefix(check.(string), "unverified") {
-					t.Fatalf("an adopted review cannot claim a verified snapshot: %v", check)
+				if check := run["review"].(map[string]any)["snapshot"].(map[string]any)["check"]; !strings.HasPrefix(check.(string), prefix) {
+					t.Fatalf("adopted review snapshot check %q, want %s", check, prefix)
 				}
 				if !hasEvent(run, "reconciled") {
 					t.Fatalf("adoption is not audited: %v", run["events"])
