@@ -192,12 +192,14 @@ func TestHostOwnershipBoundaries(t *testing.T) {
 	}
 }
 
-func TestHostReviewRecoveryDiscardPreservesGrant(t *testing.T) {
-	t.Parallel()
-	bin, repo, home, v := prepareFixture(t)
-	root := filepath.Dir(home)
-	fake := filepath.Join(root, "fake-pi")
-	writeExecutable(t, fake, `#!/usr/bin/python3
+func TestHostReviewRecoveryPreservesGrantAcrossChoices(t *testing.T) {
+	for _, choice := range []string{"adopt", "discard", "new-run"} {
+		t.Run(choice, func(t *testing.T) {
+			t.Parallel()
+			bin, repo, home, v := prepareFixture(t)
+			root := filepath.Dir(home)
+			fake := filepath.Join(root, "fake-pi")
+			writeExecutable(t, fake, `#!/usr/bin/python3
 import json,os,sys,time
 if '--list-models' in sys.argv:
  print('fixture model')
@@ -207,74 +209,123 @@ open(root+'/reviewer-pid','w').write(str(os.getpid()))
 open(root+'/runner-pid','w').write(str(os.getppid()))
 while not os.path.exists(root+'/release-review'):
  time.sleep(0.01)
+b=json.load(sys.stdin)
+v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'recovery','priority':'P2','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Fixture finding','action':'Inspect the fixture','rule':'','head':b['Head']}]}
+print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
+print(json.dumps({'type':'agent_settled','aborted':False}))
 `)
-	v = hostCall(t, bin, repo, home, v, "new", "host-new-recovery", nil)
-	v = hostPrepare(t, bin, repo, home, v, strings.TrimSpace(git(t, repo, "rev-parse", "HEAD~1")), "-recovery")
-	started := hostCall(t, bin, repo, home, v, "review", "host-review-recovery", map[string]any{"grant": "round-1"})
-	if started["outcome"] != "ok" {
-		t.Fatal(started)
-	}
-	pidPath := filepath.Join(root, "reviewer-pid")
-	deadline := time.Now().Add(10 * time.Second)
-	for time.Now().Before(deadline) {
-		if _, err := os.Stat(pidPath); err == nil {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	pidBytes, err := os.ReadFile(pidPath)
-	if err != nil {
-		t.Fatalf("reviewer did not start: %v", err)
-	}
-	var reviewerPID int
-	if _, err = fmt.Sscan(string(pidBytes), &reviewerPID); err != nil || reviewerPID <= 0 {
-		t.Fatalf("invalid reviewer pid %q: %v", pidBytes, err)
-	}
-	runnerBytes, err := os.ReadFile(filepath.Join(root, "runner-pid"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var runnerPID int
-	if _, err = fmt.Sscan(string(runnerBytes), &runnerPID); err != nil || runnerPID <= 0 {
-		t.Fatalf("invalid executor runner pid %q: %v", runnerBytes, err)
-	}
-	pidBytes, err = os.ReadFile(filepath.Join(home, "pid"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var daemonPID int
-	if err = json.Unmarshal(pidBytes, &daemonPID); err != nil || daemonPID <= 0 {
-		t.Fatalf("invalid daemon pid %q: %v", pidBytes, err)
-	}
-	if err = syscall.Kill(daemonPID, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
-	}
-	if err = syscall.Kill(runnerPID, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
-	}
-	if err = syscall.Kill(reviewerPID, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
-	}
-	var recovered map[string]any
-	for time.Now().Before(deadline.Add(15 * time.Second)) {
-		recovered = axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`)
-		if r := runOf(t, recovered); r != nil && r["status"] == "recovery-required" {
-			if rec, ok := r["recovery"].(map[string]any); ok && len(rec["options"].([]any)) > 1 {
-				break
+			v = hostCall(t, bin, repo, home, v, "new", "host-new-recovery-"+choice, nil)
+			target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD~1"))
+			v = hostPrepare(t, bin, repo, home, v, target, "-recovery-"+choice)
+			started := hostCall(t, bin, repo, home, v, "review", "host-review-recovery-"+choice, map[string]any{"grant": "round-1"})
+			if started["outcome"] != "ok" {
+				t.Fatal(started)
 			}
+			deadline := time.Now().Add(10 * time.Second)
+			pidPath := filepath.Join(root, "reviewer-pid")
+			for time.Now().Before(deadline) {
+				if _, err := os.Stat(pidPath); err == nil {
+					break
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
+			pidBytes, err := os.ReadFile(pidPath)
+			if err != nil {
+				t.Fatalf("reviewer did not start: %v", err)
+			}
+			var reviewerPID int
+			if _, err = fmt.Sscan(string(pidBytes), &reviewerPID); err != nil || reviewerPID <= 0 {
+				t.Fatalf("invalid reviewer pid %q: %v", pidBytes, err)
+			}
+			runnerBytes, err := os.ReadFile(filepath.Join(root, "runner-pid"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var runnerPID int
+			if _, err = fmt.Sscan(string(runnerBytes), &runnerPID); err != nil || runnerPID <= 0 {
+				t.Fatalf("invalid executor runner pid %q: %v", runnerBytes, err)
+			}
+			pidBytes, err = os.ReadFile(filepath.Join(home, "pid"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var daemonPID int
+			if err = json.Unmarshal(pidBytes, &daemonPID); err != nil || daemonPID <= 0 {
+				t.Fatalf("invalid daemon pid %q: %v", pidBytes, err)
+			}
+			if err = syscall.Kill(daemonPID, syscall.SIGKILL); err != nil {
+				t.Fatal(err)
+			}
+			if choice == "adopt" {
+				if err = os.WriteFile(filepath.Join(root, "release-review"), nil, 0600); err != nil {
+					t.Fatal(err)
+				}
+				done := hostSettle(t, bin, repo, home)
+				assertHostGrant(t, done, "round-1", 1)
+				return
+			}
+			if err = syscall.Kill(runnerPID, syscall.SIGKILL); err != nil {
+				t.Fatal(err)
+			}
+			if err = syscall.Kill(reviewerPID, syscall.SIGKILL); err != nil {
+				t.Fatal(err)
+			}
+			var recovered map[string]any
+			for time.Now().Before(deadline.Add(15 * time.Second)) {
+				recovered = axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`)
+				if r := runOf(t, recovered); r != nil && r["status"] == "recovery-required" {
+					if rec, ok := r["recovery"].(map[string]any); ok && len(rec["options"].([]any)) > 1 {
+						break
+					}
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			if r := runOf(t, recovered); r["status"] != "recovery-required" || len(r["recovery"].(map[string]any)["options"].([]any)) < 2 {
+				t.Fatalf("interrupted host review did not require recovery: %v", recovered)
+			}
+			choiceResult := hostCall(t, bin, repo, home, recovered, "recover", "host-review-recover-"+choice, map[string]any{"choice": choice})
+			if choiceResult["outcome"] != "ok" {
+				t.Fatal(choiceResult)
+			}
+			if choice == "discard" {
+				assertHostGrant(t, choiceResult, "round-1", 2)
+				return
+			}
+			next := runOf(t, choiceResult)
+			if next["host_grants"].([]any)[0] != "round-1" || next["review_used"] != float64(1) || next["host"].(map[string]any)["id"] != "task-7" {
+				t.Fatalf("new-run did not retain the spent host grant and usage: %v", choiceResult)
+			}
+			v = hostPrepare(t, bin, repo, home, choiceResult, next["target"].(string), "-next")
+			if reused := hostCall(t, bin, repo, home, v, "review", "reuse-recovered-grant", map[string]any{"grant": "round-1"}); reused["outcome"] != "refused" || !strings.Contains(reused["error"].(string), "grant already used") {
+				t.Fatalf("new-run reused the recovered grant: %v", reused)
+			}
+			if err = os.WriteFile(filepath.Join(root, "release-review"), nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			nextReview := hostCall(t, bin, repo, home, v, "review", "new-grant-after-recovery", map[string]any{"grant": "round-2"})
+			if nextReview["outcome"] != "ok" {
+				t.Fatal(nextReview)
+			}
+			assertHostGrant(t, hostSettle(t, bin, repo, home), "round-2", 2, "round-1", "round-2")
+		})
+	}
+}
+
+func assertHostGrant(t *testing.T, v map[string]any, grant string, reviews int, expectedGrants ...string) {
+	t.Helper()
+	if len(expectedGrants) == 0 {
+		expectedGrants = []string{grant}
+	}
+	result := v["host_result"].(map[string]any)
+	run := runOf(t, v)
+	grants := run["host_grants"].([]any)
+	if result["grant"] != grant || run["review_used"] != float64(reviews) || len(grants) != len(expectedGrants) {
+		t.Fatalf("host grant or usage changed: result=%v run=%v", result, run)
+	}
+	for i, want := range expectedGrants {
+		if grants[i] != want {
+			t.Fatalf("host grant history = %v, want %v", grants, expectedGrants)
 		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	if r := runOf(t, recovered); r["status"] != "recovery-required" || len(r["recovery"].(map[string]any)["options"].([]any)) < 2 {
-		t.Fatalf("interrupted host review did not require recovery: %v", recovered)
-	}
-	discarded := hostCall(t, bin, repo, home, recovered, "recover", "host-review-discard", map[string]any{"choice": "discard"})
-	if discarded["outcome"] != "ok" {
-		t.Fatal(discarded)
-	}
-	result := discarded["host_result"].(map[string]any)
-	if result["grant"] != "round-1" {
-		t.Fatalf("recovery discard lost the host review grant: %v", discarded)
 	}
 }
 
