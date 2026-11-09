@@ -72,6 +72,16 @@ Repairs that add or delete files park a user-only decision. The User can grant e
 
 Executable daemon, AXI and real-Git tests cover each item; the PTY check covers 56, 80 and 100 columns. Before and after captures are in `evidence/config-trust/`.
 
+## Review snapshot, resolution responses and OS confinement (t68)
+
+Areas C and F. Each review binds a digest of the candidate's full tree listing into its input. The reviewer runs in a read-only copy of that tree written from the object store, and Greenhouse verifies the copy after the run; any change makes the review inconclusive.
+
+A finding repair must answer every selected finding as fixed, disputed with a reason, or deferred under a cited answered decision. Invalid responses refuse the repair. In the full pipeline the next independent review checks each response. Only a confirmed response resolves a finding, and a dispute never counts as a fix. A repair that only disputes or defers commits nothing and still triggers that review.
+
+On Linux, reviewers and fixers run under Landlock. Pi reviewers write only their per-run agent directory. Claude Code and Codex receive no write access to their real config directories or credentials; Greenhouse records both roles as `degraded` because the CLIs may need writable session state. Fixers may also write their candidate and scratch directory. TCP is limited to the backend's provider, HTTPS and proxy ports. The terminal and AXI show degraded confinement.
+
+Executable daemon, AXI and terminal tests with real Git and fake backends cover each item, including a seccomp-filtered daemon without Landlock. PTY captures at 56, 80 and 100 columns are in `evidence/review-confinement/`. The eval rerun, `evidence/review-eval/11-snapshot-confinement`, kept 100% recall and 81% precision.
+
 ## 6. Live backend validation and host contract
 
 Areas C, E, and F: validate selected real agent and forge backends, capture actual rule inputs and permissions, and publish versioned configuration/AXI compatibility guarantees. Verify custody, budgets, and stale evidence at embedding boundaries.
@@ -91,6 +101,7 @@ Executable daemon, AXI and terminal tests with isolated HOMEs, real Git and fake
 - Manual acceptance: the recorded bare-command sessions use scripted real PTYs, accepted as proof for this Task. A person has not manually repeated them; the [manual checklist](evidence/v1-live/manual-acceptance.md) is available for later use.
 
 - Area A: a descendant that survives a killed runner after closing the inherited lease descriptor is not detected; its executor shows `unverified`. Controller Git commands outside the pipeline runner, such as worktree creation, commits and handback, have no executor record; their outcomes are reconciled from refs.
-- Area C: full-tree review snapshots, explicit finding-resolution responses, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
+- Area C: full-tree review snapshots, explicit finding-resolution responses, and OS confinement. Pi reviews the diff and changed candidate files with fresh context and read-only tools. Vendor agents keep their real config and credentials read-only; Greenhouse records Claude Code and Codex roles as `degraded` when they require writable session state. OS confinement is also `degraded` on non-Linux platforms. A review adopted after a controller restart keeps its verdict, but its snapshot check reads `unverified`. Provider-backed review evaluation is in `eval/`; live fixer evidence covers the two standalone flows, without a broader evaluation corpus.
+- Area D: cap decisions for embedded hosts.
 - Area E and D2: broader provider-backed fixer evaluation. Live exact-head review and GitHub delivery are recorded above.
-- Area F: finding-resolution responses and the Posse adapter, which belongs in the Posse Project. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.
+- Area F: event subscriptions, finding-resolution responses and the Posse adapter, which belongs in the Posse Project. AXI and the terminal share findings, bounded summaries, cancellation, and current-token actions. There is no fake successful gate or dummy approval.

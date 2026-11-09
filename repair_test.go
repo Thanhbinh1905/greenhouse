@@ -35,7 +35,7 @@ b=json.load(sys.stdin)
 with open(os.path.dirname(__file__)+'/fix-invocations','a') as f: f.write('fix\n')
 with open(os.path.dirname(__file__)+'/fix-input.json','w') as f: json.dump({'args':sys.argv[1:],'input':b},f)
 with open('sample.txt','w') as f: f.write('repaired\n')
-`
+` + respondFixed
 	if err := os.WriteFile(p, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +524,7 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 	if err = writeConfigBytes(filepath.Join(otherHome, "fixer.json"), primaryConfig, 0600); err != nil {
 		t.Fatal(err)
 	}
-	program := "import pathlib,time; pathlib.Path('" + writerLog + "').open('a').write('write\\n'); time.sleep(2); pathlib.Path('sample.txt').write_text('repaired\\n')"
+	program := "import pathlib,time; pathlib.Path('" + writerLog + "').open('a').write('write\\n'); time.sleep(2); pathlib.Path('sample.txt').write_text('repaired\\n')\n" + respondFixed
 	if err := os.WriteFile(writer, []byte("#!/usr/bin/python3\n"+program+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}

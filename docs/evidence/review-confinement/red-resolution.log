@@ -1,0 +1,20 @@
+== TestFixedResponseIsCheckedByTheNextIndependentReview
+--- FAIL: TestFixedResponseIsCheckedByTheNextIndependentReview (3.70s)
+panic: interface conversion: interface {} is nil, not []interface {} [recovered, repanicked]
+== TestDisputeIsNeverCountedAsAFix
+--- FAIL: TestDisputeIsNeverCountedAsAFix (4.82s)
+        resolution_test.go:88: a dispute without edits must not commit: map[actor:auto args:[--print --mode json --no-session --tools read,edit,write,grep,find,ls --no-extensions --no-mcp --no-skills --no-context-files -
+        resolution_test.go:88: a dispute without edits must not commit: map[actor:auto args:[--print --mode json --no-session --tools read,edit,write,grep,find,ls --no-extensions --no-mcp --no-skills --no-context-files -
+FAIL
+== TestInvalidResolutionResponsesRefuseTheRepair
+--- FAIL: TestInvalidResolutionResponsesRefuseTheRepair (5.97s)
+        resolution_test.go:142: invalid responses must refuse the repair: map[actor:auto args:[--print --mode json --no-session --tools read,edit,write,grep,find,ls --no-extensions --no-mcp --no-skills --no-context-files
+        resolution_test.go:142: invalid responses must refuse the repair: map[actor:auto args:[--print --mode json --no-session --tools read,edit,write,grep,find,ls --no-extensions --no-mcp --no-skills --no-context-files
+FAIL
+== TestDeferralCitesAnsweredDecision
+--- FAIL: TestDeferralCitesAnsweredDecision (3.40s)
+panic: interface conversion: interface {} is nil, not []interface {} [recovered, repanicked]
+== TestOnePassRepairShowsResponses
+--- FAIL: TestOnePassRepairShowsResponses (4.18s)
+    resolution_test.go:183: one-pass repair responses = map[actor:client args:[--print --mode json --no-session --tools read,edit,write,grep,find,ls --no-extensions --no-mcp --no-skills --no-context-files --no-prompt-tem
+FAIL

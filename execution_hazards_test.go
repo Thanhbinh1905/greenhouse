@@ -82,6 +82,9 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 				if run["status"] != "outstanding-findings" || run["review"].(map[string]any)["status"] != "outstanding-findings" || run["review_used"] != float64(1) {
 					t.Fatalf("orphaned reviewer verdict was not adopted after restart: %v", adopted)
 				}
+				if check := run["review"].(map[string]any)["snapshot"].(map[string]any)["check"]; !strings.HasPrefix(check.(string), "unverified") {
+					t.Fatalf("an adopted review cannot claim a verified snapshot: %v", check)
+				}
 				if !hasEvent(run, "reconciled") {
 					t.Fatalf("adoption is not audited: %v", run["events"])
 				}

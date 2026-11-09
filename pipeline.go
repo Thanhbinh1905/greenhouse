@@ -82,17 +82,19 @@ type Pipeline struct {
 	Grants         []Grant           `json:"grants,omitempty"`
 }
 type stepOutcome struct {
-	Run, Step string
-	URL       string
-	Stage     StageResult
-	Head      string
-	Status    string
-	Log       string
-	Result    *Verdict
-	Repair    *Repair
-	Conflict  []string
-	Failure   *BackendFailure
-	Answer    agentAnswer
+	Run, Step   string
+	URL         string
+	Stage       StageResult
+	Head        string
+	Status      string
+	Log         string
+	Result      *Verdict
+	Repair      *Repair
+	Conflict    []string
+	Failure     *BackendFailure
+	Answer      agentAnswer
+	Snapshot    string
+	Confinement *Confinement
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
@@ -251,7 +253,11 @@ func stageInputs(r *Run, name string) string {
 		for _, rule := range snapshot.Rules {
 			rules = append(rules, rule.Selection, rule.Status, rule.Digest)
 		}
-		return digest([]any{name, r.Candidate, r.Target, r.Intent, r.Configs[len(r.Configs)-1].Settings.Preset, r.Reviewer, rules})
+		parts := []any{name, r.Candidate, r.Target, r.Intent, r.Configs[len(r.Configs)-1].Settings.Preset, r.Reviewer, rules}
+		if _, responses := pendingResponses(r); len(responses) > 0 {
+			parts = append(parts, responses)
+		}
+		return digest(parts)
 	case "docs":
 		review := ""
 		if r.Review != nil {
@@ -539,6 +545,11 @@ func advancePipeline(s *Store, r *Run) *Step {
 	if p.stage("review").Status == "accepted-risk" {
 		p.Outcome = "accepted-risk"
 	}
+	for _, res := range p.Resolutions {
+		if res.Kind == "deferred" && res.Reopened == "" {
+			p.Outcome = "accepted-risk"
+		}
+	}
 	r.Token = opaque()
 	event := Event{Kind: readyStatus, Actor: "daemon", Reason: "all configured stages passed for candidate " + r.Candidate}
 	if readyStatus == "ci-ready" {
@@ -614,16 +625,23 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 		return e
 	}
 	id := opaque()
-	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
+	var authorities []DeferralAuthority
+	respond := ""
+	if len(selected) > 0 {
+		authorities, respond = deferralAuthorities(r), responseContract
+	}
+	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Authorities: authorities, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Stage, Reason, Diff string
 		Paths                             []string
 		Failures                          []CheckResult
 		Conflict                          []string
 		Selected                          []Finding
+		Authorities                       []DeferralAuthority `json:",omitempty"`
 		Criteria                          json.RawMessage
 		Grants                            []Grant
-	}{r.Intent, r.Candidate, st.Name, st.Reason, string(diff), allowed, st.Commands, p.Conflict, selected, criteria.Bytes(), stageGrants(p, st.Name)})
+		Respond                           string `json:",omitempty"`
+	}{r.Intent, r.Candidate, st.Name, st.Reason, string(diff), allowed, st.Commands, p.Conflict, selected, authorities, criteria.Bytes(), stageGrants(p, st.Name), respond})
 	if len(x.Input) > 2*1024*1024 {
 		return errors.New("repair input exceeds 2 MiB")
 	}
@@ -728,6 +746,7 @@ func completeStep(r *Run, o stepOutcome) error {
 			return errors.New("review identity mismatch")
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
+		recordReviewEvidence(x, o.Snapshot, o.Confinement)
 		recordAttempt(r, Attempt{Execution: x.ID, Stage: st.Name, Kind: "review", Role: "reviewer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: o.Status, Reason: failureReason(o.Failure), Message: failureMessage(o.Failure), CostUSD: o.Answer.CostUSD, Tokens: o.Answer.Tokens})
 		if o.Failure != nil && !cancelling {
 			if x.Budget == "final-fix" {
@@ -776,6 +795,9 @@ func completeStep(r *Run, o stepOutcome) error {
 				return nil
 			}
 			st.Status, st.Reason = "cancelled", "repair cancelled"
+		case "responded-no-change":
+			invalidate(r, st.Name)
+			st.Reason = "fixer responded without edits; awaiting independent review of the responses"
 		case "fixed-not-independently-rereviewed":
 			r.Candidate = x.Head
 			if step.Kind == "conflict" {
@@ -1516,6 +1538,9 @@ func renderPipeline(w io.Writer, r *Run, details bool) {
 		if details {
 			fmt.Fprintf(w, "Candidate worktree: %s\n", p.Worktree)
 		}
+	}
+	if n := len(p.Repairs); n > 0 && p.Repairs[n-1].Confinement != nil {
+		fmt.Fprintln(w, confinementLine(p.Repairs[n-1].Confinement))
 	}
 	if p.Handback != "" {
 		fmt.Fprintf(w, "Handback: %s %s\n", p.Handback, p.HandbackError)

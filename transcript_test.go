@@ -17,7 +17,7 @@ func TestTranscriptLogIsRedactedBoundedAndViewable(t *testing.T) {
 		t.Fatal("normal inspection carries transcript content")
 	}
 	fixer := filepath.Join(filepath.Dir(home), "fake-fixer")
-	writeExecutable(t, fixer, "#!/usr/bin/python3\nimport json,sys\njson.load(sys.stdin)\nprint('fixer token ghp_abcdefghijklmnopqrstuvwxyz0123456789')\nopen('sample.txt','w').write('repaired\\n')\n")
+	writeExecutable(t, fixer, "#!/usr/bin/python3\nimport json,sys\nb=json.load(sys.stdin)\nsys.stderr.write('fixer token ghp_abcdefghijklmnopqrstuvwxyz0123456789\\n')\nopen('sample.txt','w').write('repaired\\n')\n"+respondFixed)
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": fixer, "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
 	repairRequest(t, bin, repo, home, reviewed, "repair", "repair", selectedID(t, reviewed))
 	repaired := waitRepair(t, bin, repo, home)

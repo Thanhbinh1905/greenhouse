@@ -332,7 +332,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", x.Full, reviewerPrompt)) {
+			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || digest(x.Args) != digest(agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -964,6 +964,8 @@ func daemon(h string) error {
 		repair                      *Repair
 		failure                     *BackendFailure
 		answer                      agentAnswer
+		snapshot                    string
+		confinement                 *Confinement
 	}
 	type repairProgress struct {
 		run, id string
@@ -1060,7 +1062,7 @@ func daemon(h string) error {
 					o.Status, o.Log = o.Stage.Status, o.Stage.Reason
 				case "review":
 					reviewed := executeReview(ctx, &review)
-					o.Status, o.Result, o.Log, o.Failure, o.Answer = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer
+					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot, o.Confinement = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot, reviewed.Confinement
 				case "repair":
 					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
 					o.Repair = &repair
@@ -1141,7 +1143,7 @@ func daemon(h string) error {
 				reviewed := executeReview(ctx, &x)
 				cancel()
 				select {
-				case completed <- completion{run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer}:
+				case completed <- completion{run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement}:
 				case <-stopped:
 				}
 			}()
@@ -1261,6 +1263,7 @@ func daemon(h string) error {
 				return errors.New("execution identity mismatch")
 			}
 			delete(active, r.ID)
+			recordReviewEvidence(r.Review, done.snapshot, done.confinement)
 			finishReview(r, reviewOutcome{Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer})
 			if err := persist(h, s); err != nil {
 				return err
@@ -1564,17 +1567,25 @@ func terminal(h, path string) error {
 		for _, f := range informational {
 			label[f.ID] = "Informational"
 		}
+		kinds := resolvedKinds(r)
+		responses := responseLines(r)
 		for _, f := range r.Findings {
 			state := label[f.ID]
 			if state == "" {
-				state = "Resolved"
+				state = "Resolved (" + kinds[f.ID] + ")"
 			}
 			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, displayID(f.ID, terminalWidth()))
+			for _, line := range responses[f.ID] {
+				fmt.Fprintln(&page, line)
+			}
 		}
 		if r.Repair != nil {
 			fix := r.Repair
 			fmt.Fprintf(&page, "Repair: %s | handback: %s | actor: %s\nWriter: %s | base: %s | commit: %s\n", fix.Status, fix.Handback, fix.Actor, fix.Writer, fix.Base, fix.Head)
 			fmt.Fprintf(&page, "Selected: %d | fixer input: %s | rules: %s | config: %s\n", len(fix.Selected), fix.InputDigest, fix.Rules.Digest, fix.ConfigDigest)
+			if fix.Confinement != nil {
+				fmt.Fprintln(&page, confinementLine(fix.Confinement))
+			}
 			for _, check := range fix.Checks {
 				fmt.Fprintf(&page, "Check %s exit=%d: %s\n", strings.Join(check.Args, " "), check.Exit, check.Status)
 			}
@@ -1585,6 +1596,12 @@ func terminal(h, path string) error {
 		if r.Review != nil {
 			x := r.Review
 			fmt.Fprintf(&page, "Review: %s | %s | %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", x.Status, x.Backend, x.Config.Model, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
+			if x.Snapshot != nil {
+				fmt.Fprintln(&page, snapshotLine(x.Snapshot))
+			}
+			if x.Confinement != nil {
+				fmt.Fprintln(&page, confinementLine(x.Confinement))
+			}
 			if details {
 				fmt.Fprintf(&page, "Executor: %s\nArgs: %s\n", x.Config.Executable, strings.Join(x.Args, " "))
 			}

@@ -36,45 +36,48 @@ type CheckResult struct {
 	Status           string   `json:"status"`
 }
 type Repair struct {
-	ID               string          `json:"id"`
-	Stage            string          `json:"stage,omitempty"`
-	Actor            string          `json:"actor"`
-	Binding          string          `json:"binding"`
-	Config           FixerConfig     `json:"config"`
-	ConfigDigest     string          `json:"config_digest"`
-	ExecutableDigest string          `json:"executable_digest"`
-	CheckDigests     []string        `json:"check_executable_digests"`
-	Selected         []Finding       `json:"selected"`
-	Paths            []string        `json:"paths"`
-	Args             []string        `json:"args"`
-	Input            []byte          `json:"input"`
-	InputDigest      string          `json:"input_digest"`
-	Rules            InputIdentity   `json:"rules"`
-	Worktree         string          `json:"worktree"`
-	Ref              string          `json:"ref"`
-	Base             string          `json:"base"`
-	Head             string          `json:"head"`
-	Parent           string          `json:"parent"`
-	Diff             string          `json:"diff"`
-	Status           string          `json:"status"`
-	Writer           string          `json:"writer"`
-	Checks           []CheckResult   `json:"checks"`
-	Log              string          `json:"log"`
-	Handback         string          `json:"handback"`
-	Authority        string          `json:"authority,omitempty"`
-	AuthorityPaths   []string        `json:"authority_paths,omitempty"`
-	Grants           []Grant         `json:"grants,omitempty"`
-	Granted          []string        `json:"granted,omitempty"`
-	Run              string          `json:"run,omitempty"`
-	Budget           string          `json:"budget,omitempty"`
-	Failure          *BackendFailure `json:"failure,omitempty"`
-	Partial          string          `json:"partial,omitempty"`
-	PartialDigest    string          `json:"partial_digest,omitempty"`
-	PartialBytes     int             `json:"partial_bytes,omitempty"`
-	Resumed          bool            `json:"resumed,omitempty"`
-	CostUSD          float64         `json:"cost_usd,omitempty"`
-	Tokens           int             `json:"tokens,omitempty"`
-	LeaseEpoch       int             `json:"lease_epoch,omitempty"`
+	ID               string               `json:"id"`
+	Stage            string               `json:"stage,omitempty"`
+	Actor            string               `json:"actor"`
+	Binding          string               `json:"binding"`
+	Config           FixerConfig          `json:"config"`
+	ConfigDigest     string               `json:"config_digest"`
+	ExecutableDigest string               `json:"executable_digest"`
+	CheckDigests     []string             `json:"check_executable_digests"`
+	Selected         []Finding            `json:"selected"`
+	Paths            []string             `json:"paths"`
+	Args             []string             `json:"args"`
+	Input            []byte               `json:"input"`
+	InputDigest      string               `json:"input_digest"`
+	Rules            InputIdentity        `json:"rules"`
+	Worktree         string               `json:"worktree"`
+	Ref              string               `json:"ref"`
+	Base             string               `json:"base"`
+	Head             string               `json:"head"`
+	Parent           string               `json:"parent"`
+	Diff             string               `json:"diff"`
+	Status           string               `json:"status"`
+	Writer           string               `json:"writer"`
+	Checks           []CheckResult        `json:"checks"`
+	Log              string               `json:"log"`
+	Handback         string               `json:"handback"`
+	Authority        string               `json:"authority,omitempty"`
+	AuthorityPaths   []string             `json:"authority_paths,omitempty"`
+	Grants           []Grant              `json:"grants,omitempty"`
+	Granted          []string             `json:"granted,omitempty"`
+	Run              string               `json:"run,omitempty"`
+	Budget           string               `json:"budget,omitempty"`
+	Failure          *BackendFailure      `json:"failure,omitempty"`
+	Partial          string               `json:"partial,omitempty"`
+	PartialDigest    string               `json:"partial_digest,omitempty"`
+	PartialBytes     int                  `json:"partial_bytes,omitempty"`
+	Resumed          bool                 `json:"resumed,omitempty"`
+	CostUSD          float64              `json:"cost_usd,omitempty"`
+	Tokens           int                  `json:"tokens,omitempty"`
+	Confinement      *Confinement         `json:"confinement,omitempty"`
+	Authorities      []DeferralAuthority  `json:"authorities,omitempty"`
+	Responses        []ResolutionResponse `json:"responses,omitempty"`
+	LeaseEpoch       int                  `json:"lease_epoch,omitempty"`
 }
 
 func executableDigest(path string) (string, error) {
@@ -249,12 +252,15 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	}
 	id := opaque()
 	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready", Run: r.ID}
+	x.Authorities = deferralAuthorities(r)
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Diff string
 		Paths              []string
 		Selected           []Finding
+		Authorities        []DeferralAuthority
 		Criteria           json.RawMessage
-	}{r.Intent, r.Candidate, r.SelectedDiff, names, selected, rules.Bytes()})
+		Respond            string
+	}{r.Intent, r.Candidate, r.SelectedDiff, names, selected, x.Authorities, rules.Bytes(), responseContract})
 	if len(x.Input) > 2*1024*1024 {
 		return errors.New("repair input exceeds 2 MiB")
 	}
@@ -604,6 +610,22 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	if e != nil {
 		fail("scope-refused", e)
 		return
+	}
+	if len(x.Selected) > 0 {
+		if x.Responses, e = parseResponses(run.answer.Text, x); e != nil {
+			fail("fixer-failed", e)
+			return
+		}
+		if diff == "" && !anyFixed(x.Responses) {
+			x.Status = "responded-no-change"
+			x.Log = "the fixer disputed or deferred every selected finding without editing; the next independent review checks the responses"
+			save()
+			return
+		}
+		if diff != "" && !anyFixed(x.Responses) {
+			fail("fixer-failed", errors.New("the fixer edited the candidate without a fixed resolution response"))
+			return
+		}
 	}
 	if diff == "" {
 		x.Status = "no-change"

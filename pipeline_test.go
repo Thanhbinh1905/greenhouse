@@ -23,6 +23,7 @@ if sys.argv[1:] == ['--list-models']:
 root=os.path.dirname(__file__)
 with open(root+'/review-invocations','a') as f: f.write('review\n')
 b=json.load(sys.stdin)
+with open(root+'/review-input.json','w') as f: json.dump(b,f,separators=(',',':'))
 mode=open(root+'/review-mode').read().strip() if os.path.exists(root+'/review-mode') else 'clean'
 v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}
 if mode=='docs-missing':
@@ -33,6 +34,9 @@ if mode=='findings':
 if mode=='mixed':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':p,'origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':e,'action':'Fix the sample','rule':'','head':b['Head']} for p,e in [('P1','Sample is wrong'),('P2','Sample is vague'),('P3','Sample could be shorter')]]
+if b.get('Responses'):
+    check=open(root+'/review-check').read().strip() if os.path.exists(root+'/review-check') else 'confirmed'
+    v['resolutions']=[{'finding':r['finding'],'check':check,'reason':'checked against the candidate'} for r in b['Responses']]
 provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':provider,'model':model,'stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))
@@ -80,6 +84,21 @@ if os.path.exists(root+'/fix-escalate'):
     print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':answer}]}}))
     print(json.dumps({'type':'agent_settled','aborted':False}))
     sys.exit(0)
+response=open(root+'/fix-response').read().strip() if os.path.exists(root+'/fix-response') else 'fixed'
+def respond():
+    if not b.get('Selected') or response=='missing':
+        return
+    items=[]
+    for f in b['Selected']:
+        item={'finding':f['id'],'response':response,'reason':'answered by the fixture fixer'}
+        if response=='deferred':
+            item['authority']=b['Authorities'][0]['id'] if b.get('Authorities') else 'none'
+        items.append(item)
+    print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps({'responses':items})}]}}))
+    print(json.dumps({'type':'agent_settled','aborted':False}))
+if b.get('Selected') and response in ('disputed','deferred'):
+    respond()
+    sys.exit(0)
 if os.path.exists(root+'/fix-extra'):
     extra=open(root+'/fix-extra').read()
     os.makedirs(os.path.dirname(extra) or '.', exist_ok=True)
@@ -92,6 +111,7 @@ elif target=='APPEND':
     with open(path,'a') as f: f.write('x\n')
 else:
     with open(path,'w') as f: f.write(target)
+respond()
 `
 
 func countLines(t *testing.T, path string) map[string]int {
@@ -137,7 +157,25 @@ func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
 		}
 		data = []byte(head + body)
 	}
+	if filepath.Base(path) == "backends.json" && !strings.Contains(string(data), `"writable"`) {
+		root, _ := json.Marshal(filepath.Dir(filepath.Dir(path)))
+		data = []byte(strings.Replace(string(data), "{", `{"writable":{"reviewer":[`+string(root)+`],"fixer":[`+string(root)+`]},`, 1))
+		data = []byte(strings.Replace(string(data), ",}", "}", 1))
+	}
 	return os.WriteFile(path, data, perm)
+}
+
+// allowFixtureWrites lets fake agents record invocations beside the state
+// directory, which OS confinement would otherwise deny.
+func allowFixtureWrites(t *testing.T, home string) {
+	t.Helper()
+	path := filepath.Join(home, "backends.json")
+	if _, err := os.Stat(path); os.IsNotExist(err) {
+		os.MkdirAll(home, 0700)
+		if err = writeConfigBytes(path, []byte("{}"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
 }
 
 func installPipelineProvider(t *testing.T, home string) {
@@ -146,6 +184,7 @@ func installPipelineProvider(t *testing.T, home string) {
 		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}}})
 	}))
 	t.Cleanup(server.Close)
+	allowFixtureWrites(t, home)
 	writePrivateJSON(t, filepath.Join(home, "providers.json"), TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}})
 }
 
