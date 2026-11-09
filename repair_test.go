@@ -14,6 +14,13 @@ import (
 	"time"
 )
 
+const fixturePiCatalog = `import sys
+if sys.argv[1:] == ['--list-models']:
+    print('provider model context max-out thinking images')
+    print('fixture model 128K 16K no no')
+    sys.exit(0)
+`
+
 func repairRequest(t *testing.T, bin, repo, home string, v map[string]any, op, action string, selected []string) map[string]any {
 	t.Helper()
 	q := map[string]any{"version": 1, "op": op, "run_id": v["run_id"], "input_id": v["input_id"], "gate_id": "none", "expected": v["token"], "action_id": action, "selected": selected}
@@ -167,7 +174,7 @@ func TestKilledWriterRunnerParksRepairCustody(t *testing.T) {
 	original := cfg
 	cfg.Executable = filepath.Join(filepath.Dir(home), "kill-runner.py")
 	program := "import os,signal,subprocess,sys; subprocess.Popen([sys.executable,'-c',\"import pathlib,time; time.sleep(.4); pathlib.Path('sample.txt').write_text('late descendant write')\"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); os.kill(os.getppid(), signal.SIGKILL)"
-	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+program+"\n"), 0700); err != nil {
+	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+fixturePiCatalog+program+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	data, err = json.Marshal(cfg)
@@ -241,7 +248,7 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 	cfg.Executable = filepath.Join(filepath.Dir(home), "slow-fixer.py")
 	started := filepath.Join(filepath.Dir(home), "fixer-started")
 	program := "import pathlib,subprocess,sys,time; subprocess.Popen([sys.executable,'-c',\"import pathlib,time; time.sleep(4); pathlib.Path('sample.txt').write_text('late fixer write')\"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); pathlib.Path('" + started + "').write_text('started'); time.sleep(30)"
-	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+program+"\n"), 0700); err != nil {
+	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+fixturePiCatalog+program+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = json.Marshal(cfg)
@@ -360,7 +367,7 @@ func TestDaemonCrashDuringFixParksUnknownWriter(t *testing.T) {
 	}
 	cfg.Executable = filepath.Join(filepath.Dir(home), "crash-fixer.py")
 	program := "import pathlib,time; pathlib.Path('" + started + "').write_text('started'); time.sleep(1); pathlib.Path('sample.txt').write_text('late after daemon crash')"
-	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+program+"\n"), 0700); err != nil {
+	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+fixturePiCatalog+program+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = json.Marshal(cfg)
@@ -525,7 +532,7 @@ func TestLinkedWorktreeSerializesConcurrentRepairs(t *testing.T) {
 		t.Fatal(err)
 	}
 	program := "import pathlib,time; pathlib.Path('" + writerLog + "').open('a').write('write\\n'); time.sleep(2); pathlib.Path('sample.txt').write_text('repaired\\n')\n" + respondFixed
-	if err := os.WriteFile(writer, []byte("#!/usr/bin/python3\n"+program+"\n"), 0700); err != nil {
+	if err := os.WriteFile(writer, []byte("#!/usr/bin/python3\n"+fixturePiCatalog+program+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	for _, stateHome := range []string{home, otherHome} {
