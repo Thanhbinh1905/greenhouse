@@ -2,11 +2,14 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 var fakeHost = map[string]any{"name": "fake-host", "id": "task-7", "metadata": map[string]string{"worker": "author-1"}}
@@ -186,6 +189,92 @@ func TestHostOwnershipBoundaries(t *testing.T) {
 	}
 	if invalid := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"","id":"x"}}`); invalid["outcome"] != "refused" {
 		t.Fatalf("an empty host name must refuse: %v", invalid)
+	}
+}
+
+func TestHostReviewRecoveryDiscardPreservesGrant(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := prepareFixture(t)
+	root := filepath.Dir(home)
+	fake := filepath.Join(root, "fake-pi")
+	writeExecutable(t, fake, `#!/usr/bin/python3
+import json,os,sys,time
+if '--list-models' in sys.argv:
+ print('fixture model')
+ sys.exit(0)
+root=os.path.dirname(__file__)
+open(root+'/reviewer-pid','w').write(str(os.getpid()))
+open(root+'/runner-pid','w').write(str(os.getppid()))
+while not os.path.exists(root+'/release-review'):
+ time.sleep(0.01)
+`)
+	v = hostCall(t, bin, repo, home, v, "new", "host-new-recovery", nil)
+	v = hostPrepare(t, bin, repo, home, v, strings.TrimSpace(git(t, repo, "rev-parse", "HEAD~1")), "-recovery")
+	started := hostCall(t, bin, repo, home, v, "review", "host-review-recovery", map[string]any{"grant": "round-1"})
+	if started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
+	pidPath := filepath.Join(root, "reviewer-pid")
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(pidPath); err == nil {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	pidBytes, err := os.ReadFile(pidPath)
+	if err != nil {
+		t.Fatalf("reviewer did not start: %v", err)
+	}
+	var reviewerPID int
+	if _, err = fmt.Sscan(string(pidBytes), &reviewerPID); err != nil || reviewerPID <= 0 {
+		t.Fatalf("invalid reviewer pid %q: %v", pidBytes, err)
+	}
+	runnerBytes, err := os.ReadFile(filepath.Join(root, "runner-pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var runnerPID int
+	if _, err = fmt.Sscan(string(runnerBytes), &runnerPID); err != nil || runnerPID <= 0 {
+		t.Fatalf("invalid executor runner pid %q: %v", runnerBytes, err)
+	}
+	pidBytes, err = os.ReadFile(filepath.Join(home, "pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var daemonPID int
+	if err = json.Unmarshal(pidBytes, &daemonPID); err != nil || daemonPID <= 0 {
+		t.Fatalf("invalid daemon pid %q: %v", pidBytes, err)
+	}
+	if err = syscall.Kill(daemonPID, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	if err = syscall.Kill(runnerPID, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	if err = syscall.Kill(reviewerPID, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	var recovered map[string]any
+	for time.Now().Before(deadline.Add(15 * time.Second)) {
+		recovered = axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`)
+		if r := runOf(t, recovered); r != nil && r["status"] == "recovery-required" {
+			if rec, ok := r["recovery"].(map[string]any); ok && len(rec["options"].([]any)) > 1 {
+				break
+			}
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if r := runOf(t, recovered); r["status"] != "recovery-required" || len(r["recovery"].(map[string]any)["options"].([]any)) < 2 {
+		t.Fatalf("interrupted host review did not require recovery: %v", recovered)
+	}
+	discarded := hostCall(t, bin, repo, home, recovered, "recover", "host-review-discard", map[string]any{"choice": "discard"})
+	if discarded["outcome"] != "ok" {
+		t.Fatal(discarded)
+	}
+	result := discarded["host_result"].(map[string]any)
+	if result["grant"] != "round-1" {
+		t.Fatalf("recovery discard lost the host review grant: %v", discarded)
 	}
 }
 

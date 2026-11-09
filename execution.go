@@ -129,12 +129,7 @@ func trustedReviewer() (ReviewerConfig, error) {
 }
 func admitReview(r *Run) error {
 	if r.Host != nil {
-		grant := r.Review.Grant
-		if err := admitReviewAgain(r); err != nil {
-			return err
-		}
-		r.Review.Grant = grant
-		return nil
+		return admitReviewAgain(r)
 	}
 	if settings := r.Configs[len(r.Configs)-1].Settings; r.ReviewUsed+r.RepairUsed >= settings.Limit {
 		return errors.New("review budget exhausted")
@@ -145,6 +140,10 @@ func admitReview(r *Run) error {
 	return admitReviewAgain(r)
 }
 func admitReviewAgain(r *Run) error {
+	grant := ""
+	if r.Host != nil && r.Review != nil {
+		grant = r.Review.Grant
+	}
 	if r.Intent == "" || r.Target == "" {
 		return errors.New("explicit intent and immutable target required")
 	}
@@ -170,6 +169,7 @@ func admitReviewAgain(r *Run) error {
 	if e != nil {
 		return e
 	}
+	x.Grant = grant
 	r.Review = x
 	r.Stage = "independent-review"
 	r.Status = "running"
