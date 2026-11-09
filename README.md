@@ -474,7 +474,7 @@ For each case, `fix-run` commits the trees, starts an isolated daemon and sends 
 - Cost uses Pi's reported cost, or the reported tokens at `-price` when Pi reports none. Latency is the wall time of the fixer process.
 - The bar is at least 75% of cases fixed, with no regression and no scope violation on any case.
 
-[The recorded runs](docs/evidence/fixer-eval/README.md) show the default fixer meeting the bar at 90% after one instruction change.
+[The recorded runs](docs/evidence/fixer-eval/README.md) show the default fixer meeting the bar at 90% after the response contract put unselected findings out of scope.
 
 See [the rule contract](docs/rules.md) for selection, validation, provenance, and fixture delivery limits.
 
