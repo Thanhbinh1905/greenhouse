@@ -195,8 +195,27 @@ func screenDigest(v Response) string {
 	return digest(v)
 }
 
-// A watch answer computed before a mutation can arrive after the mutation's
-// response.
-func newer(update, current Response) bool {
-	return update.Stream != current.Stream || update.Sequence > current.Sequence
+// snapshotOrder holds the event streams a client has replaced. One daemon
+// holds the store lock at a time, so a replaced stream is older than its
+// replacement and is never accepted again. Within a stream, a watch answer
+// computed before a mutation can arrive after the mutation's response.
+type snapshotOrder map[string]bool
+
+// accepts reports whether update may replace current. equal accepts the
+// current sequence: an action response carries the sequence committed
+// before its own change.
+func (o snapshotOrder) accepts(update, current Response, equal bool) bool {
+	switch {
+	case o[update.Stream]:
+		return false
+	case update.Stream != current.Stream:
+		return true
+	}
+	return update.Sequence > current.Sequence || equal && update.Sequence == current.Sequence
+}
+
+func (o snapshotOrder) adopt(next, current Response) {
+	if next.Stream != current.Stream && current.Stream != "" {
+		o[current.Stream] = true
+	}
 }

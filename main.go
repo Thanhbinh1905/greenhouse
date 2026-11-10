@@ -1630,6 +1630,7 @@ func lineTerminal(h, path string) error {
 	live := "live"
 	message := ""
 	details := false
+	order := snapshotOrder{}
 	for {
 		if v.Run == nil {
 			return errors.New(v.Error)
@@ -1651,7 +1652,8 @@ func lineTerminal(h, path string) error {
 		for !redraw && !entered {
 			select {
 			case u := <-updates:
-				if u.view != nil && u.view.Run != nil && newer(*u.view, v) && screenDigest(*u.view) != screenDigest(v) {
+				if u.view != nil && u.view.Run != nil && order.accepts(*u.view, v, false) && screenDigest(*u.view) != screenDigest(v) {
+					order.adopt(*u.view, v)
 					v, redraw = *u.view, true
 				}
 				if u.state != live {
@@ -1813,6 +1815,7 @@ func lineTerminal(h, path string) error {
 				if err != nil {
 					return err
 				}
+				order.adopt(applied, v)
 				v = applied
 				if v.Outcome != "ok" {
 					message = v.Error
@@ -1980,10 +1983,12 @@ func lineTerminal(h, path string) error {
 			q.Input = v.Input
 			q.Gate = v.Gate
 		}
-		v, e = call(h, q)
+		answer, e := call(h, q)
 		if e != nil {
 			return e
 		}
+		order.adopt(answer, v)
+		v = answer
 		message = v.Outcome + " " + v.Error
 	}
 }

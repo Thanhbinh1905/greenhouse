@@ -148,7 +148,7 @@ type tuiModel struct {
 	runKey     string
 	runSince   time.Time
 	runFromTop bool
-	retired    map[string]bool
+	order      snapshotOrder
 	now        func() time.Time
 }
 
@@ -156,7 +156,7 @@ func newTUI(client tuiClient, v Response, agents []string, suggestion string, up
 	input := textinput.New()
 	input.Prompt = "> "
 	input.Cursor.SetMode(cursor.CursorStatic)
-	m := &tuiModel{client: client, updates: updates, live: "live", fresh: true, agents: agents, suggestion: suggestion, width: 80, height: 24, screen: screenHome, input: input, selected: map[string]bool{}, retired: map[string]bool{}, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot)), now: time.Now, collector: localCollector}
+	m := &tuiModel{client: client, updates: updates, live: "live", fresh: true, agents: agents, suggestion: suggestion, width: 80, height: 24, screen: screenHome, input: input, selected: map[string]bool{}, order: snapshotOrder{}, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot)), now: time.Now, collector: localCollector}
 	m.setView(v, false)
 	return m
 }
@@ -206,9 +206,7 @@ func (m *tuiModel) setView(v Response, seen bool) {
 	if seen && !m.failed && m.v.Run != nil && v.Run != nil && m.v.Run.Status != v.Run.Status {
 		m.message = ""
 	}
-	if v.Stream != m.v.Stream && m.v.Stream != "" {
-		m.retired[m.v.Stream] = true
-	}
+	m.order.adopt(v, m.v)
 	m.v = v
 	if key := activeExecution(v.Run); key != m.runKey {
 		m.runKey, m.runSince, m.runFromTop = key, m.now(), seen
@@ -258,19 +256,8 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return model, cmd
 }
 
-// ordered reports whether a watch snapshot or action response may replace
-// the shown state. One daemon holds the store lock at a time, so a stream
-// the screen has replaced is older than its replacement and never returns.
-// equal accepts the shown sequence: an action response carries the sequence
-// committed before its own change.
 func (m *tuiModel) ordered(v Response, equal bool) bool {
-	switch {
-	case v.Run == nil || m.retired[v.Stream]:
-		return false
-	case v.Stream != m.v.Stream:
-		return true
-	}
-	return v.Sequence > m.v.Sequence || equal && v.Sequence == m.v.Sequence
+	return v.Run != nil && m.order.accepts(v, m.v, equal)
 }
 
 func (m *tuiModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {

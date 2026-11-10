@@ -176,6 +176,7 @@ func TestTerminalFollowsEventsWithoutInput(t *testing.T) {
 
 func TestTerminalIgnoresOlderSnapshots(t *testing.T) {
 	current := Response{Stream: "s1", Sequence: 7}
+	order := snapshotOrder{}
 	for _, c := range []struct {
 		update Response
 		want   bool
@@ -185,8 +186,19 @@ func TestTerminalIgnoresOlderSnapshots(t *testing.T) {
 		{Response{Stream: "s1", Sequence: 8}, true},
 		{Response{Stream: "s2", Sequence: 1}, true},
 	} {
-		if got := newer(c.update, current); got != c.want {
-			t.Fatalf("newer(%+v) = %v, want %v", c.update, got, c.want)
+		if got := order.accepts(c.update, current, false); got != c.want {
+			t.Fatalf("accepts(%+v) = %v, want %v", c.update, got, c.want)
 		}
+	}
+	if !order.accepts(Response{Stream: "s1", Sequence: 7}, current, true) {
+		t.Fatal("an action response at the shown sequence was refused")
+	}
+	restarted := Response{Stream: "s2", Sequence: 1}
+	order.adopt(restarted, current)
+	if order.accepts(Response{Stream: "s1", Sequence: 9}, restarted, false) || order.accepts(Response{Stream: "s1", Sequence: 9}, restarted, true) {
+		t.Fatal("a snapshot from the replaced stream was accepted")
+	}
+	if !order.accepts(Response{Stream: "s3", Sequence: 1}, restarted, false) {
+		t.Fatal("a snapshot from a later daemon was refused")
 	}
 }

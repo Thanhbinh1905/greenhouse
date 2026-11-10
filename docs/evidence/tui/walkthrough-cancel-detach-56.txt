@@ -2,7 +2,7 @@
 
 ## 1. first launch: one Run action, nothing collected yet
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                   |
 | ○ Intent   collected from your agent session on Run    |
@@ -32,7 +32,7 @@ $ keys 'Enter'
 
 ## 2. no matching agent session: Run asks one question
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Which intent should Run use?                           |
 |                                                        |
@@ -62,7 +62,7 @@ $ keys type 'Fix q and x handling in sample so every reader of sample.txt sees c
 
 ## 3. typing past the screen width keeps the cursor end visible; q and x stay in the answer
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Which intent should Run use?                           |
 |                                                        |
@@ -92,7 +92,7 @@ $ keys 'BSpace' 'BSpace' 'BSpace' 'BSpace' 'BSpace'
 
 ## 4. deletion is visible
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Which intent should Run use?                           |
 |                                                        |
@@ -122,7 +122,7 @@ $ resize to 100x24
 
 ## 5. resize while editing keeps the whole answer visible
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 4751363                                               one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Which intent should Run use?                                                                       |
 |                                                                                                    |
@@ -152,7 +152,7 @@ $ resize to 56x24
 
 ## 6. resize back while editing
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Which intent should Run use?                           |
 |                                                        |
@@ -184,15 +184,15 @@ $ keys 'Enter'
 
 ## 7. one Enter collected the intent, prepared, loaded rules and started the review
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
 | ✓ Intent   Fix q and x handling in sample so every re… |
-| ✓ Target   71cdcda                                     |
+| ✓ Target   d8df2ec                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
-| ⠙ Review   running · budget 1 of 4 used                |
+| ⠋ Review   running · budget 1 of 4 used                |
 |                                                        |
-| ⠙ Independent review · Pi · 0s                         |
+| ⠋ Independent review · Pi · 0s                         |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -212,15 +212,15 @@ $ keys 'Enter'
 
 ## 8. live progress: stage, agent and elapsed time
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
 | ✓ Intent   Fix q and x handling in sample so every re… |
-| ✓ Target   71cdcda                                     |
+| ✓ Target   d8df2ec                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
-| ⠧ Review   running · budget 1 of 4 used                |
+| ⠼ Review   running · budget 1 of 4 used                |
 |                                                        |
-| ⠧ Independent review · Pi · 1s                         |
+| ⠼ Independent review · Pi · 1s                         |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -242,15 +242,15 @@ $ resize to 100x24
 
 ## 9. resized to 100 columns while running
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 4751363                                               one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
 | ✓ Intent   Fix q and x handling in sample so every reader of sample.txt sees corrected text        |
-| ✓ Target   71cdcda                                                                                 |
+| ✓ Target   d8df2ec                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
-| ⠹ Review   running · budget 1 of 4 used                                                            |
+| ⠧ Review   running · budget 1 of 4 used                                                            |
 |                                                                                                    |
-| ⠹ Independent review · Pi · 1s                                                                     |
+| ⠧ Independent review · Pi · 1s                                                                     |
 |                                                                                                    |
 |                                                                                                    |
 |                                                                                                    |
@@ -272,15 +272,15 @@ $ resize to 56x24
 
 ## 10. resized back to 56 columns
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
 | ✓ Intent   Fix q and x handling in sample so every re… |
-| ✓ Target   71cdcda                                     |
+| ✓ Target   d8df2ec                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
-| ⠦ Review   running · budget 1 of 4 used                |
+| ⠙ Review   running · budget 1 of 4 used                |
 |                                                        |
-| ⠦ Independent review · Pi · 2s                         |
+| ⠙ Independent review · Pi · 1s                         |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -302,7 +302,7 @@ $ keys 'x'
 
 ## 11. one x asks for confirmation
 +--------------------------------------------------------+
-|Greenhouse · feature @ 4751363   one-pass · auto · live |
+|Greenhouse · feature @ 9ff5471   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Cancel running work                                    |
 |                                                        |
