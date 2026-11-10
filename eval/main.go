@@ -112,6 +112,10 @@ func dispatch(sub string, args []string) error {
 		if err != nil {
 			return err
 		}
+		coverage, err := CheckCoverage(c)
+		if err != nil {
+			return err
+		}
 		count := map[string]int{}
 		high := 0
 		for _, k := range c.Cases {
@@ -122,7 +126,8 @@ func dispatch(sub string, args []string) error {
 				}
 			}
 		}
-		fmt.Printf("corpus v%d revision %d %s: %d cases, bug=%d policy=%d noise=%d clean=%d, %d high-severity findings\n", c.Version, c.Revision, c.Digest, len(c.Cases), count["bug"], count["policy"], count["noise"], count["clean"], high)
+		fmt.Printf("corpus v%d revision %d %s: %d cases, bug=%d policy=%d noise=%d clean=%d judgment=%d, %d high-severity findings\n", c.Version, c.Revision, c.Digest, len(c.Cases), count["bug"], count["policy"], count["noise"], count["clean"], count["judgment"], high)
+		fmt.Print(coverageText(coverage))
 		return nil
 	case "judge":
 		o := judgeOptions{}
@@ -159,24 +164,23 @@ func dispatch(sub string, args []string) error {
 			if err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
-			if sub == "rescore" {
-				if err := filterReport(r, c, split); err != nil {
-					return err
-				}
-				if split != "all" {
-					a = filterAdjudications(a, r)
-				}
-			}
 			if err := rescoreReport(r, c, a); err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
-			if err := writeAdjudications(dir, a); err != nil {
+			target := dir
+			if split != "all" {
+				target = filepath.Join(dir, split)
+			}
+			if err := os.MkdirAll(target, 0o755); err != nil {
 				return err
 			}
-			if err := writeReport(dir, r); err != nil {
+			if err := writeAdjudications(target, a); err != nil {
 				return err
 			}
-			fmt.Printf("%s: %s; bar met %t\n", dir, a.Judge.Note, r.Summary.BarMet)
+			if err := writeReport(target, r); err != nil {
+				return err
+			}
+			fmt.Printf("%s: %s; bar met %t\n", target, a.Judge.Note, r.Summary.BarMet)
 		}
 		return nil
 	case "rescore":
@@ -196,21 +200,31 @@ func dispatch(sub string, args []string) error {
 			if err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
-			if sub == "rescore" {
-				if err := filterReport(r, c, split); err != nil {
-					return err
-				}
-				if split != "all" {
-					a = filterAdjudications(a, r)
-				}
+			if err := filterReport(r, c, split); err != nil {
+				return err
+			}
+			if split != "all" {
+				a = filterAdjudications(a, r)
 			}
 			if err := rescoreReport(r, c, a); err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
-			if err := writeReport(dir, r); err != nil {
+			target := dir
+			if split != "all" {
+				target = filepath.Join(dir, split)
+			}
+			if a != nil && split != "all" {
+				if err := os.MkdirAll(target, 0o755); err != nil {
+					return err
+				}
+				if err := writeAdjudications(target, a); err != nil {
+					return err
+				}
+			}
+			if err := writeReport(target, r); err != nil {
 				return err
 			}
-			fmt.Printf("%s: bar met %t\n", dir, r.Summary.BarMet)
+			fmt.Printf("%s: bar met %t\n", target, r.Summary.BarMet)
 		}
 		return nil
 	case "run":

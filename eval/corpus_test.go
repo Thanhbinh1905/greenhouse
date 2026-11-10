@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -196,5 +198,207 @@ func TestPublicProvenanceValidation(t *testing.T) {
 				t.Fatalf("public source without %s accepted", field)
 			}
 		})
+	}
+}
+
+func TestCorpusCoverageGate(t *testing.T) {
+	c, err := LoadCorpus(filepath.Join("testdata", "corpus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := CheckCoverage(c); err != nil {
+		t.Fatal(err)
+	}
+	small := *c
+	small.Cases = small.Cases[:16]
+	if _, err := CheckCoverage(&small); err == nil {
+		t.Fatal("undersized corpus accepted")
+	}
+	for _, field := range []string{"split", "language", "size", "license"} {
+		t.Run(field, func(t *testing.T) {
+			broken := *c
+			broken.Cases = append([]Case(nil), c.Cases...)
+			for i := range broken.Cases {
+				k := &broken.Cases[i]
+				switch field {
+				case "split":
+					k.Split = "tune"
+				case "language":
+					renamedBase, renamedHead := map[string]string{}, map[string]string{}
+					for name, body := range k.Base {
+						renamedBase[name+".go"] = body
+					}
+					for name, body := range k.Head {
+						renamedHead[name+".go"] = body
+					}
+					k.Base, k.Head = renamedBase, renamedHead
+					k.Source.Files = append([]string(nil), k.Source.Files...)
+					for j := range k.Source.Files {
+						k.Source.Files[j] += ".go"
+					}
+					k.Expected = append([]Expected(nil), k.Expected...)
+					for j := range k.Expected {
+						k.Expected[j].File += ".go"
+					}
+					k.Allowed = append([]Allowed(nil), k.Allowed...)
+					for j := range k.Allowed {
+						k.Allowed[j].File += ".go"
+					}
+				case "size":
+					if slices.Contains(k.Tags, "large-change") {
+						k.Base = maps.Clone(k.Head)
+						for name, body := range k.Base {
+							k.Base[name] = "// before\n" + body
+							break
+						}
+					}
+				case "license":
+					if k.Source.Kind == "public" {
+						k.Source.License = "GPL-3.0"
+					}
+				}
+			}
+			if _, err := CheckCoverage(&broken); err == nil {
+				t.Fatal("coverage violation accepted")
+			}
+		})
+	}
+}
+
+func TestCorpusCheckOutputAndRevision(t *testing.T) {
+	c, err := LoadCorpus(filepath.Join("testdata", "corpus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Revision != 5 || c.Digest == "9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b" {
+		t.Fatalf("revision/digest = %d %s", c.Revision, c.Digest)
+	}
+	v, err := CheckCoverage(c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := coverageText(v)
+	for _, want := range []string{"total=166", "source: local=60 public=60 synthetic=46", "split: holdout=59 tune=107", "language: Go=74 Python=47 Rust=22 TypeScript=22"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("missing %q in %s", want, out)
+		}
+	}
+}
+
+func TestRescoreCLISelectsHoldoutOffline(t *testing.T) {
+	c, err := LoadCorpus(filepath.Join("testdata", "corpus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &Report{Config: RunConfig{Split: "all"}}
+	for _, k := range c.Cases {
+		r.Cases = append(r.Cases, CaseRecord{ID: k.ID, Status: "clean-review", Usage: Usage{CostUSD: 1}, LatencyMillis: 2})
+	}
+	dir := t.TempDir()
+	if err := writeReport(dir, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatch("rescore", []string{"-corpus", filepath.Join("testdata", "corpus"), "-split", "holdout", dir}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readReport(filepath.Join(dir, "holdout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Config.Split != "holdout" || len(got.Cases) != 59 || got.CostUSD != 59 || got.LatencyMillis.Total != 118 {
+		t.Fatalf("selected report = %+v", got.Config)
+	}
+	if err := rescoreReport(got, c, nil); err != nil {
+		t.Fatal(err)
+	}
+	if got.Summary.BySplit["holdout"] != 59 || got.Summary.BySplit["tune"] != 0 {
+		t.Fatalf("summary=%+v", got.Summary)
+	}
+	if err := dispatch("rescore", []string{"-corpus", filepath.Join("testdata", "corpus"), "-split", "invalid", dir}); err == nil {
+		t.Fatal("invalid split accepted by CLI")
+	}
+}
+
+func TestCoverageRejectsEachStratumShortfall(t *testing.T) {
+	c, err := LoadCorpus(filepath.Join("testdata", "corpus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, stratum := range []string{"reversed-bug-fix", "injected-defect", "clean-real-change", "security-sensitive", "refactor-only", "cross-file", "judgment"} {
+		t.Run(stratum, func(t *testing.T) {
+			broken := *c
+			broken.Cases = append([]Case(nil), c.Cases...)
+			for i := range broken.Cases {
+				k := &broken.Cases[i]
+				if k.Stratum == stratum {
+					k.Stratum = "security-sensitive"
+					if stratum == "security-sensitive" {
+						k.Stratum = "injected-defect"
+					}
+				}
+				k.Tags = append([]string(nil), k.Tags...)
+				k.Tags = slices.DeleteFunc(k.Tags, func(tag string) bool { return tag == stratum })
+			}
+			if _, err := CheckCoverage(&broken); err == nil || !strings.Contains(err.Error(), stratum) {
+				t.Fatalf("missing %s: %v", stratum, err)
+			}
+		})
+	}
+	for _, kind := range []string{"local", "public"} {
+		t.Run(kind, func(t *testing.T) {
+			broken := *c
+			broken.Cases = append([]Case(nil), c.Cases...)
+			for i := range broken.Cases {
+				if broken.Cases[i].Source.Kind == kind {
+					broken.Cases[i].Source.Kind = "synthetic"
+					break
+				}
+			}
+			if _, err := CheckCoverage(&broken); err == nil || !strings.Contains(err.Error(), kind+"=59") {
+				t.Fatalf("source minimum: %v", err)
+			}
+		})
+	}
+}
+
+func TestJudgeCLISelectsHoldoutWithoutJudgingTune(t *testing.T) {
+	c, err := LoadCorpus(filepath.Join("testdata", "corpus"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := &Report{Config: RunConfig{Split: "all"}}
+	for _, k := range c.Cases {
+		if k.Split == "holdout" && len(r.Cases) == 0 {
+			r.Cases = append(r.Cases, CaseRecord{ID: k.ID, Status: "clean-review"})
+		}
+	}
+	for _, k := range c.Cases {
+		if k.Split == "tune" && len(k.Expected) > 0 {
+			e := k.Expected[0]
+			r.Cases = append(r.Cases, CaseRecord{ID: k.ID, Status: "outstanding-findings", Findings: []Finding{{File: e.File, Start: e.Start, End: e.End, Origin: e.Origin, Rule: e.Rule}}})
+			break
+		}
+	}
+	dir := t.TempDir()
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte("#!/bin/sh\nif [ \"$1\" = --version ]; then echo offline-test; exit 0; fi\necho 'unexpected judge call' >&2\nexit 99\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeReport(dir, r); err != nil {
+		t.Fatal(err)
+	}
+	if err := dispatch("judge", []string{"-corpus", filepath.Join("testdata", "corpus"), "-model", "fake/judge", "-pi", pi, "-split", "holdout", dir}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readReport(filepath.Join(dir, "holdout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Cases) != 1 || got.Config.Split != "holdout" {
+		t.Fatalf("report=%+v", got.Config)
+	}
+	original, err := readReport(dir)
+	if err != nil || len(original.Cases) != 2 {
+		t.Fatalf("original report changed: %v", err)
 	}
 }

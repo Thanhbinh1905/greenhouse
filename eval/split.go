@@ -66,6 +66,14 @@ func filterReport(r *Report, c *Corpus, split string) error {
 		r.Config.Cases = append(r.Config.Cases, rec.ID)
 	}
 	r.Config.Split = split
+	r.CostUSD = 0
+	r.LatencyMillis = LatencyStats{}
+	for _, rec := range selected {
+		r.CostUSD += rec.Usage.CostUSD
+		r.LatencyMillis.Total += rec.LatencyMillis
+		r.LatencyMillis.Max = max(r.LatencyMillis.Max, rec.LatencyMillis)
+	}
+	r.LatencyMillis.Mean = r.LatencyMillis.Total / int64(len(selected))
 	return nil
 }
 

@@ -99,6 +99,16 @@ func validateMetadata(k Case) error {
 	default:
 		return fmt.Errorf("unknown source kind %q", s.Kind)
 	}
+	for _, name := range s.Files {
+		if name == "" || filepath.IsAbs(name) || filepath.ToSlash(filepath.Clean(name)) != name || name == ".." || strings.HasPrefix(name, "../") {
+			return errors.New("source files must be repository-relative paths")
+		}
+		if _, base := k.Base[name]; !base {
+			if _, head := k.Head[name]; !head {
+				return fmt.Errorf("source file %s absent from case trees", name)
+			}
+		}
+	}
 	for _, tag := range k.Tags {
 		if strings.TrimSpace(tag) == "" {
 			return errors.New("empty tag")
@@ -180,6 +190,9 @@ func LoadCorpus(root string) (*Corpus, error) {
 	}
 	listed := map[string]bool{}
 	for _, id := range manifest.Cases {
+		if !expectedID.MatchString(id) || listed[id] {
+			return nil, fmt.Errorf("invalid or duplicate case ID %q", id)
+		}
 		listed[id] = true
 	}
 	entries, err := os.ReadDir(root)
