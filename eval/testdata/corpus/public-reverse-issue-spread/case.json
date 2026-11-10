@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-issue-spread",
+  "category": "bug",
+  "description": "A nested array produces 200,000 issues; spreading them into push exceeds the JavaScript argument limit and safeParse throws RangeError.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A nested array produces 200,000 issues; spreading them into push exceeds the JavaScript argument limit and safeParse throws RangeError.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/schemas.ts",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A nested array produces 200,000 issues; spreading them into push exceeds the JavaScript argument limit and safeParse throws RangeError."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "c504186332c00ef0059b685e6b93c4cc09891c77",
+    "files": [
+      "packages/zod/src/v4/core/schemas.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A nested array produces 200,000 issues; spreading them into push exceeds the JavaScript argument limit and safeParse throws RangeError. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 1876-1882, 2003-2045, 3147-3153, 3154-3203, 3274-3458, 3525-3572, 3628-3641; head source lines 1876-1882, 2003-2045, 3147-3153, 3154-3203, 3274-3458, 3525-3572, 3628-3641. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/c504186332c00ef0059b685e6b93c4cc09891c77"
+  }
+}

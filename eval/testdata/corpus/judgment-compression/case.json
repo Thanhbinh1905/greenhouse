@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "judgment-compression",
+  "category": "judgment",
+  "description": "Clients accept identity and gzip. Skipping compression for small bodies trades bandwidth for CPU; payload measurements decide whether 1024 bytes is appropriate.",
+  "intent": "Clients accept identity and gzip. Skipping compression for small bodies trades bandwidth for CPU; payload measurements decide whether 1024 bytes is appropriate.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "judgment",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed judgment case. Clients accept identity and gzip. Skipping compression for small bodies trades bandwidth for CPU; payload measurements decide whether 1024 bytes is appropriate. The allowed range marks an optional policy objection, not a required defect."
+  },
+  "allowed": [
+    {
+      "file": "policy.ts",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "note": "Clients accept identity and gzip. Skipping compression for small bodies trades bandwidth for CPU; payload measurements decide whether 1024 bytes is appropriate."
+    }
+  ]
+}

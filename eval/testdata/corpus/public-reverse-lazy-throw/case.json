@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-lazy-throw",
+  "category": "bug",
+  "description": "Read a lazy property whose getter throws, then read again: the memo sentinel remains cached instead of retrying or throwing again.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Read a lazy property whose getter throws, then read again: the memo sentinel remains cached instead of retrying or throwing again.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/util.ts",
+      "start": 11,
+      "end": 11,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Read a lazy property whose getter throws, then read again: the memo sentinel remains cached instead of retrying or throwing again."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "6fd0477452e861093163cfd66e3c61369208a19c",
+    "files": [
+      "packages/zod/src/v4/core/util.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Read a lazy property whose getter throws, then read again: the memo sentinel remains cached instead of retrying or throwing again. Excerpt coordinates: packages/zod/src/v4/core/util.ts: base source lines 338-368, 1286-1306; head source lines 338-362, 1280-1300. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/6fd0477452e861093163cfd66e3c61369208a19c"
+  }
+}

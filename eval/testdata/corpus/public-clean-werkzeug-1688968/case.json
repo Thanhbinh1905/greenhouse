@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-1688968",
+  "category": "clean",
+  "description": "ignore invalid authorization parameters",
+  "intent": "ignore invalid authorization parameters",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "1688968101c3341136bd8420ac7b77b6286c7409",
+    "files": [
+      "src/werkzeug/http.py"
+    ],
+    "derivation": "Retain upstream source change: ignore invalid authorization parameters. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/http.py: base source lines 327-394; head source lines 327-398. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/1688968101c3341136bd8420ac7b77b6286c7409"
+  }
+}

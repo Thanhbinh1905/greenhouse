@@ -184,12 +184,16 @@ func effectiveRules(r *Run) ([]RuleEvidence, bool) {
 	return rules, rulesReady(rules)
 }
 func rulesReady(rules []RuleEvidence) bool {
- for i:=range rules {
-  r:=rules[i]
-  if !r.Required {continue}
-  if r.Status!="loaded" {return false}
- }
- return true
+	for i := range rules {
+		r := rules[i]
+		if !r.Required {
+			continue
+		}
+		if r.Status != "resolved" {
+			return false
+		}
+	}
+	return true
 }
 
 func uniqueJSON(d *json.Decoder) error {

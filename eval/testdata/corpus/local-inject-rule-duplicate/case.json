@@ -9,8 +9,8 @@
     {
       "id": "regression",
       "file": "rules.go",
-      "start": 1,
-      "end": 1,
+      "start": 93,
+      "end": 93,
       "origin": "correctness",
       "rule": "",
       "severity": "high",

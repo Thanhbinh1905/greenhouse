@@ -110,15 +110,21 @@ func parsePack(b []byte) (*RulePack, error) {
 	}
 	return &p, nil
 }
-func exactFields(b []byte, allowed ...string) (map[string]json.RawMessage,error) {
- var fields map[string]json.RawMessage
- if err:=json.Unmarshal(b,&fields);err!=nil {return nil,err}
- names:=map[string]bool{}
- for _,name:=range allowed {names[name]=true}
- for name:=range fields {
-  if !names[name] {return nil,fmt.Errorf("unknown schema field %q; field names are case-sensitive",name)}
- }
- return fields,nil
+func exactFields(b []byte, allowed ...string) (map[string]json.RawMessage, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(b, &fields); err != nil {
+		return nil, err
+	}
+	names := map[string]bool{}
+	for _, name := range allowed {
+		names[name] = true
+	}
+	for name := range fields {
+		if !names[name] {
+			return nil, fmt.Errorf("unknown schema field %q; field names are case-sensitive", name)
+		}
+	}
+	return fields, nil
 }
 func selectedRules(s Settings) []RuleEvidence {
 	out := []RuleEvidence{}

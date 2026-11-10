@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-hostname-suffix",
+  "category": "bug",
+  "description": "Substring URL matching admits an attacker-controlled host and bypasses the outbound API host allowlist.",
+  "intent": "Constructed security-sensitive contract. Substring URL matching admits an attacker-controlled host and bypasses the outbound API host allowlist. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Substring URL matching admits an attacker-controlled host and bypasses the outbound API host allowlist."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. Substring URL matching admits an attacker-controlled host and bypasses the outbound API host allowlist. The unchanged caller is an executable failure scenario."
+  }
+}

@@ -22,7 +22,7 @@
     }
   ],
   "noise": [],
-  "split": "tune",
+  "split": "holdout",
   "stratum": "injected-defect",
   "tags": [
     "Go",
@@ -35,6 +35,6 @@
     "files": [
       "grant.go"
     ],
-    "derivation": "Inject into the real stageGrants change: replace 'if has(g.Stages, stage)' with 'if len(g.Stages)>0'. Static scenario: An add-files grant for docs also reaches the review stage, so a review fixer receives authority never granted for that stage."
+    "derivation": "Inject into the real stageGrants change: replace 'if has(g.Stages, stage)' with 'if len(g.Stages)>0'. Static scenario: An add-files grant for docs also reaches the review stage, so a review fixer receives authority never granted for that stage. Format the modified Go file with gofmt."
   }
 }

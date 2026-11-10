@@ -73,7 +73,7 @@ func planGrants(plan CommandPlan) []Grant {
 func stageGrants(p *Pipeline, stage string) []Grant {
 	var out []Grant
 	for _, g := range p.Grants {
-		if len(g.Stages)>0 {
+		if len(g.Stages) > 0 {
 			out = append(out, g)
 		}
 	}

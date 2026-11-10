@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-parent-path",
+  "category": "bug",
+  "description": "A relative parent traversal passes the download guard and can address files outside the serving root.",
+  "intent": "Constructed security-sensitive contract. A relative parent traversal passes the download guard and can address files outside the serving root. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A relative parent traversal passes the download guard and can address files outside the serving root."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. A relative parent traversal passes the download guard and can address files outside the serving root. The unchanged caller is an executable failure scenario."
+  }
+}

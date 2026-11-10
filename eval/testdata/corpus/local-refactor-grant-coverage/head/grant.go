@@ -81,15 +81,23 @@ func stageGrants(p *Pipeline, stage string) []Grant {
 }
 
 func covered(grants []Grant, authority, name string) bool {
- for _,g:=range grants {
-  if g.Authority!=authority {continue}
-  for _,scope:=range g.Paths {
-   if name==scope {return true}
-   if !strings.HasSuffix(scope,"/") {continue}
-   if strings.HasPrefix(name,scope) {return true}
-  }
- }
- return false
+	for _, g := range grants {
+		if g.Authority != authority {
+			continue
+		}
+		for _, scope := range g.Paths {
+			if name == scope {
+				return true
+			}
+			if !strings.HasSuffix(scope, "/") {
+				continue
+			}
+			if strings.HasPrefix(name, scope) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // grantedPaths returns the paths a repair changed under a grant.

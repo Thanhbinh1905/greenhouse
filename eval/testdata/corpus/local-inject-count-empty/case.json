@@ -9,8 +9,8 @@
     {
       "id": "regression",
       "file": "authority.go",
-      "start": 1,
-      "end": 1,
+      "start": 447,
+      "end": 447,
       "origin": "correctness",
       "rule": "",
       "severity": "high",

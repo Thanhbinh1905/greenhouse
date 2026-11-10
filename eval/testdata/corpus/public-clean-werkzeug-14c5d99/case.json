@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-14c5d99",
+  "category": "clean",
+  "description": "Add support for RFC5861 Cache-Control headers",
+  "intent": "Add support for RFC5861 Cache-Control headers",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "14c5d990215dc90fa92132ee7dc56efa2c0f67c2",
+    "files": [
+      "src/werkzeug/datastructures/cache_control.py"
+    ],
+    "derivation": "Retain upstream source change: Add support for RFC5861 Cache-Control headers. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/cache_control.py: base source lines 154-188; head source lines 154-191. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/14c5d990215dc90fa92132ee7dc56efa2c0f67c2"
+  }
+}

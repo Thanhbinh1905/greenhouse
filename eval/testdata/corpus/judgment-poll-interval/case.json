@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "judgment-poll-interval",
+  "category": "judgment",
+  "description": "Error counts are bounded nonnegative integers. Polling less often while hidden or failing reduces load but delays updates; no background freshness guarantee is stated.",
+  "intent": "Error counts are bounded nonnegative integers. Polling less often while hidden or failing reduces load but delays updates; no background freshness guarantee is stated.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "judgment",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed judgment case. Error counts are bounded nonnegative integers. Polling less often while hidden or failing reduces load but delays updates; no background freshness guarantee is stated. The allowed range marks an optional policy objection, not a required defect."
+  },
+  "allowed": [
+    {
+      "file": "policy.ts",
+      "start": 2,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "note": "Error counts are bounded nonnegative integers. Polling less often while hidden or failing reduces load but delays updates; no background freshness guarantee is stated."
+    }
+  ]
+}

@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-iterable-close",
+  "category": "bug",
+  "description": "make_sequence fully consumes a closable response iterable but defers its close until response teardown, retaining the underlying resource after conversion.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: make_sequence fully consumes a closable response iterable but defers its close until response teardown, retaining the underlying resource after conversion.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "src/werkzeug/wrappers/response.py",
+      "start": 17,
+      "end": 17,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "make_sequence fully consumes a closable response iterable but defers its close until response teardown, retaining the underlying resource after conversion."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "818568f4e5e00ef85c48bf9078a81a2ee865bd9e",
+    "files": [
+      "src/werkzeug/wrappers/response.py"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: make_sequence fully consumes a closable response iterable but defers its close until response teardown, retaining the underlying resource after conversion. Excerpt coordinates: src/werkzeug/wrappers/response.py: base source lines container line 52, 383-410; head source lines container line 52, 383-398. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/818568f4e5e00ef85c48bf9078a81a2ee865bd9e"
+  }
+}

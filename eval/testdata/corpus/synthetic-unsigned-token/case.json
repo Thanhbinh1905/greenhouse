@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-unsigned-token",
+  "category": "bug",
+  "description": "An unsigned token declaring alg none bypasses the signature verification result.",
+  "intent": "Constructed security-sensitive contract. An unsigned token declaring alg none bypasses the signature verification result. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An unsigned token declaring alg none bypasses the signature verification result."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. An unsigned token declaring alg none bypasses the signature verification result. The unchanged caller is an executable failure scenario."
+  }
+}

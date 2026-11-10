@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-b1f0ba1",
+  "category": "clean",
+  "description": "refactor: replace match with a single if let guard",
+  "intent": "refactor: replace match with a single if let guard",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "b1f0ba11472bf4bee126b49363b11dc0d6c490c8",
+    "files": [
+      "src/groupbylazy.rs"
+    ],
+    "derivation": "Retain upstream source change: refactor: replace match with a single if let guard. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/groupbylazy.rs: base source lines 101-290; head source lines 101-288. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/b1f0ba11472bf4bee126b49363b11dc0d6c490c8"
+  }
+}

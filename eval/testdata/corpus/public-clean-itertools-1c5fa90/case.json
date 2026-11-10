@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-1c5fa90",
+  "category": "clean",
+  "description": "Add `unique_[by_]with_hasher()`",
+  "intent": "Add `unique_[by_]with_hasher()`",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "1c5fa90cf5391eeda1fc523e17238415e184b8f6",
+    "files": [
+      "src/lib.rs",
+      "src/unique_impl.rs"
+    ],
+    "derivation": "Retain upstream source change: Add `unique_[by_]with_hasher()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines container line 455, 1686-1692, 1713-1720; head source lines container line 455, 1686-1692, 1711-1718, 1739-1746, 1765-1773; src/unique_impl.rs: base source lines 12-20, 21-29, 30-43, 44-54, 55-79, 80-91, 92-99, 100-129, 130-147, 148-159, 160-167, 168-175, 176-188; head source lines 14-25, 26-35, 36-50, 51-62, 63-88, 89-101, 102-110, 111-141, 142-160, 161-173, 174-182, 183-191, 192-205. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/1c5fa90cf5391eeda1fc523e17238415e184b8f6"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-e858b8c",
+  "category": "clean",
+  "description": "clippy: fix collapsible_match lint",
+  "intent": "clippy: fix collapsible_match lint",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "e858b8c6971ea24fb70820453451136fd1459384",
+    "files": [
+      "src/groupbylazy.rs"
+    ],
+    "derivation": "Retain upstream source change: clippy: fix collapsible_match lint. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/groupbylazy.rs: base source lines 101-294; head source lines 101-290. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/e858b8c6971ea24fb70820453451136fd1459384"
+  }
+}

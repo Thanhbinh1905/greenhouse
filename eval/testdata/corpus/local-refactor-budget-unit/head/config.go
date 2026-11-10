@@ -56,14 +56,18 @@ func configVersion(name string, b []byte) (int, map[string]json.RawMessage, erro
 }
 
 func budgetUnit(name string, fields map[string]json.RawMessage) error {
- raw,ok:=fields["budget_unit"]
- if !ok {return schemaError{name + ": budget_unit is required; the only supported unit is \"rounds\""}}
- var unit string
- json.Unmarshal(raw,&unit)
- switch unit {
- case "rounds":return nil
- default:return schemaError{fmt.Sprintf("%s: budget_unit %s is unsupported; Greenhouse counts rounds and never converts or reinterprets a budget unit",name,raw)}
- }
+	raw, ok := fields["budget_unit"]
+	if !ok {
+		return schemaError{name + ": budget_unit is required; the only supported unit is \"rounds\""}
+	}
+	var unit string
+	json.Unmarshal(raw, &unit)
+	switch unit {
+	case "rounds":
+		return nil
+	default:
+		return schemaError{fmt.Sprintf("%s: budget_unit %s is unsupported; Greenhouse counts rounds and never converts or reinterprets a budget unit", name, raw)}
+	}
 }
 
 // decodeConfig strictly decodes a current-version per-user file into out.

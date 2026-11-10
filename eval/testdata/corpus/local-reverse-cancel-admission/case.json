@@ -22,7 +22,7 @@
     }
   ],
   "noise": [],
-  "split": "holdout",
+  "split": "tune",
   "stratum": "reversed-bug-fix",
   "tags": [
     "Go"

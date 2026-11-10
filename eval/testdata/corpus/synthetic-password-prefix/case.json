@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-password-prefix",
+  "category": "bug",
+  "description": "Prefix comparison treats an empty candidate as a valid password-derived hash.",
+  "intent": "Constructed security-sensitive contract. Prefix comparison treats an empty candidate as a valid password-derived hash. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Prefix comparison treats an empty candidate as a valid password-derived hash."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. Prefix comparison treats an empty candidate as a valid password-derived hash. The unchanged caller is an executable failure scenario."
+  }
+}

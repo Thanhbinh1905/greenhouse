@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "public-reverse-record-proto-key",
+  "category": "bug",
+  "description": "An own enumerable __proto__ key bypasses the record key refinement because it is skipped before key validation.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: An own enumerable __proto__ key bypasses the record key refinement because it is skipped before key validation.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/schemas.ts",
+      "start": 97,
+      "end": 98,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An own enumerable __proto__ key bypasses the record key refinement because it is skipped before key validation."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "311cd74b2765ff7c7b58add60e37c5a0ea7a1972",
+    "files": [
+      "packages/zod/src/v4/core/schemas.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: An own enumerable __proto__ key bypasses the record key refinement because it is skipped before key validation. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 3266-3450; head source lines 3266-3451. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/311cd74b2765ff7c7b58add60e37c5a0ea7a1972"
+  }
+}

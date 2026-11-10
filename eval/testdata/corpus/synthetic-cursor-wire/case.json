@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-cursor-wire",
+  "category": "bug",
+  "description": "Returning an integer cursor breaks the unchanged HTTP link builder, which concatenates the serialized cursor as a string.",
+  "intent": "Constructed cross-file contract. Returning an integer cursor breaks the unchanged HTTP link builder, which concatenates the serialized cursor as a string. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Returning an integer cursor breaks the unchanged HTTP link builder, which concatenates the serialized cursor as a string."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. Returning an integer cursor breaks the unchanged HTTP link builder, which concatenates the serialized cursor as a string. The unchanged caller is an executable failure scenario."
+  }
+}

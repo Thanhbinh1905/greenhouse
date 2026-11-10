@@ -71,12 +71,14 @@ func planGrants(plan CommandPlan) []Grant {
 }
 
 func stageGrants(p *Pipeline, stage string) []Grant {
- var out []Grant
- for _,g := range p.Grants {
-  if !has(g.Stages,stage) {continue}
-  out=append(out,g)
- }
- return out
+	var out []Grant
+	for _, g := range p.Grants {
+		if !has(g.Stages, stage) {
+			continue
+		}
+		out = append(out, g)
+	}
+	return out
 }
 
 func covered(grants []Grant, authority, name string) bool {

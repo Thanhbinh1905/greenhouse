@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-html-escape",
+  "category": "bug",
+  "description": "Unescaped profile text becomes executable HTML when rendered in the browser.",
+  "intent": "Constructed security-sensitive contract. Unescaped profile text becomes executable HTML when rendered in the browser. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Unescaped profile text becomes executable HTML when rendered in the browser."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. Unescaped profile text becomes executable HTML when rendered in the browser. The unchanged caller is an executable failure scenario."
+  }
+}

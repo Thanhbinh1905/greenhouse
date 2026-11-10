@@ -32,11 +32,15 @@ var grantStages = map[string]bool{"review": true, "test": true, "lint": true, "d
 var grantAuthority = map[string]string{"add-files": "add-files", "destructive": "delete-files"}
 
 func validGrantPath(name string) bool {
- dir := strings.HasSuffix(name, "/")
- clean := strings.TrimSuffix(name, "/")
- if clean == "" || filepath.IsAbs(clean) || filepath.Clean(clean) != clean {return false}
- if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {return false}
- return !dir || !strings.HasSuffix(clean, "/")
+	dir := strings.HasSuffix(name, "/")
+	clean := strings.TrimSuffix(name, "/")
+	if clean == "" || filepath.IsAbs(clean) || filepath.Clean(clean) != clean {
+		return false
+	}
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, "../") {
+		return false
+	}
+	return !dir || !strings.HasSuffix(clean, "/")
 }
 
 func validatePlanGrants(grants []PlanGrant) error {

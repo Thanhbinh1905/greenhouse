@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "id": "local-large-independent-reviews",
+  "category": "bug",
+  "description": "A valid reviewer response for the authorized candidate is rejected, while a response naming a different head passes this identity guard.",
+  "intent": "Review the original feature change with the recorded injected defect.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "seeded-regression",
+      "file": "execution.go",
+      "start": 340,
+      "end": 340,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A valid reviewer response for the authorized candidate is rejected, while a response naming a different head passes this identity guard."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "55fbd03fd8e4abbb77a941628364451d6bcba292",
+    "files": [
+      "execution.go",
+      "execution_config_test.go",
+      "execution_hazards_test.go",
+      "execution_test.go",
+      "main.go",
+      "verdict_coverage_test.go",
+      "verdict_test.go"
+    ],
+    "derivation": "Inject a defect into the full real change at the pinned commit: replace 'v.Head != x.Rules.Candidate' with 'v.Head == x.Rules.Candidate'. The large snapshot retains all changed Go source and test files. Scenario: A valid reviewer response for the authorized candidate is rejected, while a response naming a different head passes this identity guard."
+  }
+}

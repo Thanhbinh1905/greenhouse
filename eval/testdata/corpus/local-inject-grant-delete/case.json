@@ -22,7 +22,7 @@
     }
   ],
   "noise": [],
-  "split": "tune",
+  "split": "holdout",
   "stratum": "injected-defect",
   "tags": [
     "Go",

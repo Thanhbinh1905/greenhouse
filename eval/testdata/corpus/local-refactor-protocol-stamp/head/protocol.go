@@ -31,10 +31,12 @@ func checkVersion(q Request) error {
 }
 
 func stamp(v *Response, requested int) {
- version:=requested
- if version<protocolMin || version>protocolMax {version=protocolMax}
- v.Version=version
- v.Protocol=&Protocol{Version:version,Min:protocolMin,Max:protocolMax}
+	version := requested
+	if version < protocolMin || version > protocolMax {
+		version = protocolMax
+	}
+	v.Version = version
+	v.Protocol = &Protocol{Version: version, Min: protocolMin, Max: protocolMax}
 }
 
 func protocolRefusal(v Response) error {

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "judgment-page-size",
+  "category": "judgment",
+  "description": "The API documents an upper bound on returned results but no minimum. Capping each response at 100 bounds work and may require more pagination; it does not violate the stated contract.",
+  "intent": "The API documents an upper bound on returned results but no minimum. Capping each response at 100 bounds work and may require more pagination; it does not violate the stated contract.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "judgment",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed judgment case. The API documents an upper bound on returned results but no minimum. Capping each response at 100 bounds work and may require more pagination; it does not violate the stated contract. The allowed range marks an optional policy objection, not a required defect."
+  },
+  "allowed": [
+    {
+      "file": "policy.ts",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "note": "The API documents an upper bound on returned results but no minimum. Capping each response at 100 bounds work and may require more pagination; it does not violate the stated contract."
+    }
+  ]
+}

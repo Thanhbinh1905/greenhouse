@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-e6b4cce",
+  "category": "clean",
+  "description": "catch OSError from getpass.getuser",
+  "intent": "catch OSError from getpass.getuser",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "e6b4cce97eef17716004625bcf6754fa930f2618",
+    "files": [
+      "src/werkzeug/debug/__init__.py"
+    ],
+    "derivation": "Retain upstream source change: catch OSError from getpass.getuser. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/debug/__init__.py: base source lines 142-225; head source lines 142-226. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/e6b4cce97eef17716004625bcf6754fa930f2618"
+  }
+}

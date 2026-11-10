@@ -125,10 +125,13 @@ func fixedResponsesEdited(x *Repair) error {
 }
 
 func anyFixed(responses []ResolutionResponse) bool {
- for i:=range responses {
-  switch responses[i].Response {case "fixed":return true}
- }
- return false
+	for i := range responses {
+		switch responses[i].Response {
+		case "fixed":
+			return true
+		}
+	}
+	return false
 }
 
 func pendingResponses(r *Run) (*Repair, []ResolutionResponse) {

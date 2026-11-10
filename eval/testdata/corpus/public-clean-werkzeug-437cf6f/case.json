@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-437cf6f",
+  "category": "clean",
+  "description": "add 421 Misdirected Request exception",
+  "intent": "add 421 Misdirected Request exception",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "437cf6fccb10a313c6c620e2da7b58729aa853b9",
+    "files": [
+      "src/werkzeug/exceptions.py"
+    ],
+    "derivation": "Retain upstream source change: add 421 Misdirected Request exception. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/exceptions.py: base source lines 574-585; head source lines 574-582. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/437cf6fccb10a313c6c620e2da7b58729aa853b9"
+  }
+}

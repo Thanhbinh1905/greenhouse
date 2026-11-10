@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-b2a978a",
+  "category": "clean",
+  "description": "feat(Itertools): add strip_prefix and strip_prefix_by methods",
+  "intent": "feat(Itertools): add strip_prefix and strip_prefix_by methods",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "b2a978abca1dc57f929f60e0be16d83e58f9558f",
+    "files": [
+      "src/lib.rs"
+    ],
+    "derivation": "Retain upstream source change: feat(Itertools): add strip_prefix and strip_prefix_by methods. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines whole file; head source lines container line 457, 5146-5156, 5172-5196, 5206-5217. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/b2a978abca1dc57f929f60e0be16d83e58f9558f"
+  }
+}

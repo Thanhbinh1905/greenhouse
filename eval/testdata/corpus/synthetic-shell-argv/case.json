@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-shell-argv",
+  "category": "bug",
+  "description": "A branch name containing shell syntax is appended without quoting and becomes extra commands when passed to a shell.",
+  "intent": "Constructed security-sensitive contract. A branch name containing shell syntax is appended without quoting and becomes extra commands when passed to a shell. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A branch name containing shell syntax is appended without quoting and becomes extra commands when passed to a shell."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. A branch name containing shell syntax is appended without quoting and becomes extra commands when passed to a shell. The unchanged caller is an executable failure scenario."
+  }
+}

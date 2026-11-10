@@ -96,14 +96,16 @@ func covered(grants []Grant, authority, name string) bool {
 
 // grantedPaths returns the paths a repair changed under a grant.
 func grantedPaths(x *Repair) []string {
- var out []string
- for _,entry := range x.Granted {
-  parts:=strings.SplitN(entry, ":",2)
-  name:=""
-  if len(parts)==2 {name=parts[1]}
-  out=append(out,name)
- }
- return out
+	var out []string
+	for _, entry := range x.Granted {
+		parts := strings.SplitN(entry, ":", 2)
+		name := ""
+		if len(parts) == 2 {
+			name = parts[1]
+		}
+		out = append(out, name)
+	}
+	return out
 }
 
 func classifyGranted(x *Repair, added, deleted []string) error {

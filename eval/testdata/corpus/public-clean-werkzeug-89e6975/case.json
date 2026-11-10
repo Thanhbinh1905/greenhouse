@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-89e6975",
+  "category": "clean",
+  "description": "improve `parse_cookie` performance",
+  "intent": "improve `parse_cookie` performance",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "89e6975ad98654dc5e5f3c8f53a50739dd6dfd03",
+    "files": [
+      "src/werkzeug/http.py"
+    ],
+    "derivation": "Retain upstream source change: improve `parse_cookie` performance. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/http.py: base source lines 1268-1283; head source lines 1268-1283. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/89e6975ad98654dc5e5f3c8f53a50739dd6dfd03"
+  }
+}

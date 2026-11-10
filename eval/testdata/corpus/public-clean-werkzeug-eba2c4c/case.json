@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-eba2c4c",
+  "category": "clean",
+  "description": "add `IfMatch.check`",
+  "intent": "add `IfMatch.check`",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "eba2c4c83fbfea4590cfc5ac42b25b322fc24f7d",
+    "files": [
+      "src/werkzeug/datastructures/range.py"
+    ],
+    "derivation": "Retain upstream source change: add `IfMatch.check`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/range.py: base source lines 19-73; head source lines 19-93. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/eba2c4c83fbfea4590cfc5ac42b25b322fc24f7d"
+  }
+}

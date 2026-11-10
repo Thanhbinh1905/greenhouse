@@ -7,7 +7,7 @@
   "rules": [],
   "expected": [],
   "noise": [],
-  "split": "tune",
+  "split": "holdout",
   "stratum": "clean-real-change",
   "tags": [
     "Go"

@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "id": "local-large-host-protocol",
+  "category": "bug",
+  "description": "A delayed watch response with an older sequence overwrites the current mutation response, while newer watch updates are discarded.",
+  "intent": "Review the original feature change with the recorded injected defect.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "seeded-regression",
+      "file": "events.go",
+      "start": 201,
+      "end": 201,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A delayed watch response with an older sequence overwrites the current mutation response, while newer watch updates are discarded."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "78fc0d8231b737ae962ae1756d5852a717130e5f",
+    "files": [
+      "embedding_test.go",
+      "events.go",
+      "events_test.go",
+      "execution.go",
+      "host.go",
+      "main.go",
+      "protocol.go",
+      "protocol_test.go",
+      "resume.go"
+    ],
+    "derivation": "Inject a defect into the full real change at the pinned commit: replace 'update.Sequence > current.Sequence' with 'update.Sequence < current.Sequence'. The large snapshot retains all changed Go source and test files. Scenario: A delayed watch response with an older sequence overwrites the current mutation response, while newer watch updates are discarded."
+  }
+}

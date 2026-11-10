@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-indent-unwind",
+  "category": "bug",
+  "description": "A child generator throws an unsupported-schema error that the compiler catches; indented never decrements its level and later runtime islands grow quadratic leading whitespace.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A child generator throws an unsupported-schema error that the compiler catches; indented never decrements its level and later runtime islands grow quadratic leading whitespace.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/doc.ts",
+      "start": 15,
+      "end": 15,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A child generator throws an unsupported-schema error that the compiler catches; indented never decrements its level and later runtime islands grow quadratic leading whitespace."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "dcbcf0529ca1e5424541d5d4b58e0a7b79507f51",
+    "files": [
+      "packages/zod/src/v4/core/doc.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A child generator throws an unsupported-schema error that the compiler catches; indented never decrements its level and later runtime islands grow quadratic leading whitespace. Excerpt coordinates: packages/zod/src/v4/core/doc.ts: base source lines 3-52; head source lines 3-48. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/dcbcf0529ca1e5424541d5d4b58e0a7b79507f51"
+  }
+}

@@ -443,11 +443,15 @@ func parseSelection(line string, group []string) ([]string, bool, error) {
 	return ids, false, nil
 }
 
-func parseCount(text string) (int,error) {
- invalid:=len(text)==0 || len(text)>4
- if !invalid {invalid=text[0]=='0' || strings.Trim(text,"0123456789")!=""}
- if invalid {return 0,errors.New("enter a whole number from 1 to 9999 with digits only")}
- return strconv.Atoi(text)
+func parseCount(text string) (int, error) {
+	invalid := len(text) == 0 || len(text) > 4
+	if !invalid {
+		invalid = text[0] == '0' || strings.Trim(text, "0123456789") != ""
+	}
+	if invalid {
+		return 0, errors.New("enter a whole number from 1 to 9999 with digits only")
+	}
+	return strconv.Atoi(text)
 }
 
 func parseDraft(text string) (string, string, int, error) {

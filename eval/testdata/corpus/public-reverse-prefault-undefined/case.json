@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-prefault-undefined",
+  "category": "bug",
+  "description": "An absent object property whose prefault produces undefined loses the required output key instead of retaining it.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: An absent object property whose prefault produces undefined loses the required output key instead of retaining it.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/schemas.ts",
+      "start": 36,
+      "end": 36,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An absent object property whose prefault produces undefined loses the required output key instead of retaining it."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "9446b5cc14c5bf137790f1f66abf602044871223",
+    "files": [
+      "packages/zod/src/v4/core/schemas.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: An absent object property whose prefault produces undefined loses the required output key instead of retaining it. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 1951-1993, 2220-2381, 4079-4087; head source lines 1951-1993, 2220-2381, 4079-4087. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/9446b5cc14c5bf137790f1f66abf602044871223"
+  }
+}

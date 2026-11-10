@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-padding-back",
+  "category": "bug",
+  "description": "Mix next and next_back on a padded iterator; next_back counts only min and ignores elements already consumed from the front, yielding the wrong number or positions of filler elements.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Mix next and next_back on a padded iterator; next_back counts only min and ignores elements already consumed from the front, yielding the wrong number or positions of filler elements.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "src/pad_tail.rs",
+      "start": 83,
+      "end": 83,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Mix next and next_back on a padded iterator; next_back counts only min and ignores elements already consumed from the front, yielding the wrong number or positions of filler elements."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "6c2e8f611d1d75ca4033dae2bc64ade8c1ac05e1",
+    "files": [
+      "src/pad_tail.rs"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Mix next and next_back on a padded iterator; next_back counts only min and ignores elements already consumed from the front, yielding the wrong number or positions of filler elements. Excerpt coordinates: src/pad_tail.rs: base source lines 11-18, 19-32, 33-46, 47-86, 87-113; head source lines 12-18, 19-26, 27-39, 40-83, 84-111. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/6c2e8f611d1d75ca4033dae2bc64ade8c1ac05e1"
+  }
+}
