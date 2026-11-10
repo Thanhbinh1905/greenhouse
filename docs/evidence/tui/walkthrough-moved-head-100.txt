@@ -1,0 +1,61 @@
+# moved-head at 100x24: keys sent and screens captured from a real PTY
+
+## 1. first launch: one Run action, nothing collected yet
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 0b787bc                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                                               |
+| ○ Intent   collected from your agent session on Run                                                |
+| ○ Target   main (suggested)                                                                        |
+| ○ Rules    unslop, no-comments · not loaded                                                        |
+| ○ Review   not started · budget 0 of 4 used                                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Run review                                                                                       |
+|   Collect the intent from your agent session, load rules and start one independent review. It uses |
+|   one round of the budget.                                                                         |
+|⏎ run review  a actions  s settings  ? help  i details  q quit                                      |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 2. moved head: Run stops with the controller's reason
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 0b787bc                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model (installed)                                                   |
+| ○ Intent   describe the change                                                                     |
+| ○ Target   suggested main                                                                          |
+| ○ Rules    unslop, no-comments · not loaded                                                        |
+| ○ Review   not started · budget 0 of 4 used                                                        |
+|                                                                                                    |
+| Your branch or head moved since this run started. Start a new run to review the current head.      |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Start a new run                                                                                  |
+|   Retain this run's evidence and start a new run for the current head.                             |
+|Run stopped: saving intent and target refused: source head or branch moved. The screen shows the    |
+|controller's current state; nothing was retried.                                                    |
+|⏎ start a new run  a actions  s settings  ? help  i details  q quit                                 |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'q'

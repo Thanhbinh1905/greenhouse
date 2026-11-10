@@ -1,0 +1,89 @@
+# no-agent at 56x24: keys sent and screens captured from a real PTY
+
+## 1. first launch without an installed agent
++--------------------------------------------------------+
+|Greenhouse · feature @ ccf7de5   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✗ Agent    none found: install pi, claude or codex     |
+| ○ Intent   describe the change                         |
+| ○ Target   suggested main                              |
+| ○ Rules    unslop, no-comments · not loaded            |
+| ○ Review   not started · budget 0 of 4 used            |
+|                                                        |
+| No supported agent found on PATH. Install Pi, Claude   |
+| Code or Codex, sign in with its own CLI, then press r  |
+| to recheck.                                            |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| Next: install an agent and sign in with its own CLI,   |
+| then press r.                                          |
+|a actions  s settings  ? help  i details  q quit        |
++--------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 2. Enter does not start anything without an agent
++--------------------------------------------------------+
+|Greenhouse · feature @ ccf7de5   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✗ Agent    none found: install pi, claude or codex     |
+| ○ Intent   describe the change                         |
+| ○ Target   suggested main                              |
+| ○ Rules    unslop, no-comments · not loaded            |
+| ○ Review   not started · budget 0 of 4 used            |
+|                                                        |
+| No supported agent found on PATH. Install Pi, Claude   |
+| Code or Codex, sign in with its own CLI, then press r  |
+| to recheck.                                            |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| Next: install an agent and sign in with its own CLI,   |
+| then press r.                                          |
+|Nothing to run from here now. Press a for all actions   |
+|or ? for help.                                          |
+|a actions  s settings  ? help  i details  q quit        |
++--------------------------------------------------------+
+
+$ keys 'q'
+
+## 3. q quits with a notice
++--------------------------------------------------------+
+|Detached. Nothing was cancelled. Run greenhouse here to |
+|reattach.                                               |
+|EXIT=0                                                  |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
++--------------------------------------------------------+

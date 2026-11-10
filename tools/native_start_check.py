@@ -38,7 +38,7 @@ print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':
 print(json.dumps({'type':'agent_settled','aborted':False}))
 ''')
     agent.chmod(0o700)
-    env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(state), PATH=f"{agents}:/usr/bin:/bin",
+    env = dict(os.environ, TERM="dumb", HOME=str(root), GREENHOUSE_HOME=str(state), PATH=f"{agents}:/usr/bin:/bin",
                GIT_CONFIG_GLOBAL="/dev/null", GIT_CONFIG_NOSYSTEM="1")
 
     def git(*args):

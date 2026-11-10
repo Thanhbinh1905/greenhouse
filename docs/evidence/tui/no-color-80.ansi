@@ -1,0 +1,24 @@
+Greenhouse · feature @ bac2c94                           one-pass · auto · live
+───────────────────────────────────────────────────────────────────────────────
+ ✓ Agent    Pi · native default model
+ ✓ Intent   Fix q and x
+ ✓ Target   d60779f
+ ✓ Rules    unslop, no-comments · used by the review
+ ! Review   fixed not independently rereviewed · budget 2 of 4 used
+
+ Findings · 2 outstanding findings
+   P1 sample.txt:1  Sample text is wrong for the stated intent
+   P2 sample.txt:1  Sample text gives no context for readers
+
+ The fix is on your branch now. Start a new run to review it independently.
+ The fix passed its checks but was not independently reviewed again.
+
+
+
+
+
+
+
+ ▸ Start a new run
+   Retain this run's evidence and start a new run for the current head.
+⏎ start a new run  a actions  s settings  f findings  ? help  i details  q quit

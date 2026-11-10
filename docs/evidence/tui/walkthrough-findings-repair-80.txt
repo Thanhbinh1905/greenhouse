@@ -1,0 +1,511 @@
+# findings-repair at 80x24: keys sent and screens captured from a real PTY
+
+## 1. first launch: one Run action, nothing collected yet
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                           |
+| ○ Intent   collected from your agent session on Run                            |
+| ○ Target   main (suggested)                                                    |
+| ○ Rules    unslop, no-comments · not loaded                                    |
+| ○ Review   not started · budget 0 of 4 used                                    |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ▸ Run review                                                                   |
+|   Collect the intent from your agent session, load rules and start one         |
+|   independent review. It uses one round of the budget.                         |
+|⏎ run review  a actions  s settings  ? help  i details  q quit                  |
++--------------------------------------------------------------------------------+
+
+$ keys 'Tab' 'Tab'
+
+## 2. Tab moves focus to the Intent row
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                           |
+|▸○ Intent   collected from your agent session on Run                            |
+| ○ Target   main (suggested)                                                    |
+| ○ Rules    unslop, no-comments · not loaded                                    |
+| ○ Review   not started · budget 0 of 4 used                                    |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ▸ Run review                                                                   |
+|   Collect the intent from your agent session, load rules and start one         |
+|   independent review. It uses one round of the budget.                         |
+|⏎ edit intent  a actions  s settings  ? help  i details  q quit                 |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+$ keys type 'Fix q and x'
+
+## 3. editing the intent before Run
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Set up review · step 2 of 4                                                    |
+|                                                                                |
+| ✓ Agent    pi                                                                  |
+| ▸ Intent   > Fix q and x                                                       |
+| ○ Target   main                                                                |
+| ○ Confirm  save intent and target                                              |
+|                                                                                |
+| Describe what the committed change should do. The reviewer checks the diff     |
+| against this intent.                                                           |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|⏎ accept  esc back                                                              |
++--------------------------------------------------------------------------------+
+
+$ keys 'Escape'
+
+## 4. Esc goes back to the agent step
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Set up review · step 1 of 4                                                    |
+|                                                                                |
+| ▸ Agent    pi                                                                  |
+|   ▸ Pi · native default model                                                  |
+|     Claude · native default model                                              |
+| ○ Intent   Fix q and x                                                         |
+| ○ Target   main                                                                |
+| ○ Confirm  save intent and target                                              |
+|                                                                                |
+| Greenhouse uses the agent's own login, provider and default model. It never    |
+| runs login or copies credentials.                                              |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|⏎ choose  ↑↓ move  esc back  q quit                                             |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 5. the typed intent is kept
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Set up review · step 2 of 4                                                    |
+|                                                                                |
+| ✓ Agent    pi                                                                  |
+| ▸ Intent   > Fix q and x                                                       |
+| ○ Target   main                                                                |
+| ○ Confirm  save intent and target                                              |
+|                                                                                |
+| Describe what the committed change should do. The reviewer checks the diff     |
+| against this intent.                                                           |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|⏎ accept  esc back                                                              |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter' 'Enter' 'Enter'
+
+## 6. saved for Run; nothing sent
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                           |
+| ○ Intent   Fix q and x · typed                                                 |
+| ○ Target   main                                                                |
+| ○ Rules    unslop, no-comments · not loaded                                    |
+| ○ Review   not started · budget 0 of 4 used                                    |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ▸ Run review                                                                   |
+|   Collect the intent from your agent session, load rules and start one         |
+|   independent review. It uses one round of the budget.                         |
+|Saved for Run. Nothing has run yet.                                             |
+|⏎ run review  a actions  s settings  ? help  i details  q quit                  |
++--------------------------------------------------------------------------------+
+
+$ keys 'Escape' 'Enter'
+
+## 7. one Enter collected the intent, prepared, loaded rules and started the review
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   Fix q and x                                                         |
+| ✓ Target   d60779f                                                             |
+| ✓ Rules    unslop, no-comments · loaded                                        |
+| ⠦ Review   running · budget 1 of 4 used                                        |
+|                                                                                |
+| ⠦ Independent review · Pi · 0s                                                 |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Work runs in the daemon. x cancels it; q detaches and leaves it running.       |
+|Review started.                                                                 |
+|x cancel  a actions  s settings  ? help  i details  q detach                    |
++--------------------------------------------------------------------------------+
+
+## 8. findings arrive without a keypress
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   Fix q and x                                                         |
+| ✓ Target   d60779f                                                             |
+| ✓ Rules    unslop, no-comments · loaded                                        |
+| ✗ Review   2 outstanding findings · budget 1 of 4 used                         |
+|                                                                                |
+| Findings · 2 outstanding findings                                              |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                  |
+|   P2 sample.txt:1  Sample text gives no context for readers                    |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ▸ Open findings                                                                |
+|   Read each finding with its location and full description.                    |
+|⏎ open findings  a actions  s settings  f findings  ? help  i details  q quit   |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 9. findings list with selection
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Findings · 2 outstanding findings · 0 selected                                 |
+|                                                                                |
+| ▸ [ ] P1 sample.txt:1 open · Sample text is wrong for the stated intent        |
+|   [ ] P2 sample.txt:1 open · Sample text gives no context for readers          |
+|                                                                                |
+|   Enter shows the full finding.                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|↑↓ move  ⏎ details  space select  r repair selected  esc back  q quit           |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 10. full finding description
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Findings · 2 outstanding findings · 0 selected                                 |
+|                                                                                |
+| ▸ [ ] P1 sample.txt:1 open · Sample text is wrong for the stated intent        |
+|   [ ] P2 sample.txt:1 open · Sample text gives no context for readers          |
+| ─────────────────────────────────────────────────────────────────────────────  |
+| [1mP1 correctness [0m · sample.txt:1                                           |
+|Sample text is wrong for the stated intent                                      |
+|Action: Rewrite the line to say repaired                                        |
+|Reported for head bac2c94                                                       |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|↑↓ move  ⏎ details  space select  r repair selected  esc back  q quit           |
++--------------------------------------------------------------------------------+
+
+$ keys 'Escape' 'Space'
+
+## 11. first finding selected
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Findings · 2 outstanding findings · 1 selected                                 |
+|                                                                                |
+| ▸ [x] P1 sample.txt:1 open · Sample text is wrong for the stated intent        |
+|   [ ] P2 sample.txt:1 open · Sample text gives no context for readers          |
+|                                                                                |
+|   Enter shows the full finding.                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|↑↓ move  ⏎ details  space select  r repair selected  esc back  q quit           |
++--------------------------------------------------------------------------------+
+
+$ keys 'r'
+
+## 12. repair asks for confirmation
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Repair 1 finding                                                               |
+|                                                                                |
+| The trusted fixer edits a private worktree, runs the trusted checks and        |
+| commits; it uses one round (1 of 4 used).                                      |
+|                                                                                |
+| Press Enter to confirm or Esc to go back.                                      |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|⏎ confirm  esc back  q quit                                                     |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 13. repaired; handback is next
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   Fix q and x                                                         |
+| ✓ Target   d60779f                                                             |
+| ✓ Rules    unslop, no-comments · used by the review                            |
+| ! Review   fixed not independently rereviewed · budget 2 of 4 used             |
+|                                                                                |
+| Findings · 2 outstanding findings                                              |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                  |
+|   P2 sample.txt:1  Sample text gives no context for readers                    |
+|                                                                                |
+| The fix passed its checks but was not independently reviewed again.            |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ▸ Hand back the fix                                                            |
+|   Fast-forward your unchanged branch to the repaired commit.                   |
+|⏎ hand back the fix  a actions  s settings  f findings  ? help  q quit          |
++--------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 14. handed back
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   Fix q and x                                                         |
+| ✓ Target   d60779f                                                             |
+| ✓ Rules    unslop, no-comments · used by the review                            |
+| ! Review   fixed not independently rereviewed · budget 2 of 4 used             |
+|                                                                                |
+| Findings · 2 outstanding findings                                              |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                  |
+|   P2 sample.txt:1  Sample text gives no context for readers                    |
+|                                                                                |
+| The fix is on your branch now. Start a new run to review it independently.     |
+| The fix passed its checks but was not independently reviewed again.            |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| ▸ Start a new run                                                              |
+|   Retain this run's evidence and start a new run for the current head.         |
+|Fix handed back to your branch.                                                 |
+|⏎ start a new run  a actions  s settings  f findings  ? help  i details  q quit |
++--------------------------------------------------------------------------------+
+
+$ keys 'i'
+
+## 15. details expose IDs, digests and sources
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Details · lines 1-18 of 76                                                     |
+|                                                                                |
+| Greenhouse | independent review                                                |
+| Events: live                                                                   |
+| Run 05fa34bbb1b8ccc626baa8cc87f5f0f5                                           |
+| Stage: selected-repair | fixed-not-independently-rereviewed                    |
+| Candidate: 1403ab8d3a6bcf8db5d903dd53ed339144db9712                            |
+| Mode: auto | one-pass | limit 4                                                |
+| Reviewer: pi /                                                                 |
+| Fixer: pi /                                                                    |
+| Budget: review 1 + repair 1 = 2 of 4                                           |
+| Rules: unslop, no-comments                                                     |
+| Sources: built-in default: mode, preset, limit, rules, reviewer_backend,       |
+| reviewer_model, fixer_backend, fixer_model, auto_resume                        |
+| Target: d60779fcee9012e81e5ce494b21d72768076ad94                               |
+| Intent: Fix q and x                                                            |
+| Scope: committed target-to-candidate diff; dirty files excluded                |
+| Repository override: none (no .greenhouse.json)                                |
+| Rule unslop | configured | required=true                                       |
+| Source: builtin:unslop                                                         |
+|Fix handed back to your branch.                                                 |
+|↑↓ scroll  c criteria  o logs  esc back  q quit                                 |
++--------------------------------------------------------------------------------+
+
+$ keys 'Escape' '?'
+
+## 16. help lists the keys
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Help · lines 1-18 of 63                                                        |
+|                                                                                |
+| Keys                                                                           |
+|   Enter      run the highlighted action                                        |
+|   ↑ ↓ Tab    move between choices                                              |
+|   Esc        go back one step                                                  |
+|   a          all actions available now                                         |
+|   s          settings draft (Apply or Save explicitly)                         |
+|   f          findings                                                          |
+|   d          answer the open decision                                          |
+|   i          details: IDs, digests, sources, rules                             |
+|   o          transcript log                                                    |
+|   x          cancel running work (press x twice)                               |
+|   r          recheck agents and reconnect                                      |
+|   ?          this help                                                         |
+|   q, Ctrl-C  detach; work keeps running in the daemon                          |
+|                                                                                |
+| Typing inside a text field never detaches or cancels; Esc leaves the field.    |
+|                                                                                |
+| Actions                                                                        |
+|Fix handed back to your branch.                                                 |
+|↑↓ scroll  esc back  q quit                                                     |
++--------------------------------------------------------------------------------+
+
+$ keys 'NPage'
+
+## 17. help explains unavailable actions without running them
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ bac2c94                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| Help · lines 21-38 of 63                                                       |
+|                                                                                |
+| one round of the budget.                                                       |
+|   Change agent, intent or target: not available now                            |
+|     Edit what Run uses. Nothing is sent until you Run.                         |
+|   Load rules: not available now                                                |
+|     Snapshot the selected rule packs for this run. Nothing runs yet.           |
+|   Start review: not available now                                              |
+|     Dispatch one independent review. It uses one round of the budget.          |
+|   Start pipeline: not available now                                            |
+|     Run the trusted pipeline stages in order on a private candidate.           |
+|   Answer decision: not available now                                           |
+|     The pipeline waits for your answer.                                        |
+|   Let the fixer resolve the conflict: not available now                        |
+|     Authorize the fixer to edit only the conflicted paths and commit the       |
+| merge.                                                                         |
+|   Repair selected findings: not available now                                  |
+|     Select findings, then let the trusted fixer repair them in a private       |
+| worktree.                                                                      |
+|   Hand back the fix: not available now                                         |
+|Fix handed back to your branch.                                                 |
+|↑↓ scroll  esc back  q quit                                                     |
++--------------------------------------------------------------------------------+
+
+$ keys 'Escape' 'q'

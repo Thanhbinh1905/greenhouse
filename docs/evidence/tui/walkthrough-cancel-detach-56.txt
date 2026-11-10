@@ -1,0 +1,269 @@
+# cancel-detach at 56x24: keys sent and screens captured from a real PTY
+
+## 1. first launch: one Run action, nothing collected yet
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                   |
+| ○ Intent   collected from your agent session on Run    |
+| ○ Target   main (suggested)                            |
+| ○ Rules    unslop, no-comments · not loaded            |
+| ○ Review   not started · budget 0 of 4 used            |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| ▸ Run review                                           |
+|   Collect the intent from your agent session, load     |
+|   rules and start one independent review. It uses one  |
+|   round of the budget.                                 |
+|⏎ run review  a actions  s settings  ? help  q quit     |
++--------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 2. no matching agent session: Run asks one question
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| Which intent should Run use?                           |
+|                                                        |
+| No local agent session started in this worktree        |
+| mentions the changed files. What should this change    |
+| do?                                                    |
+|                                                        |
+| > the change in your own words                         |
+|                                                        |
+| Enter continues Run; Esc stops it. Nothing was sent    |
+| yet.                                                   |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|⏎ continue run  esc stop run                            |
++--------------------------------------------------------+
+
+$ keys type 'Fix q and x handling in sample'
+
+## 3. typing q and x stays in the answer
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| Which intent should Run use?                           |
+|                                                        |
+| No local agent session started in this worktree        |
+| mentions the changed files. What should this change    |
+| do?                                                    |
+|                                                        |
+| > Fix q and x handling in sample                       |
+|                                                        |
+| Enter continues Run; Esc stops it. Nothing was sent    |
+| yet.                                                   |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|⏎ continue run  esc stop run                            |
++--------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 4. one Enter collected the intent, prepared, loaded rules and started the review
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                   |
+| ✓ Intent   Fix q and x handling in sample              |
+| ✓ Target   27d9fa7                                     |
+| ✓ Rules    unslop, no-comments · loaded                |
+| ⠇ Review   running · budget 1 of 4 used                |
+|                                                        |
+| ⠇ Independent review · Pi · 0s                         |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| Work runs in the daemon. x cancels it; q detaches and  |
+| leaves it running.                                     |
+|Review started.                                         |
+|x cancel  a actions  s settings  ? help  q detach       |
++--------------------------------------------------------+
+
+## 5. live progress: stage, agent and elapsed time
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                   |
+| ✓ Intent   Fix q and x handling in sample              |
+| ✓ Target   27d9fa7                                     |
+| ✓ Rules    unslop, no-comments · loaded                |
+| ⠹ Review   running · budget 1 of 4 used                |
+|                                                        |
+| ⠹ Independent review · Pi · 1s                         |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| Work runs in the daemon. x cancels it; q detaches and  |
+| leaves it running.                                     |
+|Review started.                                         |
+|x cancel  a actions  s settings  ? help  q detach       |
++--------------------------------------------------------+
+
+$ resize to 100x24
+
+## 6. resized to 100 columns while running
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 7910aad                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                                               |
+| ✓ Intent   Fix q and x handling in sample                                                          |
+| ✓ Target   27d9fa7                                                                                 |
+| ✓ Rules    unslop, no-comments · loaded                                                            |
+| ⠴ Review   running · budget 1 of 4 used                                                            |
+|                                                                                                    |
+| ⠴ Independent review · Pi · 1s                                                                     |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| Work runs in the daemon. x cancels it; q detaches and leaves it running.                           |
+|Review started.                                                                                     |
+|x cancel  a actions  s settings  ? help  i details  q detach                                        |
++----------------------------------------------------------------------------------------------------+
+
+$ resize to 56x24
+
+## 7. resized back to 56 columns
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                   |
+| ✓ Intent   Fix q and x handling in sample              |
+| ✓ Target   27d9fa7                                     |
+| ✓ Rules    unslop, no-comments · loaded                |
+| ⠏ Review   running · budget 1 of 4 used                |
+|                                                        |
+| ⠏ Independent review · Pi · 1s                         |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| Work runs in the daemon. x cancels it; q detaches and  |
+| leaves it running.                                     |
+|Review started.                                         |
+|x cancel  a actions  s settings  ? help  q detach       |
++--------------------------------------------------------+
+
+$ keys 'x'
+
+## 8. one x asks for confirmation
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| Cancel running work                                    |
+|                                                        |
+| Stop the running review, fixer, check or pipeline      |
+| step. The run stays rerunnable.                        |
+|                                                        |
+| Press x again to cancel the independent review. Esc    |
+| keeps it running. q only detaches.                     |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|Review started.                                         |
+|x confirm cancel  esc keep running  q detach            |
++--------------------------------------------------------+
+
+$ keys 'Escape'
+
+$ keys 'q'
+
+## 9. q detaches and says the review keeps running
++--------------------------------------------------------+
+|Detached. The independent review keeps running in the Gr|
+|eenhouse daemon. Run greenhouse here to reattach.       |
+|EXIT=0                                                  |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
++--------------------------------------------------------+

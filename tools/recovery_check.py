@@ -86,7 +86,7 @@ def fixture(width):
     wrapper = bindir / "git"
     wrapper.write_text(GIT_WRAPPER.replace("REAL", repr(shutil.which("git"))).replace("MARKER", repr(str(marker))))
     wrapper.chmod(0o700)
-    env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(state), PATH=f"{bindir}:{os.environ['PATH']}",
+    env = dict(os.environ, TERM="dumb", HOME=str(root), GREENHOUSE_HOME=str(state), PATH=f"{bindir}:{os.environ['PATH']}",
                GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
     native_bin = root / "native-bin"
     native_bin.mkdir()

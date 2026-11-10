@@ -51,7 +51,7 @@ def fixture(width):
     root = Path(tempfile.mkdtemp(prefix=f"gh-events-{width}-", dir=os.environ["TMPDIR"]))
     state = root / "state"
     state.mkdir(mode=0o700)
-    env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(state), GIT_CONFIG_NOSYSTEM="1",
+    env = dict(os.environ, TERM="dumb", HOME=str(root), GREENHOUSE_HOME=str(state), GIT_CONFIG_NOSYSTEM="1",
                GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
     native_bin = root / "native-bin"
     native_bin.mkdir()

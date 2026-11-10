@@ -1471,6 +1471,124 @@ func terminalText(text string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+func statePage(v Response, live string, details bool) string {
+	var page strings.Builder
+	r := v.Run
+	s := r.Configs[len(r.Configs)-1]
+	if s.Settings.Preset == "full" {
+		fmt.Fprintln(&page, "Greenhouse | full pipeline")
+	} else {
+		fmt.Fprintln(&page, "Greenhouse | independent review")
+	}
+	fmt.Fprintf(&page, "Events: %s\n", live)
+	fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), sourceSummary(fieldSources(s)))
+	if r.Target != "" {
+		fmt.Fprintf(&page, "Target: %s\nIntent: %s\nScope: committed target-to-candidate diff; dirty files excluded\n", r.Target, r.Intent)
+	}
+	if o := v.Repository; o != nil {
+		fmt.Fprintln(&page, overrideLine(o))
+	}
+	for _, cfg := range v.Config {
+		if cfg.Status == "retired" {
+			fmt.Fprintf(&page, "Configuration: %s retired; preserved, not used for new reviews\n", cfg.File)
+		}
+	}
+	if x := v.HostResult; x != nil {
+		outcome := x.Verdict
+		if outcome == "" {
+			outcome = x.Status
+		}
+		fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Host: %s | grant %s | %s | current %t", hostLabel(&x.Host), x.Grant, outcome, x.Current), terminalWidth()))
+	}
+	for _, rule := range v.Rules {
+		fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
+		if rule.Error != "" {
+			fmt.Fprintln(&page, "Load error: "+rule.Error)
+		}
+		if details && rule.Pack != nil {
+			fmt.Fprintln(&page, v.RuleScope)
+			for _, c := range rule.Pack.Criteria {
+				fmt.Fprintf(&page, "%s/%s [%s]: %s\nRepair: %s\n", rule.Pack.ID, c.ID, c.Classification, c.Text, c.Repair)
+			}
+		}
+	}
+	fmt.Fprintf(&page, "Auto-resume: %s\n", autoResumeLabel(s.Settings))
+	if p := r.Pause; p != nil {
+		width := terminalWidth()
+		fmt.Fprintln(&page, wrapWords("PAUSED: "+v.Explanation, width))
+		fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Paused stage: %s | agent %s %s | backend %s", p.Stage, p.Backend, p.Model, p.Reason), width))
+		if p.ResetAt != "" {
+			fmt.Fprintf(&page, "Reset: %s\n", clock(p.ResetAt))
+		}
+		if p.AutoResumeAt != "" {
+			fmt.Fprintf(&page, "Scheduled %s: %s\n", p.AutoAction, clock(p.AutoResumeAt))
+		}
+	}
+	for _, b := range v.Blocked {
+		fmt.Fprintln(&page, "Blocked: "+b)
+	}
+	renderRecovery(&page, r)
+	if r.Pipeline != nil {
+		renderPipeline(&page, r, details)
+	}
+	if details && r.SelectedDiff != "" {
+		fmt.Fprintln(&page, "Selected committed diff:", r.SelectedDiff)
+	}
+	actionable, informational := outstanding(r)
+	label := map[string]string{}
+	for _, f := range actionable {
+		label[f.ID] = "Outstanding"
+	}
+	for _, f := range informational {
+		label[f.ID] = "Informational"
+	}
+	kinds := resolvedKinds(r)
+	responses := responseLines(r)
+	for _, f := range r.Findings {
+		state := label[f.ID]
+		if state == "" {
+			state = "Resolved (" + kinds[f.ID] + ")"
+		}
+		fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, displayID(f.ID, terminalWidth()))
+		for _, line := range responses[f.ID] {
+			fmt.Fprintln(&page, line)
+		}
+	}
+	if r.Repair != nil {
+		fix := r.Repair
+		fmt.Fprintf(&page, "Repair: %s | handback: %s | actor: %s\nWriter: %s | base: %s | commit: %s\n", fix.Status, fix.Handback, fix.Actor, fix.Writer, fix.Base, fix.Head)
+		fmt.Fprintf(&page, "Selected: %d | fixer input: %s | rules: %s | config: %s\n", len(fix.Selected), fix.InputDigest, fix.Rules.Digest, fix.ConfigDigest)
+		if fix.Confinement != nil {
+			fmt.Fprintln(&page, confinementLine(fix.Confinement))
+		}
+		for _, check := range fix.Checks {
+			fmt.Fprintf(&page, "Check %s exit=%d: %s\n", strings.Join(check.Args, " "), check.Exit, check.Status)
+		}
+		if fix.Log != "" {
+			fmt.Fprintln(&page, fix.Log)
+		}
+	}
+	if r.Review != nil {
+		x := r.Review
+		fmt.Fprintf(&page, "Review: %s | %s | %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", x.Status, x.Backend, x.Config.Model, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
+		if x.Snapshot != nil {
+			fmt.Fprintln(&page, snapshotLine(x.Snapshot))
+		}
+		if x.Confinement != nil {
+			fmt.Fprintln(&page, confinementLine(x.Confinement))
+		}
+		if details {
+			fmt.Fprintf(&page, "Executor: %s\nArgs: %s\n", x.Config.Executable, strings.Join(x.Args, " "))
+		}
+		if x.Result != nil {
+			fmt.Fprintf(&page, "Reported model: %s/%s\nCoverage: %s\n", x.Result.ReportedProvider, x.Result.ReportedModel, strings.Join(x.Result.Coverage, ", "))
+			for _, f := range x.Result.Findings {
+				fmt.Fprintf(&page, "%s %s %s:%d-%d %s\nAction: %s\nRule: %s | ID: %s\n", f.Priority, f.Origin, f.File, f.Start, f.End, f.Explanation, f.Action, f.Rule, displayID(f.ID, terminalWidth()))
+			}
+		}
+	}
+	return page.String()
+}
 func screen(text string) {
 	fmt.Print("\033[2J\033[H")
 	fmt.Println(terminalText(text))
@@ -1482,7 +1600,7 @@ func terminalPrompt(format string, args ...any) {
 		fmt.Print(" ")
 	}
 }
-func terminal(h, path string) error {
+func lineTerminal(h, path string) error {
 	q := Request{Version: protocolMax, Op: "attach", Path: path}
 	v, e := call(h, q)
 	if e != nil {
@@ -1513,124 +1631,13 @@ func terminal(h, path string) error {
 	message := ""
 	details := false
 	for {
-		var page strings.Builder
 		if v.Run == nil {
 			return errors.New(v.Error)
 		}
 		r := v.Run
 		s := r.Configs[len(r.Configs)-1]
-		if s.Settings.Preset == "full" {
-			fmt.Fprintln(&page, "Greenhouse | full pipeline")
-		} else {
-			fmt.Fprintln(&page, "Greenhouse | independent review")
-		}
-		fmt.Fprintf(&page, "Events: %s\n", live)
-		fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), sourceSummary(fieldSources(s)))
-		if r.Target != "" {
-			fmt.Fprintf(&page, "Target: %s\nIntent: %s\nScope: committed target-to-candidate diff; dirty files excluded\n", r.Target, r.Intent)
-		}
-		if o := v.Repository; o != nil {
-			fmt.Fprintln(&page, overrideLine(o))
-		}
-		for _, cfg := range v.Config {
-			if cfg.Status == "retired" {
-				fmt.Fprintf(&page, "Configuration: %s retired; preserved, not used for new reviews\n", cfg.File)
-			}
-		}
-		if x := v.HostResult; x != nil {
-			outcome := x.Verdict
-			if outcome == "" {
-				outcome = x.Status
-			}
-			fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Host: %s | grant %s | %s | current %t", hostLabel(&x.Host), x.Grant, outcome, x.Current), terminalWidth()))
-		}
-		for _, rule := range v.Rules {
-			fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
-			if rule.Error != "" {
-				fmt.Fprintln(&page, "Load error: "+rule.Error)
-			}
-			if details && rule.Pack != nil {
-				fmt.Fprintln(&page, v.RuleScope)
-				for _, c := range rule.Pack.Criteria {
-					fmt.Fprintf(&page, "%s/%s [%s]: %s\nRepair: %s\n", rule.Pack.ID, c.ID, c.Classification, c.Text, c.Repair)
-				}
-			}
-		}
-		fmt.Fprintf(&page, "Auto-resume: %s\n", autoResumeLabel(s.Settings))
-		if p := r.Pause; p != nil {
-			width := terminalWidth()
-			fmt.Fprintln(&page, wrapWords("PAUSED: "+v.Explanation, width))
-			fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Paused stage: %s | agent %s %s | backend %s", p.Stage, p.Backend, p.Model, p.Reason), width))
-			if p.ResetAt != "" {
-				fmt.Fprintf(&page, "Reset: %s\n", clock(p.ResetAt))
-			}
-			if p.AutoResumeAt != "" {
-				fmt.Fprintf(&page, "Scheduled %s: %s\n", p.AutoAction, clock(p.AutoResumeAt))
-			}
-		}
-		for _, b := range v.Blocked {
-			fmt.Fprintln(&page, "Blocked: "+b)
-		}
-		renderRecovery(&page, r)
-		if r.Pipeline != nil {
-			renderPipeline(&page, r, details)
-		}
-		if details && r.SelectedDiff != "" {
-			fmt.Fprintln(&page, "Selected committed diff:", r.SelectedDiff)
-		}
-		actionable, informational := outstanding(r)
-		label := map[string]string{}
-		for _, f := range actionable {
-			label[f.ID] = "Outstanding"
-		}
-		for _, f := range informational {
-			label[f.ID] = "Informational"
-		}
-		kinds := resolvedKinds(r)
-		responses := responseLines(r)
-		for _, f := range r.Findings {
-			state := label[f.ID]
-			if state == "" {
-				state = "Resolved (" + kinds[f.ID] + ")"
-			}
-			fmt.Fprintf(&page, "%s %s %s:%d %s | reviewed %s | ID %s\n", state, f.Priority, f.File, f.Start, f.Explanation, f.Head, displayID(f.ID, terminalWidth()))
-			for _, line := range responses[f.ID] {
-				fmt.Fprintln(&page, line)
-			}
-		}
-		if r.Repair != nil {
-			fix := r.Repair
-			fmt.Fprintf(&page, "Repair: %s | handback: %s | actor: %s\nWriter: %s | base: %s | commit: %s\n", fix.Status, fix.Handback, fix.Actor, fix.Writer, fix.Base, fix.Head)
-			fmt.Fprintf(&page, "Selected: %d | fixer input: %s | rules: %s | config: %s\n", len(fix.Selected), fix.InputDigest, fix.Rules.Digest, fix.ConfigDigest)
-			if fix.Confinement != nil {
-				fmt.Fprintln(&page, confinementLine(fix.Confinement))
-			}
-			for _, check := range fix.Checks {
-				fmt.Fprintf(&page, "Check %s exit=%d: %s\n", strings.Join(check.Args, " "), check.Exit, check.Status)
-			}
-			if fix.Log != "" {
-				fmt.Fprintln(&page, fix.Log)
-			}
-		}
-		if r.Review != nil {
-			x := r.Review
-			fmt.Fprintf(&page, "Review: %s | %s | %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", x.Status, x.Backend, x.Config.Model, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
-			if x.Snapshot != nil {
-				fmt.Fprintln(&page, snapshotLine(x.Snapshot))
-			}
-			if x.Confinement != nil {
-				fmt.Fprintln(&page, confinementLine(x.Confinement))
-			}
-			if details {
-				fmt.Fprintf(&page, "Executor: %s\nArgs: %s\n", x.Config.Executable, strings.Join(x.Args, " "))
-			}
-			if x.Result != nil {
-				fmt.Fprintf(&page, "Reported model: %s/%s\nCoverage: %s\n", x.Result.ReportedProvider, x.Result.ReportedModel, strings.Join(x.Result.Coverage, ", "))
-				for _, f := range x.Result.Findings {
-					fmt.Fprintf(&page, "%s %s %s:%d-%d %s\nAction: %s\nRule: %s | ID: %s\n", f.Priority, f.Origin, f.File, f.Start, f.End, f.Explanation, f.Action, f.Rule, displayID(f.ID, terminalWidth()))
-				}
-			}
-		}
+		var page strings.Builder
+		page.WriteString(statePage(v, live, details))
 		fmt.Fprintln(&page, "\n"+wrapMenuEntries([]string{"[i] Inspect", "[c] Criteria/diff", "[l] Load rules", "[s] Settings"}, terminalWidth())+"\n"+
 			wrapMenuEntries([]string{"[p] Intent/target", "[v] Review", "[g] Pipeline", "[d] Decide"}, terminalWidth())+"\n"+
 			wrapMenuEntries([]string{"[m] Resolve conflict", "[f] Selected repair", "[h] Handback"}, terminalWidth())+"\n"+

@@ -1,0 +1,503 @@
+# settings-decision at 100x24: keys sent and screens captured from a real PTY
+
+## 1. first launch: one Run action, nothing collected yet
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                                               |
+| ○ Intent   collected from your agent session on Run                                                |
+| ○ Target   main (suggested)                                                                        |
+| ○ Rules    unslop, no-comments · not loaded                                                        |
+| ○ Review   not started · budget 0 of 4 used                                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Run review                                                                                       |
+|   Collect the intent from your agent session, load rules and start one independent review. It uses |
+|   one round of the budget.                                                                         |
+|⏎ run review  a actions  s settings  ? help  i details  q quit                                      |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 's'
+
+## 2. settings draft with sources
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Settings draft · changes apply only when you choose Apply or Save                                  |
+|                                                                                                    |
+| ▸  Mode            auto                   built-in default                                         |
+|    Preset          one-pass               built-in default                                         |
+|    Limit           4                      built-in default                                         |
+|    Reviewer agent  pi                     built-in default                                         |
+|    Reviewer model  default                built-in default                                         |
+|    Fixer agent     pi                     built-in default                                         |
+|    Fixer model     default                built-in default                                         |
+|    Rules           unslop, no-comments    built-in default                                         |
+|    Auto-resume     default                built-in default                                         |
+|                                                                                                    |
+|   Apply to this run                                                                                |
+|   Save as my default                                                                               |
+|   Save to repository override                                                                      |
+|   Reset draft                                                                                      |
+|                                                                                                    |
+| Current source: built-in default.                                                                  |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|↑↓ move  ←→ change  ⏎ edit or run  esc back (keeps draft)  q quit                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Down' 'Right' 'Down' 'Enter' 'BSpace'
+
+$ keys type '1'
+
+$ keys 'Enter'
+
+## 3. draft edits are marked and not sent
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Settings draft · changes apply only when you choose Apply or Save                                  |
+|                                                                                                    |
+|    Mode            auto                   built-in default                                         |
+|  * Preset          full                   draft, was one-pass                                      |
+| ▸* Limit           1                      draft, was 4                                             |
+|    Reviewer agent  pi                     built-in default                                         |
+|    Reviewer model  default                built-in default                                         |
+|    Fixer agent     pi                     built-in default                                         |
+|    Fixer model     default                built-in default                                         |
+|    Rules           unslop, no-comments    built-in default                                         |
+|    Auto-resume     default                built-in default                                         |
+|                                                                                                    |
+|   Apply to this run                                                                                |
+|   Save as my default                                                                               |
+|   Save to repository override                                                                      |
+|   Reset draft                                                                                      |
+|                                                                                                    |
+| Combined review and repair rounds for a run. Current source: built-in default.                     |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|↑↓ move  ←→ change  ⏎ edit or run  esc back (keeps draft)  q quit                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Escape'
+
+## 4. home keeps the draft
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                                               |
+| ○ Intent   collected from your agent session on Run                                                |
+| ○ Target   main (suggested)                                                                        |
+| ○ Rules    unslop, no-comments · not loaded                                                        |
+| ○ Review   not started · budget 0 of 4 used                                                        |
+|                                                                                                    |
+| Settings draft has changes that are not applied or saved (s).                                      |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Run review                                                                                       |
+|   Collect the intent from your agent session, load rules and start one independent review. It uses |
+|   one round of the budget.                                                                         |
+|Settings draft kept; it is not applied or saved.                                                    |
+|⏎ run review  a actions  s settings  ? help  i details  q quit                                      |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 's'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+$ keys 'Down'
+
+## 5. apply shows its scope
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Settings draft · changes apply only when you choose Apply or Save                                  |
+|                                                                                                    |
+|    Mode            auto                   built-in default                                         |
+|  * Preset          full                   draft, was one-pass                                      |
+|  * Limit           1                      draft, was 4                                             |
+|    Reviewer agent  pi                     built-in default                                         |
+|    Reviewer model  default                built-in default                                         |
+|    Fixer agent     pi                     built-in default                                         |
+|    Fixer model     default                built-in default                                         |
+|    Rules           unslop, no-comments    built-in default                                         |
+|    Auto-resume     default                built-in default                                         |
+|                                                                                                    |
+| ▸ Apply to this run                                                                                |
+|   Save as my default                                                                               |
+|   Save to repository override                                                                      |
+|   Reset draft                                                                                      |
+|                                                                                                    |
+| Adds a run-local snapshot. New runs keep their defaults.                                           |
+|                                                                                                    |
+|                                                                                                    |
+|Settings draft kept; it is not applied or saved.                                                    |
+|↑↓ move  ←→ change  ⏎ edit or run  esc back (keeps draft)  q quit                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 6. applied to this run
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Settings draft · changes apply only when you choose Apply or Save                                  |
+|                                                                                                    |
+|    Mode            auto                   built-in default                                         |
+|    Preset          full                   run-local                                                |
+|    Limit           1                      run-local                                                |
+|    Reviewer agent  pi                     built-in default                                         |
+|    Reviewer model  default                built-in default                                         |
+|    Fixer agent     pi                     built-in default                                         |
+|    Fixer model     default                built-in default                                         |
+|    Rules           unslop, no-comments    built-in default                                         |
+|    Auto-resume     default                built-in default                                         |
+|                                                                                                    |
+| ▸ Apply to this run                                                                                |
+|   Save as my default                                                                               |
+|   Save to repository override                                                                      |
+|   Reset draft                                                                                      |
+|                                                                                                    |
+| Adds a run-local snapshot. New runs keep their defaults.                                           |
+|                                                                                                    |
+|                                                                                                    |
+|Draft applied to this run.                                                                          |
+|↑↓ move  ←→ change  ⏎ edit or run  esc back (keeps draft)  q quit                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Down'
+
+## 7. save shows its scope
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Settings draft · changes apply only when you choose Apply or Save                                  |
+|                                                                                                    |
+|    Mode            auto                   built-in default                                         |
+|    Preset          full                   run-local                                                |
+|    Limit           1                      run-local                                                |
+|    Reviewer agent  pi                     built-in default                                         |
+|    Reviewer model  default                built-in default                                         |
+|    Fixer agent     pi                     built-in default                                         |
+|    Fixer model     default                built-in default                                         |
+|    Rules           unslop, no-comments    built-in default                                         |
+|    Auto-resume     default                built-in default                                         |
+|                                                                                                    |
+|   Apply to this run                                                                                |
+| ▸ Save as my default                                                                               |
+|   Save to repository override                                                                      |
+|   Reset draft                                                                                      |
+|                                                                                                    |
+| Changes per-user defaults for new runs. This run does not change.                                  |
+|                                                                                                    |
+|                                                                                                    |
+|Draft applied to this run.                                                                          |
+|↑↓ move  ←→ change  ⏎ edit or run  esc back (keeps draft)  q quit                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 8. saved as default
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Settings draft · changes apply only when you choose Apply or Save                                  |
+|                                                                                                    |
+|    Mode            auto                   built-in default                                         |
+|    Preset          full                   run-local                                                |
+|    Limit           1                      run-local                                                |
+|    Reviewer agent  pi                     built-in default                                         |
+|    Reviewer model  default                built-in default                                         |
+|    Fixer agent     pi                     built-in default                                         |
+|    Fixer model     default                built-in default                                         |
+|    Rules           unslop, no-comments    built-in default                                         |
+|    Auto-resume     default                built-in default                                         |
+|                                                                                                    |
+|   Apply to this run                                                                                |
+| ▸ Save as my default                                                                               |
+|   Save to repository override                                                                      |
+|   Reset draft                                                                                      |
+|                                                                                                    |
+| Changes per-user defaults for new runs. This run does not change.                                  |
+|                                                                                                    |
+|                                                                                                    |
+|Draft saved for new runs; this run did not change.                                                  |
+|↑↓ move  ←→ change  ⏎ edit or run  esc back (keeps draft)  q quit                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Escape'
+
+## 9. Run pipeline is the one action
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                                               |
+| ○ Intent   collected from your agent session on Run                                                |
+| ○ Target   main (suggested)                                                                        |
+| ○ Rules    unslop, no-comments · not loaded                                                        |
+| ○ Pipeline not started · budget 0 of 1 used                                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Run pipeline                                                                                     |
+|   Collect the intent from your agent session, load rules and start the trusted pipeline.           |
+|Draft saved for new runs; this run did not change.                                                  |
+|⏎ run pipeline  a actions  s settings  ? help  i details  q quit                                    |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 10. decision required
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                                               |
+| ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
+| ✓ Target   b504e19                                                                                 |
+| ✓ Rules    unslop, no-comments · loaded                                                            |
+| ! Pipeline decision required · budget 1 of 1 used                                                  |
+| Stages: intent ✓  sync ✓  review !  test ○  docs ○  lint ○  push ○  pr ○  ci ○                     |
+|                                                                                                    |
+| Findings · 2 outstanding findings                                                                  |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                                      |
+|   P2 sample.txt:1  Sample text gives no context for readers                                        |
+|                                                                                                    |
+| Decision required (cap): review cap reached (1/1: review 1 + repair 0); 2 actionable findings      |
+| remain and no room for a repair and its rereview                                                   |
+| Budget exhausted: 1 of 1 rounds used. Raise the limit in Settings to continue.                     |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Answer decision                                                                                  |
+|   The pipeline waits for your answer.                                                              |
+|⏎ answer decision  a actions  s settings  f findings  ? help  i details  q quit                     |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 11. decision options
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Decision required: cap at review                                                                   |
+|                                                                                                    |
+| review cap reached (1/1: review 1 + repair 0); 2 actionable findings remain and no room for a      |
+| repair and its rereview                                                                            |
+|                                                                                                    |
+| Choose an answer:                                                                                  |
+| ▸ accept-head                                                                                      |
+|   final-fix                                                                                        |
+|   increase-cap                                                                                     |
+|   rethink                                                                                          |
+|   discard                                                                                          |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|⏎ next  ↑↓ move  esc back  q quit                                                                   |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+$ keys type 'accept this exact head'
+
+## 12. decision reason
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Decision required: cap at review                                                                   |
+|                                                                                                    |
+| review cap reached (1/1: review 1 + repair 0); 2 actionable findings remain and no room for a      |
+| repair and its rereview                                                                            |
+|                                                                                                    |
+| Answer: accept-head                                                                                |
+| Reason (recorded with the decision):                                                               |
+| > accept this exact head                                                                           |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|⏎ accept  esc back                                                                                  |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 13. pipeline finished with accepted risk
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                                               |
+| ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
+| ✓ Target   b504e19                                                                                 |
+| ✓ Rules    unslop, no-comments · loaded                                                            |
+| ! Pipeline accepted risk (review risk accepted, not a clean pass) · locally-ready                  |
+| Stages: intent ✓  sync ✓  review !  test ✓  docs -  lint ✓  push -  pr -  ci -                     |
+|                                                                                                    |
+| Findings · 2 outstanding findings                                                                  |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                                      |
+|   P2 sample.txt:1  Sample text gives no context for readers                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| Pipeline complete: locally-ready. a lists further actions.                                         |
+|a actions  s settings  f findings  ? help  i details  q quit                                        |
++----------------------------------------------------------------------------------------------------+
+
+## 14. daemon lost: last state kept, reconnecting
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                         RECONNECTING |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                                               |
+| ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
+| ✓ Target   b504e19                                                                                 |
+| ✓ Rules    unslop, no-comments · loaded                                                            |
+| ! Pipeline accepted risk (review risk accepted, not a clean pass) · locally-ready                  |
+| Stages: intent ✓  sync ✓  review !  test ✓  docs -  lint ✓  push -  pr -  ci -                     |
+|                                                                                                    |
+| Findings · 2 outstanding findings                                                                  |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                                      |
+|   P2 sample.txt:1  Sample text gives no context for readers                                        |
+|                                                                                                    |
+| Reconnecting to the Greenhouse daemon. The last state stays on screen; actions are disabled until  |
+| fresh state arrives.                                                                               |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| Waiting for the daemon. Press r to reconnect.                                                      |
+|a actions  s settings  f findings  r reconnect  ? help  i details  q quit                           |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'a'
+
+## 15. actions menu lists only views while reconnecting
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                         RECONNECTING |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Actions available now                                                                              |
+|                                                                                                    |
+| ▸ Settings                                                                                         |
+|   Open findings                                                                                    |
+|   Details                                                                                          |
+|   Transcript log                                                                                   |
+|   Help                                                                                             |
+|                                                                                                    |
+|   Draft mode, preset, budget, agents, models and rules; Apply or Save explicitly.                  |
+| Reconnecting: only views are listed until fresh state arrives.                                     |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|⏎ choose  ↑↓ move  esc back  q quit                                                                 |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Escape'
+
+## 16. resynchronized after the daemon returned
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                                               |
+| ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
+| ✓ Target   b504e19                                                                                 |
+| ✓ Rules    unslop, no-comments · loaded                                                            |
+| ! Pipeline accepted risk (review risk accepted, not a clean pass) · locally-ready                  |
+| Stages: intent ✓  sync ✓  review !  test ✓  docs -  lint ✓  push -  pr -  ci -                     |
+|                                                                                                    |
+| Findings · 2 outstanding findings                                                                  |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                                      |
+|   P2 sample.txt:1  Sample text gives no context for readers                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| Pipeline complete: locally-ready. a lists further actions.                                         |
+|a actions  s settings  f findings  ? help  i details  q quit                                        |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'q'

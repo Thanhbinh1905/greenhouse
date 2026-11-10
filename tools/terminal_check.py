@@ -29,7 +29,7 @@ class ModelHandler(BaseHTTPRequestHandler):
         pass
 provider = HTTPServer(("127.0.0.1", 0), ModelHandler)
 threading.Thread(target=provider.serve_forever, daemon=True).start()
-env = dict(os.environ, HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
+env = dict(os.environ, TERM="dumb", HOME=str(root), GREENHOUSE_HOME=str(root / "state"),
            GIT_CONFIG_NOSYSTEM="1", GIT_CONFIG_GLOBAL="/dev/null", GREENHOUSE_TEST_PROVIDER_KEY="fixture-secret")
 native_bin = root / "native-bin"
 native_bin.mkdir()

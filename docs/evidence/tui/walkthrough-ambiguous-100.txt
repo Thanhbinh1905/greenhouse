@@ -1,0 +1,119 @@
+# ambiguous at 100x24: keys sent and screens captured from a real PTY
+
+## 1. first launch: one Run action, nothing collected yet
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ○ Agent    Pi · native default model                                                               |
+| ○ Intent   collected from your agent session on Run                                                |
+| ○ Target   main (suggested)                                                                        |
+| ○ Rules    unslop, no-comments · not loaded                                                        |
+| ○ Review   not started · budget 0 of 4 used                                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Run review                                                                                       |
+|   Collect the intent from your agent session, load rules and start one independent review. It uses |
+|   one round of the budget.                                                                         |
+|⏎ run review  a actions  s settings  ? help  i details  q quit                                      |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 2. two sessions match equally: one question
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Which intent should Run use?                                                                       |
+|                                                                                                    |
+| Several agent sessions in this worktree mention the changed files. Which one asked for this        |
+| change?                                                                                            |
+|                                                                                                    |
+| ▸ Pi session 55555555 (2026-11-10 10:38): Pi asked to reword the sample in sample.txt              |
+|   Claude session 44444444 (2026-11-10 10:38): Claude asked to fix the sample                       |
+|   Type the intent myself                                                                           |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|⏎ choose  ↑↓ move  esc stop run  q quit                                                             |
++----------------------------------------------------------------------------------------------------+
+
+## 3. the Pi session is focused
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Which intent should Run use?                                                                       |
+|                                                                                                    |
+| Several agent sessions in this worktree mention the changed files. Which one asked for this        |
+| change?                                                                                            |
+|                                                                                                    |
+| ▸ Pi session 55555555 (2026-11-10 10:38): Pi asked to reword the sample in sample.txt              |
+|   Claude session 44444444 (2026-11-10 10:38): Claude asked to fix the sample                       |
+|   Type the intent myself                                                                           |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|⏎ choose  ↑↓ move  esc stop run  q quit                                                             |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'Enter'
+
+## 4. one Enter collected the intent, prepared, loaded rules and started the review
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                                               |
+| ✓ Intent   “Pi asked to reword the sample in sample.txt” · collected from Pi session 55555555 (20… |
+| ✓ Target   fbac440                                                                                 |
+| ✓ Rules    unslop, no-comments · loaded                                                            |
+| ✗ Review   2 outstanding findings · budget 1 of 4 used                                             |
+|                                                                                                    |
+| Findings · 2 outstanding findings                                                                  |
+|   P1 sample.txt:1  Sample text is wrong for the stated intent                                      |
+|   P2 sample.txt:1  Sample text gives no context for readers                                        |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+| ▸ Open findings                                                                                    |
+|   Read each finding with its location and full description.                                        |
+|⏎ open findings  a actions  s settings  f findings  ? help  i details  q quit                       |
++----------------------------------------------------------------------------------------------------+
+
+$ keys 'q'

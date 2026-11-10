@@ -1,0 +1,61 @@
+# cancel-reattach at 56x24: keys sent and screens captured from a real PTY
+
+## 1. reattach shows the running review
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                   |
+| ✓ Intent   Fix q and x handling in sample              |
+| ✓ Target   27d9fa7                                     |
+| ✓ Rules    unslop, no-comments · loaded                |
+| ⠸ Review   running · budget 1 of 4 used                |
+|                                                        |
+| ⠸ Independent review · Pi · ≥0s                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| Work runs in the daemon. x cancels it; q detaches and  |
+| leaves it running.                                     |
+|x cancel  a actions  s settings  ? help  q detach       |
++--------------------------------------------------------+
+
+$ keys 'x' 'x'
+
+## 2. cancelled after x x; rerun offered
++--------------------------------------------------------+
+|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                   |
+| ✓ Intent   Fix q and x handling in sample              |
+| ✓ Target   27d9fa7                                     |
+| ✓ Rules    unslop, no-comments · loaded                |
+| ! Review   cancelled · budget 1 of 4 used              |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+| ▸ Rerun stage                                          |
+|   Run the stopped stage again with the current         |
+|   settings. Earlier evidence stays.                    |
+|⏎ rerun stage  a actions  s settings  ? help  q quit    |
++--------------------------------------------------------+
+
+$ keys 'q'
