@@ -16,5 +16,14 @@
       "end": 11,
       "note": "Unchanged SQL concatenation; pre-existing, out of scope."
     }
-  ]
+  ],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Retained handcrafted revision-4 fixture introduced by local corpus history through f8420b91c5daff944d41bae0c2b8c2c1a861d452; expected findings and ranges unchanged."
+  }
 }
