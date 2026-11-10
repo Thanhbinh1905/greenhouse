@@ -2,7 +2,7 @@
 
 ## 1. first launch: one Run action, nothing collected yet
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|Greenhouse · feature @ ced8426                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                                               |
 | ○ Intent   collected from your agent session on Run                                                |
@@ -32,15 +32,15 @@ $ keys 'Enter'
 
 ## 2. two sessions match equally: one question
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|Greenhouse · feature @ ced8426                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Which intent should Run use?                                                                       |
 |                                                                                                    |
 | Several agent sessions in this worktree mention the changed files. Which one asked for this        |
 | change?                                                                                            |
 |                                                                                                    |
-| ▸ Pi session 55555555 (2026-11-10 10:38): Pi asked to reword the sample in sample.txt              |
-|   Claude session 44444444 (2026-11-10 10:38): Claude asked to fix the sample                       |
+| ▸ Pi session 55555555 (2026-11-10 11:20): Pi asked to reword the sample in sample.txt              |
+|   Claude session 44444444 (2026-11-10 11:20): Claude asked to fix the sample                       |
 |   Type the intent myself                                                                           |
 |                                                                                                    |
 |                                                                                                    |
@@ -60,15 +60,15 @@ $ keys 'Enter'
 
 ## 3. the Pi session is focused
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|Greenhouse · feature @ ced8426                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Which intent should Run use?                                                                       |
 |                                                                                                    |
 | Several agent sessions in this worktree mention the changed files. Which one asked for this        |
 | change?                                                                                            |
 |                                                                                                    |
-| ▸ Pi session 55555555 (2026-11-10 10:38): Pi asked to reword the sample in sample.txt              |
-|   Claude session 44444444 (2026-11-10 10:38): Claude asked to fix the sample                       |
+| ▸ Pi session 55555555 (2026-11-10 11:20): Pi asked to reword the sample in sample.txt              |
+|   Claude session 44444444 (2026-11-10 11:20): Claude asked to fix the sample                       |
 |   Type the intent myself                                                                           |
 |                                                                                                    |
 |                                                                                                    |
@@ -90,11 +90,11 @@ $ keys 'Enter'
 
 ## 4. one Enter collected the intent, prepared, loaded rules and started the review
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 7977f16                                               one-pass · auto · live |
+|Greenhouse · feature @ ced8426                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
 | ✓ Intent   “Pi asked to reword the sample in sample.txt” · collected from Pi session 55555555 (20… |
-| ✓ Target   fbac440                                                                                 |
+| ✓ Target   f46be3f                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
 | ✗ Review   2 outstanding findings · budget 1 of 4 used                                             |
 |                                                                                                    |

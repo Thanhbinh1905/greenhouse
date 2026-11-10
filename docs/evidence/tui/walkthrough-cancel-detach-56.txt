@@ -2,7 +2,7 @@
 
 ## 1. first launch: one Run action, nothing collected yet
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                   |
 | ○ Intent   collected from your agent session on Run    |
@@ -32,7 +32,7 @@ $ keys 'Enter'
 
 ## 2. no matching agent session: Run asks one question
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Which intent should Run use?                           |
 |                                                        |
@@ -58,11 +58,11 @@ $ keys 'Enter'
 |⏎ continue run  esc stop run                            |
 +--------------------------------------------------------+
 
-$ keys type 'Fix q and x handling in sample'
+$ keys type 'Fix q and x handling in sample so every reader of sample.txt sees corrected text'
 
-## 3. typing q and x stays in the answer
+## 3. typing past the screen width keeps the cursor end visible; q and x stay in the answer
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Which intent should Run use?                           |
 |                                                        |
@@ -70,7 +70,7 @@ $ keys type 'Fix q and x handling in sample'
 | mentions the changed files. What should this change    |
 | do?                                                    |
 |                                                        |
-| > Fix q and x handling in sample                       |
+| > e so every reader of sample.txt sees corrected text  |
 |                                                        |
 | Enter continues Run; Esc stops it. Nothing was sent    |
 | yet.                                                   |
@@ -88,19 +88,111 @@ $ keys type 'Fix q and x handling in sample'
 |⏎ continue run  esc stop run                            |
 +--------------------------------------------------------+
 
+$ keys 'BSpace' 'BSpace' 'BSpace' 'BSpace' 'BSpace'
+
+## 4. deletion is visible
++--------------------------------------------------------+
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| Which intent should Run use?                           |
+|                                                        |
+| No local agent session started in this worktree        |
+| mentions the changed files. What should this change    |
+| do?                                                    |
+|                                                        |
+| > sample so every reader of sample.txt sees corrected  |
+|                                                        |
+| Enter continues Run; Esc stops it. Nothing was sent    |
+| yet.                                                   |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|⏎ continue run  esc stop run                            |
++--------------------------------------------------------+
+
+$ resize to 100x24
+
+## 5. resize while editing keeps the whole answer visible
++----------------------------------------------------------------------------------------------------+
+|Greenhouse · feature @ d0aeaa9                                               one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────────────────────────── |
+| Which intent should Run use?                                                                       |
+|                                                                                                    |
+| No local agent session started in this worktree mentions the changed files. What should this       |
+| change do?                                                                                         |
+|                                                                                                    |
+| > Fix q and x handling in sample so every reader of sample.txt sees corrected                      |
+|                                                                                                    |
+| Enter continues Run; Esc stops it. Nothing was sent yet.                                           |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|                                                                                                    |
+|⏎ continue run  esc stop run                                                                        |
++----------------------------------------------------------------------------------------------------+
+
+$ resize to 56x24
+
+## 6. resize back while editing
++--------------------------------------------------------+
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
+|─────────────────────────────────────────────────────── |
+| Which intent should Run use?                           |
+|                                                        |
+| No local agent session started in this worktree        |
+| mentions the changed files. What should this change    |
+| do?                                                    |
+|                                                        |
+| > sample so every reader of sample.txt sees corrected  |
+|                                                        |
+| Enter continues Run; Esc stops it. Nothing was sent    |
+| yet.                                                   |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|                                                        |
+|⏎ continue run  esc stop run                            |
++--------------------------------------------------------+
+
+$ keys type ' text'
+
 $ keys 'Enter'
 
-## 4. one Enter collected the intent, prepared, loaded rules and started the review
+## 7. one Enter collected the intent, prepared, loaded rules and started the review
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
-| ✓ Intent   Fix q and x handling in sample              |
-| ✓ Target   27d9fa7                                     |
+| ✓ Intent   Fix q and x handling in sample so every re… |
+| ✓ Target   b9202c1                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
-| ⠇ Review   running · budget 1 of 4 used                |
+| ⠋ Review   running · budget 1 of 4 used                |
 |                                                        |
-| ⠇ Independent review · Pi · 0s                         |
+| ⠋ Independent review · Pi · 0s                         |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -118,17 +210,17 @@ $ keys 'Enter'
 |x cancel  a actions  s settings  ? help  q detach       |
 +--------------------------------------------------------+
 
-## 5. live progress: stage, agent and elapsed time
+## 8. live progress: stage, agent and elapsed time
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
-| ✓ Intent   Fix q and x handling in sample              |
-| ✓ Target   27d9fa7                                     |
+| ✓ Intent   Fix q and x handling in sample so every re… |
+| ✓ Target   b9202c1                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
-| ⠹ Review   running · budget 1 of 4 used                |
+| ⠼ Review   running · budget 1 of 4 used                |
 |                                                        |
-| ⠹ Independent review · Pi · 1s                         |
+| ⠼ Independent review · Pi · 1s                         |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -148,17 +240,17 @@ $ keys 'Enter'
 
 $ resize to 100x24
 
-## 6. resized to 100 columns while running
+## 9. resized to 100 columns while running
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 7910aad                                               one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
-| ✓ Intent   Fix q and x handling in sample                                                          |
-| ✓ Target   27d9fa7                                                                                 |
+| ✓ Intent   Fix q and x handling in sample so every reader of sample.txt sees corrected text        |
+| ✓ Target   b9202c1                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
-| ⠴ Review   running · budget 1 of 4 used                                                            |
+| ⠇ Review   running · budget 1 of 4 used                                                            |
 |                                                                                                    |
-| ⠴ Independent review · Pi · 1s                                                                     |
+| ⠇ Independent review · Pi · 1s                                                                     |
 |                                                                                                    |
 |                                                                                                    |
 |                                                                                                    |
@@ -178,17 +270,17 @@ $ resize to 100x24
 
 $ resize to 56x24
 
-## 7. resized back to 56 columns
+## 10. resized back to 56 columns
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
-| ✓ Intent   Fix q and x handling in sample              |
-| ✓ Target   27d9fa7                                     |
+| ✓ Intent   Fix q and x handling in sample so every re… |
+| ✓ Target   b9202c1                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
-| ⠏ Review   running · budget 1 of 4 used                |
+| ⠙ Review   running · budget 1 of 4 used                |
 |                                                        |
-| ⠏ Independent review · Pi · 1s                         |
+| ⠙ Independent review · Pi · 1s                         |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -208,9 +300,9 @@ $ resize to 56x24
 
 $ keys 'x'
 
-## 8. one x asks for confirmation
+## 11. one x asks for confirmation
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | Cancel running work                                    |
 |                                                        |
@@ -240,7 +332,7 @@ $ keys 'Escape'
 
 $ keys 'q'
 
-## 9. q detaches and says the review keeps running
+## 12. q detaches and says the review keeps running
 +--------------------------------------------------------+
 |Detached. The independent review keeps running in the Gr|
 |eenhouse daemon. Run greenhouse here to reattach.       |

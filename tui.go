@@ -71,6 +71,7 @@ type responseMsg struct {
 	v     Response
 	err   error
 	run   bool
+	sent  string
 }
 type modelsMsg struct {
 	models []string
@@ -154,7 +155,6 @@ type tuiModel struct {
 func newTUI(client tuiClient, v Response, agents []string, suggestion string, updates chan liveUpdate) *tuiModel {
 	input := textinput.New()
 	input.Prompt = "> "
-	input.CharLimit = 2000
 	input.Cursor.SetMode(cursor.CursorStatic)
 	m := &tuiModel{client: client, updates: updates, live: "live", fresh: true, agents: agents, suggestion: suggestion, width: 80, height: 24, screen: screenHome, input: input, selected: map[string]bool{}, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot)), now: time.Now, collector: localCollector}
 	m.setView(v, false)
@@ -247,6 +247,28 @@ func (m *tuiModel) say(message string) {
 }
 
 func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	if width := m.fieldWidth(); width != m.input.Width {
+		m.input.Width = width
+		m.input.SetCursor(m.input.Position())
+	}
+	return model, cmd
+}
+
+// newerResponse orders an action response against the shown state. A
+// response from another stream is newer only while the screen still shows
+// the stream the request was sent on.
+func (m *tuiModel) newerResponse(v Response, sent string) bool {
+	if v.Run == nil {
+		return false
+	}
+	if v.Stream == m.v.Stream {
+		return v.Sequence >= m.v.Sequence
+	}
+	return m.v.Stream == sent
+}
+
+func (m *tuiModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -299,7 +321,7 @@ func (m *tuiModel) answered(msg responseMsg) tea.Cmd {
 		m.say(msg.label + " was not confirmed: " + msg.err.Error() + ". Actions stay disabled until fresh state arrives.")
 		return nil
 	}
-	if msg.v.Run != nil {
+	if m.newerResponse(msg.v, msg.sent) {
 		m.setView(msg.v, true)
 	}
 	if msg.v.Outcome != "ok" {
@@ -333,7 +355,7 @@ func (m *tuiModel) runAnswered(msg responseMsg) tea.Cmd {
 		m.say("Run stopped: " + strings.ToLower(msg.label) + " was not confirmed: " + msg.err.Error() + ". Nothing else was sent.")
 		return nil
 	}
-	if msg.v.Run != nil {
+	if m.newerResponse(msg.v, msg.sent) {
 		m.setView(msg.v, true)
 	}
 	if msg.v.Outcome != "ok" {
@@ -399,10 +421,10 @@ func (m *tuiModel) submit(label string, q Request) tea.Cmd {
 	}
 	m.pending = true
 	m.message, m.failed = label+"…", false
-	client := m.client
+	client, sent := m.client, m.v.Stream
 	return func() tea.Msg {
 		v, err := client.send(q, false)
-		return responseMsg{op: q.Op, label: label, v: v, err: err}
+		return responseMsg{op: q.Op, label: label, v: v, err: err, sent: sent}
 	}
 }
 
@@ -621,6 +643,10 @@ func (m *tuiModel) editDone(accept bool) tea.Cmd {
 			} else {
 				m.edit(m.setupValues[m.setupStep], "")
 			}
+			return nil
+		}
+		if m.setupStep == 1 && len(value) > intentLimit {
+			m.say(fmt.Sprintf("The intent is %d bytes; a review intent holds at most %d. Nothing was cut.", len(value), intentLimit))
 			return nil
 		}
 		if value == "" && m.setupStep == 2 {

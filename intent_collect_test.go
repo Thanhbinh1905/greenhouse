@@ -83,7 +83,7 @@ func TestCollectIntentFindsTheUsersRequestInThisWorktree(t *testing.T) {
 	if err != nil || m.Session == nil {
 		t.Fatalf("no match: %+v %v", m, err)
 	}
-	intent := m.Session.Intent()
+	intent, _ := m.Session.Intent()
 	for _, want := range []string{"Claude session aaaaaaaa", "user's own words", "not a summary", "Keep the max at 5 tries"} {
 		if !strings.Contains(intent, want) {
 			t.Errorf("intent lacks %q:\n%s", want, intent)
@@ -130,5 +130,27 @@ func TestCollectIntentNoMatchAndCancellation(t *testing.T) {
 	cancel()
 	if _, err := collectIntent(ctx, f.home, f.repo, f.target, f.head); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled collection: %v", err)
+	}
+}
+
+func TestCollectedIntentKeepsRequirementsAtTheEndOfALongSession(t *testing.T) {
+	f := newIntentFixture(t)
+	early := strings.Repeat("Early detail about retry.go and pkg/backoff.go. ", 130)
+	claudeLog(t, f.home, f.repo, "ffffffff", early, "retry.go", "pkg/backoff.go")
+	path := filepath.Join(f.home, ".claude", "projects", encodedPath(f.repo), "ffffffff.jsonl")
+	b, _ := os.ReadFile(path)
+	late, _ := json.Marshal(map[string]any{"type": "user", "cwd": f.repo, "message": map[string]any{"content": "Final requirement: cap retries at five."}})
+	os.WriteFile(path, append(b, append(late, '\n')...), 0600)
+	m, err := collectIntent(context.Background(), f.home, f.repo, f.target, f.head)
+	if err != nil || m.Session == nil {
+		t.Fatalf("no match: %v", err)
+	}
+	intent, ok := m.Session.Intent()
+	if !ok || !strings.Contains(intent, "cap retries at five") || !validText(intent) {
+		t.Fatalf("late requirement lost or intent invalid (%d bytes, ok %t)", len(intent), ok)
+	}
+	m.Session.Requests = append(m.Session.Requests, strings.Repeat("x", intentLimit))
+	if _, ok := m.Session.Intent(); ok {
+		t.Fatal("an intent over the controller limit was accepted")
 	}
 }

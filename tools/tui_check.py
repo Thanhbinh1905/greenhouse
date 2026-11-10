@@ -230,11 +230,19 @@ def cancel_detach(width):
         s.keys("Enter")
         s.capture("no matching agent session: Run asks one question", r"No local agent session started in this worktree", r"What should this change do\?")
         assert f.axi()["run"].get("intent", "") == "" and f.axi()["run"]["review_used"] == 0
-        s.type("Fix q and x handling in sample")
-        s.capture("typing q and x stays in the answer", r"> Fix q and x handling in sample")
+        answer = "Fix q and x handling in sample so every reader of sample.txt sees corrected text"
+        s.type(answer)
+        s.capture("typing past the screen width keeps the cursor end visible; q and x stay in the answer", r"corrected text\s*$|corrected text\s*\n", absent=[r"EXIT="])
+        s.keys("BSpace", "BSpace", "BSpace", "BSpace", "BSpace")
+        s.capture("deletion is visible", r"corrected\s")
+        s.resize(100)
+        s.capture("resize while editing keeps the whole answer visible", r"> Fix q and x handling in sample so every reader of sample\.txt sees corrected")
+        s.resize(width)
+        s.capture("resize back while editing", r"sees corrected")
+        s.type(" text")
         s.keys("Enter")
         state = review_started(s)
-        assert state["run"]["intent"] == "Fix q and x handling in sample", state["run"]["intent"]
+        assert state["run"]["intent"] == answer, state["run"]["intent"]
         s.capture("live progress: stage, agent and elapsed time", r"Independent review · Pi · \d+s", r"x cancel", r"q detach")
         s.resize(100)
         s.capture("resized to 100 columns while running", r"Independent review · Pi")

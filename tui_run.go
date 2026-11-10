@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -126,6 +127,11 @@ func (m *tuiModel) advance() tea.Cmd {
 		m.say("Run stopped after " + strings.ToLower(runStepLabels[seq.step]) + ". Nothing else was sent.")
 		return nil
 	}
+	if !m.fresh {
+		m.seq = nil
+		m.say("Run stopped: the connection to the daemon was lost. Nothing else was sent; Run again once the screen is live.")
+		return nil
+	}
 	r, settings := m.v.Run, m.current()
 	agent, target := m.planAgent(), m.planTarget()
 	full := settings.Preset == "full"
@@ -135,7 +141,7 @@ func (m *tuiModel) advance() tea.Cmd {
 		return m.collect(target)
 	case agent != settings.ReviewerBackend && (r.Reviewer == nil || backendOf(*r.Reviewer) != agent):
 		draft := settings
-		draft.ReviewerBackend, draft.FixerBackend, draft.ReviewerModel, draft.FixerModel = agent, agent, "", ""
+		draft.ReviewerBackend, draft.ReviewerModel = agent, ""
 		q := mutation(m.v, "apply")
 		q.Settings, q.Reason = &draft, "select installed agent"
 		return m.step("apply", q)
@@ -175,10 +181,10 @@ func (m *tuiModel) step(op string, q Request) tea.Cmd {
 		return nil
 	}
 	m.pending = true
-	client := m.client
+	client, sent := m.client, m.v.Stream
 	return func() tea.Msg {
 		v, err := client.send(q, false)
-		return responseMsg{op: op, label: runStepLabels[op], v: v, err: err, run: true}
+		return responseMsg{op: op, label: runStepLabels[op], v: v, err: err, run: true, sent: sent}
 	}
 }
 
@@ -205,9 +211,7 @@ func (m *tuiModel) collected(msg intentMsg) tea.Cmd {
 		m.say("Intent collection cancelled. Nothing was sent.")
 		return nil
 	case msg.err == nil && msg.match.Session != nil:
-		seq.intent, seq.source = msg.match.Session.Intent(), msg.match.Session.Label()
-		m.plan.intent = seq.intent
-		return m.advance()
+		return m.useSession(msg.match.Session)
 	case msg.err == nil && len(msg.match.Candidates) > 0:
 		m.candidates = msg.match.Candidates
 		m.cursor = 0
@@ -224,6 +228,22 @@ func (m *tuiModel) collected(msg intentMsg) tea.Cmd {
 	seq.step = "question"
 	m.screen = screenIntent
 	return nil
+}
+
+// useSession asks for a shorter intent instead of cutting requests that do
+// not fit the controller's limit.
+func (m *tuiModel) useSession(s *intentSession) tea.Cmd {
+	intent, ok := s.Intent()
+	if !ok {
+		m.candidates = nil
+		m.question = fmt.Sprintf("The requests in %s are too long for a review intent: %d bytes, at most %d. Nothing was cut or sent. Write the intent in your own words, keeping every requirement.", s.Label(), len(intent), intentLimit)
+		m.seq.step, m.screen = "question", screenIntent
+		m.edit("", "the change in your own words")
+		return nil
+	}
+	m.seq.intent, m.seq.source, m.plan.intent = intent, s.Label(), intent
+	m.home("")
+	return m.advance()
 }
 
 func (m *tuiModel) stopRun() {
@@ -258,11 +278,7 @@ func (m *tuiModel) intentKey(key string) tea.Cmd {
 			m.edit("", "the change in your own words")
 			return nil
 		}
-		c := m.candidates[m.cursor]
-		m.seq.intent, m.seq.source = c.Intent(), c.Label()
-		m.plan.intent = m.seq.intent
-		m.home("")
-		return m.advance()
+		return m.useSession(m.candidates[m.cursor])
 	}
 	return nil
 }
@@ -275,7 +291,7 @@ func (m *tuiModel) intentTyped(accept bool, value string) tea.Cmd {
 		return nil
 	}
 	if !validText(value) {
-		m.say("Describe the change in a few words, or press Esc to stop Run.")
+		m.say(fmt.Sprintf("Describe the change in at most %d bytes, or press Esc to stop Run.", intentLimit))
 		return nil
 	}
 	m.editing = false

@@ -42,7 +42,7 @@ func wrap(text string, width int) []string {
 				return ' '
 			}
 			return r
-		}, line)
+		}, ansi.Strip(line))
 		out = append(out, strings.Split(ansi.Wrap(clean, width, ""), "\n")...)
 	}
 	return out
@@ -605,7 +605,9 @@ func (m *tuiModel) findingDetail(f Finding, w int) []string {
 	if f.End > f.Start {
 		location += fmt.Sprintf("-%d", f.End)
 	}
-	add(styleBold.Render(f.Priority+" "+f.Origin) + " · " + location)
+	for _, line := range wrap(f.Priority+" "+f.Origin+" · "+location, w) {
+		out = append(out, styleBold.Render(line))
+	}
 	add(f.Explanation)
 	if f.Action != "" {
 		add("Action: " + f.Action)
@@ -724,7 +726,7 @@ func (m *tuiModel) settingsView(w, room int) []string {
 			mark, source = "*", "draft, was "+orDefault(fieldValue(current, i))
 		}
 		row := fmt.Sprintf("%s %-15s %s", mark, name, value)
-		if w >= 70 {
+		if w >= 70 && !(m.editing && i == m.cursor) {
 			row = fmt.Sprintf("%-40s %s", fit(row, 40), styleDim.Render(source))
 		}
 		rows = append(rows, row)
@@ -908,4 +910,17 @@ func agentName(backend, model string) string {
 		name += " " + model
 	}
 	return name
+}
+
+// fieldWidth is the room left for the text input's value on the current
+// screen, after the row label, the "> " prompt and the cursor.
+func (m *tuiModel) fieldWidth() int {
+	label := 1
+	switch m.screen {
+	case screenSetup:
+		label = 12
+	case screenSettings:
+		label = 20
+	}
+	return max(1, m.width-1-label-3)
 }

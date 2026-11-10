@@ -12,7 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode/utf8"
 )
 
 // Intent collection reads the local Claude Code, Codex and Pi session logs
@@ -23,7 +22,7 @@ import (
 const (
 	intentWindow       = 72 * time.Hour
 	intentSessionBytes = 64 << 20
-	intentTextBytes    = 6000
+	intentLimit        = 8192
 	intentDecisive     = 0.85
 )
 
@@ -56,17 +55,11 @@ func short8(id string) string {
 	return id
 }
 
-func (s *intentSession) Intent() string {
-	header := collectedPrefix + s.Label() + ". These are the user's own words from that session, not a summary:\n\n"
-	body := strings.Join(s.Requests, "\n\n")
-	if limit := intentTextBytes; len(body) > limit {
-		cut := limit
-		for cut > 0 && !utf8.RuneStart(body[cut]) {
-			cut--
-		}
-		body = body[:cut] + "\n[later text omitted]"
-	}
-	return header + body
+// Intent returns the requests with their source, and false when they do not
+// fit the controller's intent limit; requests are never cut.
+func (s *intentSession) Intent() (string, bool) {
+	text := collectedPrefix + s.Label() + ". These are the user's own words from that session, not a summary:\n\n" + strings.Join(s.Requests, "\n\n")
+	return text, len(text) <= intentLimit
 }
 
 func (s *intentSession) FirstLine() string {

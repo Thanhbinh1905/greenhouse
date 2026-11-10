@@ -2,11 +2,11 @@
 
 ## 1. reattach shows the running review
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
-| ✓ Intent   Fix q and x handling in sample              |
-| ✓ Target   27d9fa7                                     |
+| ✓ Intent   Fix q and x handling in sample so every re… |
+| ✓ Target   b9202c1                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
 | ⠸ Review   running · budget 1 of 4 used                |
 |                                                        |
@@ -32,11 +32,11 @@ $ keys 'x' 'x'
 
 ## 2. cancelled after x x; rerun offered
 +--------------------------------------------------------+
-|Greenhouse · feature @ 7910aad   one-pass · auto · live |
+|Greenhouse · feature @ d0aeaa9   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
-| ✓ Intent   Fix q and x handling in sample              |
-| ✓ Target   27d9fa7                                     |
+| ✓ Intent   Fix q and x handling in sample so every re… |
+| ✓ Target   b9202c1                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
 | ! Review   cancelled · budget 1 of 4 used              |
 |                                                        |

@@ -3,13 +3,16 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 type recordingClient struct {
@@ -191,6 +194,11 @@ func collectedFor(t *testing.T, session *intentSession) collector {
 	}
 }
 
+func intentText(s *intentSession) string {
+	text, _ := s.Intent()
+	return text
+}
+
 func firstRun() Response {
 	v := tuiState("unconfigured", "apply", "save", "resolve-rules", "prepare", "new")
 	v.Run.Submitted.Worktree = "."
@@ -211,7 +219,7 @@ func TestOneRunCollectsIntentPreparesLoadsRulesAndStartsReview(t *testing.T) {
 	if strings.Join(ops(got), ",") != "prepare,resolve-rules,review" {
 		t.Fatalf("Run sent %v", ops(got))
 	}
-	if got[0].Intent != session.Intent() || got[0].Target != "main" || got[0].Expected != "token" {
+	if got[0].Intent != intentText(session) || got[0].Target != "main" || got[0].Expected != "token" {
 		t.Fatalf("prepare: %+v", got[0])
 	}
 	if got[1].Expected != "token-1" || got[2].Expected != "token-2" || got[0].Action == got[1].Action || got[1].Action == got[2].Action {
@@ -285,7 +293,7 @@ func TestRunAsksOnceWhenNoSessionMatchesOrSeveralDo(t *testing.T) {
 		t.Fatalf("ambiguity not shown:\n%s", m.View())
 	}
 	press(m, "down", "enter")
-	if got := client.mutations(); len(got) != 3 || got[0].Intent != b.Intent() {
+	if got := client.mutations(); len(got) != 3 || got[0].Intent != intentText(b) {
 		t.Fatalf("chosen session not used: %+v", got)
 	}
 }
@@ -571,6 +579,192 @@ func TestViewFitsSupportedSizes(t *testing.T) {
 					}
 				}
 			}
+		}
+	}
+}
+
+func TestRunNeverSendsAfterEventLoss(t *testing.T) {
+	reconnecting := liveUpdate{state: "reconnecting (daemon unavailable)"}
+	session := &intentSession{Agent: "pi", ID: "abc", Requests: []string{"do it"}}
+
+	client := fakeController(firstRun())
+	m := newTestTUI(firstRun(), client, "pi")
+	m.collector = collectedFor(t, session)
+	_, collect := m.Update(keyMsg("enter"))
+	drive(m, reconnecting)
+	for _, msg := range run(collect) {
+		drive(m, msg)
+	}
+	if got := client.mutations(); len(got) != 0 || m.seq != nil {
+		t.Fatalf("collection result after event loss sent %v", ops(got))
+	}
+
+	client = fakeController(firstRun())
+	m = newTestTUI(firstRun(), client, "pi")
+	m.plan.intent = "typed"
+	_, prepare := m.Update(keyMsg("enter"))
+	drive(m, reconnecting)
+	for _, msg := range run(prepare) {
+		drive(m, msg)
+	}
+	if got := ops(client.mutations()); strings.Join(got, ",") != "prepare" || m.seq != nil {
+		t.Fatalf("a prerequisite response after event loss continued Run: %v", got)
+	}
+
+	client = fakeController(firstRun())
+	m = newTestTUI(firstRun(), client, "pi")
+	m.collector = func(ctx context.Context, worktree, target, head string) (intentMatch, error) {
+		return intentMatch{}, errNoIntent
+	}
+	press(m, "enter")
+	drive(m, reconnecting)
+	press(m, typed("answer")...)
+	press(m, "enter")
+	if got := client.mutations(); len(got) != 0 {
+		t.Fatalf("an intent answer after event loss sent %v", ops(got))
+	}
+}
+
+func sequenced(v Response, seq uint64, token string) Response {
+	run := *v.Run
+	v.Run, v.Stream, v.Sequence, v.Token = &run, "s", seq, token
+	run.Token = token
+	return v
+}
+
+func TestOlderActionResponseDoesNotReplaceNewerWatchState(t *testing.T) {
+	running := ready(tuiState("running", "cancel"))
+	running.Run.Review = &Execution{ID: "x"}
+	client := &recordingClient{answer: func(q Request) (Response, error) {
+		old := sequenced(running, 5, "old")
+		old.Run.Status = "cancelling"
+		return old, nil
+	}}
+	m := newTestTUI(sequenced(running, 5, "t5"), client, "pi")
+	press(m, "x")
+	_, cancel := m.Update(keyMsg("x"))
+	watched := sequenced(running, 7, "t7")
+	watched.Run.Status = "cancelled"
+	drive(m, liveUpdate{state: "live", view: &watched})
+	for _, msg := range run(cancel) {
+		drive(m, msg)
+	}
+	if m.v.Token != "t7" || m.v.Sequence != 7 || m.v.Run.Status != "cancelled" {
+		t.Fatalf("older cancel response replaced newer state: token %s seq %d status %s", m.v.Token, m.v.Sequence, m.v.Run.Status)
+	}
+	if !strings.Contains(m.message, "Cancellation requested") {
+		t.Fatalf("receipt not processed: %q", m.message)
+	}
+
+	start := sequenced(firstRun(), 5, "t5")
+	var sent []Request
+	client = &recordingClient{answer: func(q Request) (Response, error) {
+		sent = append(sent, q)
+		old := sequenced(firstRun(), 5, "old")
+		old.Run.Intent, old.Run.Target, old.Run.Reviewer = "typed", "b", &ReviewerConfig{Backend: "pi"}
+		return old, nil
+	}}
+	m = newTestTUI(start, client, "pi")
+	m.plan.intent = "typed"
+	_, prepare := m.Update(keyMsg("enter"))
+	prepared := sequenced(firstRun(), 7, "t7")
+	prepared.Run.Intent, prepared.Run.Target, prepared.Run.Reviewer = "typed", "b", &ReviewerConfig{Backend: "pi"}
+	drive(m, liveUpdate{state: "live", view: &prepared})
+	for _, msg := range run(prepare) {
+		drive(m, msg)
+	}
+	if m.v.Sequence != 7 || len(sent) < 2 || sent[1].Op != "resolve-rules" || sent[1].Expected != "t7" {
+		t.Fatalf("Run step used an older response: seq %d requests %+v", m.v.Sequence, sent)
+	}
+}
+
+func TestOversizedCollectedIntentAsksInsteadOfTruncating(t *testing.T) {
+	client := fakeController(firstRun())
+	m := newTestTUI(firstRun(), client, "pi")
+	long := &intentSession{Agent: "claude", ID: "long", Requests: []string{strings.Repeat("requirement text ", 600), "Final requirement: keep the retry limit at five."}}
+	m.collector = collectedFor(t, long)
+	press(m, "enter")
+	if len(client.mutations()) != 0 || m.screen != screenIntent || !strings.Contains(strings.Join(strings.Fields(m.View()), " "), "too long") {
+		t.Fatalf("oversized intent was dispatched or not explained:\n%s", m.View())
+	}
+	press(m, typed("bounded intent")...)
+	press(m, "enter")
+	if got := client.mutations(); len(got) != 3 || got[0].Intent != "bounded intent" {
+		t.Fatalf("bounded answer not used: %v", ops(got))
+	}
+}
+
+func TestEditingKeepsIntentLongerThanTwoThousandCharacters(t *testing.T) {
+	client := fakeController(firstRun())
+	m := newTestTUI(firstRun(), client, "pi")
+	m.collector = collectedFor(t, nil)
+	long := strings.Repeat("keep every word ", 200) + "end"
+	press(m, "tab", "tab", "enter")
+	drive(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(long), Paste: true})
+	press(m, "enter", "enter", "enter", "enter")
+	if got := client.mutations(); len(got) == 0 || got[0].Intent != long {
+		t.Fatalf("edited intent changed: %d bytes sent", len(got[0].Intent))
+	}
+}
+
+func TestChangingTheReviewAgentKeepsTheFixer(t *testing.T) {
+	v := firstRun()
+	v.Run.Configs[0].Settings.FixerBackend, v.Run.Configs[0].Settings.FixerModel = "codex", "gpt-5.6-luna"
+	v.Run.Configs[0].Settings.ReviewerModel = "openai/x"
+	client := fakeController(v)
+	m := newTestTUI(v, client, "pi", "claude")
+	m.collector = collectedFor(t, &intentSession{Agent: "pi", ID: "a", Requests: []string{"r"}})
+	press(m, "tab", "enter", "down", "enter", "enter", "enter", "enter", "enter")
+	got := client.mutations()
+	if len(got) == 0 || got[0].Op != "apply" {
+		t.Fatalf("no agent change: %v", ops(got))
+	}
+	s := got[0].Settings
+	if s.ReviewerBackend != "claude" || s.ReviewerModel != "" || s.FixerBackend != "codex" || s.FixerModel != "gpt-5.6-luna" {
+		t.Fatalf("agent change touched the fixer: %+v", s)
+	}
+}
+
+func TestTextFieldsScrollWithinTheScreen(t *testing.T) {
+	long := strings.Repeat("abcdefghij", 20) + "TAILMARK"
+	for _, width := range []int{56, 80, 100} {
+		m := newTestTUI(firstRun(), &recordingClient{}, "pi")
+		drive(m, tea.WindowSizeMsg{Width: width, Height: 24})
+		press(m, "tab", "tab", "enter")
+		drive(m, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(long), Paste: true})
+		drive(m, tea.WindowSizeMsg{Width: 400, Height: 24})
+		if !strings.Contains(m.View(), "> "+long) {
+			t.Fatalf("width %d: widening did not reveal the whole text:\n%s", width, m.View())
+		}
+		drive(m, tea.WindowSizeMsg{Width: width, Height: 24})
+		view := m.View()
+		if !strings.Contains(view, "TAILMARK") {
+			t.Fatalf("width %d: cursor end of the text not visible:\n%s", width, view)
+		}
+		press(m, "backspace")
+		if !strings.Contains(m.View(), "TAILMAR") || strings.Contains(m.View(), "TAILMARK") {
+			t.Fatalf("width %d: deletion not visible", width)
+		}
+		for _, line := range strings.Split(m.View(), "\n") {
+			if ansi.StringWidth(line) > width {
+				t.Fatalf("width %d: line too wide %q", width, line)
+			}
+		}
+	}
+}
+
+func TestFindingDetailHasNoVisibleEscapeFragments(t *testing.T) {
+	previous := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.ANSI)
+	defer lipgloss.SetColorProfile(previous)
+	v := ready(tuiState("outstanding-findings", "apply", "repair", "new"))
+	v.Run.Findings = []Finding{{ID: "f1", Priority: "P1", Origin: "correctness", File: "a.go", Start: 3, Explanation: "broken\x1b[31m", Action: "fix", Head: v.Run.Candidate}}
+	m := newTestTUI(v, &recordingClient{}, "pi")
+	press(m, "f", "enter")
+	fragment := regexp.MustCompile(`\[[0-9;]*m`)
+	for _, line := range strings.Split(m.View(), "\n") {
+		if plain := ansi.Strip(line); fragment.MatchString(plain) {
+			t.Fatalf("visible escape fragment: %q", plain)
 		}
 	}
 }

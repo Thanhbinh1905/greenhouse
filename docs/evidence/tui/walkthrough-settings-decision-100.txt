@@ -2,7 +2,7 @@
 
 ## 1. first launch: one Run action, nothing collected yet
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|Greenhouse · feature @ dc3b4bc                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                                               |
 | ○ Intent   collected from your agent session on Run                                                |
@@ -32,7 +32,7 @@ $ keys 's'
 
 ## 2. settings draft with sources
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|Greenhouse · feature @ dc3b4bc                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Settings draft · changes apply only when you choose Apply or Save                                  |
 |                                                                                                    |
@@ -66,7 +66,7 @@ $ keys 'Enter'
 
 ## 3. draft edits are marked and not sent
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|Greenhouse · feature @ dc3b4bc                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Settings draft · changes apply only when you choose Apply or Save                                  |
 |                                                                                                    |
@@ -96,7 +96,7 @@ $ keys 'Escape'
 
 ## 4. home keeps the draft
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|Greenhouse · feature @ dc3b4bc                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                                               |
 | ○ Intent   collected from your agent session on Run                                                |
@@ -144,7 +144,7 @@ $ keys 'Down'
 
 ## 5. apply shows its scope
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                               one-pass · auto · live |
+|Greenhouse · feature @ dc3b4bc                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Settings draft · changes apply only when you choose Apply or Save                                  |
 |                                                                                                    |
@@ -174,7 +174,7 @@ $ keys 'Enter'
 
 ## 6. applied to this run
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Settings draft · changes apply only when you choose Apply or Save                                  |
 |                                                                                                    |
@@ -204,7 +204,7 @@ $ keys 'Down'
 
 ## 7. save shows its scope
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Settings draft · changes apply only when you choose Apply or Save                                  |
 |                                                                                                    |
@@ -234,7 +234,7 @@ $ keys 'Enter'
 
 ## 8. saved as default
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Settings draft · changes apply only when you choose Apply or Save                                  |
 |                                                                                                    |
@@ -264,7 +264,7 @@ $ keys 'Escape'
 
 ## 9. Run pipeline is the one action
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                                               |
 | ○ Intent   collected from your agent session on Run                                                |
@@ -294,11 +294,11 @@ $ keys 'Enter'
 
 ## 10. decision required
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
 | ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
-| ✓ Target   b504e19                                                                                 |
+| ✓ Target   371450c                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
 | ! Pipeline decision required · budget 1 of 1 used                                                  |
 | Stages: intent ✓  sync ✓  review !  test ○  docs ○  lint ○  push ○  pr ○  ci ○                     |
@@ -324,7 +324,7 @@ $ keys 'Enter'
 
 ## 11. decision options
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Decision required: cap at review                                                                   |
 |                                                                                                    |
@@ -356,7 +356,7 @@ $ keys type 'accept this exact head'
 
 ## 12. decision reason
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Decision required: cap at review                                                                   |
 |                                                                                                    |
@@ -386,11 +386,11 @@ $ keys 'Enter'
 
 ## 13. pipeline finished with accepted risk
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
 | ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
-| ✓ Target   b504e19                                                                                 |
+| ✓ Target   371450c                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
 | ! Pipeline accepted risk (review risk accepted, not a clean pass) · locally-ready                  |
 | Stages: intent ✓  sync ✓  review !  test ✓  docs -  lint ✓  push -  pr -  ci -                     |
@@ -414,11 +414,11 @@ $ keys 'Enter'
 
 ## 14. daemon lost: last state kept, reconnecting
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                         RECONNECTING |
+|Greenhouse · feature @ dc3b4bc                                                         RECONNECTING |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
 | ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
-| ✓ Target   b504e19                                                                                 |
+| ✓ Target   371450c                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
 | ! Pipeline accepted risk (review risk accepted, not a clean pass) · locally-ready                  |
 | Stages: intent ✓  sync ✓  review !  test ✓  docs -  lint ✓  push -  pr -  ci -                     |
@@ -444,7 +444,7 @@ $ keys 'a'
 
 ## 15. actions menu lists only views while reconnecting
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                         RECONNECTING |
+|Greenhouse · feature @ dc3b4bc                                                         RECONNECTING |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | Actions available now                                                                              |
 |                                                                                                    |
@@ -474,11 +474,11 @@ $ keys 'Escape'
 
 ## 16. resynchronized after the daemon returned
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 51e0571                                                   full · auto · live |
+|Greenhouse · feature @ dc3b4bc                                                   full · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                                               |
 | ✓ Intent   “Please fix sample.txt so the pipeline passes; keep it one line” · collected from Clau… |
-| ✓ Target   b504e19                                                                                 |
+| ✓ Target   371450c                                                                                 |
 | ✓ Rules    unslop, no-comments · loaded                                                            |
 | ! Pipeline accepted risk (review risk accepted, not a clean pass) · locally-ready                  |
 | Stages: intent ✓  sync ✓  review !  test ✓  docs -  lint ✓  push -  pr -  ci -                     |
