@@ -786,9 +786,11 @@ func TestRetiredStreamSnapshotsNeverReplaceTheReplacementStream(t *testing.T) {
 	}}
 	m := newTestTUI(onStream(running, "old", 5, "t5"), client, "pi")
 	press(m, "x", "x")
-	if m.v.Stream != "new" {
-		t.Fatalf("response from the replacement stream not adopted: %s", m.v.Stream)
+	if m.v.Stream != "old" {
+		t.Fatalf("action response introduced a replacement stream: %s", m.v.Stream)
 	}
+	replacement := onStream(running, "new", 1, "new-token")
+	drive(m, liveUpdate{state: "live", view: &replacement})
 	delayed := onStream(running, "old", 9, "old-token")
 	drive(m, liveUpdate{state: "live", view: &delayed})
 	if m.v.Stream != "new" || m.v.Token != "new-token" {
@@ -824,5 +826,80 @@ func TestResyncAfterDaemonRestartRetiresTheOldStream(t *testing.T) {
 	drive(m, liveUpdate{state: "live", view: &late})
 	if m.v.Stream != "new" || m.v.Token != "t-new" || m.v.Run.Status != "clean-review" || !m.fresh {
 		t.Fatalf("old stream replaced the resynchronized state: %s %s %s fresh=%t", m.v.Stream, m.v.Token, m.v.Run.Status, m.fresh)
+	}
+}
+
+func TestDelayedIntermediateDaemonResponse(t *testing.T) {
+	for _, responseFirst := range []bool{false, true} {
+		name := "watch-before-response"
+		if responseFirst {
+			name = "response-before-watch"
+		}
+		t.Run(name, func(t *testing.T) {
+			running := ready(tuiState("running", "cancel"))
+			running.Run.Review = &Execution{ID: "x"}
+			client := &recordingClient{answer: func(q Request) (Response, error) {
+				answer := onStream(running, "daemon-B", 1, "token-B")
+				answer.Run.Status = "cancelling"
+				return answer, nil
+			}}
+			m := newTestTUI(onStream(running, "daemon-A", 5, "token-A"), client, "pi")
+			press(m, "x")
+			_, cancel := m.Update(keyMsg("x"))
+			deliver := func() {
+				for _, msg := range run(cancel) {
+					drive(m, msg)
+				}
+			}
+			if responseFirst {
+				deliver()
+				if m.v.Stream != "daemon-A" {
+					t.Fatalf("action response introduced stream %s", m.v.Stream)
+				}
+			}
+			current := onStream(running, "daemon-C", 1, "token-C")
+			current.Run.Status = "cancelled"
+			drive(m, liveUpdate{state: "live", view: &current})
+			if !responseFirst {
+				deliver()
+			}
+			if m.v.Stream != "daemon-C" || m.v.Token != "token-C" || m.v.Run.Status != "cancelled" {
+				t.Fatalf("delayed intermediate daemon response replaced newer state: stream=%s token=%s status=%s", m.v.Stream, m.v.Token, m.v.Run.Status)
+			}
+			if !strings.Contains(m.message, "Cancellation requested") && !responseFirst {
+				t.Fatalf("receipt not processed: %q", m.message)
+			}
+		})
+	}
+}
+
+func TestRunWaitsForFollowerAfterCrossStreamResponse(t *testing.T) {
+	client := &recordingClient{answer: func(q Request) (Response, error) {
+		prepared := onStream(ready(firstRun()), "daemon-B", 1, "token-B")
+		return prepared, nil
+	}}
+	m := newTestTUI(onStream(firstRun(), "daemon-A", 5, "token-A"), client, "pi")
+	m.plan.intent = "typed"
+	press(m, "enter")
+	if got := client.mutations(); len(got) != 1 || got[0].Op != "prepare" {
+		t.Fatalf("Run continued before follower resync: %v", ops(got))
+	}
+	if m.v.Stream != "daemon-A" || m.seq != nil || !strings.Contains(m.message, "waiting for follower") {
+		t.Fatalf("Run did not wait for resync: stream=%s sequence=%+v message=%q", m.v.Stream, m.seq, m.message)
+	}
+	current := onStream(ready(firstRun()), "daemon-C", 1, "token-C")
+	drive(m, liveUpdate{state: "live", view: &current})
+	if m.v.Stream != "daemon-C" || len(client.mutations()) != 1 {
+		t.Fatal("resync replayed the action or failed to adopt C")
+	}
+}
+
+func TestFollowerAdoptsStreamWithUnchangedScreen(t *testing.T) {
+	state := ready(tuiState("running", "cancel"))
+	m := newTestTUI(onStream(state, "daemon-A", 5, "token"), &recordingClient{}, "pi")
+	current := onStream(state, "daemon-C", 1, "token")
+	drive(m, liveUpdate{state: "live", view: &current})
+	if m.v.Stream != "daemon-C" {
+		t.Fatal("unchanged screen prevented follower stream adoption")
 	}
 }

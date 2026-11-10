@@ -256,8 +256,8 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return model, cmd
 }
 
-func (m *tuiModel) ordered(v Response, equal bool) bool {
-	return v.Run != nil && m.order.accepts(v, m.v, equal)
+func (m *tuiModel) ordered(v Response, actionResponse bool) bool {
+	return v.Run != nil && m.order.accepts(v, m.v, actionResponse)
 }
 
 func (m *tuiModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -266,7 +266,7 @@ func (m *tuiModel) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		return m, nil
 	case liveUpdate:
-		if msg.view != nil && m.ordered(*msg.view, false) && screenDigest(*msg.view) != screenDigest(m.v) {
+		if msg.view != nil && m.ordered(*msg.view, false) {
 			m.setView(*msg.view, true)
 		}
 		m.live = msg.state
@@ -356,6 +356,11 @@ func (m *tuiModel) runAnswered(msg responseMsg) tea.Cmd {
 		return m.tick()
 	}
 	if seq == nil {
+		return m.tick()
+	}
+	if msg.v.Stream != m.v.Stream {
+		m.seq = nil
+		m.say("Run stopped after " + strings.ToLower(msg.label) + ": waiting for follower state after daemon restart. Press Run after resync.")
 		return m.tick()
 	}
 	switch msg.op {

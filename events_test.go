@@ -202,3 +202,31 @@ func TestTerminalIgnoresOlderSnapshots(t *testing.T) {
 		t.Fatal("a snapshot from a later daemon was refused")
 	}
 }
+
+func TestOnlyFollowerMayIntroduceStream(t *testing.T) {
+	order := snapshotOrder{}
+	a := Response{Stream: "daemon-A", Sequence: 5}
+	b := Response{Stream: "daemon-B", Sequence: 1}
+	c := Response{Stream: "daemon-C", Sequence: 1}
+	if order.accepts(b, a, true) {
+		t.Fatal("action response introduced B before follower resync")
+	}
+	if !order.accepts(c, a, false) {
+		t.Fatal("follower could not introduce C")
+	}
+	order.adopt(c, a)
+	if order.accepts(b, c, true) {
+		t.Fatal("delayed unseen B response replaced C")
+	}
+	if order.accepts(a, c, false) {
+		t.Fatal("retired A watch replaced C")
+	}
+	if !order.accepts(c, c, true) {
+		t.Fatal("same-sequence C action response was refused")
+	}
+	older := c
+	older.Sequence = 0
+	if order.accepts(older, c, true) {
+		t.Fatal("older C action response was accepted")
+	}
+}

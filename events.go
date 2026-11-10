@@ -190,28 +190,18 @@ func follow(h, path, stream string, after uint64, updates chan liveUpdate, stop 
 	}
 }
 
-func screenDigest(v Response) string {
-	v.Events, v.Sequence, v.Stream, v.Wait, v.Protocol, v.Version = nil, 0, "", "", nil, 0
-	return digest(v)
-}
-
-// snapshotOrder holds the event streams a client has replaced. One daemon
-// holds the store lock at a time, so a replaced stream is older than its
-// replacement and is never accepted again. Within a stream, a watch answer
-// computed before a mutation can arrive after the mutation's response.
 type snapshotOrder map[string]bool
 
-// accepts reports whether update may replace current. equal accepts the
-// current sequence: an action response carries the sequence committed
-// before its own change.
-func (o snapshotOrder) accepts(update, current Response, equal bool) bool {
+// Action responses carry the sequence committed before their own change.
+// Only the follower may introduce a stream; action responses may be delayed.
+func (o snapshotOrder) accepts(update, current Response, actionResponse bool) bool {
 	switch {
 	case o[update.Stream]:
 		return false
 	case update.Stream != current.Stream:
-		return true
+		return !actionResponse
 	}
-	return update.Sequence > current.Sequence || equal && update.Sequence == current.Sequence
+	return update.Sequence > current.Sequence || actionResponse && update.Sequence == current.Sequence
 }
 
 func (o snapshotOrder) adopt(next, current Response) {

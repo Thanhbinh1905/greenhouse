@@ -1652,7 +1652,7 @@ func lineTerminal(h, path string) error {
 		for !redraw && !entered {
 			select {
 			case u := <-updates:
-				if u.view != nil && u.view.Run != nil && order.accepts(*u.view, v, false) && screenDigest(*u.view) != screenDigest(v) {
+				if u.view != nil && u.view.Run != nil && order.accepts(*u.view, v, false) {
 					order.adopt(*u.view, v)
 					v, redraw = *u.view, true
 				}
@@ -1815,10 +1815,16 @@ func lineTerminal(h, path string) error {
 				if err != nil {
 					return err
 				}
-				order.adopt(applied, v)
-				v = applied
-				if v.Outcome != "ok" {
-					message = v.Error
+				accepted := order.accepts(applied, v, true)
+				if accepted {
+					v = applied
+				}
+				if applied.Outcome != "ok" {
+					message = applied.Error
+					continue
+				}
+				if !accepted {
+					message = "Agent selection confirmed; waiting for follower state. Submit intent after resync."
 					continue
 				}
 				r = v.Run
@@ -1987,9 +1993,10 @@ func lineTerminal(h, path string) error {
 		if e != nil {
 			return e
 		}
-		order.adopt(answer, v)
-		v = answer
-		message = v.Outcome + " " + v.Error
+		if order.accepts(answer, v, true) {
+			v = answer
+		}
+		message = answer.Outcome + " " + answer.Error
 	}
 }
 func main() {
