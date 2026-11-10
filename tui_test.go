@@ -768,3 +768,61 @@ func TestFindingDetailHasNoVisibleEscapeFragments(t *testing.T) {
 		}
 	}
 }
+
+func onStream(v Response, stream string, seq uint64, token string) Response {
+	v = sequenced(v, seq, token)
+	v.Stream = stream
+	return v
+}
+
+func TestRetiredStreamSnapshotsNeverReplaceTheReplacementStream(t *testing.T) {
+	running := ready(tuiState("running", "cancel"))
+	running.Run.Review = &Execution{ID: "x"}
+
+	client := &recordingClient{answer: func(q Request) (Response, error) {
+		restarted := onStream(running, "new", 1, "new-token")
+		restarted.Run.Status = "cancelling"
+		return restarted, nil
+	}}
+	m := newTestTUI(onStream(running, "old", 5, "t5"), client, "pi")
+	press(m, "x", "x")
+	if m.v.Stream != "new" {
+		t.Fatalf("response from the replacement stream not adopted: %s", m.v.Stream)
+	}
+	delayed := onStream(running, "old", 9, "old-token")
+	drive(m, liveUpdate{state: "live", view: &delayed})
+	if m.v.Stream != "new" || m.v.Token != "new-token" {
+		t.Fatalf("delayed watch snapshot from the retired stream replaced state: %s %s", m.v.Stream, m.v.Token)
+	}
+
+	client = &recordingClient{answer: func(q Request) (Response, error) {
+		late := onStream(running, "old", 6, "old-token")
+		late.Run.Status = "cancelling"
+		return late, nil
+	}}
+	m = newTestTUI(onStream(running, "old", 5, "t5"), client, "pi")
+	press(m, "x")
+	_, cancel := m.Update(keyMsg("x"))
+	watched := onStream(running, "new", 1, "new-token")
+	drive(m, liveUpdate{state: "live", view: &watched})
+	for _, msg := range run(cancel) {
+		drive(m, msg)
+	}
+	if m.v.Stream != "new" || m.v.Token != "new-token" || !strings.Contains(m.message, "Cancellation requested") {
+		t.Fatalf("late response from the retired stream replaced state: %s %s %q", m.v.Stream, m.v.Token, m.message)
+	}
+}
+
+func TestResyncAfterDaemonRestartRetiresTheOldStream(t *testing.T) {
+	state := ready(tuiState("clean-review", "apply", "new"))
+	m := newTestTUI(onStream(state, "old", 4, "t4"), &recordingClient{}, "pi")
+	drive(m, liveUpdate{state: "reconnecting (daemon unavailable)"})
+	resync := onStream(state, "new", 1, "t-new")
+	drive(m, liveUpdate{state: "live", view: &resync})
+	late := onStream(state, "old", 8, "t-old")
+	late.Run.Status = "outstanding-findings"
+	drive(m, liveUpdate{state: "live", view: &late})
+	if m.v.Stream != "new" || m.v.Token != "t-new" || m.v.Run.Status != "clean-review" || !m.fresh {
+		t.Fatalf("old stream replaced the resynchronized state: %s %s %s fresh=%t", m.v.Stream, m.v.Token, m.v.Run.Status, m.fresh)
+	}
+}

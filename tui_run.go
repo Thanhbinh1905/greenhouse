@@ -181,10 +181,10 @@ func (m *tuiModel) step(op string, q Request) tea.Cmd {
 		return nil
 	}
 	m.pending = true
-	client, sent := m.client, m.v.Stream
+	client := m.client
 	return func() tea.Msg {
 		v, err := client.send(q, false)
-		return responseMsg{op: op, label: runStepLabels[op], v: v, err: err, run: true, sent: sent}
+		return responseMsg{op: op, label: runStepLabels[op], v: v, err: err, run: true}
 	}
 }
 

@@ -2,7 +2,7 @@
 
 ## 1. first launch without an installed agent
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ d729462                           one-pass · auto · live |
+|Greenhouse · feature @ 438cfe4                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✗ Agent    none found: install pi, claude or codex                             |
 | ○ Intent   describe the change                                                 |
@@ -32,7 +32,7 @@ $ keys 'Enter'
 
 ## 2. Enter does not start anything without an agent
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ d729462                           one-pass · auto · live |
+|Greenhouse · feature @ 438cfe4                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✗ Agent    none found: install pi, claude or codex                             |
 | ○ Intent   describe the change                                                 |

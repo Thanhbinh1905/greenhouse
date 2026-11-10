@@ -30,7 +30,7 @@ All commands ran on Linux under `taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GO
 | `go vet ./...` | pass |
 | `staticcheck ./...` | pass |
 | `go test -p 1 -parallel 1 -timeout 1800s ./...` | pass |
-| `go test -race -p 1 -parallel 1 -timeout 3000s ./...` | pass (`greenhouse` 448 s, `greenhouse/eval` 35 s) |
+| `go test -race -p 1 -parallel 1 -timeout 3000s ./...` | pass (`greenhouse` 546 s, `greenhouse/eval` 36 s) |
 | `python3 tools/terminal_check.py`, `native_start_check.py`, `recovery_check.py`, `events_check.py` | pass; they now set `TERM=dumb` and drive the line client |
 | `python3 tools/tui_check.py "$TMPDIR/greenhouse" docs/evidence/tui` | pass |
 | `python3 tools/notices.py "$TMPDIR/greenhouse" --check` | pass: 21 linked modules |
