@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-partial-before-reset",
+  "category": "bug",
+  "description": "Rerun a stopped repair with an exhausted budget: restoreCandidate discards its uncommitted edits before readmitRepair rejects the retry.",
+  "intent": "Reverse the affected file containing the rerunRepair fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Rerun a stopped repair with an exhausted budget: restoreCandidate discards its uncommitted edits before readmitRepair rejects the retry.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "resume.go",
+      "start": 491,
+      "end": 491,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Rerun a stopped repair with an exhausted budget: restoreCandidate discards its uncommitted edits before readmitRepair rejects the retry."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "8f228c11c2b485295eb7d89d2771f556deabb59d",
+    "files": [
+      "resume.go"
+    ],
+    "derivation": "Reverse the affected file containing the rerunRepair fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Rerun a stopped repair with an exhausted budget: restoreCandidate discards its uncommitted edits before readmitRepair rejects the retry."
+  }
+}

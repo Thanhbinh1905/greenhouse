@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-rule-version",
+  "category": "bug",
+  "description": "An unsupported version-2 rule pack is accepted and interpreted as version 1.",
+  "intent": "Inject into the real parsePack change: replace 'p.Version != 1' with 'p.Version < 1'. Static scenario: An unsupported version-2 rule pack is accepted and interpreted as version 1.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "rules.go",
+      "start": 88,
+      "end": 88,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An unsupported version-2 rule pack is accepted and interpreted as version 1."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "156c93a8fe19ad5ca51d85fa33e418f737690638",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Inject into the real parsePack change: replace 'p.Version != 1' with 'p.Version < 1'. Static scenario: An unsupported version-2 rule pack is accepted and interpreted as version 1."
+  }
+}

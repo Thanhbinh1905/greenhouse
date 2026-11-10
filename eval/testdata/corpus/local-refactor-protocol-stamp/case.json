@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-refactor-protocol-stamp",
+  "category": "clean",
+  "description": "Compute the negotiated response version once, then stamp both response fields with that value.",
+  "intent": "Compute the negotiated response version once, then stamp both response fields with that value.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "refactor-only",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "78fc0d8231b737ae962ae1756d5852a717130e5f",
+    "files": [
+      "protocol.go"
+    ],
+    "derivation": "Construct a behavior-preserving refactor of stamp from the pinned source. Compute the negotiated response version once, then stamp both response fields with that value. This transformation is not claimed to be an upstream merged change."
+  }
+}

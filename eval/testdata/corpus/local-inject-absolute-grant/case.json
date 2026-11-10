@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-absolute-grant",
+  "category": "bug",
+  "description": "A trusted grant path /etc/service.conf passes validation and can name a file outside the repository.",
+  "intent": "Inject into the real validGrantPath change: replace '!filepath.IsAbs(clean)' with 'true'. Static scenario: A trusted grant path /etc/service.conf passes validation and can name a file outside the repository.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "grant.go",
+      "start": 29,
+      "end": 29,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A trusted grant path /etc/service.conf passes validation and can name a file outside the repository."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "882eecdf7624c1bc4b3cbf404b09ce2a38312f55",
+    "files": [
+      "grant.go"
+    ],
+    "derivation": "Inject into the real validGrantPath change: replace '!filepath.IsAbs(clean)' with 'true'. Static scenario: A trusted grant path /etc/service.conf passes validation and can name a file outside the repository."
+  }
+}

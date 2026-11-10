@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-clean-dispute-instructions",
+  "category": "clean",
+  "description": "Keep the scope instruction neutral about disputes",
+  "intent": "Keep the scope instruction neutral about disputes",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "9f2eeeaf4f3f43fbcd553242cb1f1f73683fdd75",
+    "files": [
+      "resolution.go"
+    ],
+    "derivation": "Retain the merged change: Keep the scope instruction neutral about disputes. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

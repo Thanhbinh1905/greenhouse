@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-selection-whitespace",
+  "category": "bug",
+  "description": "A whitespace-only terminal answer selects the whole group and authorizes more findings than the user entered.",
+  "intent": "Reverse the affected file containing the parseSelection fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A whitespace-only terminal answer selects the whole group and authorizes more findings than the user entered.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "authority.go",
+      "start": 425,
+      "end": 425,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A whitespace-only terminal answer selects the whole group and authorizes more findings than the user entered."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c3572775536a1c962f96501a4ea617a979959076",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Reverse the affected file containing the parseSelection fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A whitespace-only terminal answer selects the whole group and authorizes more findings than the user entered."
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-refactor-required-rules",
+  "category": "clean",
+  "description": "Skip optional evidence before checking required-rule load status.",
+  "intent": "Skip optional evidence before checking required-rule load status.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "refactor-only",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "156c93a8fe19ad5ca51d85fa33e418f737690638",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Construct a behavior-preserving refactor of rulesReady from the pinned source. Skip optional evidence before checking required-rule load status. This transformation is not claimed to be an upstream merged change."
+  }
+}

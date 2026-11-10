@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-text-empty",
+  "category": "bug",
+  "description": "A whitespace-only criterion or reason passes validation, leaving no actionable text.",
+  "intent": "Inject into the real validText change: replace 'strings.TrimSpace(s) == \"\"' with 's == \"\"'. Static scenario: A whitespace-only criterion or reason passes validation, leaving no actionable text.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "rules.go",
+      "start": 61,
+      "end": 61,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A whitespace-only criterion or reason passes validation, leaving no actionable text."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "156c93a8fe19ad5ca51d85fa33e418f737690638",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Inject into the real validText change: replace 'strings.TrimSpace(s) == \"\"' with 's == \"\"'. Static scenario: A whitespace-only criterion or reason passes validation, leaving no actionable text."
+  }
+}

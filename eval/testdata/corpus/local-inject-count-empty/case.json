@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-count-empty",
+  "category": "bug",
+  "description": "An empty terminal limit reaches text[0] and panics.",
+  "intent": "Inject into the real parseCount change: replace 'len(text) == 0 || ' with ''. Static scenario: An empty terminal limit reaches text[0] and panics.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "authority.go",
+      "start": 1,
+      "end": 1,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An empty terminal limit reaches text[0] and panics."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c3572775536a1c962f96501a4ea617a979959076",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Inject into the real parseCount change: replace 'len(text) == 0 || ' with ''. Static scenario: An empty terminal limit reaches text[0] and panics."
+  }
+}

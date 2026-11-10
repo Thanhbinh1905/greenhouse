@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-grant-prefix",
+  "category": "bug",
+  "description": "A file grant for config matches config-secrets; prefix matching expands a file grant into unrelated paths.",
+  "intent": "Inject into the real covered change: replace 'strings.HasSuffix(scope, \"/\") && strings.HasPrefix(name, scope)' with 'strings.HasPrefix(name, scope)'. Static scenario: A file grant for config matches config-secrets; prefix matching expands a file grant into unrelated paths.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "grant.go",
+      "start": 89,
+      "end": 89,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A file grant for config matches config-secrets; prefix matching expands a file grant into unrelated paths."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "882eecdf7624c1bc4b3cbf404b09ce2a38312f55",
+    "files": [
+      "grant.go"
+    ],
+    "derivation": "Inject into the real covered change: replace 'strings.HasSuffix(scope, \"/\") && strings.HasPrefix(name, scope)' with 'strings.HasPrefix(name, scope)'. Static scenario: A file grant for config matches config-secrets; prefix matching expands a file grant into unrelated paths."
+  }
+}

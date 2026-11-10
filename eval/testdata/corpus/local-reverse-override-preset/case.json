@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-override-preset",
+  "category": "bug",
+  "description": "A repository override changes one-pass to full without increasing the limit; narrows accepts broader delivery authority.",
+  "intent": "Reverse the affected file containing the narrows fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A repository override changes one-pass to full without increasing the limit; narrows accepts broader delivery authority.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "trust.go",
+      "start": 200,
+      "end": 200,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A repository override changes one-pass to full without increasing the limit; narrows accepts broader delivery authority."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "5510999ba60d5c35595af712faf53f769344d813",
+    "files": [
+      "trust.go"
+    ],
+    "derivation": "Reverse the affected file containing the narrows fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A repository override changes one-pass to full without increasing the limit; narrows accepts broader delivery authority."
+  }
+}

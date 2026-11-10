@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-ci-poll",
+  "category": "bug",
+  "description": "A required CI check not yet registered returns missing required check: name; polling parks instead of waiting for registration.",
+  "intent": "Reverse the affected file containing the runDeliveryStage fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A required CI check not yet registered returns missing required check: name; polling parks instead of waiting for registration.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "pipeline.go",
+      "start": 819,
+      "end": 819,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A required CI check not yet registered returns missing required check: name; polling parks instead of waiting for registration."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c0bbcfd3171eb0b87588aaa05b12b58a8221e887",
+    "files": [
+      "pipeline.go"
+    ],
+    "derivation": "Reverse the affected file containing the runDeliveryStage fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A required CI check not yet registered returns missing required check: name; polling parks instead of waiting for registration."
+  }
+}

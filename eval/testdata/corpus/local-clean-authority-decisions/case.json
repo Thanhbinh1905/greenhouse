@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "id": "local-clean-authority-decisions",
+  "category": "clean",
+  "description": "feat: add authority modes and review-cap decisions to the full pipeline",
+  "intent": "feat: add authority modes and review-cap decisions to the full pipeline",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "90f684ce159b3062efb903f9b4a42ed5b7fce7fa",
+    "files": [
+      "authority.go",
+      "authority_test.go",
+      "main.go",
+      "pipeline.go",
+      "pipeline_test.go",
+      "repair.go"
+    ],
+    "derivation": "Retain the merged change: feat: add authority modes and review-cap decisions to the full pipeline. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "local-clean-comment-cleanup",
+  "category": "clean",
+  "description": "Trim comments and refresh terminal captures",
+  "intent": "Trim comments and refresh terminal captures",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "a33be2d669a71c327906d67c05d332a83ff37f20",
+    "files": [
+      "confine.go",
+      "resolution.go",
+      "snapshot.go"
+    ],
+    "derivation": "Retain the merged change: Trim comments and refresh terminal captures. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-clean-snapshot-cleanup",
+  "category": "clean",
+  "description": "Record reasoning-enabled evaluation and response failures",
+  "intent": "Record reasoning-enabled evaluation and response failures",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "e9f495461f86f809a6712fc8e40f7043a8d8ff82",
+    "files": [
+      "snapshot.go"
+    ],
+    "derivation": "Retain the merged change: Record reasoning-enabled evaluation and response failures. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

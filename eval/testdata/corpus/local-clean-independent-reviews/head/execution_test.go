@@ -1,0 +1,171 @@
+package main
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+)
+
+func TestReviewRequiresExplicitIntent(t *testing.T) {
+	bin, repo, home := fixture(t)
+	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	v = mutate(t, bin, repo, home, v, "review", "review-missing", nil)
+	if v["outcome"] != "refused" || v["error"] == "unsupported operation: review" {
+		t.Fatalf("review must validate prerequisites, got %v", v)
+	}
+}
+func prepareFixture(t *testing.T) (string, string, string, map[string]any) {
+	t.Helper()
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	installFake(t, home, "")
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Review sample change", "target": target}
+	b, _ := json.Marshal(q)
+	v = axi(t, bin, repo, home, string(b))
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "rules", nil)
+	return bin, repo, home, v
+}
+func installFake(t *testing.T, home, mode string) string {
+	t.Helper()
+	p := filepath.Join(filepath.Dir(home), "fake-pi")
+	script := `#!/usr/bin/python3
+import sys,json,os,time
+root=os.path.dirname(__file__)
+with open(root+'/invocations','a') as f: f.write('invoked\n')
+b=json.load(sys.stdin)
+with open(root+'/captured.json','w') as f: json.dump({'args':sys.argv[1:],'input':b,'env':[k for k in os.environ if k.startswith(('PI_','POSSE_','HERDR_'))]},f)
+MODE
+v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'model-id','priority':'P2','origin':'policy','file':'sample.txt','start':1,'end':1,'explanation':'Changed prose is redundant','action':'Remove repetition','rule':'unslop/plain-prose','head':b['Head']}]}
+print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
+print(json.dumps({'type':'agent_settled','aborted':False}))
+`
+	script = strings.Replace(script, "MODE", mode, 1)
+	if e := os.WriteFile(p, []byte(script), 0700); e != nil {
+		t.Fatal(e)
+	}
+	b, _ := json.Marshal(ReviewerConfig{p, "fixture/model"})
+	if e := os.WriteFile(filepath.Join(home, "reviewer.json"), b, 0600); e != nil {
+		t.Fatal(e)
+	}
+	return filepath.Join(filepath.Dir(home), "invocations")
+}
+func waitReview(t *testing.T, bin, repo, home string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		status := runOf(t, v)["status"]
+		if status != "running" && status != "cancelling" {
+			return v
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("review did not settle")
+	return nil
+}
+func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	invocations := installFake(t, home, "")
+	os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600)
+	before := git(t, repo, "status", "--porcelain")
+	refs := git(t, repo, "show-ref")
+	var a, b map[string]any
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); a = mutate(t, bin, repo, home, v, "review", "review-1", nil) }()
+	go func() { defer wg.Done(); b = mutate(t, bin, repo, home, v, "review", "review-1", nil) }()
+	wg.Wait()
+	if a["outcome"] != "ok" || b["outcome"] != "ok" {
+		t.Fatal(a, b)
+	}
+	done := waitReview(t, bin, repo, home)
+	if runOf(t, done)["status"] != "outstanding-findings" || runOf(t, done)["review_used"] != float64(1) {
+		t.Fatal(done)
+	}
+	review := runOf(t, done)["review"].(map[string]any)
+	if len(review["result"].(map[string]any)["findings"].([]any)) != 1 {
+		t.Fatal(review)
+	}
+	captured, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if !strings.Contains(string(captured), "--no-context-files") || !strings.Contains(string(captured), "read,grep,find,ls") || !strings.Contains(string(captured), "plain-prose") || strings.Contains(string(captured), "POSSE_") {
+		t.Fatal(string(captured))
+	}
+	var capturedInput struct {
+		Input map[string]json.RawMessage `json:"input"`
+	}
+	if err := json.Unmarshal(captured, &capturedInput); err != nil {
+		t.Fatal(err)
+	}
+	var delivered AgentInput
+	if err := json.Unmarshal(capturedInput.Input["Criteria"], &delivered); err != nil {
+		t.Fatal(err)
+	}
+	rules := review["rules"].(map[string]any)
+	encoded, _ := json.Marshal(rules)
+	var identity InputIdentity
+	if err := json.Unmarshal(encoded, &identity); err != nil {
+		t.Fatal(err)
+	}
+	var retained AgentInput
+	if err := json.Unmarshal(identity.Content, &retained); err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(delivered, retained) || identity.Digest != bytesDigest(identity.Content) {
+		t.Fatal("emitted criteria differ from retained input identity")
+	}
+	if mutate(t, bin, repo, home, done, "review", "review-2", nil)["outcome"] != "refused" {
+		t.Fatal("one-pass dispatched twice")
+	}
+	s := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 8, "rules": []string{"unslop", "no-comments"}}
+	changed := mutate(t, bin, repo, home, done, "apply", "cap", s)
+	if runOf(t, changed)["review_used"] != float64(1) {
+		t.Fatal("usage reset")
+	}
+	stopDaemon(t, home)
+	restarted := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	if runOf(t, restarted)["review"].(map[string]any)["input_digest"] != review["input_digest"] {
+		t.Fatal("evidence lost")
+	}
+	count, _ := os.ReadFile(invocations)
+	if string(count) != "invoked\n" {
+		t.Fatal(string(count))
+	}
+	if git(t, repo, "status", "--porcelain") != before || git(t, repo, "show-ref") != refs {
+		t.Fatal("source changed")
+	}
+}
+func TestReviewCancellationAndMalformedOutput(t *testing.T) {
+	for _, mode := range []string{"time.sleep(30)", "print('malformed');sys.exit(0)"} {
+		t.Run(mode, func(t *testing.T) {
+			bin, repo, home, v := prepareFixture(t)
+			installFake(t, home, mode)
+			v = mutate(t, bin, repo, home, v, "review", "start", nil)
+			if mode == "time.sleep(30)" {
+				v = mutate(t, bin, repo, home, v, "cancel", "cancel", nil)
+				if v["outcome"] != "ok" {
+					t.Fatal(v)
+				}
+			}
+			v = waitReview(t, bin, repo, home)
+			want := "inconclusive"
+			if mode == "time.sleep(30)" {
+				want = "cancelled"
+			}
+			if runOf(t, v)["status"] != want || runOf(t, v)["review_used"] != float64(1) {
+				t.Fatal(v)
+			}
+		})
+	}
+}

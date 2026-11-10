@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-refactor-fixed-response",
+  "category": "clean",
+  "description": "Use indexed iteration and an explicit response switch; only fixed responses return true.",
+  "intent": "Use indexed iteration and an explicit response switch; only fixed responses return true.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "refactor-only",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "f2814950295a4f1a917303916c87cc70efcbd419",
+    "files": [
+      "resolution.go"
+    ],
+    "derivation": "Construct a behavior-preserving refactor of anyFixed from the pinned source. Use indexed iteration and an explicit response switch; only fixed responses return true. This transformation is not claimed to be an upstream merged change."
+  }
+}

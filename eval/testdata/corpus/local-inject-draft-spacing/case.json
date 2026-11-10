@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-draft-spacing",
+  "category": "bug",
+  "description": "A tab-separated or multiply-spaced authority draft is accepted despite the exact single-space grammar.",
+  "intent": "Inject into the real parseDraft change: replace 'strings.Split(text, \" \")' with 'strings.Fields(text)'. Static scenario: A tab-separated or multiply-spaced authority draft is accepted despite the exact single-space grammar.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "authority.go",
+      "start": 454,
+      "end": 454,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A tab-separated or multiply-spaced authority draft is accepted despite the exact single-space grammar."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c3572775536a1c962f96501a4ea617a979959076",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Inject into the real parseDraft change: replace 'strings.Split(text, \" \")' with 'strings.Fields(text)'. Static scenario: A tab-separated or multiply-spaced authority draft is accepted despite the exact single-space grammar."
+  }
+}

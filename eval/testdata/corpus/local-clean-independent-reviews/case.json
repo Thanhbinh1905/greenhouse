@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "id": "local-clean-independent-reviews",
+  "category": "clean",
+  "description": "feat: execute durable independent Pi reviews",
+  "intent": "feat: execute durable independent Pi reviews",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "55fbd03fd8e4abbb77a941628364451d6bcba292",
+    "files": [
+      "execution.go",
+      "execution_config_test.go",
+      "execution_hazards_test.go",
+      "execution_test.go",
+      "main.go",
+      "verdict_coverage_test.go",
+      "verdict_test.go"
+    ],
+    "derivation": "Retain the merged change: feat: execute durable independent Pi reviews. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

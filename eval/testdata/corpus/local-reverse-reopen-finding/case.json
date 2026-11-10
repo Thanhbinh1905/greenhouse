@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-reopen-finding",
+  "category": "bug",
+  "description": "A resolution marked Reopened remains suppressed because outstanding treats every resolution as active.",
+  "intent": "Reverse the affected file containing the outstanding fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A resolution marked Reopened remains suppressed because outstanding treats every resolution as active.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "authority.go",
+      "start": 115,
+      "end": 115,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A resolution marked Reopened remains suppressed because outstanding treats every resolution as active."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "b87a565d96733ac68af9d108d708ac62c1fa58e5",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Selectively reverse the reopen-finding predicate fix from the named commit; retain the updated data model and function signatures. Static scenario: A resolution marked Reopened remains suppressed because outstanding treats every resolution as active."
+  }
+}

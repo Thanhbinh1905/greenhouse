@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-refactor-schema-fields",
+  "category": "clean",
+  "description": "Build one exact-name membership map instead of scanning allowed fields for each JSON key.",
+  "intent": "Build one exact-name membership map instead of scanning allowed fields for each JSON key.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "refactor-only",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "d0a473e6ce8be8c6b8fa7cb274f74c76ee370c12",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Construct a behavior-preserving refactor of exactFields from the pinned source. Build one exact-name membership map instead of scanning allowed fields for each JSON key. This transformation is not claimed to be an upstream merged change."
+  }
+}

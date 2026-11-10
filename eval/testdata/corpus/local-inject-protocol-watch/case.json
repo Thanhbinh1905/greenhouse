@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-protocol-watch",
+  "category": "bug",
+  "description": "A protocol-1 caller can invoke the protocol-2 streaming watch operation.",
+  "intent": "Inject into the real checkVersion change: replace 'q.Version < 2 && q.Op == \"watch\"' with 'q.Version < 1 && q.Op == \"watch\"'. Static scenario: A protocol-1 caller can invoke the protocol-2 streaming watch operation.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "protocol.go",
+      "start": 24,
+      "end": 24,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A protocol-1 caller can invoke the protocol-2 streaming watch operation."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "78fc0d8231b737ae962ae1756d5852a717130e5f",
+    "files": [
+      "protocol.go"
+    ],
+    "derivation": "Inject into the real checkVersion change: replace 'q.Version < 2 && q.Op == \"watch\"' with 'q.Version < 1 && q.Op == \"watch\"'. Static scenario: A protocol-1 caller can invoke the protocol-2 streaming watch operation."
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "id": "local-clean-executor-recovery",
+  "category": "clean",
+  "description": "Reconcile interrupted executors and add explicit recovery",
+  "intent": "Reconcile interrupted executors and add explicit recovery",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "abead781a24847e878a725d080420c15f809673a",
+    "files": [
+      "execution.go",
+      "execution_hazards_test.go",
+      "execution_review_regression_test.go",
+      "executor.go",
+      "leases.go",
+      "main.go",
+      "pipeline.go",
+      "pipeline_test.go",
+      "recovery.go",
+      "recovery_test.go",
+      "repair.go",
+      "repair_acceptance_test.go",
+      "repair_test.go",
+      "resume.go"
+    ],
+    "derivation": "Retain the merged change: Reconcile interrupted executors and add explicit recovery. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}
