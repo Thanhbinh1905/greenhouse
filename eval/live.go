@@ -20,6 +20,7 @@ import (
 )
 
 type runOptions struct {
+	Split      string
 	JudgeModel string
 	Corpus     string
 	Out        string
@@ -35,6 +36,7 @@ type runOptions struct {
 }
 
 type RunConfig struct {
+	Split             string    `json:"split"`
 	Label             string    `json:"label"`
 	Started           time.Time `json:"started"`
 	Finished          time.Time `json:"finished"`
@@ -509,23 +511,11 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	cases := c.Cases
-	if len(o.Cases) > 0 {
-		want := map[string]bool{}
-		for _, id := range o.Cases {
-			want[id] = true
-		}
-		cases = nil
-		for _, k := range c.Cases {
-			if want[k.ID] {
-				cases = append(cases, k)
-				delete(want, k.ID)
-			}
-		}
-		if len(want) > 0 {
-			return nil, fmt.Errorf("unknown cases: %v", want)
-		}
+	cases, err := selectCases(c, o.Split, o.Cases)
+	if err != nil {
+		return nil, err
 	}
+	split, _ := normalizedSplit(o.Split)
 	if o.Out, err = filepath.Abs(o.Out); err != nil {
 		return nil, err
 	}
@@ -561,7 +551,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	secrets := secretValues()
 	jobs := make(chan int)
@@ -685,6 +675,7 @@ func writeReport(dir string, r *Report) error {
 	}
 	fmt.Fprintf(&md, "- Model: `%s` through `%s`, %s\n", r.Config.Model, r.Config.Backend, agent)
 	fmt.Fprintf(&md, "- Greenhouse: `%s`, corpus v%d revision %d `%s`\n", r.Config.GreenhouseVersion, r.Config.CorpusVersion, r.Config.CorpusRevision, r.Config.CorpusDigest)
+	fmt.Fprintf(&md, "- Split: `%s`; counts by split: %v; counts by stratum: %v\n", r.Config.Split, s.BySplit, s.ByStratum)
 	fmt.Fprintf(&md, "- Scored with corpus revision %d `%s`\n", r.Config.ScoredRevision, r.Config.ScoredDigest)
 	fmt.Fprintf(&md, "- Started %s, finished %s, parallel %d\n\n", r.Config.Started.Format(time.RFC3339), r.Config.Finished.Format(time.RFC3339), r.Config.Parallel)
 	bar := "not met"
@@ -695,7 +686,8 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Metric | Value |\n|---|---|\n")
 	fmt.Fprintf(&md, "| High-severity recall | %s (%d/%d) |\n", pct(s.HighRecall), s.HighDetected, s.HighExpected)
 	fmt.Fprintf(&md, "| Recall | %s (%d/%d) |\n", pct(s.Recall), s.Detected, s.Expected)
-	fmt.Fprintf(&md, "| Precision | %s (%d/%d) |\n", pct(s.Precision), s.Matched, s.Findings)
+	fmt.Fprintf(&md, "| Precision | %s (%d/%d) |\n", pct(s.Precision), s.Matched, s.Findings-s.Allowed)
+	fmt.Fprintf(&md, "| Allowed judgment findings (excluded from precision) | %d |\n", s.Allowed)
 	fmt.Fprintf(&md, "| Priority accuracy | %s (%d/%d) |\n", pct(s.PriorityAccuracy), s.PriorityCorrect, s.PriorityJudged)
 	fmt.Fprintf(&md, "| False positives (clean / noise / all) | %d / %d / %d |\n", s.CleanFalsePositives, s.NoiseFalsePositives, s.FalsePositives)
 	fmt.Fprintf(&md, "| False positives judged a different defect at an expected location | %d |\n", s.WrongDefect)

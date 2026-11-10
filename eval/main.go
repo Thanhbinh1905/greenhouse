@@ -16,9 +16,9 @@ import (
 
 const usage = `usage:
   go run ./eval check [-corpus dir]
-  go run ./eval judge -model provider/id [-pi path] [-parallel n] [-corpus dir] run-dir...
-  go run ./eval rescore [-corpus dir] run-dir...
-  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-parallel n]
+  go run ./eval judge -model provider/id [-pi path] [-parallel n] [-corpus dir] [-split tune|holdout|all] run-dir...
+  go run ./eval rescore [-corpus dir] [-split tune|holdout|all] run-dir...
+  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-split tune|holdout|all] [-parallel n]
   go run ./eval fix-check [-corpus dir]
   go run ./eval fix-run -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
 
@@ -41,6 +41,10 @@ func dispatch(sub string, args []string) error {
 	defaultCorpus := "eval/testdata/corpus"
 	if strings.HasPrefix(sub, "fix-") {
 		defaultCorpus = "eval/testdata/fixer"
+	}
+	split := "all"
+	if sub == "run" || sub == "judge" || sub == "rescore" {
+		fs.StringVar(&split, "split", "all", "case split: tune, holdout or all")
 	}
 	corpus := fs.String("corpus", defaultCorpus, "corpus directory")
 	switch sub {
@@ -148,9 +152,20 @@ func dispatch(sub string, args []string) error {
 			if err != nil {
 				return err
 			}
+			if err := filterReport(r, c, split); err != nil {
+				return err
+			}
 			a, err := judgeReport(r, c, o)
 			if err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
+			}
+			if sub == "rescore" {
+				if err := filterReport(r, c, split); err != nil {
+					return err
+				}
+				if split != "all" {
+					a = filterAdjudications(a, r)
+				}
 			}
 			if err := rescoreReport(r, c, a); err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
@@ -181,6 +196,14 @@ func dispatch(sub string, args []string) error {
 			if err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
+			if sub == "rescore" {
+				if err := filterReport(r, c, split); err != nil {
+					return err
+				}
+				if split != "all" {
+					a = filterAdjudications(a, r)
+				}
+			}
 			if err := rescoreReport(r, c, a); err != nil {
 				return fmt.Errorf("%s: %w", dir, err)
 			}
@@ -206,6 +229,10 @@ func dispatch(sub string, args []string) error {
 			return err
 		}
 		o.Corpus = *corpus
+		o.Split = split
+		if _, err := normalizedSplit(split); err != nil {
+			return err
+		}
 		if o.Model == "" || o.Out == "" || o.Parallel < 1 {
 			return fmt.Errorf("-model, -out and a positive -parallel are required\n%s", usage)
 		}
