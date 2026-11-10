@@ -19,7 +19,7 @@
     "files": [
       "src/exactly_one_err.rs"
     ],
-    "derivation": "Retain upstream source change: Relax iterator Debug bounds on ExactlyOneError. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/exactly_one_err.rs: base source lines 108-128, 129-134; head source lines 108-128, 129-134. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: Relax iterator Debug bounds on ExactlyOneError. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/exactly_one_err.rs: base source lines 108-128, 129-134; head source lines 108-128, 129-134. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/ca423f43d5031d032b4f3b9a18c1cfa038fac467"
   }

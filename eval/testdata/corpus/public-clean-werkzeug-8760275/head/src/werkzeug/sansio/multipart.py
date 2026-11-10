@@ -11,4 +11,3 @@ class MultipartDecoder:
             raise RequestEntityTooLarge()
         else:
             self.buffer.extend(data)
-

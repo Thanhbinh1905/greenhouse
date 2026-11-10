@@ -36,4 +36,3 @@ class ResponseCacheControl(_CacheControl):
     must_understand = cache_control_property("must-understand", None, bool)
     stale_while_revalidate = cache_control_property("stale-while-revalidate", None, int)
     stale_if_error = cache_control_property("stale-if-error", None, int)
-

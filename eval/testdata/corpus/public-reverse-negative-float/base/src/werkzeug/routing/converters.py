@@ -93,4 +93,3 @@ class FloatConverter(BaseConverter):
             start = "0"
 
         return f"{start}.{'0' * (-exp - len(left))}{left}{right}"
-

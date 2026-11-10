@@ -19,7 +19,7 @@
     "files": [
       "src/werkzeug/security.py"
     ],
-    "derivation": "Retain upstream source change: catch special absolute path on Windows Python < 3.11. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/security.py: base source lines 131-161; head source lines 131-163. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Retain upstream source change: catch special absolute path on Windows Python < 3.11. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/security.py: base source lines 131-161; head source lines 131-163. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/87cc78a25f782f8c59fbde786840a00cf0d09b3d"
   }

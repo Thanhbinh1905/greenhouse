@@ -82,4 +82,3 @@ def get_pin_and_cookie_name(
             rv = num
 
     return rv, cookie_name
-

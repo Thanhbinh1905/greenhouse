@@ -122,4 +122,3 @@ class SharedDataMiddleware:
             response.mimetype = self.fallback_mimetype
 
         return response
-

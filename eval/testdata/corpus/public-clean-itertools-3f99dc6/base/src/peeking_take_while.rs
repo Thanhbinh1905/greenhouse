@@ -49,4 +49,3 @@ peeking_next_by_clone! { ['a, T] alloc::collections::vec_deque::Iter<'a, T> }
 // cloning a Rev has no extra overhead; peekable and put backs are never DEI.
 peeking_next_by_clone! { [I: Clone + PeekingNext + DoubleEndedIterator]
 ::std::iter::Rev<I> }
-

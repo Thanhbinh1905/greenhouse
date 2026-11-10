@@ -27,5 +27,3 @@ function mirrorProps(target: object, source: Record<PropertyKey, any>): void {
     else putProp(target, key, desc.value);
   }
 }
-
-

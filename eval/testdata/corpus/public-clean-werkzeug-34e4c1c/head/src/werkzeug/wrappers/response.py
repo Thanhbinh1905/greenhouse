@@ -183,4 +183,3 @@ class Response(_SansIOResponse):
             self.apply_range(request)
 
         return self
-

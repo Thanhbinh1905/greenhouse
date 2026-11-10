@@ -19,7 +19,7 @@
     "files": [
       "src/peeking_take_while.rs"
     ],
-    "derivation": "Retain upstream source change: feat: impl PeekingNext for {vec::Drain, array::IntoIter, string::Drain}. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/peeking_take_while.rs: base source lines 96-107; head source lines 96-108, 109-121, 122-133, 134-145. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: feat: impl PeekingNext for {vec::Drain, array::IntoIter, string::Drain}. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/peeking_take_while.rs: base source lines 96-107; head source lines 96-108, 109-121, 122-133, 134-145. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/f6bd955018c6f7e2b4803c4e0d3a1d4c582552ef"
   }

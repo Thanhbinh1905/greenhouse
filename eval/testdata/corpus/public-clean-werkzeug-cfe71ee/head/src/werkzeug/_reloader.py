@@ -93,4 +93,3 @@ class WatchdogReloaderLoop(ReloaderLoop):
 
             if watch is not None:
                 self.observer.unschedule(watch)
-

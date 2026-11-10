@@ -173,4 +173,3 @@ class UpdateDictMixin(dict[K, V]):
             super().update(**kwargs)
         else:
             super().update(arg, **kwargs)
-

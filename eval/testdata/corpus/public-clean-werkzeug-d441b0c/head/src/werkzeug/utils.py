@@ -250,4 +250,3 @@ def send_file(
             rv.headers.pop("X-Sendfile", None)
 
     return rv
-

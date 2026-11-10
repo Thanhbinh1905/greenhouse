@@ -19,7 +19,7 @@
     "files": [
       "src/werkzeug/datastructures/structures.py"
     ],
-    "derivation": "Retain upstream source change: getlist catches TypeError. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/structures.py: base source lines container line 134, 256-280, container line 548, 684-699, 781-918; head source lines container line 134, 256-282, container line 550, 686-701, 783-920. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Retain upstream source change: getlist catches TypeError. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/structures.py: base source lines container line 134, 256-280, container line 548, 684-699, 781-918; head source lines container line 134, 256-282, container line 550, 686-701, 783-920. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/e550ef8b313324d2efc0b9385be4c8c5739df36b"
   }

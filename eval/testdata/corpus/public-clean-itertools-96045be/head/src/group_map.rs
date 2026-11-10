@@ -27,4 +27,3 @@ where
 {
     into_group_map_with_hasher(iter.map(|v| (f(&v), v)), hash_builder)
 }
-

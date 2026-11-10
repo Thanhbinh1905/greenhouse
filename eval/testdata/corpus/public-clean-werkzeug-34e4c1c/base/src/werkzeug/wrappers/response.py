@@ -156,4 +156,3 @@ class Response(_SansIOResponse):
                 if length is not None:
                     self.headers["Content-Length"] = str(length)
         return self
-

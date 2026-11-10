@@ -19,7 +19,7 @@
     "files": [
       "src/groupbylazy.rs"
     ],
-    "derivation": "Retain upstream source change: clippy: fix collapsible_match lint. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/groupbylazy.rs: base source lines 101-294; head source lines 101-290. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: clippy: fix collapsible_match lint. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/groupbylazy.rs: base source lines 101-294; head source lines 101-290. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/e858b8c6971ea24fb70820453451136fd1459384"
   }

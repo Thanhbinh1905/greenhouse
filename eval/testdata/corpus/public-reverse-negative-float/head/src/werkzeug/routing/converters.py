@@ -87,4 +87,3 @@ class FloatConverter(BaseConverter):
 
         # A small number. Expand leading zeros in the fraction part.
         return f"0.{'0' * (-exp - len(left))}{left}{right}"
-

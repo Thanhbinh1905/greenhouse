@@ -20,4 +20,3 @@ class MultiDict(TypeConversionDict[K, V]):
 
         self.update(other)
         return self
-

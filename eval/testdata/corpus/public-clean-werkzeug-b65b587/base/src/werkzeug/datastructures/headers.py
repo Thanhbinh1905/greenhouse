@@ -5,4 +5,3 @@ class Headers(cabc.MutableMapping[str, str]):
         :return: list
         """
         return list(self)  # type: ignore[arg-type]
-

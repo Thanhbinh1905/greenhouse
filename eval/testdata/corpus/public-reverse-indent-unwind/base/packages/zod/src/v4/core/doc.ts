@@ -48,4 +48,3 @@ export class Doc {
     return factory(...Object.values(this.closed)) as any;
   }
 }
-

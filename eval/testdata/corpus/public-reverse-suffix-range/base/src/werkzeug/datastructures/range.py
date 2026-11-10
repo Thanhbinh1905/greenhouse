@@ -108,4 +108,3 @@ class Range:
             return None
 
         return cr.to_header()
-

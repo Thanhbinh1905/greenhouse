@@ -139,7 +139,7 @@ export const $ZodObjectJIT: core.$constructor<$ZodObject> = /*@__PURE__*/ core.$
           doc.write(`
         if (${id}.issues.length) {${prefixStr(id, k)}
         }
-        
+
         if (${id}.value === undefined) {
           if (${isPresent}) {
             newResult[${k}] = undefined;
@@ -213,5 +213,3 @@ export interface $ZodPrefaultInternals<T extends SomeType = $ZodType>
   isst: never;
   values: T["_zod"]["values"];
 }
-
-

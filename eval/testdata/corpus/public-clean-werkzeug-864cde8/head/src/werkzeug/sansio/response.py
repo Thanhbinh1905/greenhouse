@@ -12,4 +12,3 @@ class Response:
             value._on_update = make_structure_on_update(
                 self, "WWW-Authenticate", WWWAuthenticate
             )
-

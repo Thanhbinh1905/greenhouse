@@ -35,7 +35,7 @@
     "files": [
       "packages/zod/src/v4/core/memoizer.ts"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Concurrent async siblings visit the same node; treating an in-flight sibling as an ancestor skips its issues, so a union or catch branch can hide invalid data. Excerpt coordinates: packages/zod/src/v4/core/memoizer.ts: base source lines 12-18, 19-26, 38-39, 59-66, 67-82, 83-93, 255-264, 270-395; head source lines 12-17, 29-30, 50-56, 218-233, 239-347. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Concurrent async siblings visit the same node; treating an in-flight sibling as an ancestor skips its issues, so a union or catch branch can hide invalid data. Excerpt coordinates: packages/zod/src/v4/core/memoizer.ts: base source lines 12-18, 19-26, 38-39, 59-66, 67-82, 83-93, 255-264, 270-395; head source lines 12-17, 29-30, 50-56, 218-233, 239-347. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/colinhacks/zod/commit/2ec830fd27f54d593d7814b0865c4bc190ae8426"
   }

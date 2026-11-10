@@ -4,4 +4,3 @@ where
     F: FnMut(&I::Item) -> bool,
 {
 }
-

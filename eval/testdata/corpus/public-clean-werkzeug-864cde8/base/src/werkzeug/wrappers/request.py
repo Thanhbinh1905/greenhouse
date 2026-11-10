@@ -40,4 +40,3 @@ class Request(_SansIORequest):
                 return response(request.environ, start_response)
 
         return application
-

@@ -93,4 +93,3 @@ class Response(_SansIOResponse):
             headers["Content-Length"] = str(content_length)
 
         return headers
-

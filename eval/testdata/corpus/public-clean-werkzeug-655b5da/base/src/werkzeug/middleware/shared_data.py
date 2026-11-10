@@ -145,4 +145,3 @@ class SharedDataMiddleware:
         )
         start_response("200 OK", headers)
         return wrap_file(environ, f)
-

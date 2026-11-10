@@ -19,7 +19,7 @@
     "files": [
       "src/werkzeug/datastructures/accept.py"
     ],
-    "derivation": "Retain upstream source change: improve `MIMEAccept` performance. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/accept.py: base source lines 244-244, 247-248, 251-321; head source lines 244-255, 258-328. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Retain upstream source change: improve `MIMEAccept` performance. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/accept.py: base source lines 244-244, 247-248, 251-321; head source lines 244-255, 258-328. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/4f03444db604edec0e818182fe6988b72d943a8e"
   }

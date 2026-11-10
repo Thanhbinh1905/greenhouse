@@ -34,7 +34,7 @@
     "files": [
       "packages/zod/src/v4/core/schemas.ts"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Parse an async tuple with several rest elements: callbacks share the final loop index, overwrite the final element and leave earlier slots empty. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 3040-3131; head source lines 3040-3133. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Parse an async tuple with several rest elements: callbacks share the final loop index, overwrite the final element and leave earlier slots empty. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 3040-3131; head source lines 3040-3133. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/colinhacks/zod/commit/586813ac93773ca781250553310e169736fb8caf"
   }

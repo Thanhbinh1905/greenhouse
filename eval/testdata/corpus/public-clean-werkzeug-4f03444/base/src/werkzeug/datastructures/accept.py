@@ -74,4 +74,3 @@ class MIMEAccept(Accept):
     def accept_json(self) -> bool:
         """True if ``application/json`` is accepted."""
         return "application/json" in self  # type: ignore[comparison-overlap]
-

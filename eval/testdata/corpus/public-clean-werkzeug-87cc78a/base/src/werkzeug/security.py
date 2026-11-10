@@ -29,4 +29,3 @@ def safe_join(directory: str, *pathnames: str) -> str | None:
         parts.append(filename)
 
     return posixpath.join(*parts)
-

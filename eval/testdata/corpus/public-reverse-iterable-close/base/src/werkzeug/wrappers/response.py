@@ -27,4 +27,3 @@ class Response(_SansIOResponse):
 
             if close is not None:
                 close()
-

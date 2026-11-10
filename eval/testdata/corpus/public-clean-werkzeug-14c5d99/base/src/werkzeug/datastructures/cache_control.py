@@ -33,4 +33,3 @@ class ResponseCacheControl(_CacheControl):
     s_maxage = cache_control_property("s-maxage", None, int)
     immutable = cache_control_property("immutable", None, bool)
     must_understand = cache_control_property("must-understand", None, bool)
-

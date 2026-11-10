@@ -7,4 +7,3 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
             f"{address_string} - - [{self.log_date_time_string()}] {message}\n",
             *args,
         )
-

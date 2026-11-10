@@ -194,4 +194,3 @@ class UpdateDictMixin(dict[K, V]):
         self, other: cabc.Mapping[K, V] | cabc.Iterable[tuple[K, V]]
     ) -> te.Self:
         return super().__ior__(other)
-

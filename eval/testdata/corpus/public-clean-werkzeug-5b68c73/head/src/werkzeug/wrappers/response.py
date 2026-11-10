@@ -548,4 +548,3 @@ class ResponseStream:
     @property
     def encoding(self) -> str:
         return "utf-8"
-

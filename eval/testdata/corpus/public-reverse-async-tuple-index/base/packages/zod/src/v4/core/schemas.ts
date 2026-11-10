@@ -89,5 +89,3 @@ export const $ZodTuple: core.$constructor<$ZodTuple> = /*@__PURE__*/ core.$const
     return handleTupleResults(itemResults, payload, items, input, optoutStart);
   };
 });
-
-

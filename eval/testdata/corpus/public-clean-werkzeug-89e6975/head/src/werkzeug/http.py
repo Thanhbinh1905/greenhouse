@@ -14,4 +14,3 @@ _cookie_re = re.compile(
     """,
     flags=re.ASCII | re.VERBOSE,
 )
-

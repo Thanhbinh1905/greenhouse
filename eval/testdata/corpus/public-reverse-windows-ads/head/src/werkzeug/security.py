@@ -68,4 +68,3 @@ def safe_join(directory: str, *untrusted: str) -> str | None:
         parts.append(part)
 
     return posixpath.join(*parts)
-

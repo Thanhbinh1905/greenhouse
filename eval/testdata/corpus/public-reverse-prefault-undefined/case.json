@@ -34,7 +34,7 @@
     "files": [
       "packages/zod/src/v4/core/schemas.ts"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: An absent object property whose prefault produces undefined loses the required output key instead of retaining it. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 1951-1993, 2220-2381, 4079-4087; head source lines 1951-1993, 2220-2381, 4079-4087. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: An absent object property whose prefault produces undefined loses the required output key instead of retaining it. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 1951-1993, 2220-2381, 4079-4087; head source lines 1951-1993, 2220-2381, 4079-4087. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/colinhacks/zod/commit/9446b5cc14c5bf137790f1f66abf602044871223"
   }

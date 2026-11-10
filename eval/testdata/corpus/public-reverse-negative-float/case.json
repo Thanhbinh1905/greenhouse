@@ -34,7 +34,7 @@
     "files": [
       "src/werkzeug/routing/converters.py"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Building a route for a small negative float such as -1e-7 places the minus sign inside the fractional digits instead of before zero. Excerpt coordinates: src/werkzeug/routing/converters.py: base source lines 214-308; head source lines 214-302. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Building a route for a small negative float such as -1e-7 places the minus sign inside the fractional digits instead of before zero. Excerpt coordinates: src/werkzeug/routing/converters.py: base source lines 214-308; head source lines 214-302. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/594452f6a4fe4de38a544962fbf04bfc9d37fbc2"
   }

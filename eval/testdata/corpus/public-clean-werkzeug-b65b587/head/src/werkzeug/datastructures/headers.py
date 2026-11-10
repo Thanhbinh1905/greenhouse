@@ -78,4 +78,3 @@ class EnvironHeaders(ImmutableHeadersMixin, Headers):  # type: ignore[misc]
 
     def __or__(self, other: t.Any) -> t.NoReturn:
         raise TypeError(f"cannot create {type(self).__name__!r} copies")
-

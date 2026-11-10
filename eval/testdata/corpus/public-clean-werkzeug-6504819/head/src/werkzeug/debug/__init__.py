@@ -105,4 +105,3 @@ class DebuggedApplication:
         elif bad_cookie:
             rv.delete_cookie(self.pin_cookie_name)
         return rv
-

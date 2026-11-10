@@ -21,4 +21,3 @@ where
 {
     into_group_map(iter.map(|v| (f(&v), v)))
 }
-

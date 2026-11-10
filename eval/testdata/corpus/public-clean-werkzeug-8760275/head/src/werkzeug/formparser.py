@@ -122,4 +122,3 @@ class MultiPartParser:
                 event = parser.next_event()
 
         return self.cls(fields), self.cls(files)
-

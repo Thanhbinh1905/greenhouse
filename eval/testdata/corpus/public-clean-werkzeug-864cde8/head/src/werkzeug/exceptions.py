@@ -614,4 +614,3 @@ def abort(status: int | WSGIResponse, *args: t.Any, **kwargs: t.Any) -> t.NoRetu
     :param kwargs: Keyword arguments passed when creating the status exception.
     """
     _aborter(status, *args, **kwargs)
-

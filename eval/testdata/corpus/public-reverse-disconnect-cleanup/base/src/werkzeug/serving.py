@@ -156,4 +156,3 @@ class WSGIRequestHandler(BaseHTTPRequestHandler):
 
             msg = DebugTraceback(e).render_traceback_text()
             self.server.log("error", f"Error on request:\n{msg}")
-

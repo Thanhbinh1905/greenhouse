@@ -15,4 +15,3 @@ class Response(_SansIOResponse):
             self.response = list(self.iter_encoded())
             if close is not None:
                 self.call_on_close(close)
-

@@ -9,5 +9,3 @@ impl<T> PeekingNext for ::alloc::vec::IntoIter<T> {
         }
     }
 }
-
-

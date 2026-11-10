@@ -70,4 +70,3 @@ def parse_dict_header(value: str) -> dict[str, str | None]:
         result[key] = value
 
     return result
-

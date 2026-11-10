@@ -23,4 +23,3 @@ impl<Item> Display for AllEqualValueError<Item> {
 #[cfg(feature = "use_std")]
 
 impl<Item> Error for AllEqualValueError<Item> where Item: Debug {}
-

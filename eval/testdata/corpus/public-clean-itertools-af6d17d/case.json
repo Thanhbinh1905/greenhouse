@@ -19,7 +19,7 @@
     "files": [
       "src/either_or_both.rs"
     ],
-    "derivation": "Retain upstream source change: Derive `Copy` for `EitherOrBoth`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/either_or_both.rs: base source lines whole file; head source lines whole file. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: Derive `Copy` for `EitherOrBoth`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/either_or_both.rs: base source lines whole file; head source lines whole file. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/af6d17d3f4a963c087e81b327b957966e1169ff5"
   }

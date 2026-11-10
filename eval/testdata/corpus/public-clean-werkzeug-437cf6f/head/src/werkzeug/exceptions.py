@@ -7,4 +7,3 @@ class MisdirectedRequest(HTTPException):
 
     code = 421
     description = "The server is not able to produce a response."
-

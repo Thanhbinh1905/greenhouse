@@ -49,5 +49,3 @@ pub struct StripPrefixError<I, Prefix: Iterator, T> {
     /// `None` if `iterator` was exhausted before the prefix was fully matched.
     pub mismatch: (Option<T>, Prefix::Item),
 }
-
-

@@ -19,7 +19,7 @@
     "files": [
       "src/lib.rs"
     ],
-    "derivation": "Retain upstream source change: Take consuming key in `position_{min,max,minmax}_by_key()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines container line 457, 4619-4626, 4707-4714, 4835-4842; head source lines container line 457, 4619-4626, 4707-4714, 4835-4842. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: Take consuming key in `position_{min,max,minmax}_by_key()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines container line 457, 4619-4626, 4707-4714, 4835-4842; head source lines container line 457, 4619-4626, 4707-4714, 4835-4842. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/fb3d996d813b07fb6cc83dc600518fde42170c3c"
   }

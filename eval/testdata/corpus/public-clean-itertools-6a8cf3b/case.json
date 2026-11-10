@@ -21,7 +21,7 @@
       "src/lib.rs",
       "src/unique_impl.rs"
     ],
-    "derivation": "Retain upstream source change: Add `duplicates_[by_]with_hasher()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/duplicates_impl.rs: base source lines 3-194, 195-209, 210-216; head source lines 5-205, 206-226, 227-234; src/lib.rs: base source lines container line 453, 1573-1579, 1599-1606; head source lines container line 455, 1575-1581, 1600-1607, 1627-1634, 1653-1665; src/unique_impl.rs: base source lines whole file; head source lines whole file. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: Add `duplicates_[by_]with_hasher()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/duplicates_impl.rs: base source lines 3-194, 195-209, 210-216; head source lines 5-205, 206-226, 227-234; src/lib.rs: base source lines container line 453, 1573-1579, 1599-1606; head source lines container line 455, 1575-1581, 1600-1607, 1627-1634, 1653-1665; src/unique_impl.rs: base source lines whole file; head source lines whole file. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/6a8cf3b0ddd90907f2e43826d7c97bbd4d36c85d"
   }

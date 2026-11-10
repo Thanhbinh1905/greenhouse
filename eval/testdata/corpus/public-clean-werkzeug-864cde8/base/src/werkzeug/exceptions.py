@@ -847,4 +847,3 @@ def abort(status: int | SansIOResponse, *args: t.Any, **kwargs: t.Any) -> t.NoRe
 
     """
     _aborter(status, *args, **kwargs)
-

@@ -101,5 +101,3 @@ where
         self.iter.rfold(init, f)
     }
 }
-
-

@@ -34,7 +34,7 @@
     "files": [
       "src/werkzeug/datastructures/range.py"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: For a representation shorter than the requested suffix, Range.range_for_length rejects bytes=-100 instead of returning the entire representation. Excerpt coordinates: src/werkzeug/datastructures/range.py: base source lines 9-9, container line 95, 124-158, 160-174, 176-200, 279-307; head source lines 9-9, container line 96, 125-156, 158-173, 175-193, 272-293. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: For a representation shorter than the requested suffix, Range.range_for_length rejects bytes=-100 instead of returning the entire representation. Excerpt coordinates: src/werkzeug/datastructures/range.py: base source lines 9-9, container line 95, 124-158, 160-174, 176-200, 279-307; head source lines 9-9, container line 96, 125-156, 158-173, 175-193, 272-293. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/fbbbf74573ddd05ac7c19854f9a1c0ea2ed4180b"
   }

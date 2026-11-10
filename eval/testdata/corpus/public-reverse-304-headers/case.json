@@ -34,7 +34,7 @@
     "files": [
       "src/werkzeug/wrappers/response.py"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A 304 response filters headers against an empty set and discards ETag and other metadata that must survive. Excerpt coordinates: src/werkzeug/wrappers/response.py: base source lines container line 33, 443-542; head source lines container line 33, 443-536. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A 304 response filters headers against an empty set and discards ETag and other metadata that must survive. Excerpt coordinates: src/werkzeug/wrappers/response.py: base source lines container line 33, 443-542; head source lines container line 33, 443-536. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/15fc22b699ecacd04824092453c0cd2a8c4a3a67"
   }

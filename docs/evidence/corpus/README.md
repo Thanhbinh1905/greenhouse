@@ -2,7 +2,7 @@
 
 The corpus contains 166 cases, including a fixed 59-case hold-out split with 44 real-source cases. This change builds the evaluation instrument. It does not establish a measured quality improvement.
 
-Corpus digest: `9c81261f15945480bf4c13880182f2b7066da6af7a57684b8321e69cf365f4ff`.
+Corpus digest: `ed7b98b0f75457fb748cf7d327121cfed60332eea16d839183d905366a8a6df8`.
 Revision 4 digest: `9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b`.
 The loader computes the digest from the stored corpus, including its source inventory and notices.
 
@@ -75,7 +75,7 @@ git diff --check
 python3 -B eval/validate_fixtures.py
 ```
 
-The full eval suite passed in 28.494 seconds. Formatting and vet emitted no output. The deterministic `check` printed the counts above and the revision 5 digest. It enforces source minima, real-source strata, hold-out counts, source-commit grouping, language mix, actual change sizes, cross-file structure and judgment ranges. Tests mutate a valid corpus to prove rejection of count, split, license, language and size violations. Strict loader tests cover missing or invalid metadata, public provenance, manifest identity and range constraints. CLI tests prove hold-out filtering for rescoring and judging; the fake judge fails if an excluded tune finding reaches it.
+The full eval suite passed. Formatting and vet emitted no output. The deterministic `check` printed the counts above and the revision 5 digest. It enforces source minima, real-source strata, hold-out counts, source-commit grouping, language mix, actual change sizes, cross-file structure and judgment ranges. Tests mutate a valid corpus to prove rejection of count, split, license, language and size violations. Strict loader tests cover missing or invalid metadata, public provenance, manifest identity and range constraints. CLI tests prove hold-out filtering for rescoring and judging; the fake judge fails if an excluded tune finding reaches it.
 
 The fixture script verified 40 synthetic Python base/head paths: every base satisfies its caller and every defective head fails. It also executed the public negative-float conversion and indentation-unwind methods: both bases pass and both reversed heads reproduce the defect. All 20 TypeScript judgment modules loaded with Node 22 type stripping. An additional task-scratch Go contract program extracted the ten refactored functions and verified both versions against path, grant, schema, protocol and selection invariants:
 

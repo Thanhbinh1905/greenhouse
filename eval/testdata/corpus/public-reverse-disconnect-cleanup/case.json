@@ -34,7 +34,7 @@
     "files": [
       "src/werkzeug/serving.py"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: When socket draining raises during disconnect, execution skips application_iter.close and leaks application resources. Excerpt coordinates: src/werkzeug/serving.py: base source lines 17-17, container line 163, 253-407; head source lines 17-17, container line 162, 252-400. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: When socket draining raises during disconnect, execution skips application_iter.close and leaks application resources. Excerpt coordinates: src/werkzeug/serving.py: base source lines 17-17, container line 163, 253-407; head source lines 17-17, container line 162, 252-400. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/b71ddc615fb5ac2248cb4e7df20d6eedd8f77b2b"
   }

@@ -34,7 +34,7 @@
     "files": [
       "packages/zod/src/v4/core/util.ts"
     ],
-    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A Proxy lists a shape key without a property descriptor; mirrorShape dereferences undefined.enumerable and throws instead of skipping the key. Excerpt coordinates: packages/zod/src/v4/core/util.ts: base source lines 425-444, 445-453; head source lines 425-444, 445-453. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt.",
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A Proxy lists a shape key without a property descriptor; mirrorShape dereferences undefined.enumerable and throws instead of skipping the key. Excerpt coordinates: packages/zod/src/v4/core/util.ts: base source lines 425-444, 445-453; head source lines 425-444, 445-453. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/colinhacks/zod/commit/cc96d77a0328b237b0a93941cc1334da896e6e83"
   }

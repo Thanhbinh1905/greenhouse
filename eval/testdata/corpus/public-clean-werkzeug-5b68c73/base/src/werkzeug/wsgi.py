@@ -44,4 +44,3 @@ class ClosingIterator:
     def close(self) -> None:
         for callback in self._callbacks:
             callback()
-

@@ -98,4 +98,3 @@ class EnvironBuilder:
 
         if mimetype is not None:
             self.mimetype = mimetype
-

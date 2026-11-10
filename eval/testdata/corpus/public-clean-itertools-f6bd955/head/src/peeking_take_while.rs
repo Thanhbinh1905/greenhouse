@@ -50,5 +50,3 @@ impl<T, const N: usize> PeekingNext for ::core::array::IntoIter<T, N> {
         }
     }
 }
-
-

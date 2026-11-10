@@ -130,4 +130,3 @@ export const $ZodType: core.$constructor<$ZodType> = /*@__PURE__*/ core.$constru
 
 /** The Standard Schema surface for `inst`. Shared so wrappers can extend it without forcing it. */
 // a Standard Schema result only reports issues, so a failure finalizes them straight off the raw payload: no ZodError, and no lazy result to read through
-

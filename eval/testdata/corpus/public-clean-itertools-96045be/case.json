@@ -20,7 +20,7 @@
       "src/group_map.rs",
       "src/lib.rs"
     ],
-    "derivation": "Retain upstream source change: Add `into_group_map_[by_]with_hasher`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/group_map.rs: base source lines 11-24, 25-32; head source lines 12-26, 27-39; src/lib.rs: base source lines container line 455, 4040-4046, 4076-4083; head source lines container line 455, 4040-4046, 4068-4075, 4105-4112, 4145-4157. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt.",
+    "derivation": "Retain upstream source change: Add `into_group_map_[by_]with_hasher`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/group_map.rs: base source lines 11-24, 25-32; head source lines 12-26, 27-39; src/lib.rs: base source lines container line 455, 4040-4046, 4076-4083; head source lines container line 455, 4040-4046, 4068-4075, 4105-4112, 4145-4157. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
     "license": "MIT",
     "url": "https://github.com/rust-itertools/itertools/commit/96045beb2d3379f2d3e23a64b242afcd626ee16f"
   }

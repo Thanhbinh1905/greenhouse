@@ -20,7 +20,7 @@
       "src/werkzeug/formparser.py",
       "src/werkzeug/sansio/multipart.py"
     ],
-    "derivation": "Retain upstream source change: apply max_form_memory_size another level up in the parser. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/formparser.py: base source lines 292-404; head source lines 292-415; src/werkzeug/sansio/multipart.py: base source lines container line 77, 136-145; head source lines container line 77, 136-147. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt.",
+    "derivation": "Retain upstream source change: apply max_form_memory_size another level up in the parser. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/formparser.py: base source lines 292-404; head source lines 292-415; src/werkzeug/sansio/multipart.py: base source lines container line 77, 136-145; head source lines container line 77, 136-147. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
     "license": "BSD-3-Clause",
     "url": "https://github.com/pallets/werkzeug/commit/8760275afb72bd10b57d92cb4d52abf759b2f3a7"
   }
