@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-url-segment",
+  "category": "bug",
+  "description": "The unchanged router expects one escaped object-key segment; default quote preserves slashes and changes the resource path.",
+  "intent": "Constructed cross-file contract. The unchanged router expects one escaped object-key segment; default quote preserves slashes and changes the resource path. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "The unchanged router expects one escaped object-key segment; default quote preserves slashes and changes the resource path."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. The unchanged router expects one escaped object-key segment; default quote preserves slashes and changes the resource path. The unchanged caller is an executable failure scenario."
+  }
+}

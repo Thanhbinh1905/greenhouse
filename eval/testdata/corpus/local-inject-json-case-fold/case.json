@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-json-case-fold",
+  "category": "bug",
+  "description": "A field alias differing in case passes the schema check and can overwrite its canonical field.",
+  "intent": "Inject into the real exactFields change: replace 'name == key' with 'strings.EqualFold(name, key)'. Static scenario: A field alias differing in case passes the schema check and can overwrite its canonical field.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "rules.go",
+      "start": 121,
+      "end": 121,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A field alias differing in case passes the schema check and can overwrite its canonical field."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "d0a473e6ce8be8c6b8fa7cb274f74c76ee370c12",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Inject into the real exactFields change: replace 'name == key' with 'strings.EqualFold(name, key)'. Static scenario: A field alias differing in case passes the schema check and can overwrite its canonical field."
+  }
+}

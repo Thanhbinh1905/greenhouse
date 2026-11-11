@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-cancel-admission",
+  "category": "bug",
+  "description": "Cancel after the final check but before commit: the old implementation can admit a commit without checking context cancellation.",
+  "intent": "Reverse the affected file containing the executeRepair fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Cancel after the final check but before commit: the old implementation can admit a commit without checking context cancellation.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "repair.go",
+      "start": 616,
+      "end": 616,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Cancel after the final check but before commit: the old implementation can admit a commit without checking context cancellation."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "3fc7d295654e14038cb96e4616e4b8a7effe7fa4",
+    "files": [
+      "repair.go"
+    ],
+    "derivation": "Reverse the affected file containing the executeRepair fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Cancel after the final check but before commit: the old implementation can admit a commit without checking context cancellation."
+  }
+}

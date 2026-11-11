@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-grant-add",
+  "category": "bug",
+  "description": "A fixer adds a new path without a grant and classifyGranted returns success.",
+  "intent": "Inject into the real classifyGranted change: replace 'if len(addMissing) > 0' with 'if len(addMissing) < 0'. Static scenario: A fixer adds a new path without a grant and classifyGranted returns success.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "grant.go",
+      "start": 128,
+      "end": 128,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A fixer adds a new path without a grant and classifyGranted returns success."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "882eecdf7624c1bc4b3cbf404b09ce2a38312f55",
+    "files": [
+      "grant.go"
+    ],
+    "derivation": "Inject into the real classifyGranted change: replace 'if len(addMissing) > 0' with 'if len(addMissing) < 0'. Static scenario: A fixer adds a new path without a grant and classifyGranted returns success."
+  }
+}

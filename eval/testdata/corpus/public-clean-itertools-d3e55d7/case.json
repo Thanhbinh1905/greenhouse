@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-d3e55d7",
+  "category": "clean",
+  "description": "Add `counts_[by_]with_hasher()`",
+  "intent": "Add `counts_[by_]with_hasher()`",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "d3e55d77cd1b442b146adc0dd2a010926033e99f",
+    "files": [
+      "src/lib.rs"
+    ],
+    "derivation": "Retain upstream source change: Add `counts_[by_]with_hasher()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines container line 455, 4995-5003, 5039-5046; head source lines container line 455, 4995-5001, 5006-5015, 5051-5058, 5063-5071. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/d3e55d77cd1b442b146adc0dd2a010926033e99f"
+  }
+}

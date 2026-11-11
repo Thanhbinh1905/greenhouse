@@ -1,0 +1,45 @@
+{
+  "version": 1,
+  "id": "local-large-authority-decisions",
+  "category": "bug",
+  "description": "An actionable P1 finding is classified as informational, so the full pipeline can advance without resolving a blocking finding.",
+  "intent": "Review the original feature change with the recorded injected defect.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "seeded-regression",
+      "file": "authority.go",
+      "start": 120,
+      "end": 120,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An actionable P1 finding is classified as informational, so the full pipeline can advance without resolving a blocking finding."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "90f684ce159b3062efb903f9b4a42ed5b7fce7fa",
+    "files": [
+      "authority.go",
+      "authority_test.go",
+      "main.go",
+      "pipeline.go",
+      "pipeline_test.go",
+      "repair.go"
+    ],
+    "derivation": "Inject a defect into the full real change at the pinned commit: replace 'f.Priority == \"P3\" || !validText(f.Action)' with 'f.Priority == \"P1\" || !validText(f.Action)'. The large snapshot retains all changed Go source and test files. Scenario: An actionable P1 finding is classified as informational, so the full pipeline can advance without resolving a blocking finding."
+  }
+}

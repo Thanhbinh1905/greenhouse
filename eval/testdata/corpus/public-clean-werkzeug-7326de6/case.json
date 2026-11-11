@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-7326de6",
+  "category": "clean",
+  "description": "fix logging addresses with ipv6 scope",
+  "intent": "fix logging addresses with ipv6 scope",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "7326de64ea7d1ba783bb372144d59e7433113b68",
+    "files": [
+      "src/werkzeug/serving.py"
+    ],
+    "derivation": "Retain upstream source change: fix logging addresses with ipv6 scope. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/serving.py: base source lines container line 158, 475-480; head source lines container line 158, 475-482. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/7326de64ea7d1ba783bb372144d59e7433113b68"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-cb29010",
+  "category": "clean",
+  "description": "feat: impl PeekingNext for vec::IntoIter",
+  "intent": "feat: impl PeekingNext for vec::IntoIter",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "cb290101161d325beb413cb43a4a098b93aaac27",
+    "files": [
+      "src/peeking_take_while.rs"
+    ],
+    "derivation": "Retain upstream source change: feat: impl PeekingNext for vec::IntoIter. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/peeking_take_while.rs: base source lines 75-94; head source lines 75-95, 96-105. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/cb290101161d325beb413cb43a4a098b93aaac27"
+  }
+}

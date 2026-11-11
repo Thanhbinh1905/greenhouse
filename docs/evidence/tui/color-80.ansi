@@ -1,8 +1,8 @@
-[1mGreenhouse[0m · feature @ 34f78eb                           one-pass · auto · live
+[1mGreenhouse[0m · feature @ 9764a62                           one-pass · auto · live
 [2m───────────────────────────────────────────────────────────────────────────────[0m
  [32m✓[39m Agent    Pi · native default model
  [32m✓[39m Intent   Fix q and x
- [32m✓[39m Target   ca08d1f
+ [32m✓[39m Target   c4d7496
  [32m✓[39m Rules    unslop, no-comments · used by the review
  [33m![39m Review   fixed not independently rereviewed · budget 2 of 4 used
 

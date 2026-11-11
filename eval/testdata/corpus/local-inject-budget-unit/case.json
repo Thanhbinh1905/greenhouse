@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-budget-unit",
+  "category": "bug",
+  "description": "A configuration using token budgets passes while the supported rounds budget is rejected.",
+  "intent": "Inject into the real budgetUnit change: replace 'unit != \"rounds\"' with 'unit == \"rounds\"'. Static scenario: A configuration using token budgets passes while the supported rounds budget is rejected.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "config.go",
+      "start": 65,
+      "end": 65,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A configuration using token budgets passes while the supported rounds budget is rejected."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "b4174aeb3277a4eb07ef5620b18c398094e7521e",
+    "files": [
+      "config.go"
+    ],
+    "derivation": "Inject into the real budgetUnit change: replace 'unit != \"rounds\"' with 'unit == \"rounds\"'. Static scenario: A configuration using token budgets passes while the supported rounds budget is rejected."
+  }
+}

@@ -29,6 +29,9 @@ type Adjudication struct {
 }
 
 type CaseScore struct {
+	Split           string         `json:"split"`
+	Stratum         string         `json:"stratum"`
+	Allowed         int            `json:"allowed"`
 	ID              string         `json:"id"`
 	Category        string         `json:"category"`
 	Status          string         `json:"status"`
@@ -53,27 +56,30 @@ type CaseScore struct {
 }
 
 type Summary struct {
-	Cases               int      `json:"cases"`
-	Inconclusive        int      `json:"inconclusive"`
-	Expected            int      `json:"expected"`
-	Detected            int      `json:"detected"`
-	HighExpected        int      `json:"high_expected"`
-	HighDetected        int      `json:"high_detected"`
-	Findings            int      `json:"findings"`
-	Matched             int      `json:"matched"`
-	FalsePositives      int      `json:"false_positives"`
-	WrongDefect         int      `json:"wrong_defect"`
-	Unadjudicated       int      `json:"unadjudicated"`
-	CleanFalsePositives int      `json:"clean_false_positives"`
-	CleanBlocking       int      `json:"clean_blocking"`
-	NoiseFalsePositives int      `json:"noise_false_positives"`
-	PriorityJudged      int      `json:"priority_judged"`
-	PriorityCorrect     int      `json:"priority_correct"`
-	Recall              *float64 `json:"recall"`
-	HighRecall          *float64 `json:"high_recall"`
-	Precision           *float64 `json:"precision"`
-	PriorityAccuracy    *float64 `json:"priority_accuracy"`
-	BarMet              bool     `json:"bar_met"`
+	Allowed             int            `json:"allowed"`
+	BySplit             map[string]int `json:"by_split"`
+	ByStratum           map[string]int `json:"by_stratum"`
+	Cases               int            `json:"cases"`
+	Inconclusive        int            `json:"inconclusive"`
+	Expected            int            `json:"expected"`
+	Detected            int            `json:"detected"`
+	HighExpected        int            `json:"high_expected"`
+	HighDetected        int            `json:"high_detected"`
+	Findings            int            `json:"findings"`
+	Matched             int            `json:"matched"`
+	FalsePositives      int            `json:"false_positives"`
+	WrongDefect         int            `json:"wrong_defect"`
+	Unadjudicated       int            `json:"unadjudicated"`
+	CleanFalsePositives int            `json:"clean_false_positives"`
+	CleanBlocking       int            `json:"clean_blocking"`
+	NoiseFalsePositives int            `json:"noise_false_positives"`
+	PriorityJudged      int            `json:"priority_judged"`
+	PriorityCorrect     int            `json:"priority_correct"`
+	Recall              *float64       `json:"recall"`
+	HighRecall          *float64       `json:"high_recall"`
+	Precision           *float64       `json:"precision"`
+	PriorityAccuracy    *float64       `json:"priority_accuracy"`
+	BarMet              bool           `json:"bar_met"`
 }
 
 func blocking(priority string) bool { return priority == "P0" || priority == "P1" }
@@ -88,7 +94,7 @@ func locates(e Expected, f Finding) bool {
 // without a record earns no credit. Records that contradict the findings or
 // each other are refused.
 func ScoreCase(k Case, status string, findings []Finding, records []Record) (CaseScore, error) {
-	s := CaseScore{ID: k.ID, Category: k.Category, Status: status, Inconclusive: status != "clean-review" && status != "outstanding-findings", Expected: len(k.Expected), Findings: len(findings), Missed: []Expected{}, Unmatched: []Finding{}, Adjudications: []Adjudication{}}
+	s := CaseScore{ID: k.ID, Split: k.Split, Stratum: k.Stratum, Category: k.Category, Status: status, Inconclusive: status != "clean-review" && status != "outstanding-findings", Expected: len(k.Expected), Findings: len(findings), Missed: []Expected{}, Unmatched: []Finding{}, Adjudications: []Adjudication{}}
 	byFinding := map[int]Record{}
 	for _, r := range records {
 		if r.Case != k.ID || r.Finding < 0 || r.Finding >= len(findings) {
@@ -109,6 +115,24 @@ func ScoreCase(k Case, status string, findings []Finding, records []Record) (Cas
 			if locates(e, f) {
 				eligible[e.ID] = i
 			}
+		}
+
+		allowed := false
+		if len(eligible) == 0 && k.Category == "judgment" {
+			for _, a := range k.Allowed {
+				if f.Start >= 1 && f.End >= f.Start && locates(Expected{File: a.File, Start: a.Start, End: a.End, Origin: a.Origin, Rule: a.Rule}, f) {
+					allowed = true
+					break
+				}
+			}
+		}
+		if allowed {
+			if _, ok := byFinding[n]; ok {
+				return s, fmt.Errorf("%s finding %d: allowed finding cannot carry detection record", k.ID, n)
+			}
+			s.Allowed++
+			s.Adjudications = append(s.Adjudications, Adjudication{Finding: n, Verdict: "allowed"})
+			continue
 		}
 		r, judged := byFinding[n]
 		credit := -1
@@ -196,7 +220,7 @@ func ratio(n, d int) *float64 {
 }
 
 func Summarize(scores []CaseScore) Summary {
-	m := Summary{Cases: len(scores)}
+	m := Summary{Cases: len(scores), BySplit: map[string]int{}, ByStratum: map[string]int{}}
 	for _, s := range scores {
 		if s.Inconclusive {
 			m.Inconclusive++
@@ -205,6 +229,9 @@ func Summarize(scores []CaseScore) Summary {
 		m.Detected += s.Detected
 		m.HighExpected += s.HighExpected
 		m.HighDetected += s.HighDetected
+		m.Allowed += s.Allowed
+		m.BySplit[s.Split]++
+		m.ByStratum[s.Stratum]++
 		m.Findings += s.Findings
 		m.Matched += s.Matched
 		m.FalsePositives += s.FalsePositives
@@ -222,7 +249,7 @@ func Summarize(scores []CaseScore) Summary {
 	}
 	m.Recall = ratio(m.Detected, m.Expected)
 	m.HighRecall = ratio(m.HighDetected, m.HighExpected)
-	m.Precision = ratio(m.Matched, m.Findings)
+	m.Precision = ratio(m.Matched, m.Findings-m.Allowed)
 	m.PriorityAccuracy = ratio(m.PriorityCorrect, m.PriorityJudged)
 	m.BarMet = m.HighRecall != nil && *m.HighRecall >= barHighRecall && m.CleanBlocking == 0
 	return m

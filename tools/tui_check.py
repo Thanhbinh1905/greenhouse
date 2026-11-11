@@ -439,7 +439,7 @@ def line_mode():
     try:
         p = subprocess.run([binary], input="q\n", cwd=f.repo, env=f.env, text=True, capture_output=True, timeout=20)
         assert p.returncode == 0 and "[q] Detach" in p.stdout and "\n> " in p.stdout and "\x1b[?1049h" not in p.stdout, p.stdout
-        (evidence / "line-mode-piped.txt").write_text(p.stdout.replace("\x1b[2J\x1b[H", ""))
+        (evidence / "line-mode-piped.txt").write_text("\n".join(line.rstrip() for line in p.stdout.replace("\x1b[2J\x1b[H", "").splitlines()) + "\n")
         s = Session(f, 80, "term-dumb", {"TERM": "dumb"})
         s.wait(r"> $|>\s*$")
         s.capture("TERM=dumb keeps the line client", r"\[q\] Detach", r"\[i\] Inspect")

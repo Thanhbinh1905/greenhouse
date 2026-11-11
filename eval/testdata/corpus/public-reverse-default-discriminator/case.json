@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-default-discriminator",
+  "category": "bug",
+  "description": "Two variants have defaulted discriminator tags: both advertise undefined and the old discriminator map throws even when the input supplies a unique explicit tag.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Two variants have defaulted discriminator tags: both advertise undefined and the old discriminator map throws even when the input supplies a unique explicit tag.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/schemas.ts",
+      "start": 89,
+      "end": 89,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Two variants have defaulted discriminator tags: both advertise undefined and the old discriminator map throws even when the input supplies a unique explicit tag."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "b12aa523e7e2617c4296cccf9b24d6558ed23e95",
+    "files": [
+      "packages/zod/src/v4/core/schemas.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Two variants have defaulted discriminator tags: both advertise undefined and the old discriminator map throws even when the input supplies a unique explicit tag. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 2596-2607, 2617-2627, 2628-2643, 2644-2662, 2670-2759; head source lines 2596-2607, 2617-2627, 2628-2646, 2654-2753. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/b12aa523e7e2617c4296cccf9b24d6558ed23e95"
+  }
+}

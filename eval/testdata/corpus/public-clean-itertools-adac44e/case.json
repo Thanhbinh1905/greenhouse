@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-adac44e",
+  "category": "clean",
+  "description": "Introduce AllEqualValueError",
+  "intent": "Introduce AllEqualValueError",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "adac44e4278b087033d23408652e540aef5b22f0",
+    "files": [
+      "src/all_equal_value_err.rs",
+      "src/lib.rs"
+    ],
+    "derivation": "Retain upstream source change: Introduce AllEqualValueError. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/all_equal_value_err.rs: base source lines whole file; head source lines 3-3; src/lib.rs: base source lines 94-154, 184-187, container line 455, 2550-2562; head source lines 94-155, 188-189, container line 457, 2552-2564. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/adac44e4278b087033d23408652e540aef5b22f0"
+  }
+}

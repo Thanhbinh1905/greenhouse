@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-retry-status",
+  "category": "bug",
+  "description": "An unchanged queue client retries only 429 and 503; reporting success during an outage acknowledges an undelivered job.",
+  "intent": "Constructed cross-file contract. An unchanged queue client retries only 429 and 503; reporting success during an outage acknowledges an undelivered job. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An unchanged queue client retries only 429 and 503; reporting success during an outage acknowledges an undelivered job."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. An unchanged queue client retries only 429 and 503; reporting success during an outage acknowledges an undelivered job. The unchanged caller is an executable failure scenario."
+  }
+}

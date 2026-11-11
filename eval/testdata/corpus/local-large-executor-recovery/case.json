@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "id": "local-large-executor-recovery",
+  "category": "bug",
+  "description": "A candidate lease owned by a different state home passes the owner check while the current owner is rejected, allowing conflicting writers.",
+  "intent": "Review the original feature change with the recorded injected defect.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "seeded-regression",
+      "file": "leases.go",
+      "start": 81,
+      "end": 81,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A candidate lease owned by a different state home passes the owner check while the current owner is rejected, allowing conflicting writers."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "abead781a24847e878a725d080420c15f809673a",
+    "files": [
+      "execution.go",
+      "execution_hazards_test.go",
+      "execution_review_regression_test.go",
+      "executor.go",
+      "leases.go",
+      "main.go",
+      "pipeline.go",
+      "pipeline_test.go",
+      "recovery.go",
+      "recovery_test.go",
+      "repair.go",
+      "repair_acceptance_test.go",
+      "repair_test.go",
+      "resume.go"
+    ],
+    "derivation": "Inject a defect into the full real change at the pinned commit: replace 'case l.Owner != owner:' with 'case l.Owner == owner:'. The large snapshot retains all changed Go source and test files. Scenario: A candidate lease owned by a different state home passes the owner check while the current owner is rejected, allowing conflicting writers."
+  }
+}

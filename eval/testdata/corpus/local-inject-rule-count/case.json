@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-rule-count",
+  "category": "bug",
+  "description": "An empty criteria pack is treated as a valid policy snapshot, so a required rule can silently enforce nothing.",
+  "intent": "Inject into the real parsePack change: replace 'len(p.Criteria) == 0' with 'len(p.Criteria) < 0'. Static scenario: An empty criteria pack is treated as a valid policy snapshot, so a required rule can silently enforce nothing.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "rules.go",
+      "start": 88,
+      "end": 88,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An empty criteria pack is treated as a valid policy snapshot, so a required rule can silently enforce nothing."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "156c93a8fe19ad5ca51d85fa33e418f737690638",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Inject into the real parsePack change: replace 'len(p.Criteria) == 0' with 'len(p.Criteria) < 0'. Static scenario: An empty criteria pack is treated as a valid policy snapshot, so a required rule can silently enforce nothing."
+  }
+}

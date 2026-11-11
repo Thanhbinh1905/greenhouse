@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-cf18d03",
+  "category": "clean",
+  "description": "treat SSLEOFError as dropped connection",
+  "intent": "treat SSLEOFError as dropped connection",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "cf18d037faeacfb458e645fa2dbaf25b5bbf1080",
+    "files": [
+      "src/werkzeug/serving.py"
+    ],
+    "derivation": "Retain upstream source change: treat SSLEOFError as dropped connection. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/serving.py: base source lines 38-49, container line 151, 241-386; head source lines 38-56, container line 158, 248-393. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/cf18d037faeacfb458e645fa2dbaf25b5bbf1080"
+  }
+}

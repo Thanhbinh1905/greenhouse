@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-host-grant",
+  "category": "bug",
+  "description": "Retry a host review through admitReviewAgain: the replacement execution loses the old host grant and cannot consume the authorized result.",
+  "intent": "Reverse the affected file containing the admitReviewAgain fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Retry a host review through admitReviewAgain: the replacement execution loses the old host grant and cannot consume the authorized result.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "execution.go",
+      "start": 173,
+      "end": 173,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Retry a host review through admitReviewAgain: the replacement execution loses the old host grant and cannot consume the authorized result."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "e7aa6a1a7dff4f66559ef2b90fb22488bcb3eaeb",
+    "files": [
+      "execution.go"
+    ],
+    "derivation": "Reverse the affected file containing the admitReviewAgain fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Retry a host review through admitReviewAgain: the replacement execution loses the old host grant and cannot consume the authorized result."
+  }
+}

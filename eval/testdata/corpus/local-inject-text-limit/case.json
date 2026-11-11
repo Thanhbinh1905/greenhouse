@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-text-limit",
+  "category": "bug",
+  "description": "A rule string above the documented 8192-byte bound passes admission and can exceed the intended evidence budget.",
+  "intent": "Inject into the real validText change: replace 'len(s) > 8192' with 'len(s) > 81920'. Static scenario: A rule string above the documented 8192-byte bound passes admission and can exceed the intended evidence budget.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "rules.go",
+      "start": 61,
+      "end": 61,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A rule string above the documented 8192-byte bound passes admission and can exceed the intended evidence budget."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "156c93a8fe19ad5ca51d85fa33e418f737690638",
+    "files": [
+      "rules.go"
+    ],
+    "derivation": "Inject into the real validText change: replace 'len(s) > 8192' with 'len(s) > 81920'. Static scenario: A rule string above the documented 8192-byte bound passes admission and can exceed the intended evidence budget."
+  }
+}

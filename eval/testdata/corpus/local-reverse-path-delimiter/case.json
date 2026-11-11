@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-path-delimiter",
+  "category": "bug",
+  "description": "A Git diff path ending in its tab delimiter retains the tab, so expected paths fail to match real files.",
+  "intent": "Reverse the affected file containing the diffPath fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A Git diff path ending in its tab delimiter retains the tab, so expected paths fail to match real files.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "execution.go",
+      "start": 447,
+      "end": 447,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A Git diff path ending in its tab delimiter retains the tab, so expected paths fail to match real files."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "b38d73f541ab27c7eb54c683d76b578ac36d2791",
+    "files": [
+      "execution.go"
+    ],
+    "derivation": "Reverse the affected file containing the diffPath fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A Git diff path ending in its tab delimiter retains the tab, so expected paths fail to match real files."
+  }
+}

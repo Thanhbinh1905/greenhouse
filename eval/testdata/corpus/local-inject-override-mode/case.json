@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-override-mode",
+  "category": "bug",
+  "description": "A repository changes ask to yolo, expanding approval authority without the per-user choice.",
+  "intent": "Inject into the real narrows change: replace 'rank > modeRank[base.Mode]' with 'rank < modeRank[base.Mode]'. Static scenario: A repository changes ask to yolo, expanding approval authority without the per-user choice.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "trust.go",
+      "start": 202,
+      "end": 202,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A repository changes ask to yolo, expanding approval authority without the per-user choice."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "2e011906f8b76c0156bcb75fcf6ff8cbf0ffe539",
+    "files": [
+      "trust.go"
+    ],
+    "derivation": "Inject into the real narrows change: replace 'rank > modeRank[base.Mode]' with 'rank < modeRank[base.Mode]'. Static scenario: A repository changes ask to yolo, expanding approval authority without the per-user choice."
+  }
+}

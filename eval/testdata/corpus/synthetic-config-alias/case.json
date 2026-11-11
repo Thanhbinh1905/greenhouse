@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-config-alias",
+  "category": "bug",
+  "description": "The unchanged per-request caller edits its options; returning shared defaults leaks one request timeout into subsequent requests.",
+  "intent": "Constructed cross-file contract. The unchanged per-request caller edits its options; returning shared defaults leaks one request timeout into subsequent requests. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "The unchanged per-request caller edits its options; returning shared defaults leaks one request timeout into subsequent requests."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. The unchanged per-request caller edits its options; returning shared defaults leaks one request timeout into subsequent requests. The unchanged caller is an executable failure scenario."
+  }
+}

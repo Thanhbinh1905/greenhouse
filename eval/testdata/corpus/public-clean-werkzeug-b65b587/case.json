@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-b65b587",
+  "category": "clean",
+  "description": "implement or and ior operators",
+  "intent": "implement or and ior operators",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "b65b587aa12ec40df1eecb4c6aadaf8de8931187",
+    "files": [
+      "src/werkzeug/datastructures/headers.py",
+      "src/werkzeug/datastructures/mixins.py",
+      "src/werkzeug/datastructures/structures.py"
+    ],
+    "derivation": "Retain upstream source change: implement or and ior operators. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/datastructures/headers.py: base source lines container line 20, 527-532; head source lines container line 20, 530-538, 540-553, 599-652; src/werkzeug/datastructures/mixins.py: base source lines 76-133, 166-216, 233-296; head source lines 76-139, 172-228, 245-317; src/werkzeug/datastructures/structures.py: base source lines whole file; head source lines container line 134, 441-449, 451-461. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/b65b587aa12ec40df1eecb4c6aadaf8de8931187"
+  }
+}

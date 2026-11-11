@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-fused-contract",
+  "category": "bug",
+  "description": "TakeWhileInclusive over a non-fused iterator can yield Some after None, yet its unconditional FusedIterator implementation promises that this cannot happen.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: TakeWhileInclusive over a non-fused iterator can yield Some after None, yet its unconditional FusedIterator implementation promises that this cannot happen.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "src/take_while_inclusive.rs",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "TakeWhileInclusive over a non-fused iterator can yield Some after None, yet its unconditional FusedIterator implementation promises that this cannot happen."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "75ac95bd16c014ddbd5c77f1ea67d64fb41987c7",
+    "files": [
+      "src/take_while_inclusive.rs"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: TakeWhileInclusive over a non-fused iterator can yield Some after None, yet its unconditional FusedIterator implementation promises that this cannot happen. Excerpt coordinates: src/take_while_inclusive.rs: base source lines 91-96; head source lines 91-96. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/75ac95bd16c014ddbd5c77f1ea67d64fb41987c7"
+  }
+}

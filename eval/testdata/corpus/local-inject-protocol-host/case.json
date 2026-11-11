@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-protocol-host",
+  "category": "bug",
+  "description": "A protocol-1 request carrying only a host grant bypasses the host-mode version guard.",
+  "intent": "Inject into the real checkVersion change: replace 'q.Version < 2 && (q.Host != nil || q.Grant != \"\")' with 'q.Version < 2 && (q.Host != nil && q.Grant != \"\")'. Static scenario: A protocol-1 request carrying only a host grant bypasses the host-mode version guard.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "protocol.go",
+      "start": 27,
+      "end": 27,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A protocol-1 request carrying only a host grant bypasses the host-mode version guard."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "78fc0d8231b737ae962ae1756d5852a717130e5f",
+    "files": [
+      "protocol.go"
+    ],
+    "derivation": "Inject into the real checkVersion change: replace 'q.Version < 2 && (q.Host != nil || q.Grant != \"\")' with 'q.Version < 2 && (q.Host != nil && q.Grant != \"\")'. Static scenario: A protocol-1 request carrying only a host grant bypasses the host-mode version guard."
+  }
+}

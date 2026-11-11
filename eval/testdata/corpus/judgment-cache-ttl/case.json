@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "id": "judgment-cache-ttl",
+  "category": "judgment",
+  "description": "Caching missing profiles for five seconds reduces repeated misses but delays visibility of newly created profiles. Both policies fit the stated cache contract.",
+  "intent": "Caching missing profiles for five seconds reduces repeated misses but delays visibility of newly created profiles. Both policies fit the stated cache contract.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "judgment",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed judgment case. Caching missing profiles for five seconds reduces repeated misses but delays visibility of newly created profiles. Both policies fit the stated cache contract. The allowed range marks an optional policy objection, not a required defect."
+  },
+  "allowed": [
+    {
+      "file": "policy.ts",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "note": "Caching missing profiles for five seconds reduces repeated misses but delays visibility of newly created profiles. Both policies fit the stated cache contract."
+    }
+  ]
+}

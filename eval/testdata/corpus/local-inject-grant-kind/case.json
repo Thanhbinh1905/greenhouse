@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-grant-kind",
+  "category": "bug",
+  "description": "An add-files grant can satisfy a delete-files check while a matching-authority grant is skipped.",
+  "intent": "Inject into the real covered change: replace 'g.Authority != authority' with 'g.Authority == authority'. Static scenario: An add-files grant can satisfy a delete-files check while a matching-authority grant is skipped.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "grant.go",
+      "start": 85,
+      "end": 85,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An add-files grant can satisfy a delete-files check while a matching-authority grant is skipped."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "882eecdf7624c1bc4b3cbf404b09ce2a38312f55",
+    "files": [
+      "grant.go"
+    ],
+    "derivation": "Inject into the real covered change: replace 'g.Authority != authority' with 'g.Authority == authority'. Static scenario: An add-files grant can satisfy a delete-files check while a matching-authority grant is skipped."
+  }
+}
