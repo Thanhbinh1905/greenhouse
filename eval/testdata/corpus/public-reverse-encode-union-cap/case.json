@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-encode-union-cap",
+  "category": "bug",
+  "description": "Encoding a union with one capped matching array reports invalid_union instead of its too_big error because the check-free pass incorrectly marks that branch aborted.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Encoding a union with one capped matching array reports invalid_union instead of its too_big error because the check-free pass incorrectly marks that branch aborted.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/schemas.ts",
+      "start": 82,
+      "end": 82,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Encoding a union with one capped matching array reports invalid_union instead of its too_big error because the check-free pass incorrectly marks that branch aborted."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "ab1e132c0a5da27dcf4732b4e8783f22ce4adf2b",
+    "files": [
+      "packages/zod/src/v4/core/schemas.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: Encoding a union with one capped matching array reports invalid_union instead of its too_big error because the check-free pass incorrectly marks that branch aborted. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 203-334; head source lines 203-337. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/ab1e132c0a5da27dcf4732b4e8783f22ce4adf2b"
+  }
+}

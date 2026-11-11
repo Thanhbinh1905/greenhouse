@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-transcript-cap",
+  "category": "bug",
+  "description": "Append near transcriptLimit with less room than the omission marker: slicing with a negative bound panics.",
+  "intent": "Reverse the affected file containing the appendTranscript fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Append near transcriptLimit with less room than the omission marker: slicing with a negative bound panics.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "transcript.go",
+      "start": 82,
+      "end": 82,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Append near transcriptLimit with less room than the omission marker: slicing with a negative bound panics."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "5510999ba60d5c35595af712faf53f769344d813",
+    "files": [
+      "transcript.go"
+    ],
+    "derivation": "Reverse the affected file containing the appendTranscript fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: Append near transcriptLimit with less room than the omission marker: slicing with a negative bound panics."
+  }
+}

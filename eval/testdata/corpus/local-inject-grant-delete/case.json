@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-grant-delete",
+  "category": "bug",
+  "description": "Deleting a file outside all grants no longer raises destructive authority; the candidate can accept an unauthorized deletion.",
+  "intent": "Inject into the real classifyGranted change: replace 'if len(deleteMissing) > 0' with 'if len(deleteMissing) < 0'. Static scenario: Deleting a file outside all grants no longer raises destructive authority; the candidate can accept an unauthorized deletion.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "grant.go",
+      "start": 125,
+      "end": 125,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Deleting a file outside all grants no longer raises destructive authority; the candidate can accept an unauthorized deletion."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "882eecdf7624c1bc4b3cbf404b09ce2a38312f55",
+    "files": [
+      "grant.go"
+    ],
+    "derivation": "Inject into the real classifyGranted change: replace 'if len(deleteMissing) > 0' with 'if len(deleteMissing) < 0'. Static scenario: Deleting a file outside all grants no longer raises destructive authority; the candidate can accept an unauthorized deletion."
+  }
+}

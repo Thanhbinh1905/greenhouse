@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-3f99dc6",
+  "category": "clean",
+  "description": "feat: impl PeekingNext for std::collections::*",
+  "intent": "feat: impl PeekingNext for std::collections::*",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "3f99dc60539b9a9de31a93f0e1c32b6d505ad3bd",
+    "files": [
+      "src/peeking_take_while.rs"
+    ],
+    "derivation": "Retain upstream source change: feat: impl PeekingNext for std::collections::*. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/peeking_take_while.rs: base source lines 202-252; head source lines 202-274. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/3f99dc60539b9a9de31a93f0e1c32b6d505ad3bd"
+  }
+}

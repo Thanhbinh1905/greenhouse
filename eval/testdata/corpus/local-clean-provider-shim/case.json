@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "id": "local-clean-provider-shim",
+  "category": "clean",
+  "description": "Remove unused provider shim field",
+  "intent": "Remove unused provider shim field",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "558f1163623f6067970be0b4bed87dfcc794a2e2",
+    "files": [
+      "eval/live.go",
+      "eval/shim.go"
+    ],
+    "derivation": "Retain the merged change: Remove unused provider shim field. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

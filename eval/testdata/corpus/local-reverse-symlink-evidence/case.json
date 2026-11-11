@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-symlink-evidence",
+  "category": "bug",
+  "description": "A stopped fixer creates a symlink; partial evidence records only not a regular file and loses the symlink target required for recovery.",
+  "intent": "Reverse the affected file containing the capturePartial fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A stopped fixer creates a symlink; partial evidence records only not a regular file and loses the symlink target required for recovery.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "backends.go",
+      "start": 832,
+      "end": 832,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A stopped fixer creates a symlink; partial evidence records only not a regular file and loses the symlink target required for recovery."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "91e71ca91937c2cd24745550298a6711bafaa520",
+    "files": [
+      "backends.go"
+    ],
+    "derivation": "Reverse the affected file containing the capturePartial fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A stopped fixer creates a symlink; partial evidence records only not a regular file and loses the symlink target required for recovery."
+  }
+}

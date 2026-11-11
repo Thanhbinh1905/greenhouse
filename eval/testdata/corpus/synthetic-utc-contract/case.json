@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-utc-contract",
+  "category": "bug",
+  "description": "The unchanged expiry checker compares aware UTC timestamps; changing created to local naive time raises TypeError.",
+  "intent": "Constructed cross-file contract. The unchanged expiry checker compares aware UTC timestamps; changing created to local naive time raises TypeError. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "The unchanged expiry checker compares aware UTC timestamps; changing created to local naive time raises TypeError."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. The unchanged expiry checker compares aware UTC timestamps; changing created to local naive time raises TypeError. The unchanged caller is an executable failure scenario."
+  }
+}

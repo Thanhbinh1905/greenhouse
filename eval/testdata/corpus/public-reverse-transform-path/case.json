@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "public-reverse-transform-path",
+  "category": "bug",
+  "description": "A transform reuses one issue path array across parses; receiver prefixing mutates that caller-owned array, so repeated nested parses accumulate path prefixes.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A transform reuses one issue path array across parses; receiver prefixing mutates that caller-owned array, so repeated nested parses accumulate path prefixes.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "packages/zod/src/v4/core/schemas.ts",
+      "start": 13,
+      "end": 13,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A transform reuses one issue path array across parses; receiver prefixing mutates that caller-owned array, so repeated nested parses accumulate path prefixes."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "TypeScript"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/colinhacks/zod",
+    "commit": "19c40d2072288b4cafec851e9d056a72a88e5973",
+    "files": [
+      "packages/zod/src/v4/core/schemas.ts"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: A transform reuses one issue path array across parses; receiver prefixing mutates that caller-owned array, so repeated nested parses accumulate path prefixes. Excerpt coordinates: packages/zod/src/v4/core/schemas.ts: base source lines 3873-3913, 4573-4590; head source lines 3873-3910, 4570-4586. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-zod-3f1189b28e38.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/colinhacks/zod/commit/19c40d2072288b4cafec851e9d056a72a88e5973"
+  }
+}

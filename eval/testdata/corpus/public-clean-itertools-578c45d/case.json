@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-578c45d",
+  "category": "clean",
+  "description": "New methods [circular_]array_windows().",
+  "intent": "New methods [circular_]array_windows().",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "578c45d655fd739565036e8e28f5d1a7169aa84c",
+    "files": [
+      "src/array_impl.rs",
+      "src/lib.rs"
+    ],
+    "derivation": "Retain upstream source change: New methods [circular_]array_windows().. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/array_impl.rs: base source lines whole file; head source lines 10-19, 20-28, 29-44, 45-80, 81-98, 99-108, 109-126, 127-220, 221-230; src/lib.rs: base source lines 92-151, 177-179, container line 451, 895-901; head source lines 92-152, 178-178, container line 453, 897-903, 943-949, 1012-1018. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/578c45d655fd739565036e8e28f5d1a7169aa84c"
+  }
+}

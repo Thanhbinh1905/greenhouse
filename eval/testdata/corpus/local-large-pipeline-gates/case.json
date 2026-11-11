@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "id": "local-large-pipeline-gates",
+  "category": "bug",
+  "description": "A trusted pipeline with 21 gate repairs is admitted despite the intended maximum of 20, bypassing the configured repair-budget bound.",
+  "intent": "Review the original feature change with the recorded injected defect.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "seeded-regression",
+      "file": "pipeline.go",
+      "start": 95,
+      "end": 95,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A trusted pipeline with 21 gate repairs is admitted despite the intended maximum of 20, bypassing the configured repair-budget bound."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "large-change"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "949885aba7f5e512073c01ba984747436f8f9d7b",
+    "files": [
+      "execution.go",
+      "main.go",
+      "pipeline.go",
+      "pipeline_test.go",
+      "repair.go"
+    ],
+    "derivation": "Inject a defect into the full real change at the pinned commit: replace 'plan.RepairLimit > 20' with 'plan.RepairLimit > 2000'. The large snapshot retains all changed Go source and test files. Scenario: A trusted pipeline with 21 gate repairs is admitted despite the intended maximum of 20, bypassing the configured repair-budget bound."
+  }
+}

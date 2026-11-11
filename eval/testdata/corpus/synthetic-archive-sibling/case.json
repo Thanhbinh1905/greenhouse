@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-archive-sibling",
+  "category": "bug",
+  "description": "A sibling path sharing the extraction directory prefix passes validation and escapes the archive destination.",
+  "intent": "Constructed security-sensitive contract. A sibling path sharing the extraction directory prefix passes validation and escapes the archive destination. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A sibling path sharing the extraction directory prefix passes validation and escapes the archive destination."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. A sibling path sharing the extraction directory prefix passes validation and escapes the archive destination. The unchanged caller is an executable failure scenario."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-6504819",
+  "category": "clean",
+  "description": "synchronize failed pin entry",
+  "intent": "synchronize failed pin entry",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "650481972fbab9e9d8f0b1af23c4fb6a88b4e8c0",
+    "files": [
+      "src/werkzeug/debug/__init__.py"
+    ],
+    "derivation": "Retain upstream source change: synchronize failed pin entry. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/debug/__init__.py: base source lines 16-16, container line 227, 267-309, 456-458, 460-512; head source lines 16-16, container line 228, 268-310, 457-462, 464-516. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/650481972fbab9e9d8f0b1af23c4fb6a88b4e8c0"
+  }
+}

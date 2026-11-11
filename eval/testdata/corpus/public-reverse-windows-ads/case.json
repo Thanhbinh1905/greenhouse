@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "public-reverse-windows-ads",
+  "category": "bug",
+  "description": "On Windows safe_join accepts CON::$DATA because the reserved-device check does not strip the ADS suffix, allowing a device path through the serving guard.",
+  "intent": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: On Windows safe_join accepts CON::$DATA because the reserved-device check does not strip the ADS suffix, allowing a device path through the serving guard.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "src/werkzeug/security.py",
+      "start": 61,
+      "end": 61,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "On Windows safe_join accepts CON::$DATA because the reserved-device check does not strip the ADS suffix, allowing a device path through the serving guard."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Python",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "b2a2c09730086ab2d375f0b069c821d4edf526b7",
+    "files": [
+      "src/werkzeug/security.py"
+    ],
+    "derivation": "Reverse the affected source file from the pinned upstream fix. Static scenario checked against the upstream patch and regression changes: On Windows safe_join accepts CON::$DATA because the reserved-device check does not strip the ADS suffix, allowing a device path through the serving guard. Excerpt coordinates: src/werkzeug/security.py: base source lines 149-223; head source lines 149-218. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/b2a2c09730086ab2d375f0b069c821d4edf526b7"
+  }
+}

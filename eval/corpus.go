@@ -31,6 +31,11 @@ type Corpus struct {
 }
 
 type Case struct {
+	Split       string            `json:"split"`
+	Stratum     string            `json:"stratum"`
+	Tags        []string          `json:"tags"`
+	Source      Source            `json:"source"`
+	Allowed     []Allowed         `json:"allowed,omitempty"`
 	Version     int               `json:"version"`
 	ID          string            `json:"id"`
 	Category    string            `json:"category"`
@@ -41,6 +46,99 @@ type Case struct {
 	Noise       []Noise           `json:"noise"`
 	Base        map[string]string `json:"-"`
 	Head        map[string]string `json:"-"`
+}
+
+type Source struct {
+	Kind       string   `json:"kind"`
+	Repo       string   `json:"repo,omitempty"`
+	Commit     string   `json:"commit,omitempty"`
+	License    string   `json:"license,omitempty"`
+	URL        string   `json:"url,omitempty"`
+	Files      []string `json:"files,omitempty"`
+	Derivation string   `json:"derivation"`
+}
+
+type Allowed struct {
+	File   string `json:"file"`
+	Start  int    `json:"start"`
+	End    int    `json:"end"`
+	Origin string `json:"origin"`
+	Rule   string `json:"rule"`
+	Note   string `json:"note"`
+}
+
+var strata = map[string]bool{
+	"reversed-bug-fix": true, "injected-defect": true, "clean-real-change": true,
+	"security-sensitive": true, "refactor-only": true, "large-change": true,
+	"tiny-change": true, "cross-file": true, "judgment": true,
+}
+
+var publicLicenses = map[string]bool{"MIT": true, "Apache-2.0": true, "BSD-2-Clause": true, "BSD-3-Clause": true, "ISC": true}
+var commitID = regexp.MustCompile(`^[0-9a-f]{40}$`)
+
+func validateMetadata(k Case) error {
+	if k.Split != "tune" && k.Split != "holdout" {
+		return errors.New("split must be tune or holdout")
+	}
+	if !strata[k.Stratum] {
+		return fmt.Errorf("invalid stratum %q", k.Stratum)
+	}
+	s := k.Source
+	if strings.TrimSpace(s.Derivation) == "" {
+		return errors.New("source derivation required")
+	}
+	switch s.Kind {
+	case "synthetic":
+	case "local", "public":
+		if s.Repo == "" || !commitID.MatchString(s.Commit) || len(s.Files) == 0 {
+			return errors.New("real source requires repo, exact commit and files")
+		}
+		if s.Kind == "public" && (!publicLicenses[s.License] || !strings.HasPrefix(s.URL, "https://")) {
+			return errors.New("public source requires allowed license and https url")
+		}
+	default:
+		return fmt.Errorf("unknown source kind %q", s.Kind)
+	}
+	for _, name := range s.Files {
+		if name == "" || filepath.IsAbs(name) || filepath.ToSlash(filepath.Clean(name)) != name || name == ".." || strings.HasPrefix(name, "../") {
+			return errors.New("source files must be repository-relative paths")
+		}
+		if _, base := k.Base[name]; !base {
+			if _, head := k.Head[name]; !head {
+				return fmt.Errorf("source file %s absent from case trees", name)
+			}
+		}
+	}
+	for _, tag := range k.Tags {
+		if strings.TrimSpace(tag) == "" {
+			return errors.New("empty tag")
+		}
+	}
+	if len(k.Allowed) > 0 && k.Category != "judgment" {
+		return errors.New("allowed ranges require judgment category")
+	}
+	for _, a := range k.Allowed {
+		if err := checkRange(k.Head, a.File, a.Start, a.End); err != nil {
+			return err
+		}
+		if a.Note == "" || (a.Origin != "correctness" && a.Origin != "policy") || (a.Origin == "correctness" && a.Rule != "") {
+			return errors.New("allowed range requires note and valid origin/rule")
+		}
+		if a.Origin == "policy" {
+			selected := false
+			for _, r := range k.Rules {
+				for _, id := range builtinRules[r] {
+					if id == a.Rule {
+						selected = true
+					}
+				}
+			}
+			if !selected {
+				return errors.New("allowed rule not selected")
+			}
+		}
+	}
+	return nil
 }
 
 type Expected struct {
@@ -92,6 +190,9 @@ func LoadCorpus(root string) (*Corpus, error) {
 	}
 	listed := map[string]bool{}
 	for _, id := range manifest.Cases {
+		if !expectedID.MatchString(id) || listed[id] {
+			return nil, fmt.Errorf("invalid or duplicate case ID %q", id)
+		}
 		listed[id] = true
 	}
 	entries, err := os.ReadDir(root)
@@ -162,6 +263,10 @@ func loadCase(dir, id string) (*Case, error) {
 		}
 	}
 	switch k.Category {
+	case "judgment":
+		if len(k.Allowed) == 0 {
+			return nil, errors.New("judgment case needs allowed ranges")
+		}
 	case "clean", "noise":
 		if len(k.Expected) != 0 {
 			return nil, fmt.Errorf("%s case must not expect findings", k.Category)
@@ -207,6 +312,9 @@ func loadCase(dir, id string) (*Case, error) {
 		if err := checkRange(k.Head, n.File, n.Start, n.End); err != nil {
 			return nil, err
 		}
+	}
+	if err := validateMetadata(k); err != nil {
+		return nil, err
 	}
 	return &k, nil
 }

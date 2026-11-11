@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-count-zero",
+  "category": "bug",
+  "description": "Input 0 or 0001 passes digit validation despite the promised positive canonical range.",
+  "intent": "Inject into the real parseCount change: replace \"text[0] == '0'\" with \"text[0] == 'x'\". Static scenario: Input 0 or 0001 passes digit validation despite the promised positive canonical range.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "authority.go",
+      "start": 447,
+      "end": 447,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Input 0 or 0001 passes digit validation despite the promised positive canonical range."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c3572775536a1c962f96501a4ea617a979959076",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Inject into the real parseCount change: replace \"text[0] == '0'\" with \"text[0] == 'x'\". Static scenario: Input 0 or 0001 passes digit validation despite the promised positive canonical range."
+  }
+}

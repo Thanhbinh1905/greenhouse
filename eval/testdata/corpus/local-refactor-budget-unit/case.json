@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-refactor-budget-unit",
+  "category": "clean",
+  "description": "Express supported budget units as a switch while preserving error messages and malformed-value behavior.",
+  "intent": "Express supported budget units as a switch while preserving error messages and malformed-value behavior.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "refactor-only",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "b4174aeb3277a4eb07ef5620b18c398094e7521e",
+    "files": [
+      "config.go"
+    ],
+    "derivation": "Construct a behavior-preserving refactor of budgetUnit from the pinned source. Express supported budget units as a switch while preserving error messages and malformed-value behavior. This transformation is not claimed to be an upstream merged change."
+  }
+}

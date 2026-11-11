@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-patch-header",
+  "category": "bug",
+  "description": "A source line in a hunk beginning with +++ is interpreted as a patch file header, so subsequent changed ranges attach to the wrong path.",
+  "intent": "Reverse the affected file containing the changedRanges fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A source line in a hunk beginning with +++ is interpreted as a patch file header, so subsequent changed ranges attach to the wrong path.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "execution.go",
+      "start": 412,
+      "end": 412,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A source line in a hunk beginning with +++ is interpreted as a patch file header, so subsequent changed ranges attach to the wrong path."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "8da80bb979cf020fccf34759200523018c8d5366",
+    "files": [
+      "execution.go"
+    ],
+    "derivation": "Reverse the affected file containing the changedRanges fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A source line in a hunk beginning with +++ is interpreted as a patch file header, so subsequent changed ranges attach to the wrong path."
+  }
+}

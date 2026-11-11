@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-config-unknown",
+  "category": "bug",
+  "description": "A misspelled pipeline setting is silently ignored, so the configured check does not run.",
+  "intent": "Inject into the real decodeConfig change: replace 'd.DisallowUnknownFields()' with '// Unknown fields are accepted.'. Static scenario: A misspelled pipeline setting is silently ignored, so the configured check does not run.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "config.go",
+      "start": 92,
+      "end": 92,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A misspelled pipeline setting is silently ignored, so the configured check does not run."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "b4174aeb3277a4eb07ef5620b18c398094e7521e",
+    "files": [
+      "config.go"
+    ],
+    "derivation": "Inject into the real decodeConfig change: replace 'd.DisallowUnknownFields()' with '// Unknown fields are accepted.'. Static scenario: A misspelled pipeline setting is silently ignored, so the configured check does not run."
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-121821e",
+  "category": "clean",
+  "description": "AllEqualValueError implements std::error::Error",
+  "intent": "AllEqualValueError implements std::error::Error",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "121821ed16365a39c015449a3872708fd5dcdfdd",
+    "files": [
+      "src/all_equal_value_err.rs"
+    ],
+    "derivation": "Retain upstream source change: AllEqualValueError implements std::error::Error. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/all_equal_value_err.rs: base source lines whole file; head source lines 9-10, 11-30, 31-31. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/121821ed16365a39c015449a3872708fd5dcdfdd"
+  }
+}

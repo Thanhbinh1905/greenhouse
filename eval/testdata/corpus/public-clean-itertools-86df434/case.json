@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-86df434",
+  "category": "clean",
+  "description": "Add `all_unique_with_hasher()`",
+  "intent": "Add `all_unique_with_hasher()`",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "86df43484eb48d1c04bc1843265603243aeb30f0",
+    "files": [
+      "src/lib.rs"
+    ],
+    "derivation": "Retain upstream source change: Add `all_unique_with_hasher()`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines container line 455, 2580-2587; head source lines container line 455, 2580-2586, 2604-2612. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/86df43484eb48d1c04bc1843265603243aeb30f0"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-special-restore",
+  "category": "bug",
+  "description": "An untracked FIFO survives git clean; restoring a paused repair leaves the private candidate dirty and cannot resume safely.",
+  "intent": "Reverse the affected file containing the restoreCandidate fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: An untracked FIFO survives git clean; restoring a paused repair leaves the private candidate dirty and cannot resume safely.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "backends.go",
+      "start": 948,
+      "end": 948,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An untracked FIFO survives git clean; restoring a paused repair leaves the private candidate dirty and cannot resume safely."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "3bc84edce4a5bc42b4936a6c15ce98176b71799f",
+    "files": [
+      "backends.go"
+    ],
+    "derivation": "Reverse the affected file containing the restoreCandidate fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: An untracked FIFO survives git clean; restoring a paused repair leaves the private candidate dirty and cannot resume safely."
+  }
+}

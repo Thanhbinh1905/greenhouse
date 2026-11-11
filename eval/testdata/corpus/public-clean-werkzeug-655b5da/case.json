@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-655b5da",
+  "category": "clean",
+  "description": "`SharedDataMiddleware` uses `send_file`",
+  "intent": "`SharedDataMiddleware` uses `send_file`",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "655b5daa016564a5bd4748e347c0a123ba4e900c",
+    "files": [
+      "src/werkzeug/middleware/shared_data.py"
+    ],
+    "derivation": "Retain upstream source change: `SharedDataMiddleware` uses `send_file`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/middleware/shared_data.py: base source lines 1-10, 16-16, 22-22, 23-23, 24-24, 26-26, 27-27, 29-29, 30-30, 31-31, 36-39, container line 42, 103-141, 221-231, 233-292; head source lines 1-7, 13-13, 18-18, 21-21, 22-22, 23-23, 28-29, container line 32, 77-132, 212-256. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/655b5daa016564a5bd4748e347c0a123ba4e900c"
+  }
+}

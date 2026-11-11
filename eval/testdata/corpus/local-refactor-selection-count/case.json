@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-refactor-selection-count",
+  "category": "clean",
+  "description": "Name the terminal count validation predicate while preserving short-circuit protection for empty input.",
+  "intent": "Name the terminal count validation predicate while preserving short-circuit protection for empty input.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "refactor-only",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c3572775536a1c962f96501a4ea617a979959076",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Construct a behavior-preserving refactor of parseCount from the pinned source. Name the terminal count validation predicate while preserving short-circuit protection for empty input. This transformation is not claimed to be an upstream merged change."
+  }
+}

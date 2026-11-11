@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-protocol-high",
+  "category": "bug",
+  "description": "A client speaking one version above protocolMax is accepted without any negotiated support.",
+  "intent": "Inject into the real checkVersion change: replace 'q.Version > protocolMax' with 'q.Version > protocolMax+1'. Static scenario: A client speaking one version above protocolMax is accepted without any negotiated support.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "protocol.go",
+      "start": 21,
+      "end": 21,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A client speaking one version above protocolMax is accepted without any negotiated support."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "78fc0d8231b737ae962ae1756d5852a717130e5f",
+    "files": [
+      "protocol.go"
+    ],
+    "derivation": "Inject into the real checkVersion change: replace 'q.Version > protocolMax' with 'q.Version > protocolMax+1'. Static scenario: A client speaking one version above protocolMax is accepted without any negotiated support."
+  }
+}

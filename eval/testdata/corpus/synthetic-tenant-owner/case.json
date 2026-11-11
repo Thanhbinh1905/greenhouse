@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-tenant-owner",
+  "category": "bug",
+  "description": "Dropping the tenant equality check exposes another tenant record through the shared read path.",
+  "intent": "Constructed security-sensitive contract. Dropping the tenant equality check exposes another tenant record through the shared read path. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Dropping the tenant equality check exposes another tenant record through the shared read path."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. Dropping the tenant equality check exposes another tenant record through the shared read path. The unchanged caller is an executable failure scenario."
+  }
+}

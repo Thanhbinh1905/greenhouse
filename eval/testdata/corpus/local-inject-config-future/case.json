@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-config-future",
+  "category": "bug",
+  "description": "A file one schema version ahead bypasses the upgrade refusal and is decoded with current semantics.",
+  "intent": "Inject into the real decodeConfig change: replace 'if version > currentConfigVersion' with 'if version > currentConfigVersion+1'. Static scenario: A file one schema version ahead bypasses the upgrade refusal and is decoded with current semantics.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "config.go",
+      "start": 77,
+      "end": 77,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A file one schema version ahead bypasses the upgrade refusal and is decoded with current semantics."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "b4174aeb3277a4eb07ef5620b18c398094e7521e",
+    "files": [
+      "config.go"
+    ],
+    "derivation": "Inject into the real decodeConfig change: replace 'if version > currentConfigVersion' with 'if version > currentConfigVersion+1'. Static scenario: A file one schema version ahead bypasses the upgrade refusal and is decoded with current semantics."
+  }
+}

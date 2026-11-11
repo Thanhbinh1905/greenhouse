@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-itertools-d5897f7",
+  "category": "clean",
+  "description": "refactor(strip_prefix): use try_for_each and drop PartialEq, Eq on StripPrefixError",
+  "intent": "refactor(strip_prefix): use try_for_each and drop PartialEq, Eq on StripPrefixError",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Rust"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/rust-itertools/itertools",
+    "commit": "d5897f7bb2283a34b736f539a369fe16dc9f6bb4",
+    "files": [
+      "src/lib.rs"
+    ],
+    "derivation": "Retain upstream source change: refactor(strip_prefix): use try_for_each and drop PartialEq, Eq on StripPrefixError. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/lib.rs: base source lines container line 457, 5172-5196; head source lines container line 457, 5172-5194. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-itertools-7576269ea71f.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "MIT",
+    "url": "https://github.com/rust-itertools/itertools/commit/d5897f7bb2283a34b736f539a369fe16dc9f6bb4"
+  }
+}

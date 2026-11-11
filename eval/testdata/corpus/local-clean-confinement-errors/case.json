@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "local-clean-confinement-errors",
+  "category": "clean",
+  "description": "Fix merged checks and recovery evidence",
+  "intent": "Fix merged checks and recovery evidence",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "45a17813515ad0a00b06620e885d81fa72034310",
+    "files": [
+      "confine.go"
+    ],
+    "derivation": "Retain the merged change: Fix merged checks and recovery evidence. Reviewed reference change; no known seeded defect. No 90-day follow-up audit was performed."
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-byte-offset",
+  "category": "bug",
+  "description": "An unchanged byte-stream consumer uses this offset to resume reading; counting code points resumes inside a multibyte UTF-8 character.",
+  "intent": "Constructed cross-file contract. An unchanged byte-stream consumer uses this offset to resume reading; counting code points resumes inside a multibyte UTF-8 character. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An unchanged byte-stream consumer uses this offset to resume reading; counting code points resumes inside a multibyte UTF-8 character."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. An unchanged byte-stream consumer uses this offset to resume reading; counting code points resumes inside a multibyte UTF-8 character. The unchanged caller is an executable failure scenario."
+  }
+}

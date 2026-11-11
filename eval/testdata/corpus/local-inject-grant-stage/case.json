@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "id": "local-inject-grant-stage",
+  "category": "bug",
+  "description": "An add-files grant for docs also reaches the review stage, so a review fixer receives authority never granted for that stage.",
+  "intent": "Inject into the real stageGrants change: replace 'if has(g.Stages, stage)' with 'if len(g.Stages)>0'. Static scenario: An add-files grant for docs also reaches the review stage, so a review fixer receives authority never granted for that stage.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "grant.go",
+      "start": 76,
+      "end": 76,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An add-files grant for docs also reaches the review stage, so a review fixer receives authority never granted for that stage."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go",
+    "security-sensitive"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "882eecdf7624c1bc4b3cbf404b09ce2a38312f55",
+    "files": [
+      "grant.go"
+    ],
+    "derivation": "Inject into the real stageGrants change: replace 'if has(g.Stages, stage)' with 'if len(g.Stages)>0'. Static scenario: An add-files grant for docs also reaches the review stage, so a review fixer receives authority never granted for that stage. Format the modified Go file with gofmt."
+  }
+}

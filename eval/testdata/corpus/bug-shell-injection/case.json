@@ -24,5 +24,14 @@
       "defect": "branch comes from the web client and is interpolated into a shell=True command string; command injection. Pass an argument list without a shell."
     }
   ],
-  "noise": []
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Retained handcrafted revision-4 fixture introduced by local corpus history through f8420b91c5daff944d41bae0c2b8c2c1a861d452; expected findings and ranges unchanged."
+  }
 }

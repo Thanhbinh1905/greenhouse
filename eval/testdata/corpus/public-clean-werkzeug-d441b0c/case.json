@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-d441b0c",
+  "category": "clean",
+  "description": "improve `send_file`",
+  "intent": "improve `send_file`",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "d441b0c73b4baad5a07e9d1c564beaf54e2a2753",
+    "files": [
+      "src/werkzeug/utils.py"
+    ],
+    "derivation": "Retain upstream source change: improve `send_file`. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/utils.py: base source lines 15-15, 20-20, 303-520; head source lines 19-19, 20-20, 304-551. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/d441b0c73b4baad5a07e9d1c564beaf54e2a2753"
+  }
+}

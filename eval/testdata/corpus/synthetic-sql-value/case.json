@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-sql-value",
+  "category": "bug",
+  "description": "Interpolating a user-controlled name into SQL lets a quote and OR predicate return another account.",
+  "intent": "Constructed security-sensitive contract. Interpolating a user-controlled name into SQL lets a quote and OR predicate return another account. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 3,
+      "end": 3,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Interpolating a user-controlled name into SQL lets a quote and OR predicate return another account."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "security-sensitive",
+  "tags": [
+    "Python",
+    "security-sensitive",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed security-sensitive contract. Interpolating a user-controlled name into SQL lets a quote and OR predicate return another account. The unchanged caller is an executable failure scenario."
+  }
+}

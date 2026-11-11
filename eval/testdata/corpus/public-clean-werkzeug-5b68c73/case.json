@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "id": "public-clean-werkzeug-5b68c73",
+  "category": "clean",
+  "description": "modify headers and body in place",
+  "intent": "modify headers and body in place",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "tune",
+  "stratum": "clean-real-change",
+  "tags": [
+    "Python"
+  ],
+  "source": {
+    "kind": "public",
+    "repo": "https://github.com/pallets/werkzeug",
+    "commit": "5b68c736ff07163c84454d305d67d9e1f473481f",
+    "files": [
+      "src/werkzeug/wrappers/response.py",
+      "src/werkzeug/wsgi.py"
+    ],
+    "derivation": "Retain upstream source change: modify headers and body in place. Reviewed reference change; no defect injected. The 90-day no-follow-up criterion was not verified. Excerpt coordinates: src/werkzeug/wrappers/response.py: base source lines 13-13, container line 49, 189-223, 225-234, 342-355, 389-423, 425-452, 496-506, 519-551, 553-663, 665-690, 692-709, 711-723, 794-856, 990-1032; head source lines 13-13, container line 49, 122-138, 209-243, 245-258, 366-376, 378-399, 433-482, 484-507, 551-566, 579-607, 609-654, 656-704, 706-732, 734-742, 744-767, 769-804, 806-818, 889-953, 1087-1129; src/werkzeug/wsgi.py: base source lines 234-279; head source lines 234-280. Imports and unrelated declarations are omitted; these are review excerpts, not standalone packages. License notice: LICENSE-werkzeug-3b49dcee4105.txt. Trailing whitespace and final blank lines normalized.",
+    "license": "BSD-3-Clause",
+    "url": "https://github.com/pallets/werkzeug/commit/5b68c736ff07163c84454d305d67d9e1f473481f"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-inject-selection-duplicate",
+  "category": "bug",
+  "description": "Entering a full finding ID twice creates duplicate selected IDs instead of rejecting the terminal answer.",
+  "intent": "Inject into the real parseSelection change: replace 'case has(ids, entry):' with 'case false:'. Static scenario: Entering a full finding ID twice creates duplicate selected IDs instead of rejecting the terminal answer.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "authority.go",
+      "start": 438,
+      "end": 438,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "Entering a full finding ID twice creates duplicate selected IDs instead of rejecting the terminal answer."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "injected-defect",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "c3572775536a1c962f96501a4ea617a979959076",
+    "files": [
+      "authority.go"
+    ],
+    "derivation": "Inject into the real parseSelection change: replace 'case has(ids, entry):' with 'case false:'. Static scenario: Entering a full finding ID twice creates duplicate selected IDs instead of rejecting the terminal answer."
+  }
+}

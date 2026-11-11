@@ -1,0 +1,210 @@
+pub fn new<I, K, V, S>(iter: I, hash_builder: S) -> GroupingMap<I, S>
+where
+    I: Iterator<Item = (K, V)>,
+    K: Hash + Eq,
+    S: BuildHasher,
+{
+    GroupingMap { iter, hash_builder }
+}
+
+/// `GroupingMapBy` is an intermediate struct for efficient group-and-fold operations.
+///
+/// See [`GroupingMap`] for more information.
+pub type GroupingMapBy<I, F, S = RandomState> = GroupingMap<MapForGrouping<I, F>, S>;
+
+/// `GroupingMap` is an intermediate struct for efficient group-and-fold operations.
+/// It groups elements by their key and at the same time fold each group
+/// using some aggregating operation.
+///
+/// No method on this struct performs temporary allocations.
+#[derive(Clone, Debug)]
+#[must_use = "GroupingMap is lazy and do nothing unless consumed"]
+
+pub struct GroupingMap<I, S = RandomState>
+where
+    S: BuildHasher,
+{
+    iter: I,
+    hash_builder: S,
+}
+
+
+impl<I, K, V, S> GroupingMap<I, S>
+    pub fn aggregate<FO, R>(self, mut operation: FO) -> HashMap<K, R, S>
+    where
+        FO: FnMut(Option<R>, &K, V) -> Option<R>,
+    {
+        let mut destination_map = HashMap::with_hasher(self.hash_builder);
+
+        self.iter.for_each(|(key, val)| {
+            let acc = destination_map.remove(&key);
+            if let Some(op_res) = operation(acc, &key, val) {
+                destination_map.insert(key, op_res);
+            }
+        });
+
+        destination_map
+    }
+
+    pub fn fold_with<FI, FO, R>(self, mut init: FI, mut operation: FO) -> HashMap<K, R, S>
+    where
+        FI: FnMut(&K, &V) -> R,
+        FO: FnMut(R, &K, V) -> R,
+    {
+        self.aggregate(|acc, key, val| {
+            let acc = acc.unwrap_or_else(|| init(key, &val));
+            Some(operation(acc, key, val))
+        })
+    }
+
+    pub fn fold<FO, R>(self, init: R, operation: FO) -> HashMap<K, R, S>
+    where
+        R: Clone,
+        FO: FnMut(R, &K, V) -> R,
+    {
+        self.fold_with(|_, _| init.clone(), operation)
+    }
+
+    pub fn reduce<FO>(self, mut operation: FO) -> HashMap<K, V, S>
+    where
+        FO: FnMut(V, &K, V) -> V,
+    {
+        self.aggregate(|acc, key, val| {
+            Some(match acc {
+                Some(acc) => operation(acc, key, val),
+                None => val,
+            })
+        })
+    }
+
+    pub fn fold_first<FO>(self, operation: FO) -> HashMap<K, V, S>
+    where
+        FO: FnMut(V, &K, V) -> V,
+    {
+        self.reduce(operation)
+    }
+
+    pub fn collect<C>(self) -> HashMap<K, C, S>
+    where
+        C: Default + Extend<V>,
+    {
+        let mut destination_map = HashMap::with_hasher(self.hash_builder);
+
+        self.iter.for_each(|(key, val)| {
+            destination_map
+                .entry(key)
+                .or_insert_with(C::default)
+                .extend(Some(val));
+        });
+
+        destination_map
+    }
+
+    pub fn max(self) -> HashMap<K, V, S>
+    where
+        V: Ord,
+    {
+        self.max_by(|_, v1, v2| V::cmp(v1, v2))
+    }
+
+    pub fn max_by<F>(self, mut compare: F) -> HashMap<K, V, S>
+    where
+        F: FnMut(&K, &V, &V) -> Ordering,
+    {
+        self.reduce(|acc, key, val| match compare(key, &acc, &val) {
+            Ordering::Less | Ordering::Equal => val,
+            Ordering::Greater => acc,
+        })
+    }
+
+    pub fn max_by_key<F, CK>(self, mut f: F) -> HashMap<K, V, S>
+    where
+        F: FnMut(&K, &V) -> CK,
+        CK: Ord,
+    {
+        self.max_by(|key, v1, v2| f(key, v1).cmp(&f(key, v2)))
+    }
+
+    pub fn min(self) -> HashMap<K, V, S>
+    where
+        V: Ord,
+    {
+        self.min_by(|_, v1, v2| V::cmp(v1, v2))
+    }
+
+    pub fn min_by<F>(self, mut compare: F) -> HashMap<K, V, S>
+    where
+        F: FnMut(&K, &V, &V) -> Ordering,
+    {
+        self.reduce(|acc, key, val| match compare(key, &acc, &val) {
+            Ordering::Less | Ordering::Equal => acc,
+            Ordering::Greater => val,
+        })
+    }
+
+    pub fn min_by_key<F, CK>(self, mut f: F) -> HashMap<K, V, S>
+    where
+        F: FnMut(&K, &V) -> CK,
+        CK: Ord,
+    {
+        self.min_by(|key, v1, v2| f(key, v1).cmp(&f(key, v2)))
+    }
+
+    pub fn minmax(self) -> HashMap<K, MinMaxResult<V>, S>
+    where
+        V: Ord,
+    {
+        self.minmax_by(|_, v1, v2| V::cmp(v1, v2))
+    }
+
+    pub fn minmax_by<F>(self, mut compare: F) -> HashMap<K, MinMaxResult<V>, S>
+    where
+        F: FnMut(&K, &V, &V) -> Ordering,
+    {
+        self.aggregate(|acc, key, val| {
+            Some(match acc {
+                Some(MinMaxResult::OneElement(e)) => {
+                    if compare(key, &val, &e) == Ordering::Less {
+                        MinMaxResult::MinMax(val, e)
+                    } else {
+                        MinMaxResult::MinMax(e, val)
+                    }
+                }
+                Some(MinMaxResult::MinMax(min, max)) => {
+                    if compare(key, &val, &min) == Ordering::Less {
+                        MinMaxResult::MinMax(val, max)
+                    } else if compare(key, &val, &max) != Ordering::Less {
+                        MinMaxResult::MinMax(min, val)
+                    } else {
+                        MinMaxResult::MinMax(min, max)
+                    }
+                }
+                None => MinMaxResult::OneElement(val),
+                Some(MinMaxResult::NoElements) => unreachable!(),
+            })
+        })
+    }
+
+    pub fn minmax_by_key<F, CK>(self, mut f: F) -> HashMap<K, MinMaxResult<V>, S>
+    where
+        F: FnMut(&K, &V) -> CK,
+        CK: Ord,
+    {
+        self.minmax_by(|key, v1, v2| f(key, v1).cmp(&f(key, v2)))
+    }
+
+    pub fn sum(self) -> HashMap<K, V, S>
+    where
+        V: Add<V, Output = V>,
+    {
+        self.reduce(|acc, _, val| acc + val)
+    }
+
+    pub fn product(self) -> HashMap<K, V, S>
+    where
+        V: Mul<V, Output = V>,
+    {
+        self.reduce(|acc, _, val| acc * val)
+    }
+
+}

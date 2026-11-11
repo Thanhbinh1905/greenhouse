@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "local-reverse-review-content",
+  "category": "bug",
+  "description": "A Pi message_start event with system role and string content fails JSON decoding before the assistant result is reached.",
+  "intent": "Reverse the affected file containing the parseReview fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A Pi message_start event with system role and string content fails JSON decoding before the assistant result is reached.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "execution.go",
+      "start": 291,
+      "end": 291,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "A Pi message_start event with system role and string content fails JSON decoding before the assistant result is reached."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "reversed-bug-fix",
+  "tags": [
+    "Go"
+  ],
+  "source": {
+    "kind": "local",
+    "repo": "greenhouse",
+    "commit": "1c944db9e9171f6faa8c89f99599844a468e034d",
+    "files": [
+      "execution.go"
+    ],
+    "derivation": "Reverse the affected file containing the parseReview fix from the named commit. Retain the affected source file; other package files are outside this excerpt. Static scenario: A Pi message_start event with system role and string content fails JSON decoding before the assistant result is reached."
+  }
+}

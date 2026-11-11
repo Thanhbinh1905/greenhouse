@@ -209,3 +209,23 @@ func TestRescoreReportReadsAdjudications(t *testing.T) {
 		t.Fatal("a case missing from the corpus must refuse")
 	}
 }
+
+func TestJudgmentAllowedFindingIsNeutral(t *testing.T) {
+	k := Case{ID: "judgment", Category: "judgment", Allowed: []Allowed{{File: "a.go", Start: 3, End: 3, Origin: "correctness", Note: "Timeout policy depends on deployment."}}}
+	findings := []Finding{{File: "a.go", Start: 3, End: 3, Origin: "correctness", Priority: "P1"}, {File: "a.go", Start: 30, End: 30, Origin: "correctness", Priority: "P2"}}
+	s := mustScore(t, k, "outstanding-findings", findings, nil)
+	if s.Allowed != 1 || s.FalsePositives != 1 || s.Matched != 0 || s.Blocking != 0 {
+		t.Fatalf("score = %+v", s)
+	}
+	m := Summarize([]CaseScore{s})
+	if m.Allowed != 1 || m.Precision == nil || *m.Precision != 0 {
+		t.Fatalf("summary = %+v", m)
+	}
+	if _, err := ScoreCase(k, "outstanding-findings", findings, []Record{record(k, findings, 0, "invented", "detects")}); err == nil {
+		t.Fatal("allowed range must not accept adjudicated detection")
+	}
+	only := mustScore(t, k, "outstanding-findings", findings[:1], nil)
+	if Summarize([]CaseScore{only}).Precision != nil {
+		t.Fatal("only allowed findings have undefined precision")
+	}
+}

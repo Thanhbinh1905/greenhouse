@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "synthetic-event-order",
+  "category": "bug",
+  "description": "An unchanged dashboard takes the first event as newest; ascending order silently shows the oldest event.",
+  "intent": "Constructed cross-file contract. An unchanged dashboard takes the first event as newest; ascending order silently shows the oldest event. The unchanged caller is an executable failure scenario.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "regression",
+      "file": "service.py",
+      "start": 2,
+      "end": 2,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1",
+        "P2"
+      ],
+      "defect": "An unchanged dashboard takes the first event as newest; ascending order silently shows the oldest event."
+    }
+  ],
+  "noise": [],
+  "split": "tune",
+  "stratum": "cross-file",
+  "tags": [
+    "Python",
+    "cross-file",
+    "tiny-change"
+  ],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Constructed cross-file contract. An unchanged dashboard takes the first event as newest; ascending order silently shows the oldest event. The unchanged caller is an executable failure scenario."
+  }
+}
