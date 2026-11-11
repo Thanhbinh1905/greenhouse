@@ -123,3 +123,24 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 		t.Fatal("cancel erased consumption")
 	}
 }
+
+func TestReviewDiffBase(t *testing.T) {
+	repo := t.TempDir()
+	git(t, repo, "init", "-b", "main")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "target")
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "candidate")
+	candidate := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if base, reason, err := reviewDiffBase(repo, target, candidate); err != nil || base != target || reason != "" {
+		t.Fatalf("ancestor target: base=%s reason=%s err=%v", base, reason, err)
+	}
+	git(t, repo, "checkout", "--orphan", "unrelated")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "unrelated")
+	unrelated := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if base, reason, err := reviewDiffBase(repo, unrelated, candidate); err != nil || base != unrelated || !strings.Contains(reason, "no merge-base") {
+		t.Fatalf("unrelated histories must retain target with a reason: base=%s reason=%s err=%v", base, reason, err)
+	}
+	if _, _, err := reviewDiffBase(repo, "missing-commit", candidate); err == nil || !strings.Contains(err.Error(), "cannot compute review merge-base") {
+		t.Fatalf("Git failures must not fall back silently: %v", err)
+	}
+}

@@ -396,7 +396,11 @@ func prepareRun(r *Run, intent, requested string) error {
 	if err != nil {
 		return err
 	}
-	diff, err := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", target, r.Candidate, "--")
+	base, baseReason, err := reviewDiffBase(r.Submitted.Worktree, target, r.Candidate)
+	if err != nil {
+		return err
+	}
+	diff, err := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
 	if err != nil {
 		return errors.New("cannot capture complete bounded diff")
 	}
@@ -417,6 +421,7 @@ func prepareRun(r *Run, intent, requested string) error {
 	r.Reviewer = &cfg
 	r.SelectedDiff = string(diff)
 	r.Intent, r.Target = intent, target
+	r.ReviewBase, r.ReviewBaseReason = base, baseReason
 	return nil
 }
 
