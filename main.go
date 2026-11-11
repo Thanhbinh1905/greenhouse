@@ -92,6 +92,9 @@ type Run struct {
 	Inherited     *Inheritance    `json:"inherited,omitempty"`
 	Host          *Host           `json:"host,omitempty"`
 	HostGrants    []string        `json:"host_grants,omitempty"`
+
+	ReviewBase       string `json:"review_base,omitempty"`
+	ReviewBaseReason string `json:"review_base_reason,omitempty"`
 }
 type Request struct {
 	Version  int       `json:"version"`

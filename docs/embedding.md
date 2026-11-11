@@ -34,9 +34,11 @@ Every host request carries `host`:
 
 ## Review rounds
 
-1. `attach` with `host`, then `apply` the rules and reviewer model, `prepare` the intent and exact target commit, and `resolve-rules`.
+1. `attach` with `host`, then `apply` the rules and reviewer model, `prepare` the intent and target branch or commit, and `resolve-rules`.
 2. `review` with `grant` set to the host's identity for this review authorization, for example its review round ID. Greenhouse refuses a review without a grant and refuses a grant this run or its predecessors already used. Replaying the same `action_id` returns the recorded receipt.
 3. Follow the run with `watch`, then read `host_result`.
+
+`prepare` resolves the requested target to a commit and stores it as `run.target`. The review diff uses `git merge-base <target> <candidate>`, reported as `run.review_base` in `inspect` and `review_base` in `host_result`. Pipeline sync and PR creation keep using `target`. If the histories are unrelated, the diff uses `target` and `review_base_reason` explains the fallback.
 
 `host_result` is present once a host run has a review:
 
@@ -47,6 +49,7 @@ Every host request carries `host`:
   "review_id": "...",
   "head": "exact reviewed commit",
   "target": "exact target commit",
+  "review_base": "merge-base of target and head",
   "status": "outstanding-findings",
   "verdict": "findings",
   "current": true,

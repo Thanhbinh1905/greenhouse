@@ -88,7 +88,7 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	head := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	result, _ := v["host_result"].(map[string]any)
 	findings, _ := result["findings"].([]any)
-	if result["grant"] != "round-1" || result["head"] != head || result["target"] != target || result["verdict"] != "findings" || result["current"] != true || len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
+	if result["grant"] != "round-1" || result["head"] != head || result["target"] != target || result["review_base"] != target || result["verdict"] != "findings" || result["current"] != true || len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
 		t.Fatalf("host result must carry exact-head findings and verdict: %v", v)
 	}
 	term := startTerminal(t, bin, repo, home)
@@ -376,5 +376,67 @@ func TestHostReviewResumesUnderItsGrant(t *testing.T) {
 	}
 	if calls := agentCalls(t, root, "codex"); len(calls) != 2 {
 		t.Fatalf("expected the paused and resumed calls, got %d", len(calls))
+	}
+}
+
+func TestHostReviewMovedTarget(t *testing.T) {
+	bin, repo, home := fixture(t)
+	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	git(t, repo, "checkout", "-b", "candidate")
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	git(t, repo, "checkout", "main")
+	if err := os.WriteFile(filepath.Join(repo, "target-only.txt"), []byte("target advance\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "target-only.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "advance target")
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	git(t, repo, "checkout", "candidate")
+	installFake(t, home, "")
+	v := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`)
+	v = hostPrepare(t, bin, repo, home, v, "main", "-moved")
+	run := runOf(t, v)
+	if diff, _ := run["selected_diff"].(string); !strings.Contains(diff, "+review me") || strings.Contains(diff, "target-only.txt") {
+		t.Fatalf("prepare included reverse target changes: %s", diff)
+	}
+	if run["target"] != target || run["review_base"] != base {
+		t.Fatalf("prepare must retain target and report merge-base: target=%v review_base=%v", run["target"], run["review_base"])
+	}
+	v = hostCall(t, bin, repo, home, v, "review", "review-moved", map[string]any{"grant": "round-moved"})
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	v = hostSettle(t, bin, repo, home)
+	run = runOf(t, v)
+	review := run["review"].(map[string]any)
+	if diff := review["diff"].(string); strings.Contains(diff, "target-only.txt") || diff != run["selected_diff"] {
+		t.Fatalf("review included reverse target changes: %s", diff)
+	}
+	if paths := stringsOf(review["paths"]); strings.Join(paths, ",") != "sample.txt" {
+		t.Fatalf("review paths include target changes: %v", paths)
+	}
+	captured, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var input struct {
+		Input struct {
+			Target string
+			Files  []struct{ Path string }
+		}
+	}
+	if err := json.Unmarshal(captured, &input); err != nil {
+		t.Fatal(err)
+	}
+	if input.Input.Target != target || len(input.Input.Files) != 1 || input.Input.Files[0].Path != "sample.txt" {
+		t.Fatalf("review bundle changed Target or included target files: %s", captured)
+	}
+	result := v["host_result"].(map[string]any)
+	if result["target"] != target || result["review_base"] != base || result["verdict"] != "findings" {
+		t.Fatalf("host result must report target and effective review base: %v", result)
 	}
 }
