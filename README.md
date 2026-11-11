@@ -70,6 +70,8 @@ printf '%s\n' '{"version":2,"op":"attach"}' | /path/to/greenhouse axi
 
 The daemon accepts protocol versions 1 and 2, answers in the requested version, and reports its range in `protocol`. Version 2 adds `watch` and host mode. See the [compatibility policy](docs/compatibility.md).
 
+For host integration, see the [embedding contract](docs/embedding.md) for complete requests, prepare fields, and the grant-based review flow.
+
 Git identity commands discard inherited `GIT_*` variables so the daemon cannot reuse the first client's repository selection for later clients. The invoking path determines identity, including linked worktrees.
 
 `attach` creates a run only when its canonical context has no active slot. `inspect` never creates a run. Reopening retained work does not consume budget, change snapshots, or execute a stage.

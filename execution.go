@@ -84,10 +84,12 @@ type Execution struct {
 	Run          string               `json:"run,omitempty"`
 	Grant        string               `json:"grant,omitempty"`
 
-	Reason        string     `json:"reason,omitempty"`
-	Diagnostic    string     `json:"diagnostic,omitempty"`
-	ReportedModel string     `json:"reported_model,omitempty"`
-	Usage         TokenUsage `json:"usage"`
+	Reason           string     `json:"reason,omitempty"`
+	Diagnostic       string     `json:"diagnostic,omitempty"`
+	ReportedModel    string     `json:"reported_model,omitempty"`
+	Usage            TokenUsage `json:"usage"`
+	ReviewBase       string     `json:"review_base,omitempty"`
+	ReviewBaseReason string     `json:"review_base_reason,omitempty"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -116,6 +118,18 @@ func committedTarget(path, target string) (string, error) {
 	}
 	return strings.TrimSpace(string(b)), nil
 }
+func reviewDiffBase(path, target, candidate string) (string, string, error) {
+	base, err := gitRead(path, "merge-base", target, candidate)
+	if err == nil {
+		return strings.TrimSpace(string(base)), "", nil
+	}
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return target, "target and candidate have no merge-base; using requested target for review diff", nil
+	}
+	return "", "", fmt.Errorf("cannot compute review merge-base: %w", err)
+}
+
 func trustedReviewer() (ReviewerConfig, error) {
 	return trustedAgent(backendPi, "")
 }
@@ -182,7 +196,11 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if r.Reviewer == nil || cfg != *r.Reviewer {
 		return nil, errors.New("trusted reviewer changed; prepare with a current token required")
 	}
-	diff, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", r.Target, r.Candidate, "--")
+	base, baseReason, e := reviewDiffBase(r.Submitted.Worktree, r.Target, r.Candidate)
+	if e != nil {
+		return nil, e
+	}
+	diff, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
 	if e != nil {
 		return nil, errors.New("cannot capture complete bounded diff")
 	}
@@ -192,7 +210,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if bytes.Contains(diff, []byte("GIT binary patch")) || bytes.Contains(diff, []byte("Subproject commit")) {
 		return nil, errors.New("binary and submodule review unsupported")
 	}
-	paths, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-relative", "--name-only", "-z", r.Target, r.Candidate, "--")
+	paths, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-relative", "--name-only", "-z", base, r.Candidate, "--")
 	if e != nil {
 		return nil, e
 	}
@@ -262,7 +280,8 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
-	return &Execution{Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	r.ReviewBase, r.ReviewBaseReason = base, baseReason
+	return &Execution{ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
