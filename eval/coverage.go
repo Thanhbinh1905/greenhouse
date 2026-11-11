@@ -175,7 +175,7 @@ func CheckCoverage(c *Corpus) (Coverage, error) {
 		return v, fmt.Errorf("coverage requires Rust or Java")
 	}
 	if v.Languages["Go"]*100 > v.Total*60 {
-		return v, fmt.Errorf("Go exceeds 60 percent: %d/%d", v.Languages["Go"], v.Total)
+		return v, fmt.Errorf("go exceeds 60 percent: %d/%d", v.Languages["Go"], v.Total)
 	}
 	return v, nil
 }
