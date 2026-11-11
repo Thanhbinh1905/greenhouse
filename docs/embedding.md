@@ -34,7 +34,7 @@ Every host request carries `host`:
 
 ## Review rounds
 
-1. `attach` with `host`, then `apply` the rules and reviewer model, `prepare` the intent and exact target commit, and `resolve-rules`.
+1. `attach` with `host`, then `apply` the rules and reviewer model, `resolve-rules`, and `prepare` the intent and exact target commit.
 2. `review` with `grant` set to the host's identity for this review authorization, for example its review round ID. Greenhouse refuses a review without a grant and refuses a grant this run or its predecessors already used. Replaying the same `action_id` returns the recorded receipt.
 3. Follow the run with `watch`, then read `host_result`.
 
@@ -62,6 +62,265 @@ Every host request carries `host`:
 `verdict` is `clean`, `findings` or `inconclusive`, and is empty until the review settles. `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`; an ID is stable across rounds for the same root cause.
 
 A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
+
+## Request examples
+
+Each request block below is a complete JSON request to `greenhouse axi`, invoked from the candidate worktree. AXI reads one request per invocation. It writes one response envelope on stdout and replaces any request `path` with the invoking directory.
+
+The response blocks show selected fields and collection entries; other response data is omitted. Angle-bracket values are placeholders. Each mutation copies `run_id`, `input_id`, and `gate_id` from the latest response, and copies its `token` into `expected`. An `outcome` of `ok` confirms the operation, not a clean review. A refused or failed operation stops the sequence.
+
+### Attach or start a successor
+
+`attach` creates a host run if the worktree has no active run, or reattaches to a run with the same host identity:
+
+```json
+{
+  "version": 2,
+  "op": "attach",
+  "host": {
+    "name": "posse",
+    "id": "greenhouse/t69"
+  }
+}
+```
+
+Response fields:
+
+```json
+{
+  "version": 2,
+  "outcome": "ok",
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "token": "<token>",
+  "run": {
+    "host": {
+      "name": "posse",
+      "id": "greenhouse/t69"
+    }
+  }
+}
+```
+
+After the host commits an author repair, `new` captures the changed head. It also allows explicit takeover of a standalone run. Copy the current envelope fields from `attach` or `inspect`:
+
+```json
+{
+  "version": 2,
+  "op": "new",
+  "host": {
+    "name": "posse",
+    "id": "greenhouse/t69"
+  },
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "expected": "<token>",
+  "action_id": "t69-new-2"
+}
+```
+
+The response has a new `run_id`, `input_id`, and `token`; `run.predecessor` identifies the previous run. The host repeats the remaining operations for the successor with new action IDs.
+
+### Apply settings
+
+`apply` selects rules and the reviewer without saving user defaults. It requires a complete settings object and a reason. An empty model selects the native agent's default model. Host mode ignores the standalone budget settings; they remain required settings fields.
+
+```json
+{
+  "version": 2,
+  "op": "apply",
+  "host": {
+    "name": "posse",
+    "id": "greenhouse/t69"
+  },
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "expected": "<token>",
+  "action_id": "t69-apply-1",
+  "reason": "Review the host candidate with the selected rules",
+  "settings": {
+    "mode": "ask",
+    "preset": "one-pass",
+    "limit": 3,
+    "rules": [
+      "unslop",
+      "no-comments"
+    ],
+    "reviewer_backend": "pi",
+    "reviewer_model": "",
+    "fixer_backend": "pi",
+    "fixer_model": ""
+  }
+}
+```
+
+The response includes the refreshed envelope fields and a new entry in `run.configs` containing the applied `settings`. Applying rules selects their names; it does not load their bytes.
+
+```json
+{
+  "version": 2,
+  "outcome": "ok",
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "token": "<new token>",
+  "run": {
+    "configs": [
+      {
+        "id": "<snapshot>",
+        "settings": {
+          "mode": "ask",
+          "preset": "one-pass",
+          "limit": 3,
+          "rules": [
+            "unslop",
+            "no-comments"
+          ],
+          "reviewer_backend": "pi",
+          "reviewer_model": "",
+          "fixer_backend": "pi",
+          "fixer_model": ""
+        }
+      }
+    ]
+  }
+}
+```
+
+### Resolve rules
+
+`resolve-rules` loads and snapshots the selected rule bytes:
+
+```json
+{
+  "version": 2,
+  "op": "resolve-rules",
+  "host": {
+    "name": "posse",
+    "id": "greenhouse/t69"
+  },
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "expected": "<token>",
+  "action_id": "t69-rules-1"
+}
+```
+
+The response includes the refreshed envelope fields, `rules`, `rules_ready`, and `run.rule_snapshots`. `rules_ready: true` means the selected rules loaded successfully; inspect rule errors before preparing a review.
+
+```json
+{
+  "version": 2,
+  "outcome": "ok",
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "token": "<new token>",
+  "rules_ready": true,
+  "rules": [
+    {
+      "selection": "unslop"
+    },
+    {
+      "selection": "no-comments"
+    }
+  ],
+  "run": {
+    "rule_snapshots": [
+      {
+        "id": "<snapshot>"
+      }
+    ]
+  }
+}
+```
+
+### Prepare the review input
+
+`intent` states what the change should do. `target` is a full, exact commit ID available in the local repository, not a branch name. Replace the example SHA with your target commit. Greenhouse reviews the diff from the merge-base of that target and the candidate to the candidate. The recorded target remains the exact supplied commit, even when the merge-base differs.
+
+```json
+{
+  "version": 2,
+  "op": "prepare",
+  "host": {
+    "name": "posse",
+    "id": "greenhouse/t69"
+  },
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "expected": "<token>",
+  "action_id": "t69-prepare-1",
+  "intent": "Reject invalid request fields before starting a review",
+  "target": "0123456789abcdef0123456789abcdef01234567"
+}
+```
+
+The response includes the refreshed envelope fields and the retained `run.intent`, `run.target`, and `run.candidate`.
+
+```json
+{
+  "version": 2,
+  "outcome": "ok",
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "token": "<new token>",
+  "run": {
+    "intent": "Reject invalid request fields before starting a review",
+    "target": "0123456789abcdef0123456789abcdef01234567",
+    "candidate": "<candidate commit>"
+  }
+}
+```
+
+### Dispatch one review
+
+`grant` identifies the host's authorization for this round. Each new round needs an unused grant, including rounds on a successor. Replaying the identical request with the same `action_id` returns its receipt; it does not spend another grant.
+
+```json
+{
+  "version": 2,
+  "op": "review",
+  "host": {
+    "name": "posse",
+    "id": "greenhouse/t69"
+  },
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "expected": "<token>",
+  "action_id": "t69-review-1",
+  "grant": "round-1"
+}
+```
+
+Response fields at dispatch:
+
+```json
+{
+  "version": 2,
+  "outcome": "ok",
+  "run_id": "<run>",
+  "input_id": "<input>",
+  "gate_id": "<gate>",
+  "token": "<token>",
+  "host_result": {
+    "grant": "round-1",
+    "head": "<candidate commit>",
+    "target": "<target commit>",
+    "status": "running",
+    "current": true
+  }
+}
+```
+
+`watch` follows progress; `attach` or `inspect` reads the latest envelope. The settled `host_result` has the shape shown in [review rounds](#review-rounds). Accept a verdict only while `current` is true and `head` matches the host's candidate commit.
 
 ## After an author repair
 
