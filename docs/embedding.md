@@ -58,11 +58,22 @@ Every host request carries `host`:
   "config_digest": "...",
   "input_digest": "...",
   "backend": "pi",
-  "model": "openai/gpt-5.6-luna"
+  "model": "openai/gpt-5.6-luna",
+  "reason": "",
+  "diagnostic": "",
+  "usage": {
+    "input_tokens": 100,
+    "output_tokens": 20,
+    "cached_input_tokens": 0,
+    "tokens": 120,
+    "cost_usd": 0.01
+  }
 }
 ```
 
 `verdict` is `clean`, `findings` or `inconclusive`, and is empty until the review settles. `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`; an ID is stable across rounds for the same root cause.
+
+Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports input, output, cached-input, and total tokens, plus cost in USD. Unknown values stay zero; totals retain each backend's accounting.
 
 A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
 

@@ -182,3 +182,11 @@ func TestDiagnosticRedactsIncompleteValues(t *testing.T) {
 		}
 	}
 }
+
+func TestDiagnosticRedactsCamelCaseAPIKey(t *testing.T) {
+	for _, text := range []string{`apiKey=camel-private-value`, `{"apiKey":"camel-private-value"}`, `apiKey: 'camel-private-value'`} {
+		if got := diagnosticExcerpt(text, false); strings.Contains(got, "camel-private-value") {
+			t.Fatalf("apiKey credential leaked: %s", got)
+		}
+	}
+}

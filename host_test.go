@@ -9,27 +9,34 @@ import (
 )
 
 func TestHostFailedReviewDiagnostics(t *testing.T) {
-	bin, repo, home := fixture(t)
-	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
-	git(t, repo, "add", "sample.txt")
-	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
-	installFake(t, home, "import sys; sys.stderr.write('backend crashed: token=fake-private-value\\n'); sys.exit(1)")
-	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
-	v := axi(t, bin, repo, home, string(b))
-	v = hostPrepare(t, bin, repo, home, v, target, "-diagnostic")
-	v = hostCall(t, bin, repo, home, v, "review", "failed-review", map[string]any{"grant": "failed-round"})
-	if v["outcome"] != "ok" {
-		t.Fatalf("review refused: %v", v)
-	}
-	v = hostSettle(t, bin, repo, home)
-	result := v["host_result"].(map[string]any)
-	diagnostic, _ := result["diagnostic"].(string)
-	if result["reason"] != "crash" || !strings.Contains(diagnostic, "backend crashed") {
-		t.Fatalf("host cannot diagnose crash: %v", result)
-	}
-	if strings.Contains(diagnostic, "fake-private-value") {
-		t.Fatalf("credential leaked: %v", result)
+	for _, c := range []struct{ name, mode, reason, message string }{
+		{"crash", "import sys; sys.stderr.write('backend crashed: token=fake-private-value\\n'); sys.exit(1)", "crash", "backend crashed"},
+		{"zero-exit-model", `print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'error','errorMessage':'404 model not found apiKey=fake-private-value','content':[]}})); sys.exit(0)`, "model_mismatch", "404 model not found"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			bin, repo, home := fixture(t)
+			target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+			os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+			git(t, repo, "add", "sample.txt")
+			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+			installFake(t, home, c.mode)
+			b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
+			v := axi(t, bin, repo, home, string(b))
+			v = hostPrepare(t, bin, repo, home, v, target, "-diagnostic")
+			v = hostCall(t, bin, repo, home, v, "review", "failed-review", map[string]any{"grant": "failed-round"})
+			if v["outcome"] != "ok" {
+				t.Fatalf("review refused: %v", v)
+			}
+			v = hostSettle(t, bin, repo, home)
+			result := v["host_result"].(map[string]any)
+			diagnostic, _ := result["diagnostic"].(string)
+			if result["reason"] != c.reason || !strings.Contains(diagnostic, c.message) {
+				t.Fatalf("host cannot diagnose backend failure: %v", result)
+			}
+			if strings.Contains(diagnostic, "fake-private-value") {
+				t.Fatalf("credential leaked: %v", result)
+			}
+		})
 	}
 }
 

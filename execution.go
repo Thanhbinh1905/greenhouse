@@ -460,6 +460,9 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err erro
 		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage}
 	}
 	answer, e := agentReply(x, out.Bytes(), stderr.Bytes())
+	if answer.Model == "" {
+		answer.Model = usage.Model
+	}
 	answer.CostUSD, answer.Tokens, answer.Usage = usage.CostUSD, usage.Tokens, usage.Usage
 	answer.Diagnostic = usage.Diagnostic
 	answer.Reason = "invalid_output"

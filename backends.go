@@ -41,7 +41,7 @@ func safeMessage(text string) string {
 
 var diagnosticSecrets = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?bearer\s+)[^\s"',;]+`),
-	regexp.MustCompile(`(?i)((?:[a-z0-9_]+_api_key|api[_-]key|token|secret|password)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"?|'(?:\\.|[^'\\\r\n])*'?|[^\s,;"'}]+)`),
+	regexp.MustCompile(`(?i)((?:[a-z0-9_]+_api_key|api[_-]?key|token|secret|password)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"?|'(?:\\.|[^'\\\r\n])*'?|[^\s,;"'}]+)`),
 }
 
 func redactDiagnostic(text string) string {
@@ -135,8 +135,12 @@ func classifyBackend(backend string, exit int, stdout, stderr []byte, now time.T
 	case backendPi:
 		failure = classifyPi(exit, stdout, stderr)
 	}
-	if failure == nil && exit != 0 {
-		text := backendDiagnostics(stdout, stderr)
+	structured := backendDiagnostics(stdout, nil)
+	if failure == nil && (exit != 0 || structured != "") {
+		text := structured
+		if exit != 0 {
+			text = backendDiagnostics(stdout, stderr)
+		}
 		if text == "" {
 			text = "backend process failed without diagnostic output"
 		}

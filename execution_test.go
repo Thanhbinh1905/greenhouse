@@ -285,3 +285,46 @@ func TestMissingReviewerBeforeLaunchIsDiagnosable(t *testing.T) {
 		t.Fatalf("missing binary masked: %+v", done)
 	}
 }
+
+func TestReviewRoundPreservesReportedModelOnInconclusiveReply(t *testing.T) {
+	_, codexStderr, _ := recorded(t, "codex", "success")
+	for _, c := range []struct{ name, backend, stdout, stderr, model string }{
+		{"incomplete codex", "codex", "", string(codexStderr), "gpt-5.6-luna"},
+		{"malformed codex", "codex", "not JSON", string(codexStderr), "gpt-5.6-luna"},
+		{"claude error", "claude", "{\"type\":\"system\",\"subtype\":\"init\",\"model\":\"claude-haiku-5-5\"}\n{\"type\":\"result\",\"is_error\":true,\"result\":\"request rejected\"}", "", "claude-haiku-5-5"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			x := &Execution{Config: ReviewerConfig{Backend: c.backend}}
+			done := reviewFrom(x, 0, outputBuffer([]byte(c.stdout), 65536), outputBuffer([]byte(c.stderr), 65536), nil, false)
+			retainReviewMetadata(x, done)
+			r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: x}
+			if got := hostResult(r, true).Model; got != c.model {
+				t.Fatalf("host_result.model=%q; want reported session model %q on inconclusive reply", got, c.model)
+			}
+			if done.Status != "inconclusive" || done.Failure != nil {
+				t.Fatalf("unexpected outcome: %+v", done)
+			}
+		})
+	}
+}
+
+func TestReviewRoundClassifiesStructuredZeroExitModelFailure(t *testing.T) {
+	stdout := []byte(`{"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"reported-model","stopReason":"error","errorMessage":"404 model not found","content":[]}}`)
+	x := &Execution{Config: ReviewerConfig{Backend: "pi"}}
+	done := reviewFrom(x, 0, outputBuffer(stdout, 65536), outputBuffer(nil, 65536), nil, false)
+	retainReviewMetadata(x, done)
+	result := hostResult(&Run{Host: &Host{Name: "host", ID: "1"}, Review: x}, true)
+	if result.Reason != "model_mismatch" {
+		t.Fatalf("reason=%q diagnostic=%q; want model_mismatch", result.Reason, result.Diagnostic)
+	}
+	if done.Status != "inconclusive" || done.Failure != nil {
+		t.Fatalf("diagnostics changed pause/refund behavior: %+v", done)
+	}
+	failure := classifyBackend("pi", 0, stdout, nil, time.Now())
+	if failure == nil || !failure.diagnosticOnly {
+		t.Fatalf("new classification must be diagnostic only: %+v", failure)
+	}
+	if got := classifyBackend("pi", 0, []byte(`{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}`), []byte("404 model not found"), time.Now()); got != nil {
+		t.Fatalf("successful zero-exit stderr noise classified: %+v", got)
+	}
+}
