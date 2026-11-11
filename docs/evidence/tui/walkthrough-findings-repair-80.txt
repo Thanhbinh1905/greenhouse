@@ -2,7 +2,7 @@
 
 ## 1. first launch: one Run action, nothing collected yet
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                           |
 | ○ Intent   collected from your agent session on Run                            |
@@ -32,7 +32,7 @@ $ keys 'Tab' 'Tab'
 
 ## 2. Tab moves focus to the Intent row
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                           |
 |▸○ Intent   collected from your agent session on Run                            |
@@ -64,7 +64,7 @@ $ keys type 'Fix q and x'
 
 ## 3. editing the intent before Run
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Set up review · step 2 of 4                                                    |
 |                                                                                |
@@ -94,7 +94,7 @@ $ keys 'Escape'
 
 ## 4. Esc goes back to the agent step
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Set up review · step 1 of 4                                                    |
 |                                                                                |
@@ -124,7 +124,7 @@ $ keys 'Enter'
 
 ## 5. the typed intent is kept
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Set up review · step 2 of 4                                                    |
 |                                                                                |
@@ -154,7 +154,7 @@ $ keys 'Enter' 'Enter' 'Enter'
 
 ## 6. saved for Run; nothing sent
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                           |
 | ○ Intent   Fix q and x · typed                                                 |
@@ -184,11 +184,11 @@ $ keys 'Escape' 'Enter'
 
 ## 7. one Enter collected the intent, prepared, loaded rules and started the review
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                           |
 | ✓ Intent   Fix q and x                                                         |
-| ✓ Target   ca08d1f                                                             |
+| ✓ Target   c4d7496                                                             |
 | ✓ Rules    unslop, no-comments · loaded                                        |
 | ⠦ Review   running · budget 1 of 4 used                                        |
 |                                                                                |
@@ -212,11 +212,11 @@ $ keys 'Escape' 'Enter'
 
 ## 8. findings arrive without a keypress
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                           |
 | ✓ Intent   Fix q and x                                                         |
-| ✓ Target   ca08d1f                                                             |
+| ✓ Target   c4d7496                                                             |
 | ✓ Rules    unslop, no-comments · loaded                                        |
 | ✗ Review   2 outstanding findings · budget 1 of 4 used                         |
 |                                                                                |
@@ -242,7 +242,7 @@ $ keys 'Enter'
 
 ## 9. findings list with selection
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Findings · 2 outstanding findings · 0 selected                                 |
 |                                                                                |
@@ -272,7 +272,7 @@ $ keys 'Enter'
 
 ## 10. full finding description
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Findings · 2 outstanding findings · 0 selected                                 |
 |                                                                                |
@@ -282,7 +282,7 @@ $ keys 'Enter'
 |P1 correctness · sample.txt:1                                                   |
 |Sample text is wrong for the stated intent                                      |
 |Action: Rewrite the line to say repaired                                        |
-|Reported for head 34f78eb                                                       |
+|Reported for head 9764a62                                                       |
 |                                                                                |
 |                                                                                |
 |                                                                                |
@@ -302,7 +302,7 @@ $ keys 'Escape' 'Space'
 
 ## 11. first finding selected
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Findings · 2 outstanding findings · 1 selected                                 |
 |                                                                                |
@@ -332,7 +332,7 @@ $ keys 'r'
 
 ## 12. repair asks for confirmation
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Repair 1 finding                                                               |
 |                                                                                |
@@ -362,11 +362,11 @@ $ keys 'Enter'
 
 ## 13. repaired; handback is next
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                           |
 | ✓ Intent   Fix q and x                                                         |
-| ✓ Target   ca08d1f                                                             |
+| ✓ Target   c4d7496                                                             |
 | ✓ Rules    unslop, no-comments · used by the review                            |
 | ! Review   fixed not independently rereviewed · budget 2 of 4 used             |
 |                                                                                |
@@ -392,11 +392,11 @@ $ keys 'Enter'
 
 ## 14. handed back
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                           |
 | ✓ Intent   Fix q and x                                                         |
-| ✓ Target   ca08d1f                                                             |
+| ✓ Target   c4d7496                                                             |
 | ✓ Rules    unslop, no-comments · used by the review                            |
 | ! Review   fixed not independently rereviewed · budget 2 of 4 used             |
 |                                                                                |
@@ -422,15 +422,15 @@ $ keys 'i'
 
 ## 15. details expose IDs, digests and sources
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Details · lines 1-18 of 76                                                     |
 |                                                                                |
 | Greenhouse | independent review                                                |
 | Events: live                                                                   |
-| Run 7f8d6934030bc76708c76afb14ad6ab3                                           |
+| Run 5bdc576c11ac7fcc75c8d114f148f54e                                           |
 | Stage: selected-repair | fixed-not-independently-rereviewed                    |
-| Candidate: a46a0a61ce30d958d924aff28df518d64724dbfe                            |
+| Candidate: f475c7053c1dc2f88b49d4aee7b5200467b56f97                            |
 | Mode: auto | one-pass | limit 4                                                |
 | Reviewer: pi /                                                                 |
 | Fixer: pi /                                                                    |
@@ -438,7 +438,7 @@ $ keys 'i'
 | Rules: unslop, no-comments                                                     |
 | Sources: built-in default: mode, preset, limit, rules, reviewer_backend,       |
 | reviewer_model, fixer_backend, fixer_model, auto_resume                        |
-| Target: ca08d1fb8fda5ebd345355d02a7a621e905de337                               |
+| Target: c4d7496c7848c172e2f07f9f85b86e99dd8323b2                               |
 | Intent: Fix q and x                                                            |
 | Scope: committed target-to-candidate diff; dirty files excluded                |
 | Repository override: none (no .greenhouse.json)                                |
@@ -452,7 +452,7 @@ $ keys 'Escape' '?'
 
 ## 16. help lists the keys
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Help · lines 1-18 of 63                                                        |
 |                                                                                |
@@ -482,7 +482,7 @@ $ keys 'NPage'
 
 ## 17. help explains unavailable actions without running them
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 34f78eb                           one-pass · auto · live |
+|Greenhouse · feature @ 9764a62                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | Help · lines 21-38 of 63                                                       |
 |                                                                                |

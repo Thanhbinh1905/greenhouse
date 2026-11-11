@@ -2,7 +2,7 @@
 
 ## 1. first launch: one Run action, nothing collected yet
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 69383e0                                               one-pass · auto · live |
+|Greenhouse · feature @ 0ab2381                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model                                                               |
 | ○ Intent   collected from your agent session on Run                                                |
@@ -32,7 +32,7 @@ $ keys 'Enter'
 
 ## 2. moved head: Run stops with the controller's reason
 +----------------------------------------------------------------------------------------------------+
-|Greenhouse · feature @ 69383e0                                               one-pass · auto · live |
+|Greenhouse · feature @ 0ab2381                                               one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────────────────────────── |
 | ○ Agent    Pi · native default model (installed)                                                   |
 | ○ Intent   describe the change                                                                     |
