@@ -94,3 +94,91 @@ func TestUsageIsReadFromFailedAndSuccessfulRuns(t *testing.T) {
 		t.Fatalf("codex usage: %v", tokens)
 	}
 }
+
+func TestDiagnosticRedactionAndBounds(t *testing.T) {
+	secrets := []string{"bearer-private", "key-private", "dash-private", "token-private", "secret-private", "password-private", "sk-private123", "env-private", "quoted private value"}
+	text := "Authorization: Bearer bearer-private\napi_key=key-private\napi-key: dash-private\ntoken=token-private\nsecret=secret-private\npassword=password-private\nsk-private123\nOPENAI_API_KEY=env-private\npassword=\"quoted private value\""
+	got := diagnosticExcerpt(text, false)
+	for _, secret := range secrets {
+		if strings.Contains(got, secret) {
+			t.Errorf("secret %q survived: %s", secret, got)
+		}
+	}
+	for _, text := range []string{strings.Repeat("line\n", 80) + "last", strings.Repeat("x", 6000) + "last"} {
+		got := diagnosticExcerpt(text, false)
+		if len(got) > 4096 || !strings.HasPrefix(got, "[truncated]\n") || !strings.HasSuffix(got, "last") {
+			t.Errorf("bad excerpt: length %d", len(got))
+		}
+	}
+}
+
+func TestBackendTokenBreakdown(t *testing.T) {
+	for _, backend := range []string{"claude", "codex", "pi"} {
+		t.Run(backend, func(t *testing.T) {
+			var stdout []byte
+			want := TokenUsage{}
+			switch backend {
+			case "claude":
+				stdout, _, _ = recorded(t, backend, "success")
+				want = TokenUsage{InputTokens: 2, OutputTokens: 53, CachedInputTokens: 3382, Tokens: 55, CostUSD: 6.0519999999999997e-05}
+			case "codex":
+				stdout = []byte(`{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":20,"cached_input_tokens":80}}`)
+				want = TokenUsage{InputTokens: 100, OutputTokens: 20, CachedInputTokens: 80, Tokens: 120}
+			case "pi":
+				stdout = []byte(`{"type":"message_end","message":{"role":"assistant","usage":{"input":10,"output":5,"totalTokens":30,"cost":{"total":0.25}}}}`)
+				want = TokenUsage{InputTokens: 10, OutputTokens: 5, Tokens: 30, CostUSD: 0.25}
+			}
+			if got := agentTokenUsage(backend, stdout, nil); got != want {
+				t.Fatalf("usage = %+v, want %+v", got, want)
+			}
+		})
+	}
+}
+
+func TestStderrOnlyBackendClassification(t *testing.T) {
+	for _, c := range []struct{ text, reason string }{{"401 Unauthorized token=fake-secret", "auth"}, {"quota exhausted", "quota"}, {"model not found", "model_mismatch"}, {"panic: unexpected EOF", "crash"}, {"exec: codex: executable file not found", "missing_binary"}} {
+		f := classifyBackend("codex", 1, nil, []byte(c.text), time.Now())
+		if f == nil || f.Reason != c.reason {
+			t.Errorf("%q: got %+v, want %s", c.text, f, c.reason)
+		}
+	}
+}
+
+func TestStructuredDiagnosticsExcludeReviewContent(t *testing.T) {
+	for _, stdout := range []string{
+		`{"type":"result","is_error":true,"result":"backend rejected password=private-value"}`,
+		`{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"backend rejected token=private-value","content":[{"type":"text","text":"private review input"}]}}`,
+	} {
+		got := diagnosticExcerpt(backendDiagnostics([]byte(stdout), nil), false)
+		if !strings.Contains(got, "backend rejected") || strings.Contains(got, "private-value") || strings.Contains(got, "private review input") {
+			t.Fatalf("diagnostic = %q", got)
+		}
+	}
+}
+
+func TestUsageAggregatesTurnsAndClaudeCacheFallback(t *testing.T) {
+	codex := []byte("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2,\"cached_input_tokens\":8}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":20,\"output_tokens\":3,\"cached_input_tokens\":15}}")
+	if got := agentTokenUsage("codex", codex, nil); got != (TokenUsage{InputTokens: 30, OutputTokens: 5, CachedInputTokens: 23, Tokens: 35}) {
+		t.Fatalf("multiple turns: %+v", got)
+	}
+	claude := []byte(`{"type":"result","is_error":true,"total_cost_usd":0.25,"usage":{"input_tokens":2,"output_tokens":3,"cache_read_input_tokens":40}}`)
+	if got := agentTokenUsage("claude", claude, nil); got != (TokenUsage{InputTokens: 2, OutputTokens: 3, CachedInputTokens: 40, Tokens: 5, CostUSD: 0.25}) {
+		t.Fatalf("claude fallback: %+v", got)
+	}
+}
+
+func TestDiagnosticRedactsEscapedQuotedValues(t *testing.T) {
+	for _, text := range []string{`password="before\"private-value"`, `token='before\'private-value'`, `{"api_key":"before\"private-value"}`} {
+		if got := diagnosticExcerpt(text, false); strings.Contains(got, "private-value") {
+			t.Fatalf("quoted credential leaked: %s", got)
+		}
+	}
+}
+
+func TestDiagnosticRedactsIncompleteValues(t *testing.T) {
+	for _, text := range []string{`password="private-value`, `token='private-value`, `secret=before\private-value`} {
+		if got := diagnosticExcerpt(text, true); strings.Contains(got, "private-value") {
+			t.Fatalf("incomplete credential leaked: %s", got)
+		}
+	}
+}

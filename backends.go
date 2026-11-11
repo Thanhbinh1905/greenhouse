@@ -25,14 +25,82 @@ type BackendFailure struct {
 	Reason  string `json:"reason"`
 	Message string `json:"message"`
 	ResetAt string `json:"reset_at,omitempty"`
+
+	diagnosticOnly bool
 }
 
 var secretLike = regexp.MustCompile(`(sk|key|token)-[A-Za-z0-9*_-]{4,}`)
 
 func safeMessage(text string) string {
-	text = secretLike.ReplaceAllString(strings.Join(strings.Fields(text), " "), "[redacted]")
+	text = redactDiagnostic(strings.Join(strings.Fields(text), " "))
 	if len(text) > 300 {
 		text = strings.ToValidUTF8(text[:297], "") + "..."
+	}
+	return text
+}
+
+var diagnosticSecrets = []*regexp.Regexp{
+	regexp.MustCompile(`(?i)(authorization["']?\s*:\s*["']?bearer\s+)[^\s"',;]+`),
+	regexp.MustCompile(`(?i)((?:[a-z0-9_]+_api_key|api[_-]key|token|secret|password)["']?\s*[:=]\s*)(?:"(?:\\.|[^"\\\r\n])*"?|'(?:\\.|[^'\\\r\n])*'?|[^\s,;"'}]+)`),
+}
+
+func redactDiagnostic(text string) string {
+	for _, pattern := range diagnosticSecrets {
+		text = pattern.ReplaceAllString(text, "${1}[redacted]")
+	}
+	return secretLike.ReplaceAllString(text, "[redacted]")
+}
+
+func backendDiagnostics(stdout, stderr []byte) string {
+	var messages []string
+	jsonLines(stdout, func(event map[string]json.RawMessage) {
+		switch field(event, "type") {
+		case "error":
+			messages = append(messages, field(event, "message"))
+		case "result":
+			var result struct {
+				IsError bool   `json:"is_error"`
+				Result  string `json:"result"`
+			}
+			if json.Unmarshal(mapJSON(event), &result) == nil && result.IsError {
+				messages = append(messages, result.Result)
+			}
+		case "message_end":
+			var message struct {
+				Role  string `json:"role"`
+				Stop  string `json:"stopReason"`
+				Error string `json:"errorMessage"`
+			}
+			if json.Unmarshal(event["message"], &message) == nil && message.Role == "assistant" && message.Stop == "error" {
+				messages = append(messages, message.Error)
+			}
+		case "turn.failed":
+			var failure struct {
+				Message string `json:"message"`
+			}
+			json.Unmarshal(event["error"], &failure)
+			messages = append(messages, failure.Message)
+		}
+	})
+	messages = append(messages, string(stderr))
+	return strings.TrimSpace(strings.Join(messages, "\n"))
+}
+
+func diagnosticExcerpt(text string, overflow bool) string {
+	text = redactDiagnostic(text)
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	truncated := overflow || len(lines) > 40
+	if len(lines) > 40 {
+		lines = lines[len(lines)-40:]
+	}
+	text = strings.Join(lines, "\n")
+	const marker = "[truncated]\n"
+	if len(text) > 4096-len(marker) {
+		truncated = true
+		text = strings.ToValidUTF8(text[len(text)-(4096-len(marker)):], "")
+	}
+	if truncated {
+		text = marker + text
 	}
 	return text
 }
@@ -66,6 +134,21 @@ func classifyBackend(backend string, exit int, stdout, stderr []byte, now time.T
 		failure = classifyCodex(stdout, now)
 	case backendPi:
 		failure = classifyPi(exit, stdout, stderr)
+	}
+	if failure == nil && exit != 0 {
+		text := backendDiagnostics(stdout, stderr)
+		if text == "" {
+			text = "backend process failed without diagnostic output"
+		}
+		reason := codexReason(text)
+		if reason == "" {
+			reason = "crash"
+			lower := strings.ToLower(text)
+			if strings.Contains(lower, "executable file not found") || strings.Contains(lower, "no such file or directory") || strings.Contains(lower, "is not installed on path") {
+				reason = "missing_binary"
+			}
+		}
+		failure = &BackendFailure{Reason: reason, Message: safeMessage(text), diagnosticOnly: true}
 	}
 	if failure != nil && failure.Reason == "auth" {
 		action := map[string]string{backendPi: "open pi and run /login", backendClaude: "run claude auth login", backendCodex: "run codex login"}[backend]
@@ -158,6 +241,8 @@ func codexReason(message string) string {
 		return "quota"
 	case strings.Contains(text, "401") || strings.Contains(text, "403") || strings.Contains(text, "unauthorized") || strings.Contains(text, "not logged in") || strings.Contains(text, "codex login"):
 		return "auth"
+	case strings.Contains(text, "model") && (strings.Contains(text, "not found") || strings.Contains(text, "not supported") || strings.Contains(text, "does not exist")):
+		return "model_mismatch"
 	case strings.Contains(text, "waiting for network") || strings.Contains(text, "connection failed") || serverError.MatchString(text) || strings.Contains(text, "service unavailable"):
 		return "unavailable"
 	}
@@ -482,6 +567,8 @@ func agentEnv(backend string) []string {
 type agentAnswer struct {
 	Text, Provider, Model string
 	Thinking              string
+	Reason, Diagnostic    string
+	Usage                 TokenUsage
 	CostUSD               float64
 	Tokens                int
 }
@@ -641,8 +728,40 @@ func codexAnswer(stdout, stderr []byte, readOnly bool) (agentAnswer, error) {
 	return answer, nil
 }
 
+func backendReportedModel(backend string, stdout, stderr []byte) string {
+	model := ""
+	if backend == backendCodex {
+		for _, line := range strings.Split(string(stderr), "\n") {
+			if match := codexModel.FindStringSubmatch(line); match != nil {
+				model = match[1]
+			}
+		}
+		return model
+	}
+	jsonLines(stdout, func(event map[string]json.RawMessage) {
+		if backend == backendClaude && field(event, "type") == "system" && field(event, "subtype") == "init" {
+			model = field(event, "model")
+		}
+		if (backend == backendPi || backend == "") && field(event, "type") == "message_end" {
+			var message struct {
+				Role  string `json:"role"`
+				Model string `json:"model"`
+			}
+			if json.Unmarshal(event["message"], &message) == nil && message.Role == "assistant" {
+				model = message.Model
+			}
+		}
+	})
+	return model
+}
+
 func agentUsage(backend string, stdout, stderr []byte) (float64, int) {
-	cost, tokens := 0.0, 0
+	usage := agentTokenUsage(backend, stdout, stderr)
+	return usage.CostUSD, usage.Tokens
+}
+
+func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
+	usage := TokenUsage{}
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
 		switch kind := field(event, "type"); {
 		case backend == backendClaude && kind == "result":
@@ -651,37 +770,61 @@ func agentUsage(backend string, stdout, stderr []byte) (float64, int) {
 				Usage map[string]struct {
 					Input  int `json:"inputTokens"`
 					Output int `json:"outputTokens"`
+					Cached int `json:"cacheReadInputTokens"`
 				} `json:"modelUsage"`
 			}
 			json.Unmarshal(mapJSON(event), &result)
-			cost += result.Cost
-			for _, usage := range result.Usage {
-				tokens += usage.Input + usage.Output
+			usage.CostUSD += result.Cost
+			for _, model := range result.Usage {
+				usage.InputTokens += model.Input
+				usage.OutputTokens += model.Output
+				usage.CachedInputTokens += model.Cached
+				usage.Tokens += model.Input + model.Output
+			}
+			if len(result.Usage) == 0 {
+				var native struct {
+					Input  int `json:"input_tokens"`
+					Output int `json:"output_tokens"`
+					Cached int `json:"cache_read_input_tokens"`
+				}
+				json.Unmarshal(event["usage"], &native)
+				usage.InputTokens += native.Input
+				usage.OutputTokens += native.Output
+				usage.CachedInputTokens += native.Cached
+				usage.Tokens += native.Input + native.Output
 			}
 		case backend == backendCodex && kind == "turn.completed":
-			var usage struct {
+			var native struct {
 				Input  int `json:"input_tokens"`
 				Output int `json:"output_tokens"`
+				Cached int `json:"cached_input_tokens"`
 			}
-			json.Unmarshal(event["usage"], &usage)
-			tokens += usage.Input + usage.Output
+			json.Unmarshal(event["usage"], &native)
+			usage.InputTokens += native.Input
+			usage.OutputTokens += native.Output
+			usage.CachedInputTokens += native.Cached
+			usage.Tokens += native.Input + native.Output
 		case (backend == backendPi || backend == "") && kind == "message_end":
 			var m struct {
 				Role  string `json:"role"`
 				Usage struct {
-					Total int `json:"totalTokens"`
-					Cost  struct {
+					Total  int `json:"totalTokens"`
+					Input  int `json:"input"`
+					Output int `json:"output"`
+					Cost   struct {
 						Total float64 `json:"total"`
 					} `json:"cost"`
 				} `json:"usage"`
 			}
 			if json.Unmarshal(event["message"], &m) == nil && m.Role == "assistant" {
-				cost += m.Usage.Cost.Total
-				tokens += m.Usage.Total
+				usage.CostUSD += m.Usage.Cost.Total
+				usage.Tokens += m.Usage.Total
+				usage.InputTokens += m.Usage.Input
+				usage.OutputTokens += m.Usage.Output
 			}
 		}
 	})
-	return cost, tokens
+	return usage
 }
 
 func agentReply(x *Execution, stdout, stderr []byte) (agentAnswer, error) {
@@ -804,6 +947,9 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	}
 	if !errors.Is(err, ErrWriterTreeUnknown) && ctx.Err() == nil && !out.exceeded {
 		run.failure = classifyBackend(backend, code, run.stdout, run.stderr, time.Now())
+		if run.failure != nil && (run.failure.diagnosticOnly || run.failure.Reason == "model_mismatch") {
+			run.failure = nil
+		}
 	}
 	var answerErr error
 	switch backend {

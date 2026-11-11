@@ -52,6 +52,14 @@ type Verdict struct {
 	Documentation    *DocAssessment    `json:"documentation,omitempty"`
 	Resolutions      []ResolutionCheck `json:"resolutions,omitempty"`
 }
+type TokenUsage struct {
+	InputTokens       int     `json:"input_tokens"`
+	OutputTokens      int     `json:"output_tokens"`
+	CachedInputTokens int     `json:"cached_input_tokens"`
+	Tokens            int     `json:"tokens"`
+	CostUSD           float64 `json:"cost_usd"`
+}
+
 type Execution struct {
 	Source       Identity             `json:"source"`
 	ID           string               `json:"id"`
@@ -75,6 +83,11 @@ type Execution struct {
 	Budget       string               `json:"budget,omitempty"`
 	Run          string               `json:"run,omitempty"`
 	Grant        string               `json:"grant,omitempty"`
+
+	Reason        string     `json:"reason,omitempty"`
+	Diagnostic    string     `json:"diagnostic,omitempty"`
+	ReportedModel string     `json:"reported_model,omitempty"`
+	Usage         TokenUsage `json:"usage"`
 }
 
 func gitRead(path string, args ...string) ([]byte, error) {
@@ -328,7 +341,11 @@ type reviewOutcome struct {
 
 func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	trusted, trustErr := trustedAgent(x.Config.Backend, x.Config.Model)
-	if trustErr != nil || reviewerConfigDigest(trusted) != x.ConfigDigest {
+	if trustErr != nil {
+		failure := classifyBackend(x.Config.Backend, -1, nil, []byte(trustErr.Error()), time.Now())
+		return reviewOutcome{Status: "unconfigured", Log: "installed reviewer changed; prepare again", Answer: agentAnswer{Reason: failure.Reason, Diagnostic: diagnosticExcerpt(trustErr.Error(), false)}}
+	}
+	if reviewerConfigDigest(trusted) != x.ConfigDigest {
 		return reviewOutcome{Status: "unconfigured", Log: "installed reviewer changed; prepare again"}
 	}
 	current, err := resolve(x.Source.Worktree)
@@ -384,24 +401,62 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 
 func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err error, cancelled bool) reviewOutcome {
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
-	usage := agentAnswer{}
-	usage.CostUSD, usage.Tokens = agentUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
+	usage := agentAnswer{Model: backendReportedModel(x.Config.Backend, out.Bytes(), stderr.Bytes())}
+	usage.Usage = agentTokenUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
+	usage.CostUSD, usage.Tokens = usage.Usage.CostUSD, usage.Usage.Tokens
+	usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+	usage.Reason = "crash"
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
+		usage.Reason = "missing_binary"
+	}
 	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
-		return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage}
+		usage.Reason = failure.Reason
+		usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+		if usage.Diagnostic == "" {
+			usage.Diagnostic = failure.Message
+		}
+		if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
+			usage.Reason = "missing_binary"
+		}
+		if !failure.diagnosticOnly && (failure.Reason == "auth" || failure.Reason == "quota" || failure.Reason == "unavailable") {
+			return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage}
+		}
+		if cancelled {
+			usage.Reason = "cancelled"
+			return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
+		}
+		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage}
 	}
 	if cancelled {
+		usage.Reason = "cancelled"
 		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 	}
 	if err != nil || out.exceeded || stderr.exceeded {
+		if out.exceeded || stderr.exceeded {
+			usage.Reason = "output_limit"
+		}
+		if usage.Diagnostic == "" {
+			usage.Diagnostic = "backend process failed without diagnostic output"
+		}
 		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage}
 	}
 	answer, e := agentReply(x, out.Bytes(), stderr.Bytes())
-	answer.CostUSD, answer.Tokens = usage.CostUSD, usage.Tokens
+	answer.CostUSD, answer.Tokens, answer.Usage = usage.CostUSD, usage.Tokens, usage.Usage
+	answer.Diagnostic = usage.Diagnostic
+	answer.Reason = "invalid_output"
 	if e != nil {
+		answer.Diagnostic = diagnosticExcerpt(e.Error()+"\n"+backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+		if strings.Contains(e.Error(), "model") {
+			answer.Reason = "model_mismatch"
+		}
 		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
 	}
 	result, e := verdictFrom(answer, x)
 	if e != nil {
+		answer.Diagnostic = diagnosticExcerpt(e.Error()+"\n"+backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+		if strings.Contains(e.Error(), "model") {
+			answer.Reason = "model_mismatch"
+		}
 		return reviewOutcome{Status: "inconclusive", Log: log + "; " + e.Error(), Answer: answer}
 	}
 	status := "clean-review"
@@ -410,6 +465,11 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err erro
 	}
 	if result.Verdict == "inconclusive" {
 		status = "inconclusive"
+	}
+	answer.Reason, answer.Diagnostic = "", ""
+	if status == "inconclusive" {
+		answer.Reason = "inconclusive"
+		answer.Diagnostic = diagnosticExcerpt("backend returned an inconclusive verdict\n"+stderr.String(), stderr.exceeded)
 	}
 	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer}
 }
@@ -573,4 +633,12 @@ func diffPath(path string) string {
 		return path[2:]
 	}
 	return path
+}
+
+func retainReviewMetadata(x *Execution, done reviewOutcome) {
+	x.Reason, x.Diagnostic, x.ReportedModel, x.Usage = done.Answer.Reason, done.Answer.Diagnostic, done.Answer.Model, done.Answer.Usage
+	if x.Reason == "" && (done.Status == "inconclusive" || done.Status == "unconfigured") {
+		x.Reason = "execution_failed"
+		x.Diagnostic = diagnosticExcerpt(done.Log, false)
+	}
 }

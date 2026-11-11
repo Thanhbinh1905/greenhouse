@@ -2037,6 +2037,7 @@ func main() {
 }
 
 func finishReview(r *Run, done reviewOutcome) {
+	retainReviewMetadata(r.Review, done)
 	status := done.Status
 	r.Review.Thinking = done.Answer.Thinking
 	recordAttempt(r, Attempt{Execution: r.Review.ID, Stage: "independent-review", Kind: "review", Role: "reviewer", Backend: r.Review.Config.Backend, Model: r.Review.Config.Model, Outcome: status, Reason: failureReason(done.Failure), Message: failureMessage(done.Failure), CostUSD: done.Answer.CostUSD, Tokens: done.Answer.Tokens, Thinking: done.Answer.Thinking})

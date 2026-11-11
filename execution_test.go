@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -229,5 +230,58 @@ func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 	want := []map[string]string{{"Path": "keep.txt", "Lines": "1: a\n2: changed\n3: c\n"}}
 	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "Files") {
 		t.Fatalf("delivered files = %v contract = %s", c.Input.Files, c.Input.Contract)
+	}
+}
+
+func TestReviewFailureMetadata(t *testing.T) {
+	for _, c := range []struct {
+		name, backend, stdout, stderr, reason string
+		code                                  int
+	}{
+		{name: "crash", backend: "codex", stderr: "panic: token=fake-value", reason: "crash", code: 1},
+		{name: "auth", backend: "codex", stdout: `{"type":"turn.failed","error":{"message":"401 Unauthorized secret=fake-value"}}`, reason: "auth", code: 1},
+		{name: "quota", backend: "codex", stdout: `{"type":"turn.failed","error":{"message":"quota exhausted api_key=fake-value"}}`, reason: "quota", code: 1},
+		{name: "model", backend: "codex", stdout: `{"type":"turn.failed","error":{"message":"model not found password=fake-value"}}`, reason: "model_mismatch", code: 1},
+		{name: "missing", backend: "codex", stderr: "executable file not found", reason: "missing_binary", code: 127},
+		{name: "invalid", backend: "codex", stderr: "unrecognized reply token=fake-value", reason: "invalid_output", code: 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			x := &Execution{Config: ReviewerConfig{Backend: c.backend}}
+			done := reviewFrom(x, c.code, outputBuffer([]byte(c.stdout), 65536), outputBuffer([]byte(c.stderr), 65536), nil, false)
+			if done.Answer.Reason != c.reason || done.Answer.Diagnostic == "" || strings.Contains(done.Answer.Diagnostic, "fake-value") {
+				t.Fatalf("bad metadata: %+v", done.Answer)
+			}
+		})
+	}
+}
+
+func TestFailedCodexReviewKeepsReportedModel(t *testing.T) {
+	_, stderr, _ := recorded(t, "codex", "success")
+	done := reviewFrom(&Execution{Config: ReviewerConfig{Backend: "codex"}}, 1, outputBuffer(nil, 65536), outputBuffer(stderr, 65536), nil, false)
+	if done.Answer.Model != "gpt-5.6-luna" {
+		t.Fatalf("reported model lost: %+v", done.Answer)
+	}
+}
+
+func TestNewDiagnosticsPreserveStoppedReviewBehavior(t *testing.T) {
+	x := &Execution{Config: ReviewerConfig{Backend: "codex"}}
+	for _, c := range []struct {
+		stderr string
+		err    error
+		reason string
+	}{{stderr: "401 Unauthorized", reason: "auth"}, {err: os.ErrNotExist, reason: "missing_binary"}} {
+		done := reviewFrom(x, 1, outputBuffer(nil, 65536), outputBuffer([]byte(c.stderr), 65536), c.err, false)
+		if done.Status != "inconclusive" || done.Failure != nil || done.Answer.Reason != c.reason {
+			t.Fatalf("diagnostics changed stop behavior: %+v", done)
+		}
+	}
+}
+
+func TestMissingReviewerBeforeLaunchIsDiagnosable(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("GREENHOUSE_HOME", t.TempDir())
+	done := executeReview(context.Background(), &Execution{Config: ReviewerConfig{Backend: "pi", Model: "fixture/model"}})
+	if done.Status != "unconfigured" || done.Answer.Reason != "missing_binary" || done.Answer.Diagnostic == "" {
+		t.Fatalf("missing binary masked: %+v", done)
 	}
 }

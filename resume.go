@@ -39,6 +39,8 @@ type Attempt struct {
 	Thinking  string  `json:"thinking,omitempty"`
 	Partial   string  `json:"partial,omitempty"`
 	At        string  `json:"at"`
+
+	Usage TokenUsage `json:"usage"`
 }
 
 var backendNames = map[string]string{backendPi: "Pi", backendClaude: "Claude", backendCodex: "Codex"}
@@ -46,6 +48,15 @@ var backendNames = map[string]string{backendPi: "Pi", backendClaude: "Claude", b
 func recordAttempt(r *Run, a Attempt) {
 	if a.Backend == "" {
 		a.Backend = backendPi
+	}
+	if a.Kind == "review" && r.Review != nil && a.Execution == r.Review.ID {
+		a.Usage = r.Review.Usage
+		if a.Reason == "" {
+			a.Reason = r.Review.Reason
+		}
+		if a.Model == "" {
+			a.Model = r.Review.ReportedModel
+		}
 	}
 	a.At = time.Now().UTC().Format(time.RFC3339)
 	r.Attempts = append(r.Attempts, a)

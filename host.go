@@ -26,6 +26,10 @@ type HostResult struct {
 	Input    string    `json:"input_digest"`
 	Backend  string    `json:"backend"`
 	Model    string    `json:"model"`
+
+	Reason     string     `json:"reason,omitempty"`
+	Diagnostic string     `json:"diagnostic,omitempty"`
+	Usage      TokenUsage `json:"usage"`
 }
 
 var hostOwned = map[string]string{
@@ -114,6 +118,13 @@ func hostResult(r *Run, current bool) *HostResult {
 		return nil
 	}
 	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, Head: r.Candidate, Target: r.Target, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
+	v.Reason, v.Diagnostic, v.Usage = x.Reason, x.Diagnostic, x.Usage
+	if v.Model == "" {
+		v.Model = x.ReportedModel
+		if v.Model == "" && x.Result != nil {
+			v.Model = x.Result.ReportedModel
+		}
+	}
 	if x.Result != nil {
 		v.Verdict, v.Findings = x.Result.Verdict, x.Result.Findings
 	}
