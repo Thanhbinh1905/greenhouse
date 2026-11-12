@@ -49,11 +49,11 @@ var hostOwned = map[string]string{
 var hostActions = []string{"attach", "inspect", "apply", "resolve-rules", "prepare", "review", "cancel", "resume", "rerun", "recover", "new"}
 
 func validHost(h *Host) bool {
-	if h == nil || !validText(h.Name) || !validText(h.ID) || len(h.Name) > 128 || len(h.ID) > 256 || len(h.Metadata) > 16 {
+	if h == nil || !ValidText(h.Name) || !ValidText(h.ID) || len(h.Name) > 128 || len(h.ID) > 256 || len(h.Metadata) > 16 {
 		return false
 	}
 	for k, v := range h.Metadata {
-		if !validText(k) || len(k) > 64 || len(v) > 256 || v != "" && !validText(v) {
+		if !ValidText(k) || len(k) > 64 || len(v) > 256 || v != "" && !ValidText(v) {
 			return false
 		}
 	}
@@ -64,7 +64,7 @@ func sameHost(a, b *Host) bool {
 	return a != nil && b != nil && a.Name == b.Name && a.ID == b.ID
 }
 
-func hostLabel(h *Host) string {
+func HostLabel(h *Host) string {
 	return h.Name + " " + h.ID
 }
 
@@ -73,7 +73,7 @@ func hostRefusal(r *Run, q Request) string {
 		return "invalid host identity: name and id are required text"
 	}
 	if r != nil && r.Host != nil && !sameHost(r.Host, q.Host) {
-		return "run is owned by host " + hostLabel(r.Host) + "; this client may only attach and inspect"
+		return "run is owned by host " + HostLabel(r.Host) + "; this client may only attach and inspect"
 	}
 	if q.Host != nil && r != nil && r.Host == nil && q.Op != "new" {
 		return "a standalone run owns this worktree; the host may replace it only with new"
@@ -88,7 +88,7 @@ func hostRefusal(r *Run, q Request) string {
 }
 
 func admitHostReview(r *Run, grant string) error {
-	if !validText(grant) || len(grant) > 256 {
+	if !ValidText(grant) || len(grant) > 256 {
 		return errors.New("host review requires grant: the host's review authorization identity")
 	}
 	if slices.Contains(r.HostGrants, grant) {
@@ -144,6 +144,6 @@ func hostView(v *Response, r *Run, current, actionable bool) {
 		actions = append(actions, "review")
 	}
 	v.Actions = actions
-	v.Blocked = append(v.Blocked, "owned by host "+hostLabel(r.Host)+": the host owns author repair, candidate custody, publication, CI and cap decisions")
+	v.Blocked = append(v.Blocked, "owned by host "+HostLabel(r.Host)+": the host owns author repair, candidate custody, publication, CI and cap decisions")
 	v.HostResult = hostResult(r, current)
 }

@@ -63,7 +63,7 @@ func uniformSources(source string) map[string]string {
 	return out
 }
 
-func fieldSources(s Snapshot) map[string]string {
+func FieldSources(s Snapshot) map[string]string {
 	if s.Sources != nil {
 		out := map[string]string{}
 		for name, source := range s.Sources {
@@ -81,7 +81,7 @@ func fieldSources(s Snapshot) map[string]string {
 }
 
 func nextSnapshot(prev Snapshot, settings Settings, source string) Snapshot {
-	sources := fieldSources(prev)
+	sources := FieldSources(prev)
 	before, after := settingValues(prev.Settings), settingValues(settings)
 	for _, name := range settingFields {
 		if before[name] != after[name] {
@@ -218,9 +218,9 @@ func narrows(s, base Settings) error {
 		}
 	}
 	for _, backend := range []string{s.ReviewerBackend, s.FixerBackend} {
-		if backend == backendClaude || backend == backendCodex {
+		if backend == BackendClaude || backend == BackendCodex {
 			config, err := trustedBackends()
-			if err != nil || backend == backendClaude && config.Claude == nil || backend == backendCodex && config.Codex == nil {
+			if err != nil || backend == BackendClaude && config.Claude == nil || backend == BackendCodex && config.Codex == nil {
 				return fmt.Errorf("%s backend is not configured per user; an override can only select configured backends", backend)
 			}
 		}
@@ -275,7 +275,7 @@ func initialSnapshot(s *Store, id repository.Identity) Snapshot {
 	return Snapshot{ID: opaque(), Settings: settings, Source: source, Sources: sources}
 }
 
-func sourceSummary(sources map[string]string) string {
+func SourceSummary(sources map[string]string) string {
 	var order []string
 	grouped := map[string][]string{}
 	for _, name := range settingFields {
@@ -292,8 +292,8 @@ func sourceSummary(sources map[string]string) string {
 	return strings.Join(parts, " | ")
 }
 
-func settingsTable(s Snapshot) string {
-	values, sources := settingValues(s.Settings), fieldSources(s)
+func SettingsTable(s Snapshot) string {
+	values, sources := settingValues(s.Settings), FieldSources(s)
 	var lines []string
 	for _, name := range settingFields {
 		value := strings.Trim(values[name], `"`)
@@ -308,7 +308,7 @@ func settingsTable(s Snapshot) string {
 	return strings.Join(lines, "\n")
 }
 
-func overrideLine(o *RepositoryStatus) string {
+func OverrideLine(o *RepositoryStatus) string {
 	switch o.Status {
 	case "absent":
 		return "Repository override: none (no " + overrideName + ")"

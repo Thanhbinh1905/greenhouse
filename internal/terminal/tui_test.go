@@ -1,4 +1,4 @@
-package engine
+package terminal
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	sessionintent "github.com/Thanhbinh1905/greenhouse/internal/intent"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
@@ -17,20 +19,20 @@ import (
 )
 
 type recordingClient struct {
-	requests []Request
-	answer   func(q Request) (Response, error)
+	requests []engine.Request
+	answer   func(q engine.Request) (engine.Response, error)
 }
 
-func (c *recordingClient) send(q Request, spawn bool) (Response, error) {
+func (c *recordingClient) send(q engine.Request, spawn bool) (engine.Response, error) {
 	c.requests = append(c.requests, q)
 	if c.answer == nil {
-		return Response{Outcome: "ok"}, nil
+		return engine.Response{Outcome: "ok"}, nil
 	}
 	return c.answer(q)
 }
 
-func (c *recordingClient) mutations() []Request {
-	var out []Request
+func (c *recordingClient) mutations() []engine.Request {
+	var out []engine.Request
 	for _, q := range c.requests {
 		if q.Op != "models" && q.Op != "inspect" && q.Op != "transcript" {
 			out = append(out, q)
@@ -124,19 +126,19 @@ func typed(text string) []string {
 	return keys
 }
 
-func tuiState(status string, actions ...string) Response {
+func tuiState(status string, actions ...string) engine.Response {
 	r := tuiRun(status)
 	r.Submitted = repository.Identity{Branch: "refs/heads/feat", Head: strings.Repeat("a", 40)}
-	return Response{Outcome: "ok", RunID: r.ID, Input: r.Input, Token: r.Token, Gate: "none", Run: r, Actions: append([]string{"attach", "inspect"}, actions...)}
+	return engine.Response{Outcome: "ok", RunID: r.ID, Input: r.Input, Token: r.Token, Gate: "none", Run: r, Actions: append([]string{"attach", "inspect"}, actions...)}
 }
 
-func ready(v Response) Response {
-	v.Run.Intent, v.Run.Target, v.Run.Reviewer = "fix it", strings.Repeat("b", 40), &ReviewerConfig{Backend: "claude"}
+func ready(v engine.Response) engine.Response {
+	v.Run.Intent, v.Run.Target, v.Run.Reviewer = "fix it", strings.Repeat("b", 40), &engine.ReviewerConfig{Backend: "claude"}
 	v.RulesReady = true
 	return v
 }
 
-func newTestTUI(v Response, client *recordingClient, agents ...string) *tuiModel {
+func newTestTUI(v engine.Response, client *recordingClient, agents ...string) *tuiModel {
 	m := newTUI(client, v, agents, "main", nil)
 	drive(m, tea.WindowSizeMsg{Width: 80, Height: 24})
 	return m
@@ -144,11 +146,11 @@ func newTestTUI(v Response, client *recordingClient, agents ...string) *tuiModel
 
 // fakeController answers like the daemon for the Run steps: each accepted
 // mutation changes the run and issues a new token.
-func fakeController(v Response) *recordingClient {
+func fakeController(v engine.Response) *recordingClient {
 	state := v
 	n := 0
 	client := &recordingClient{}
-	client.answer = func(q Request) (Response, error) {
+	client.answer = func(q engine.Request) (engine.Response, error) {
 		if q.Expected != state.Token || q.Action == "" {
 			refused := state
 			refused.Outcome, refused.Error = "refused", "stale run/input/gate/token"
@@ -162,9 +164,9 @@ func fakeController(v Response) *recordingClient {
 		run.Token = next.Token
 		switch q.Op {
 		case "apply":
-			run.Configs = append(run.Configs, Snapshot{Settings: *q.Settings})
+			run.Configs = append(run.Configs, engine.Snapshot{Settings: *q.Settings})
 		case "prepare":
-			run.Intent, run.Target, run.Reviewer = q.Intent, strings.Repeat("b", 40), &ReviewerConfig{Backend: run.Configs[len(run.Configs)-1].Settings.ReviewerBackend}
+			run.Intent, run.Target, run.Reviewer = q.Intent, strings.Repeat("b", 40), &engine.ReviewerConfig{Backend: run.Configs[len(run.Configs)-1].Settings.ReviewerBackend}
 			next.Actions = append(next.Actions, "review")
 		case "resolve-rules":
 			next.RulesReady = true
@@ -178,7 +180,7 @@ func fakeController(v Response) *recordingClient {
 	return client
 }
 
-func ops(requests []Request) []string {
+func ops(requests []engine.Request) []string {
 	var out []string
 	for _, q := range requests {
 		out = append(out, q.Op)
@@ -186,21 +188,21 @@ func ops(requests []Request) []string {
 	return out
 }
 
-func collectedFor(t *testing.T, session *intentSession) collector {
-	return func(ctx context.Context, worktree, target, head string) (intentMatch, error) {
+func collectedFor(t *testing.T, session *sessionintent.Session) collector {
+	return func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
 		if session == nil {
 			t.Fatal("Run collected intent although one was typed")
 		}
-		return intentMatch{Session: session}, nil
+		return sessionintent.Match{Session: session}, nil
 	}
 }
 
-func intentText(s *intentSession) string {
+func intentText(s *sessionintent.Session) string {
 	text, _ := s.Intent()
 	return text
 }
 
-func firstRun() Response {
+func firstRun() engine.Response {
 	v := tuiState("unconfigured", "apply", "save", "resolve-rules", "prepare", "new")
 	v.Run.Submitted.Worktree = "."
 	v.Run.Configs[0].Settings.ReviewerBackend = "pi"
@@ -210,7 +212,7 @@ func firstRun() Response {
 func TestOneRunCollectsIntentPreparesLoadsRulesAndStartsReview(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi", "claude")
-	session := &intentSession{Agent: "claude", ID: "abcdef123456", Requests: []string{"Add retry with jitter"}}
+	session := &sessionintent.Session{Agent: "claude", ID: "abcdef123456", Requests: []string{"Add retry with jitter"}}
 	m.collector = collectedFor(t, session)
 	if primaryAction(m.v, m.agents).Label != "Run review" {
 		t.Fatalf("first screen primary: %+v", primaryAction(m.v, m.agents))
@@ -264,8 +266,8 @@ func TestEditedAgentAndTypedIntentAreUsedByRun(t *testing.T) {
 func TestRunAsksOnceWhenNoSessionMatchesOrSeveralDo(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")
-	m.collector = func(ctx context.Context, worktree, target, head string) (intentMatch, error) {
-		return intentMatch{}, errNoIntent
+	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
+		return sessionintent.Match{}, sessionintent.ErrNoIntent
 	}
 	press(m, "enter")
 	if m.screen != screenIntent || len(client.mutations()) != 0 || !strings.Contains(m.View(), "What should this change do?") {
@@ -284,10 +286,10 @@ func TestRunAsksOnceWhenNoSessionMatchesOrSeveralDo(t *testing.T) {
 
 	client = fakeController(firstRun())
 	m = newTestTUI(firstRun(), client, "pi")
-	a := &intentSession{Agent: "pi", ID: "aaaaaaaa1", Requests: []string{"first"}}
-	b := &intentSession{Agent: "codex", ID: "bbbbbbbb2", Requests: []string{"second"}}
-	m.collector = func(ctx context.Context, worktree, target, head string) (intentMatch, error) {
-		return intentMatch{Candidates: []*intentSession{a, b}}, nil
+	a := &sessionintent.Session{Agent: "pi", ID: "aaaaaaaa1", Requests: []string{"first"}}
+	b := &sessionintent.Session{Agent: "codex", ID: "bbbbbbbb2", Requests: []string{"second"}}
+	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
+		return sessionintent.Match{Candidates: []*sessionintent.Session{a, b}}, nil
 	}
 	press(m, "enter")
 	if m.screen != screenIntent || !strings.Contains(m.View(), "second") {
@@ -302,9 +304,9 @@ func TestRunAsksOnceWhenNoSessionMatchesOrSeveralDo(t *testing.T) {
 func TestRunCancelAndDuplicateEnterSendNothingExtra(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")
-	m.collector = func(ctx context.Context, worktree, target, head string) (intentMatch, error) {
+	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
 		<-ctx.Done()
-		return intentMatch{}, ctx.Err()
+		return sessionintent.Match{}, ctx.Err()
 	}
 	_, collect := m.Update(keyMsg("enter"))
 	if _, again := m.Update(keyMsg("enter")); again != nil {
@@ -320,14 +322,14 @@ func TestRunCancelAndDuplicateEnterSendNothingExtra(t *testing.T) {
 }
 
 func TestRunStopsOnRefusalWithoutRetry(t *testing.T) {
-	client := &recordingClient{answer: func(q Request) (Response, error) {
+	client := &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 		refused := firstRun()
 		refused.Outcome, refused.Error, refused.Token = "refused", "source head or branch moved", "fresh"
 		refused.Actions = []string{"attach", "inspect", "new"}
 		return refused, nil
 	}}
 	m := newTestTUI(firstRun(), client, "pi")
-	m.collector = collectedFor(t, &intentSession{Agent: "pi", ID: "x", Requests: []string{"r"}})
+	m.collector = collectedFor(t, &sessionintent.Session{Agent: "pi", ID: "x", Requests: []string{"r"}})
 	press(m, "enter")
 	if got := client.mutations(); len(got) != 1 || got[0].Op != "prepare" {
 		t.Fatalf("refused Run step retried or continued: %v", ops(got))
@@ -342,17 +344,17 @@ func TestRunStopsOnRefusalWithoutRetry(t *testing.T) {
 
 func TestNavigationSendsNoMutation(t *testing.T) {
 	v := ready(tuiState("outstanding-findings", "apply", "save", "resolve-rules", "repair", "new", "rerun-from-start"))
-	v.Run.Findings = []Finding{{ID: "f1", Priority: "P1", File: "a.go", Start: 3, Explanation: "broken", Action: "fix", Head: v.Run.Candidate}}
-	v.Run.Review = &Execution{Result: &Verdict{Findings: v.Run.Findings}}
+	v.Run.Findings = []engine.Finding{{ID: "f1", Priority: "P1", File: "a.go", Start: 3, Explanation: "broken", Action: "fix", Head: v.Run.Candidate}}
+	v.Run.Review = &engine.Execution{Result: &engine.Verdict{Findings: v.Run.Findings}}
 	client := &recordingClient{}
 	m := newTestTUI(v, client, "claude")
-	before := digest(v)
+	before := engine.Digest(v)
 	press(m, "tab", "down", "up", "esc", "?", "down", "esc", "i", "c", "esc", "a", "down", "down", "esc", "f", "enter", "down", "esc", "esc", "s", "right", "down", "esc")
 	drive(m, tea.WindowSizeMsg{Width: 56, Height: 24}, tea.WindowSizeMsg{Width: 100, Height: 24})
 	if got := client.mutations(); len(got) != 0 {
 		t.Fatalf("navigation sent mutations: %+v", got)
 	}
-	if digest(m.v) != before {
+	if engine.Digest(m.v) != before {
 		t.Fatal("navigation changed the shown controller state")
 	}
 	if !m.draftChanged() {
@@ -397,7 +399,7 @@ func TestOlderWatchAnswerDoesNotReplaceNewerState(t *testing.T) {
 func TestStaleRefusalRefreshesWithoutRetry(t *testing.T) {
 	v := ready(tuiState("unconfigured", "apply", "save", "resolve-rules", "prepare", "review", "new"))
 	client := &recordingClient{}
-	client.answer = func(q Request) (Response, error) {
+	client.answer = func(q engine.Request) (engine.Response, error) {
 		refused := ready(tuiState("unconfigured", "apply", "save", "resolve-rules", "prepare", "new"))
 		refused.Outcome, refused.Error, refused.Token = "refused", "stale run/input/gate/token", "fresh"
 		refused.RulesReady = false
@@ -418,7 +420,7 @@ func TestStaleRefusalRefreshesWithoutRetry(t *testing.T) {
 
 func TestDetachIsNotCancel(t *testing.T) {
 	v := ready(tuiState("running", "cancel"))
-	v.Run.Review = &Execution{ID: "x", Backend: "claude"}
+	v.Run.Review = &engine.Execution{ID: "x", Backend: "claude"}
 	for _, key := range []string{"q", "ctrl+c"} {
 		client := &recordingClient{}
 		m := newTestTUI(v, client, "claude")
@@ -473,7 +475,7 @@ func TestTypedConfirmationForNewRun(t *testing.T) {
 func TestDecisionSendsChosenSubsetAndReason(t *testing.T) {
 	v := ready(tuiState("needs-decision", "apply", "decide", "new"))
 	v.Gate = "gate-1"
-	v.Decision = &Decision{ID: "gate-1", Kind: "findings", Stage: "review", Options: []string{"repair", "accept-head"}, Findings: []string{"f1", "f2"}, Reason: "two findings"}
+	v.Decision = &engine.Decision{ID: "gate-1", Kind: "findings", Stage: "review", Options: []string{"repair", "accept-head"}, Findings: []string{"f1", "f2"}, Reason: "two findings"}
 	client := &recordingClient{}
 	m := newTestTUI(v, client, "claude")
 	press(m, "enter", "enter", "space", "enter")
@@ -529,8 +531,8 @@ func TestSettingsDraftStaysLocalUntilApplyOrSave(t *testing.T) {
 
 func TestFindingsRepairSendsSelectedIDs(t *testing.T) {
 	v := ready(tuiState("outstanding-findings", "apply", "save", "resolve-rules", "repair", "new"))
-	v.Run.Findings = []Finding{{ID: "f1", Priority: "P1", File: "a.go", Start: 3, Explanation: "broken", Action: "fix", Head: v.Run.Candidate}, {ID: "f2", Priority: "P2", File: "b.go", Start: 9, Explanation: "also broken", Action: "fix", Head: v.Run.Candidate}}
-	v.Run.Review = &Execution{Result: &Verdict{Findings: v.Run.Findings}}
+	v.Run.Findings = []engine.Finding{{ID: "f1", Priority: "P1", File: "a.go", Start: 3, Explanation: "broken", Action: "fix", Head: v.Run.Candidate}, {ID: "f2", Priority: "P2", File: "b.go", Start: 9, Explanation: "also broken", Action: "fix", Head: v.Run.Candidate}}
+	v.Run.Review = &engine.Execution{Result: &engine.Verdict{Findings: v.Run.Findings}}
 	client := &recordingClient{}
 	m := newTestTUI(v, client, "claude")
 	press(m, "enter", "down", "space", "r")
@@ -555,10 +557,10 @@ func TestViewFitsSupportedSizes(t *testing.T) {
 	long := strings.Repeat("a long explanation ", 12)
 	findings := ready(tuiState("outstanding-findings", "apply", "save", "resolve-rules", "repair", "new"))
 	for i := 0; i < 12; i++ {
-		findings.Run.Findings = append(findings.Run.Findings, Finding{ID: fmt.Sprint("f", i), Priority: "P1", File: "very/long/path/to/a/file.go", Start: i, Explanation: long, Action: "fix", Head: findings.Run.Candidate})
+		findings.Run.Findings = append(findings.Run.Findings, engine.Finding{ID: fmt.Sprint("f", i), Priority: "P1", File: "very/long/path/to/a/file.go", Start: i, Explanation: long, Action: "fix", Head: findings.Run.Candidate})
 	}
-	findings.Run.Review = &Execution{Result: &Verdict{Findings: findings.Run.Findings}}
-	states := map[string]Response{
+	findings.Run.Review = &engine.Execution{Result: &engine.Verdict{Findings: findings.Run.Findings}}
+	states := map[string]engine.Response{
 		"first":    tuiState("unconfigured", "apply", "save", "resolve-rules", "prepare", "new"),
 		"running":  ready(tuiState("running", "cancel")),
 		"findings": findings,
@@ -586,7 +588,7 @@ func TestViewFitsSupportedSizes(t *testing.T) {
 
 func TestRunNeverSendsAfterEventLoss(t *testing.T) {
 	reconnecting := liveUpdate{state: "reconnecting (daemon unavailable)"}
-	session := &intentSession{Agent: "pi", ID: "abc", Requests: []string{"do it"}}
+	session := &sessionintent.Session{Agent: "pi", ID: "abc", Requests: []string{"do it"}}
 
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")
@@ -614,8 +616,8 @@ func TestRunNeverSendsAfterEventLoss(t *testing.T) {
 
 	client = fakeController(firstRun())
 	m = newTestTUI(firstRun(), client, "pi")
-	m.collector = func(ctx context.Context, worktree, target, head string) (intentMatch, error) {
-		return intentMatch{}, errNoIntent
+	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
+		return sessionintent.Match{}, sessionintent.ErrNoIntent
 	}
 	press(m, "enter")
 	drive(m, reconnecting)
@@ -626,7 +628,7 @@ func TestRunNeverSendsAfterEventLoss(t *testing.T) {
 	}
 }
 
-func sequenced(v Response, seq uint64, token string) Response {
+func sequenced(v engine.Response, seq uint64, token string) engine.Response {
 	run := *v.Run
 	v.Run, v.Stream, v.Sequence, v.Token = &run, "s", seq, token
 	run.Token = token
@@ -635,8 +637,8 @@ func sequenced(v Response, seq uint64, token string) Response {
 
 func TestOlderActionResponseDoesNotReplaceNewerWatchState(t *testing.T) {
 	running := ready(tuiState("running", "cancel"))
-	running.Run.Review = &Execution{ID: "x"}
-	client := &recordingClient{answer: func(q Request) (Response, error) {
+	running.Run.Review = &engine.Execution{ID: "x"}
+	client := &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 		old := sequenced(running, 5, "old")
 		old.Run.Status = "cancelling"
 		return old, nil
@@ -658,18 +660,18 @@ func TestOlderActionResponseDoesNotReplaceNewerWatchState(t *testing.T) {
 	}
 
 	start := sequenced(firstRun(), 5, "t5")
-	var sent []Request
-	client = &recordingClient{answer: func(q Request) (Response, error) {
+	var sent []engine.Request
+	client = &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 		sent = append(sent, q)
 		old := sequenced(firstRun(), 5, "old")
-		old.Run.Intent, old.Run.Target, old.Run.Reviewer = "typed", "b", &ReviewerConfig{Backend: "pi"}
+		old.Run.Intent, old.Run.Target, old.Run.Reviewer = "typed", "b", &engine.ReviewerConfig{Backend: "pi"}
 		return old, nil
 	}}
 	m = newTestTUI(start, client, "pi")
 	m.plan.intent = "typed"
 	_, prepare := m.Update(keyMsg("enter"))
 	prepared := sequenced(firstRun(), 7, "t7")
-	prepared.Run.Intent, prepared.Run.Target, prepared.Run.Reviewer = "typed", "b", &ReviewerConfig{Backend: "pi"}
+	prepared.Run.Intent, prepared.Run.Target, prepared.Run.Reviewer = "typed", "b", &engine.ReviewerConfig{Backend: "pi"}
 	drive(m, liveUpdate{state: "live", view: &prepared})
 	for _, msg := range run(prepare) {
 		drive(m, msg)
@@ -682,7 +684,7 @@ func TestOlderActionResponseDoesNotReplaceNewerWatchState(t *testing.T) {
 func TestOversizedCollectedIntentAsksInsteadOfTruncating(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")
-	long := &intentSession{Agent: "claude", ID: "long", Requests: []string{strings.Repeat("requirement text ", 600), "Final requirement: keep the retry limit at five."}}
+	long := &sessionintent.Session{Agent: "claude", ID: "long", Requests: []string{strings.Repeat("requirement text ", 600), "Final requirement: keep the retry limit at five."}}
 	m.collector = collectedFor(t, long)
 	press(m, "enter")
 	if len(client.mutations()) != 0 || m.screen != screenIntent || !strings.Contains(strings.Join(strings.Fields(m.View()), " "), "too long") {
@@ -714,7 +716,7 @@ func TestChangingTheReviewAgentKeepsTheFixer(t *testing.T) {
 	v.Run.Configs[0].Settings.ReviewerModel = "openai/x"
 	client := fakeController(v)
 	m := newTestTUI(v, client, "pi", "claude")
-	m.collector = collectedFor(t, &intentSession{Agent: "pi", ID: "a", Requests: []string{"r"}})
+	m.collector = collectedFor(t, &sessionintent.Session{Agent: "pi", ID: "a", Requests: []string{"r"}})
 	press(m, "tab", "enter", "down", "enter", "enter", "enter", "enter", "enter")
 	got := client.mutations()
 	if len(got) == 0 || got[0].Op != "apply" {
@@ -759,7 +761,7 @@ func TestFindingDetailHasNoVisibleEscapeFragments(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.ANSI)
 	defer lipgloss.SetColorProfile(previous)
 	v := ready(tuiState("outstanding-findings", "apply", "repair", "new"))
-	v.Run.Findings = []Finding{{ID: "f1", Priority: "P1", Origin: "correctness", File: "a.go", Start: 3, Explanation: "broken\x1b[31m", Action: "fix", Head: v.Run.Candidate}}
+	v.Run.Findings = []engine.Finding{{ID: "f1", Priority: "P1", Origin: "correctness", File: "a.go", Start: 3, Explanation: "broken\x1b[31m", Action: "fix", Head: v.Run.Candidate}}
 	m := newTestTUI(v, &recordingClient{}, "pi")
 	press(m, "f", "enter")
 	fragment := regexp.MustCompile(`\[[0-9;]*m`)
@@ -770,7 +772,7 @@ func TestFindingDetailHasNoVisibleEscapeFragments(t *testing.T) {
 	}
 }
 
-func onStream(v Response, stream string, seq uint64, token string) Response {
+func onStream(v engine.Response, stream string, seq uint64, token string) engine.Response {
 	v = sequenced(v, seq, token)
 	v.Stream = stream
 	return v
@@ -778,9 +780,9 @@ func onStream(v Response, stream string, seq uint64, token string) Response {
 
 func TestRetiredStreamSnapshotsNeverReplaceTheReplacementStream(t *testing.T) {
 	running := ready(tuiState("running", "cancel"))
-	running.Run.Review = &Execution{ID: "x"}
+	running.Run.Review = &engine.Execution{ID: "x"}
 
-	client := &recordingClient{answer: func(q Request) (Response, error) {
+	client := &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 		restarted := onStream(running, "new", 1, "new-token")
 		restarted.Run.Status = "cancelling"
 		return restarted, nil
@@ -798,7 +800,7 @@ func TestRetiredStreamSnapshotsNeverReplaceTheReplacementStream(t *testing.T) {
 		t.Fatalf("delayed watch snapshot from the retired stream replaced state: %s %s", m.v.Stream, m.v.Token)
 	}
 
-	client = &recordingClient{answer: func(q Request) (Response, error) {
+	client = &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 		late := onStream(running, "old", 6, "old-token")
 		late.Run.Status = "cancelling"
 		return late, nil
@@ -838,8 +840,8 @@ func TestDelayedIntermediateDaemonResponse(t *testing.T) {
 		}
 		t.Run(name, func(t *testing.T) {
 			running := ready(tuiState("running", "cancel"))
-			running.Run.Review = &Execution{ID: "x"}
-			client := &recordingClient{answer: func(q Request) (Response, error) {
+			running.Run.Review = &engine.Execution{ID: "x"}
+			client := &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 				answer := onStream(running, "daemon-B", 1, "token-B")
 				answer.Run.Status = "cancelling"
 				return answer, nil
@@ -875,7 +877,7 @@ func TestDelayedIntermediateDaemonResponse(t *testing.T) {
 }
 
 func TestRunWaitsForFollowerAfterCrossStreamResponse(t *testing.T) {
-	client := &recordingClient{answer: func(q Request) (Response, error) {
+	client := &recordingClient{answer: func(q engine.Request) (engine.Response, error) {
 		prepared := onStream(ready(firstRun()), "daemon-B", 1, "token-B")
 		return prepared, nil
 	}}

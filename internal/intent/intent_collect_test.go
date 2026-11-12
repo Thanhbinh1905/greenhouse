@@ -1,4 +1,4 @@
-package engine
+package intent
 
 import (
 	"context"
@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 )
 
 type intentFixture struct {
@@ -79,7 +81,7 @@ func TestCollectIntentFindsTheUsersRequestInThisWorktree(t *testing.T) {
 	claudeLog(t, f.home, other, "bbbbbbbb-2222", "Unrelated project request", "retry.go", "pkg/backoff.go")
 	sibling := f.repo + "-copy"
 	claudeLog(t, f.home, sibling, "cccccccc-3333", "Sibling worktree request", "retry.go", "pkg/backoff.go")
-	m, err := collectIntent(context.Background(), f.home, f.repo, f.target, f.head)
+	m, err := Collect(context.Background(), f.home, f.repo, f.target, f.head)
 	if err != nil || m.Session == nil {
 		t.Fatalf("no match: %+v %v", m, err)
 	}
@@ -94,7 +96,7 @@ func TestCollectIntentFindsTheUsersRequestInThisWorktree(t *testing.T) {
 			t.Errorf("intent contains %q:\n%s", unwanted, intent)
 		}
 	}
-	if !validText(intent) {
+	if !engine.ValidText(intent) {
 		t.Fatal("collected intent is not valid run intent text")
 	}
 }
@@ -109,7 +111,7 @@ func TestCollectIntentReadsPiAndCodexAndReportsAmbiguity(t *testing.T) {
 	writeLog(t, filepath.Join(f.home, ".codex", "sessions", now.Format("2006"), now.Format("01"), now.Format("02"), "rollout-x.jsonl"),
 		map[string]any{"type": "session_meta", "payload": map[string]any{"id": "codex-session-1", "cwd": f.repo, "timestamp": stamp}},
 		map[string]any{"type": "event_msg", "payload": map[string]any{"type": "user_message", "message": "Codex: change retry.go and pkg/backoff.go"}})
-	m, err := collectIntent(context.Background(), f.home, f.repo, f.target, f.head)
+	m, err := Collect(context.Background(), f.home, f.repo, f.target, f.head)
 	if err != nil || m.Session != nil || len(m.Candidates) != 2 {
 		t.Fatalf("two equal sessions must be ambiguous: %+v %v", m, err)
 	}
@@ -122,13 +124,13 @@ func TestCollectIntentReadsPiAndCodexAndReportsAmbiguity(t *testing.T) {
 func TestCollectIntentNoMatchAndCancellation(t *testing.T) {
 	f := newIntentFixture(t)
 	claudeLog(t, f.home, f.repo, "dddddddd", "Talk about docs only", "README.md")
-	if _, err := collectIntent(context.Background(), f.home, f.repo, f.target, f.head); !errors.Is(err, errNoIntent) {
+	if _, err := Collect(context.Background(), f.home, f.repo, f.target, f.head); !errors.Is(err, ErrNoIntent) {
 		t.Fatalf("unrelated session matched: %v", err)
 	}
 	claudeLog(t, f.home, f.repo, "eeeeeeee", "Real request", "retry.go", "pkg/backoff.go")
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if _, err := collectIntent(ctx, f.home, f.repo, f.target, f.head); !errors.Is(err, context.Canceled) {
+	if _, err := Collect(ctx, f.home, f.repo, f.target, f.head); !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled collection: %v", err)
 	}
 }
@@ -141,15 +143,15 @@ func TestCollectedIntentKeepsRequirementsAtTheEndOfALongSession(t *testing.T) {
 	b, _ := os.ReadFile(path)
 	late, _ := json.Marshal(map[string]any{"type": "user", "cwd": f.repo, "message": map[string]any{"content": "Final requirement: cap retries at five."}})
 	os.WriteFile(path, append(b, append(late, '\n')...), 0600)
-	m, err := collectIntent(context.Background(), f.home, f.repo, f.target, f.head)
+	m, err := Collect(context.Background(), f.home, f.repo, f.target, f.head)
 	if err != nil || m.Session == nil {
 		t.Fatalf("no match: %v", err)
 	}
 	intent, ok := m.Session.Intent()
-	if !ok || !strings.Contains(intent, "cap retries at five") || !validText(intent) {
+	if !ok || !strings.Contains(intent, "cap retries at five") || !engine.ValidText(intent) {
 		t.Fatalf("late requirement lost or intent invalid (%d bytes, ok %t)", len(intent), ok)
 	}
-	m.Session.Requests = append(m.Session.Requests, strings.Repeat("x", intentLimit))
+	m.Session.Requests = append(m.Session.Requests, strings.Repeat("x", Limit))
 	if _, ok := m.Session.Intent(); ok {
 		t.Fatal("an intent over the controller limit was accepted")
 	}

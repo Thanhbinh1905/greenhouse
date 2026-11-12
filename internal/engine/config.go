@@ -103,7 +103,7 @@ func configFailure(err error, generic string) error {
 }
 
 func configStatuses() []ConfigStatus {
-	h, err := home()
+	h, err := Home()
 	out := []ConfigStatus{}
 	if err != nil {
 		return out
@@ -163,7 +163,7 @@ type pendingMigration struct {
 }
 
 func migrateConfig(actor, reason, action string) ([]Migration, error) {
-	h, err := home()
+	h, err := Home()
 	if err != nil {
 		return nil, err
 	}
@@ -205,7 +205,7 @@ func migrateConfig(actor, reason, action string) ([]Migration, error) {
 		if bytes.Equal(body, []byte("}")) {
 			migrated = append([]byte(head[:len(head)-1]), body...)
 		}
-		if decodeConfig(name, migrated, after) != nil || digest(before) != digest(after) {
+		if decodeConfig(name, migrated, after) != nil || Digest(before) != Digest(after) {
 			return nil, fmt.Errorf("%s: migration would not be lossless; no file was changed", name)
 		}
 		backup := fmt.Sprintf("%s.v%d-%s.bak", name, version, runner.BytesDigest(b)[:12])

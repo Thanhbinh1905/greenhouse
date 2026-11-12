@@ -96,7 +96,7 @@ type Execution struct {
 }
 
 func trustedReviewer() (ReviewerConfig, error) {
-	return trustedAgent(backendPi, "")
+	return trustedAgent(BackendPi, "")
 }
 func admitReview(r *Run) error {
 	if r.Host != nil {
@@ -339,11 +339,11 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	env := agentEnv(x.Config.Backend)
 	var state []string
 	switch x.Config.Backend {
-	case backendCodex:
+	case BackendCodex:
 		if e = os.WriteFile(filepath.Join(dir, "schema.json"), []byte(verdictSchema(x.Full, len(x.Responses) > 0)), 0600); e != nil {
 			return reviewOutcome{Status: "inconclusive", Log: "private execution directory unavailable"}
 		}
-	case backendClaude:
+	case BackendClaude:
 	default:
 		env = append(env, "PI_CODING_AGENT_SESSION_DIR="+filepath.Join(dir, "sessions"))
 	}
@@ -355,8 +355,8 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	ctx, cancel := context.WithTimeout(ctx, runner.Timeout)
 	defer cancel()
 	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
-	exitCode, err := runner.RunProcess(runner.WithExecutor(ctx, x.ID, home), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
-	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, backendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
+	exitCode, err := runner.RunProcess(runner.WithExecutor(ctx, x.ID, Home), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
+	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, BackendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
 	done := reviewFrom(x, exitCode, out, stderr, err, ctx.Err() != nil)
 	done.Confinement = &confinement
 	if reason, failed := runner.ConfinementFailed(exitCode, stderr.Bytes()); failed {
@@ -511,7 +511,7 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 	ranges := changedRanges(x.Diff)
 	for i := range v.Findings {
 		f := &v.Findings[i]
-		if !expected[f.File] || f.Start < 1 || f.End < f.Start || !validText(f.Explanation) || !validText(f.Action) || f.Head != v.Head || (f.Priority != "P0" && f.Priority != "P1" && f.Priority != "P2" && f.Priority != "P3") || (f.Origin != "correctness" && f.Origin != "policy") || (f.Origin == "policy" && !rules[f.Rule]) || (f.Origin == "correctness" && f.Rule != "") {
+		if !expected[f.File] || f.Start < 1 || f.End < f.Start || !ValidText(f.Explanation) || !ValidText(f.Action) || f.Head != v.Head || (f.Priority != "P0" && f.Priority != "P1" && f.Priority != "P2" && f.Priority != "P3") || (f.Origin != "correctness" && f.Origin != "policy") || (f.Origin == "policy" && !rules[f.Rule]) || (f.Origin == "correctness" && f.Rule != "") {
 			return nil, errors.New("invalid finding")
 		}
 		inside := false
@@ -523,14 +523,14 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		if !inside {
 			return nil, errors.New("finding range outside changed hunks")
 		}
-		f.ID = digest([]any{f.Origin, f.File, f.Start, f.End, f.Rule, strings.Join(strings.Fields(f.Explanation), " ")})
+		f.ID = Digest([]any{f.Origin, f.File, f.Start, f.End, f.Rule, strings.Join(strings.Fields(f.Explanation), " ")})
 		if ids[f.ID] {
 			return nil, errors.New("duplicate finding")
 		}
 		ids[f.ID] = true
 	}
 	if x.Full {
-		if _, err := exactFields(fields["documentation"], "status", "reason"); err != nil || v.Documentation == nil || (v.Documentation.Status != "documented" && v.Documentation.Status != "not-needed" && v.Documentation.Status != "missing") || !validText(v.Documentation.Reason) {
+		if _, err := exactFields(fields["documentation"], "status", "reason"); err != nil || v.Documentation == nil || (v.Documentation.Status != "documented" && v.Documentation.Status != "not-needed" && v.Documentation.Status != "missing") || !ValidText(v.Documentation.Reason) {
 			return nil, errors.New("missing or invalid documentation assessment")
 		}
 	}
@@ -541,7 +541,7 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		return nil, errors.New("inconsistent verdict")
 	}
 	reported := provider + "/" + model
-	if x.Config.Backend == backendClaude || x.Config.Backend == backendCodex {
+	if x.Config.Backend == BackendClaude || x.Config.Backend == BackendCodex {
 		reported = model
 	}
 	if provider == "" || model == "" || (x.Config.Model != "" && reported != x.Config.Model) {

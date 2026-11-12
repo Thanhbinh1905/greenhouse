@@ -110,7 +110,7 @@ func TestFreshMissingAgentAndLogin(t *testing.T) {
 }
 
 func TestNativeClaudeAndCodexDefaultModels(t *testing.T) {
-	for _, backend := range []string{backendClaude, backendCodex} {
+	for _, backend := range []string{BackendClaude, BackendCodex} {
 		t.Run(backend+"-review", func(t *testing.T) {
 			bin, repo, state, root, v := onePassWith(t, backend, "")
 			mutate(t, bin, repo, state, v, "review", "native-default", nil)
@@ -124,7 +124,7 @@ func TestNativeClaudeAndCodexDefaultModels(t *testing.T) {
 			}
 		})
 		t.Run(backend+"-repair", func(t *testing.T) {
-			bin, repo, state, root, v := pipelineWith(t, backendPi, "fixture/model", backend, "")
+			bin, repo, state, root, v := pipelineWith(t, BackendPi, "fixture/model", backend, "")
 			os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
 			os.WriteFile(filepath.Join(root, "edit-"+backend), []byte("repaired\n"), 0600)
 			mutate(t, bin, repo, state, v, "pipeline", "native-fixer-default", nil)

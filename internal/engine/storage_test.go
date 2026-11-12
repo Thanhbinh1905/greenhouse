@@ -73,7 +73,7 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 	for i := range run.Configs {
 		cfg := run.Configs[i]
 		legacy := legacySnapshot{ID: cfg.ID, Settings: legacySettings{Mode: cfg.Settings.Mode, Preset: cfg.Settings.Preset, Limit: cfg.Settings.Limit, Rules: cfg.Settings.Rules}, Source: cfg.Source}
-		legacyDigests[cfg.ID] = digest(legacy)
+		legacyDigests[cfg.ID] = Digest(legacy)
 	}
 	for i := range run.RuleSnapshots {
 		run.RuleSnapshots[i].ConfigDigest = legacyDigests[run.RuleSnapshots[i].ConfigID]
@@ -82,7 +82,7 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 		Executable string `json:"executable"`
 		Model      string `json:"model"`
 	}{run.Review.Config.Executable, run.Review.Config.Model}
-	run.Review.ConfigDigest = digest(legacyConfig)
+	run.Review.ConfigDigest = Digest(legacyConfig)
 	run.Review.Config.Provider = ProviderConfig{}
 	run.Review.Config.Native = false
 	run.Review.Config.DisabledMCP = ""

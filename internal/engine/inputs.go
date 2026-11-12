@@ -40,7 +40,7 @@ func emitInput(w io.Writer, s RuleSnapshot, role string) (InputIdentity, error) 
 	if role != "reviewer" && role != "fixer" {
 		return InputIdentity{}, errors.New("unsupported role")
 	}
-	if !validText(s.Scope) {
+	if !ValidText(s.Scope) {
 		return InputIdentity{}, errors.New("missing rule scope")
 	}
 	if !rulesReady(s.Rules) {

@@ -56,7 +56,7 @@ var builtins = map[string]string{
 	"no-comments": `{"version":1,"id":"no-comments","criteria":[{"id":"necessary-comments","classification":"required","text":"Flag changed comments that merely narrate code or explain an obvious edit. Keep external-quirk explanations, license notices, generated markers, directives and required documentation comments.","repair_guidance":"Remove only redundant changed comments; retain comments that explain constraints not evident in code and every listed exception."}]}`,
 }
 
-func validText(s string) bool {
+func ValidText(s string) bool {
 	if strings.TrimSpace(s) == "" || len(s) > 8192 || !utf8.ValidString(s) {
 		return false
 	}
@@ -105,7 +105,7 @@ func parsePack(b []byte) (*RulePack, error) {
 	}
 	seen := map[string]bool{}
 	for _, c := range p.Criteria {
-		if !packID.MatchString(c.ID) || seen[c.ID] || (c.Classification != "required" && c.Classification != "advisory") || !validText(c.Text) || !validText(c.Repair) {
+		if !packID.MatchString(c.ID) || seen[c.ID] || (c.Classification != "required" && c.Classification != "advisory") || !ValidText(c.Text) || !ValidText(c.Repair) {
 			return nil, errors.New("invalid or duplicate criterion, classification or text")
 		}
 		seen[c.ID] = true
@@ -145,7 +145,7 @@ func selectedRules(s Settings) []RuleEvidence {
 }
 func resolveRules(r *Run) RuleSnapshot {
 	cfg := r.Configs[len(r.Configs)-1]
-	snap := RuleSnapshot{Scope: policyScope, ID: opaque(), Candidate: r.Candidate, ConfigID: cfg.ID, ConfigDigest: digest(cfg), Rules: selectedRules(cfg.Settings)}
+	snap := RuleSnapshot{Scope: policyScope, ID: opaque(), Candidate: r.Candidate, ConfigID: cfg.ID, ConfigDigest: Digest(cfg), Rules: selectedRules(cfg.Settings)}
 	packs := map[string]bool{}
 	for i := range snap.Rules {
 		e := &snap.Rules[i]
