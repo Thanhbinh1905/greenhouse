@@ -215,3 +215,11 @@ func TestClassificationUsesTerminalStructuredOutcome(t *testing.T) {
 		})
 	}
 }
+
+func TestClassificationUsesLatestCodexFailure(t *testing.T) {
+	stdout := []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"model not found\"}}\n{\"type\":\"error\",\"message\":\"worker crashed\"}")
+	failure := classifyBackend("codex", 0, stdout, nil, time.Now())
+	if failure == nil || failure.Reason != "crash" {
+		t.Fatalf("superseded error controls classification: %+v", failure)
+	}
+}

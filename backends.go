@@ -58,7 +58,7 @@ func backendDiagnostics(stdout, stderr []byte) string {
 		case "turn.completed":
 			messages = nil
 		case "error":
-			messages = append(messages, field(event, "message"))
+			messages = []string{field(event, "message")}
 		case "result":
 			var result struct {
 				IsError bool   `json:"is_error"`
@@ -87,7 +87,7 @@ func backendDiagnostics(stdout, stderr []byte) string {
 				Message string `json:"message"`
 			}
 			json.Unmarshal(event["error"], &failure)
-			messages = append(messages, failure.Message)
+			messages = []string{failure.Message}
 		}
 	})
 	messages = append(messages, string(stderr))
