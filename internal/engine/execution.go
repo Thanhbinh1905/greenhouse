@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -63,28 +64,28 @@ type TokenUsage struct {
 }
 
 type Execution struct {
-	Source       Identity             `json:"source"`
-	ID           string               `json:"id"`
-	Full         bool                 `json:"full,omitempty"`
-	Backend      string               `json:"backend"`
-	Config       ReviewerConfig       `json:"config"`
-	ConfigDigest string               `json:"config_digest"`
-	Args         []string             `json:"args"`
-	Input        []byte               `json:"input"`
-	InputDigest  string               `json:"input_digest"`
-	Rules        InputIdentity        `json:"rules"`
-	Diff         string               `json:"diff"`
-	Paths        []string             `json:"paths"`
-	Snapshot     *TreeSnapshot        `json:"snapshot,omitempty"`
-	Responses    []ResolutionResponse `json:"responses,omitempty"`
-	Confinement  *runner.Confinement  `json:"confinement,omitempty"`
-	Thinking     string               `json:"thinking,omitempty"`
-	Status       string               `json:"status"`
-	Log          string               `json:"log"`
-	Result       *Verdict             `json:"result,omitempty"`
-	Budget       string               `json:"budget,omitempty"`
-	Run          string               `json:"run,omitempty"`
-	Grant        string               `json:"grant,omitempty"`
+	Source       repository.Identity      `json:"source"`
+	ID           string                   `json:"id"`
+	Full         bool                     `json:"full,omitempty"`
+	Backend      string                   `json:"backend"`
+	Config       ReviewerConfig           `json:"config"`
+	ConfigDigest string                   `json:"config_digest"`
+	Args         []string                 `json:"args"`
+	Input        []byte                   `json:"input"`
+	InputDigest  string                   `json:"input_digest"`
+	Rules        InputIdentity            `json:"rules"`
+	Diff         string                   `json:"diff"`
+	Paths        []string                 `json:"paths"`
+	Snapshot     *repository.TreeSnapshot `json:"snapshot,omitempty"`
+	Responses    []ResolutionResponse     `json:"responses,omitempty"`
+	Confinement  *runner.Confinement      `json:"confinement,omitempty"`
+	Thinking     string                   `json:"thinking,omitempty"`
+	Status       string                   `json:"status"`
+	Log          string                   `json:"log"`
+	Result       *Verdict                 `json:"result,omitempty"`
+	Budget       string                   `json:"budget,omitempty"`
+	Run          string                   `json:"run,omitempty"`
+	Grant        string                   `json:"grant,omitempty"`
 
 	Reason           string     `json:"reason,omitempty"`
 	Diagnostic       string     `json:"diagnostic,omitempty"`
@@ -92,44 +93,6 @@ type Execution struct {
 	Usage            TokenUsage `json:"usage"`
 	ReviewBase       string     `json:"review_base,omitempty"`
 	ReviewBaseReason string     `json:"review_base_reason,omitempty"`
-}
-
-func gitRead(path string, args ...string) ([]byte, error) {
-	c := exec.Command("git", append([]string{"-C", path}, args...)...)
-	for _, v := range os.Environ() {
-		if !strings.HasPrefix(v, "GIT_") {
-			c.Env = append(c.Env, v)
-		}
-	}
-	c.Env = append(c.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
-	b := runner.NewBuffer(1024 * 1024)
-	c.Stdout = b
-	err := c.Run()
-	if b.Exceeded() {
-		return nil, errors.New("committed input exceeds 1 MiB")
-	}
-	return b.Bytes(), err
-}
-func committedTarget(path, target string) (string, error) {
-	if target == "" || strings.HasPrefix(target, "-") || strings.ContainsAny(target, "\x00\r\n") {
-		return "", errors.New("select a target Git branch or commit")
-	}
-	b, e := gitRead(path, "rev-parse", "--verify", target+"^{commit}")
-	if e != nil || strings.TrimSpace(string(b)) == "" {
-		return "", errors.New("target commit unavailable")
-	}
-	return strings.TrimSpace(string(b)), nil
-}
-func reviewDiffBase(path, target, candidate string) (string, string, error) {
-	base, err := gitRead(path, "merge-base", target, candidate)
-	if err == nil {
-		return strings.TrimSpace(string(base)), "", nil
-	}
-	var exit *exec.ExitError
-	if errors.As(err, &exit) && exit.ExitCode() == 1 {
-		return target, "target and candidate have no merge-base; using requested target for review diff", nil
-	}
-	return "", "", fmt.Errorf("cannot compute review merge-base: %w", err)
 }
 
 func trustedReviewer() (ReviewerConfig, error) {
@@ -198,11 +161,11 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if r.Reviewer == nil || cfg != *r.Reviewer {
 		return nil, errors.New("trusted reviewer changed; prepare with a current token required")
 	}
-	base, baseReason, e := reviewDiffBase(r.Submitted.Worktree, r.Target, r.Candidate)
+	base, baseReason, e := repository.ReviewDiffBase(r.Submitted.Worktree, r.Target, r.Candidate)
 	if e != nil {
 		return nil, e
 	}
-	diff, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
+	diff, e := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
 	if e != nil {
 		return nil, errors.New("cannot capture complete bounded diff")
 	}
@@ -212,7 +175,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if bytes.Contains(diff, []byte("GIT binary patch")) || bytes.Contains(diff, []byte("Subproject commit")) {
 		return nil, errors.New("binary and submodule review unsupported")
 	}
-	paths, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-relative", "--name-only", "-z", base, r.Candidate, "--")
+	paths, e := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-relative", "--name-only", "-z", base, r.Candidate, "--")
 	if e != nil {
 		return nil, e
 	}
@@ -252,7 +215,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	snap, e := snapshotOf(r.Submitted.Worktree, r.Candidate)
+	snap, e := repository.SnapshotOf(r.Submitted.Worktree, r.Candidate)
 	if e != nil {
 		return nil, e
 	}
@@ -278,7 +241,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if len(input) > 2*1024*1024 {
 		return nil, errors.New("review input too large")
 	}
-	current, err := resolve(r.Submitted.Worktree)
+	current, err := repository.Resolve(r.Submitted.Worktree)
 	if err != nil || current != r.Submitted {
 		return nil, errors.New("source moved during admission")
 	}
@@ -291,7 +254,7 @@ type reviewFile struct {
 }
 
 func candidateFiles(worktree, candidate string, names []string) ([]reviewFile, error) {
-	listing, e := gitRead(worktree, append([]string{"--literal-pathspecs", "ls-tree", "-r", "-z", "--full-tree", candidate, "--"}, names...)...)
+	listing, e := repository.Read(worktree, append([]string{"--literal-pathspecs", "ls-tree", "-r", "-z", "--full-tree", candidate, "--"}, names...)...)
 	if e != nil {
 		return nil, errors.New("cannot list candidate files")
 	}
@@ -302,7 +265,7 @@ func candidateFiles(worktree, candidate string, names []string) ([]reviewFile, e
 		if !ok || len(fields) != 3 || fields[1] != "blob" {
 			continue
 		}
-		content, e := gitRead(worktree, "cat-file", "blob", fields[2])
+		content, e := repository.Read(worktree, "cat-file", "blob", fields[2])
 		if e != nil {
 			return nil, errors.New("cannot read candidate file")
 		}
@@ -355,7 +318,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if reviewerConfigDigest(trusted) != x.ConfigDigest {
 		return reviewOutcome{Status: "unconfigured", Log: "installed reviewer changed; prepare again"}
 	}
-	current, err := resolve(x.Source.Worktree)
+	current, err := repository.Resolve(x.Source.Worktree)
 	if err != nil || current != x.Source {
 		return reviewOutcome{Status: "stale", Log: "source moved before process start"}
 	}
@@ -369,10 +332,10 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if x.Snapshot == nil {
 		return reviewOutcome{Status: "inconclusive", Log: "review admitted without a candidate snapshot; prepare again"}
 	}
-	if e = materialize(x.Source.Worktree, x.Snapshot, tree); e != nil {
+	if e = repository.Materialize(x.Source.Worktree, x.Snapshot, tree); e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "candidate snapshot unavailable: " + e.Error()}
 	}
-	defer removeSnapshot(tree)
+	defer repository.RemoveSnapshot(tree)
 	env := agentEnv(x.Config.Backend)
 	var state []string
 	switch x.Config.Backend {
@@ -399,7 +362,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if reason, failed := runner.ConfinementFailed(exitCode, stderr.Bytes()); failed {
 		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; " + reason, Answer: done.Answer, Confinement: &confinement}
 	}
-	if e = verifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
+	if e = repository.VerifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; candidate snapshot modified during review: " + e.Error(), Answer: done.Answer, Confinement: &confinement, Snapshot: "modified: " + e.Error()}
 	}
 	done.Snapshot = "unchanged"

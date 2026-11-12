@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -252,12 +253,12 @@ func observeCandidate(r *Run) *CandidateEvidence {
 	c := &CandidateEvidence{Worktree: worktree, Ref: ref, Durable: durable}
 	if _, err := os.Stat(worktree); os.IsNotExist(err) {
 		c.Summary = "candidate worktree does not exist"
-		if _, err := gitRead(r.Submitted.Worktree, "rev-parse", "-q", "--verify", ref); err != nil {
+		if _, err := repository.Read(r.Submitted.Worktree, "rev-parse", "-q", "--verify", ref); err != nil {
 			c.Summary += " and its ref is absent"
 		}
 		return c
 	}
-	id, err := resolve(worktree)
+	id, err := repository.Resolve(worktree)
 	if err != nil {
 		c.Summary = "candidate worktree is unreadable: " + err.Error()
 		return c
@@ -267,9 +268,9 @@ func observeCandidate(r *Run) *CandidateEvidence {
 		c.Summary = "candidate worktree is on " + id.Branch + ", not " + ref
 		return c
 	}
-	status, err := gitRead(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	status, err := repository.Read(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	c.Clean = err == nil && len(status) == 0
-	_, mergeErr := gitRead(worktree, "rev-parse", "-q", "--verify", "MERGE_HEAD")
+	_, mergeErr := repository.Read(worktree, "rev-parse", "-q", "--verify", "MERGE_HEAD")
 	c.Merging = mergeErr == nil
 	switch {
 	case c.Merging:
@@ -285,7 +286,7 @@ func observeCandidate(r *Run) *CandidateEvidence {
 }
 
 func parents(dir, head string) []string {
-	b, err := gitRead(dir, "rev-list", "--parents", "-n", "1", head)
+	b, err := repository.Read(dir, "rev-list", "--parents", "-n", "1", head)
 	if err != nil {
 		return nil
 	}
@@ -299,7 +300,7 @@ func parents(dir, head string) []string {
 func adoption(r *Run) (string, func() error) {
 	rec, c := r.Recovery, r.Recovery.Candidate
 	if rec.Kind == "handback" {
-		source, err := resolve(r.Submitted.Worktree)
+		source, err := repository.Resolve(r.Submitted.Worktree)
 		if err != nil || source.Branch != r.Submitted.Branch {
 			return "", nil
 		}
@@ -332,7 +333,7 @@ func adoption(r *Run) (string, func() error) {
 				return "", nil
 			}
 		} else {
-			diff, err := gitRead(c.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, c.Observed, "--")
+			diff, err := repository.Read(c.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, c.Observed, "--")
 			if len(got) != 1 || got[0] != x.Base || x.Diff == "" || err != nil || string(diff) != x.Diff {
 				return "", nil
 			}
@@ -395,14 +396,14 @@ func discardable(r *Run) error {
 		}
 	}
 	if c := rec.Candidate; c != nil && c.Observed != "" && rec.Kind != "candidate" {
-		if _, err := gitRead(c.Worktree, "merge-base", "--is-ancestor", c.Durable, c.Observed); err != nil {
+		if _, err := repository.Read(c.Worktree, "merge-base", "--is-ancestor", c.Durable, c.Observed); err != nil {
 			return errors.New("candidate no longer descends from the recorded head; start a linked new run")
 		}
 	}
 	return nil
 }
 
-func recoverRun(s *Store, r *Run, source Identity, a Answer) (*Run, error) {
+func recoverRun(s *Store, r *Run, source repository.Identity, a Answer) (*Run, error) {
 	rec := r.Recovery
 	if rec == nil {
 		return nil, errors.New("no open recovery")

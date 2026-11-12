@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/forge"
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -399,7 +401,7 @@ func deliveryRetry(st *StageResult) (retry, exhausted bool) {
 
 func advancePipeline(s *Store, r *Run) *Step {
 	p := r.Pipeline
-	if id, e := resolve(r.Submitted.Worktree); e != nil || id != r.Submitted {
+	if id, e := repository.Resolve(r.Submitted.Worktree); e != nil || id != r.Submitted {
 		park(r, p.stage("intent"), "needs-decision", "source head or branch moved; old-run advancement blocked")
 		return nil
 	}
@@ -562,7 +564,7 @@ func advancePipeline(s *Store, r *Run) *Step {
 }
 
 func changedPaths(r *Run) ([]string, error) {
-	b, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-renames", "--diff-filter=AM", "--name-only", "-z", r.Target, r.Candidate, "--")
+	b, e := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-renames", "--diff-filter=AM", "--name-only", "-z", r.Target, r.Candidate, "--")
 	if e != nil {
 		return nil, e
 	}
@@ -622,7 +624,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 	if e != nil {
 		return e
 	}
-	diff, e := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--binary", r.Target, r.Candidate, "--")
+	diff, e := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--binary", r.Target, r.Candidate, "--")
 	if e != nil {
 		return e
 	}
@@ -889,7 +891,7 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 		case <-timer.C:
 		}
 	}
-	identity, err := resolve(p.Worktree)
+	identity, err := repository.Resolve(p.Worktree)
 	if err != nil || identity.Head != candidate || identity.Branch != p.Ref {
 		out.Status, out.Reason = "needs-decision", "candidate ref identity changed; delivery refused"
 		return out, candidate, ""
@@ -937,7 +939,7 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 		}
 		out.Status, out.Reason = "passed", "authorized candidate pushed to configured remote"
 	case "pr":
-		forge, err := configuredForge()
+		forge, err := forge.Configured()
 		if err != nil {
 			out.Status, out.Reason = "failed", err.Error()
 			return out, candidate, ""
@@ -958,7 +960,7 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 		}
 		out.Status, out.URL, out.Number, out.Reason = "passed", pr.URL, pr.Number, "pull request created or reconciled for exact candidate"
 	case "ci":
-		forge, err := configuredForge()
+		forge, err := forge.Configured()
 		if err != nil {
 			out.Status, out.Reason = "failed", err.Error()
 			return out, candidate, ""
@@ -1005,11 +1007,11 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 }
 
 func worktreeClean(dir, head string) error {
-	id, e := resolve(dir)
+	id, e := repository.Resolve(dir)
 	if e != nil || id.Head != head {
 		return errors.New("candidate head moved during command")
 	}
-	b, e := gitRead(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	b, e := repository.Read(dir, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if e != nil || len(b) != 0 {
 		return errors.New("command modified the candidate worktree; mechanical autofix is unsupported")
 	}
@@ -1108,7 +1110,7 @@ func withWriterLock(repository string, fn func() error) error {
 }
 
 func unmergedPaths(dir string) []string {
-	b, _ := gitRead(dir, "diff", "--name-only", "--diff-filter=U", "-z")
+	b, _ := repository.Read(dir, "diff", "--name-only", "--diff-filter=U", "-z")
 	var names []string
 	for _, name := range strings.Split(string(b), "\x00") {
 		if name != "" {
@@ -1149,7 +1151,7 @@ func syncTarget(ctx context.Context, p Pipeline, target, candidate string) (Stag
 		return out, "", nil
 	}
 	if merge.Status == "passed" {
-		head, e := gitRead(p.Worktree, "rev-parse", "HEAD", "HEAD^1", "HEAD^2")
+		head, e := repository.Read(p.Worktree, "rev-parse", "HEAD", "HEAD^1", "HEAD^2")
 		fields := strings.Fields(string(head))
 		if e != nil || len(fields) != 3 || fields[1] != candidate || fields[2] != target {
 			out.Status, out.Reason = "unknown-outcome", "unexpected merge lineage; candidate preserved without retry"
@@ -1192,7 +1194,7 @@ func conflictMarkers(dir string, paths []string) error {
 	return nil
 }
 
-func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target string, source Identity, checkpoint func(*Repair) bool) {
+func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target string, source repository.Identity, checkpoint func(*Repair) bool) {
 	save := func() bool { return checkpoint(x) }
 	merging := false
 	fail := func(status string, e error) {
@@ -1206,7 +1208,7 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		save()
 	}
 	err := withWriterLock(source.Repository, func() error {
-		if current, e := resolve(source.Worktree); e != nil || current != source {
+		if current, e := repository.Resolve(source.Worktree); e != nil || current != source {
 			return errors.New("source moved before writer start")
 		}
 		if !fixerUnchanged(x) {
@@ -1286,14 +1288,14 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		for _, name := range x.Paths {
 			allowed[name] = true
 		}
-		unstaged, _ := gitRead(x.Worktree, "diff", "--name-only", "-z")
+		unstaged, _ := repository.Read(x.Worktree, "diff", "--name-only", "-z")
 		for _, name := range strings.Split(string(unstaged), "\x00") {
 			if name != "" && !allowed[name] {
 				x.Status = "scope-refused"
 				return errors.New("fixer changed a path outside the conflict")
 			}
 		}
-		if untracked, _ := gitRead(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z"); len(untracked) != 0 {
+		if untracked, _ := repository.Read(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z"); len(untracked) != 0 {
 			x.Status = "scope-refused"
 			return errors.New("fixer created untracked files")
 		}
@@ -1319,7 +1321,7 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 			return e
 		}
 		merging = false
-		heads, e := gitRead(x.Worktree, "rev-parse", "HEAD", "HEAD^1", "HEAD^2")
+		heads, e := repository.Read(x.Worktree, "rev-parse", "HEAD", "HEAD^1", "HEAD^2")
 		fields := strings.Fields(string(heads))
 		if e != nil || len(fields) != 3 || fields[1] != x.Base || fields[2] != target {
 			x.Status = "unknown-outcome"
@@ -1358,13 +1360,13 @@ func authorizePipelineHandback(r *Run) error {
 func handbackPipeline(r *Run, trusted string) error {
 	p := r.Pipeline
 	if p.Handback == "handed-back" {
-		id, e := resolve(r.Submitted.Worktree)
+		id, e := repository.Resolve(r.Submitted.Worktree)
 		if e == nil && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == r.Candidate {
 			return nil
 		}
 		return errors.New("recorded handback outcome does not match source; preserve recovery evidence")
 	}
-	if now, e := resolve(r.Submitted.Worktree); e == nil && now.Worktree == r.Submitted.Worktree && now.Branch == r.Submitted.Branch && now.Head == r.Candidate {
+	if now, e := repository.Resolve(r.Submitted.Worktree); e == nil && now.Worktree == r.Submitted.Worktree && now.Branch == r.Submitted.Branch && now.Head == r.Candidate {
 		p.Handback = "handed-back"
 		return nil
 	}
@@ -1372,28 +1374,28 @@ func handbackPipeline(r *Run, trusted string) error {
 		if e := gitHazards(r.Submitted.Worktree); e != nil {
 			return e
 		}
-		if source, e := resolve(r.Submitted.Worktree); e != nil || source != r.Submitted {
+		if source, e := repository.Resolve(r.Submitted.Worktree); e != nil || source != r.Submitted {
 			return errors.New("source branch, head or worktree moved; candidate preserved")
 		}
-		if candidate, e := resolve(p.Worktree); e != nil || candidate.Head != r.Candidate || candidate.Branch != p.Ref {
+		if candidate, e := repository.Resolve(p.Worktree); e != nil || candidate.Head != r.Candidate || candidate.Branch != p.Ref {
 			return errors.New("candidate identity changed; preserve recovery evidence")
 		}
-		if status, e := gitRead(p.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); e != nil || len(status) != 0 {
+		if status, e := repository.Read(p.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); e != nil || len(status) != 0 {
 			return errors.New("candidate dirty state is ambiguous; preserve recovery evidence")
 		}
-		if _, e := gitRead(r.Submitted.Worktree, "merge-base", "--is-ancestor", r.Submitted.Head, r.Candidate); e != nil {
+		if _, e := repository.Read(r.Submitted.Worktree, "merge-base", "--is-ancestor", r.Submitted.Head, r.Candidate); e != nil {
 			return errors.New("candidate does not descend from the submitted head")
 		}
 		if e := sourceClean(r.Submitted.Worktree, trusted); e != nil {
 			return e
 		}
 		if _, e := controllerGit(r.Submitted.Worktree, "merge", "--ff-only", r.Candidate); e != nil {
-			if after, err := resolve(r.Submitted.Worktree); err == nil && after == r.Submitted {
+			if after, err := repository.Resolve(r.Submitted.Worktree); err == nil && after == r.Submitted {
 				return errors.New("guarded handback refused; candidate preserved")
 			}
 			return errHandbackUnknown
 		}
-		if after, e := resolve(r.Submitted.Worktree); e != nil || after.Head != r.Candidate {
+		if after, e := repository.Resolve(r.Submitted.Worktree); e != nil || after.Head != r.Candidate {
 			return errHandbackUnknown
 		}
 		p.Handback = "handed-back"

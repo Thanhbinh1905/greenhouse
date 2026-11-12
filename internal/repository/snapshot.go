@@ -1,4 +1,4 @@
-package engine
+package repository
 
 import (
 	"bufio"
@@ -39,7 +39,7 @@ const (
 	snapshotByteLimit  = 512 << 20
 )
 
-func treeListing(worktree, commit string) ([]byte, []treeEntry, error) {
+func TreeListing(worktree, commit string) ([]byte, []treeEntry, error) {
 	c := exec.Command("git", "-C", worktree, "ls-tree", "-r", "-z", "-l", "--full-tree", commit)
 	c.Env = gitEnv()
 	out := runner.NewBuffer(64 << 20)
@@ -76,12 +76,12 @@ func gitEnv() []string {
 	return append(env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
 }
 
-func snapshotOf(worktree, commit string) (*TreeSnapshot, error) {
-	listing, entries, err := treeListing(worktree, commit)
+func SnapshotOf(worktree, commit string) (*TreeSnapshot, error) {
+	listing, entries, err := TreeListing(worktree, commit)
 	if err != nil {
 		return nil, err
 	}
-	tree, err := gitRead(worktree, "rev-parse", "--verify", commit+"^{tree}")
+	tree, err := Read(worktree, "rev-parse", "--verify", commit+"^{tree}")
 	if err != nil {
 		return nil, errors.New("cannot resolve the candidate tree")
 	}
@@ -97,14 +97,14 @@ func snapshotOf(worktree, commit string) (*TreeSnapshot, error) {
 
 // materialize writes the exact snapshot listing to root from the object store,
 // so attributes such as export-ignore or smudge filters cannot alter it.
-func materialize(worktree string, s *TreeSnapshot, root string) error {
+func Materialize(worktree string, s *TreeSnapshot, root string) error {
 	return materializeWithOpen(worktree, s, root, func(path string, flags int, mode os.FileMode) (io.WriteCloser, error) {
 		return os.OpenFile(path, flags, mode)
 	})
 }
 
 func materializeWithOpen(worktree string, s *TreeSnapshot, root string, openFile func(string, int, os.FileMode) (io.WriteCloser, error)) (retErr error) {
-	listing, entries, err := treeListing(worktree, s.Commit)
+	listing, entries, err := TreeListing(worktree, s.Commit)
 	if err != nil {
 		return err
 	}
@@ -211,8 +211,8 @@ func materializeWithOpen(worktree string, s *TreeSnapshot, root string, openFile
 	return nil
 }
 
-func verifySnapshot(worktree string, s *TreeSnapshot, root string) error {
-	_, entries, err := treeListing(worktree, s.Commit)
+func VerifySnapshot(worktree string, s *TreeSnapshot, root string) error {
+	_, entries, err := TreeListing(worktree, s.Commit)
 	if err != nil {
 		return err
 	}
@@ -287,7 +287,7 @@ func gitObject(like string, content []byte) string {
 	return hex.EncodeToString(h.Sum(nil))
 }
 
-func removeSnapshot(root string) {
+func RemoveSnapshot(root string) {
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err == nil && d.IsDir() {
 			os.Chmod(path, 0700)
@@ -295,59 +295,4 @@ func removeSnapshot(root string) {
 		return nil
 	})
 	os.RemoveAll(root)
-}
-
-func reviewDir(execution string) string {
-	return filepath.Join(os.TempDir(), "greenhouse-review-"+execution)
-}
-
-func reverifySnapshot(x *Execution) string {
-	dir := reviewDir(x.ID)
-	defer removeSnapshot(dir)
-	if x.Snapshot == nil {
-		return "unverified: the review has no bound snapshot"
-	}
-	listing, _, err := treeListing(x.Source.Worktree, x.Snapshot.Commit)
-	if err != nil {
-		return "unverified: the candidate tree is unavailable"
-	}
-	if runner.BytesDigest(listing) != x.Snapshot.Digest {
-		return "failed: the candidate tree differs from the bound digest"
-	}
-	tree := filepath.Join(dir, "tree")
-	info, err := os.Lstat(tree)
-	if os.IsNotExist(err) {
-		return "verified after restart: the candidate tree matches the bound digest; the review copy was already removed"
-	}
-	if err != nil || !info.IsDir() {
-		return "failed: the review copy is unreadable"
-	}
-	if err := verifySnapshot(x.Source.Worktree, x.Snapshot, tree); err != nil {
-		return "failed: the review copy was modified: " + err.Error()
-	}
-	return "verified after restart: the review copy matches the bound digest"
-}
-
-func recordReviewEvidence(x *Execution, check string, confinement *runner.Confinement) {
-	if confinement != nil {
-		x.Confinement = confinement
-	}
-	if x.Snapshot == nil || check == "" {
-		return
-	}
-	s := *x.Snapshot
-	s.Check = check
-	x.Snapshot = &s
-}
-
-func snapshotLine(s *TreeSnapshot) string {
-	check := s.Check
-	if check == "" {
-		check = "not yet checked"
-	}
-	files := "files"
-	if s.Entries == 1 {
-		files = "file"
-	}
-	return fmt.Sprintf("Snapshot: %s | %d %s | tree %s\nSnapshot digest: %s", check, s.Entries, files, s.Tree, s.Digest)
 }

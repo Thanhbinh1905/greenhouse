@@ -8,6 +8,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 func TestReviewMovementAndUnknownRestart(t *testing.T) {
@@ -75,7 +77,7 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 						t.Fatal(err)
 					}
 				case "restart-copy-removed":
-					removeSnapshot(copyRoot)
+					repository.RemoveSnapshot(copyRoot)
 				}
 			}
 			os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600)

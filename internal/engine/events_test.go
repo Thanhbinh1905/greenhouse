@@ -88,7 +88,7 @@ func TestEventSubscriptionRecoversThroughSnapshots(t *testing.T) {
 		}
 	}
 
-	stopDaemon(t, home)
+	stopDaemonAndWait(t, home)
 	restarted := watch(t, bin, repo, home, stream, after, 1000)
 	if restarted["wait"] != "resync" || restarted["stream"] == stream || runOf(t, restarted)["status"] != "outstanding-findings" {
 		t.Fatalf("a reconnect after restart must resync on a new stream: %v", restarted)

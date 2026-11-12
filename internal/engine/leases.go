@@ -9,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 type RefLease struct {
@@ -114,7 +116,7 @@ func renewLease(repository, ref string, epoch int) (int, error) {
 }
 
 func checkCandidateLease(worktree, ref string, epoch int) error {
-	id, err := resolve(worktree)
+	id, err := repository.Resolve(worktree)
 	if err != nil {
 		return err
 	}

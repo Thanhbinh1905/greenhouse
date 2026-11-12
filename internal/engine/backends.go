@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -1039,7 +1040,7 @@ func gitPathIgnored(root, name string) (bool, error) {
 }
 
 func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode os.FileMode, walkErr error) error) error {
-	tracked, err := gitRead(root, "ls-files", "-z")
+	tracked, err := repository.Read(root, "ls-files", "-z")
 	if err != nil {
 		return err
 	}
@@ -1111,12 +1112,12 @@ func walkUntrackedSpecialFiles(root string, visit func(path, name string, mode o
 
 func capturePartial(x *Repair) {
 	w := &evidenceWriter{hash: sha256.New()}
-	diff, err := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, "--")
+	diff, err := repository.Read(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, "--")
 	if err != nil {
 		fmt.Fprintf(w, "partial diff unavailable: %v\n", err)
 	}
 	w.Write(diff)
-	untracked, err := gitRead(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
+	untracked, err := repository.Read(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
 		fmt.Fprintf(w, "untracked files unavailable: %v\n", err)
 	}
@@ -1243,7 +1244,7 @@ func restoreCandidate(x *Repair) error {
 	if _, err := controllerGit(x.Worktree, "clean", "-fd"); err != nil {
 		return err
 	}
-	if status, err := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); err != nil || len(status) != 0 {
+	if status, err := repository.Read(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all"); err != nil || len(status) != 0 {
 		return errors.New("candidate is still dirty after restore")
 	}
 	return candidateSafe(x, x.Base)
