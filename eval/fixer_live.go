@@ -338,7 +338,7 @@ func runFixLive(o fixOptions) (*FixReport, error) {
 	}
 	defer os.RemoveAll(work)
 	bin := filepath.Join(work, "greenhouse")
-	if _, err := command(root, nil, "go", "build", "-o", bin, "."); err != nil {
+	if _, err := command(root, nil, "go", "build", "-o", bin, "./cmd/greenhouse"); err != nil {
 		return nil, err
 	}
 	shimBin, err := os.Executable()
