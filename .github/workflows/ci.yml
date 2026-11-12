@@ -16,12 +16,16 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
+      - name: Remove runner Git LFS filters
+        run: sudo git lfs uninstall --system
       - name: Check formatting
         run: |
           unformatted=$(gofmt -l .)
