@@ -1,10 +1,12 @@
-package engine
+package terminal
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -116,7 +118,7 @@ func (m *tuiModel) footer(w int) string {
 		if m.seq != nil {
 			keys = append(keys, "x stop run")
 		}
-		if has(m.v.Actions, "cancel") {
+		if slices.Contains(m.v.Actions, "cancel") {
 			keys = append(keys, "x cancel")
 		}
 		keys = append(keys, "a actions", "s settings")
@@ -139,7 +141,7 @@ func (m *tuiModel) footer(w int) string {
 		}
 	case screenFindings:
 		keys = []string{"↑↓ move", "⏎ details"}
-		if has(m.v.Actions, "repair") {
+		if slices.Contains(m.v.Actions, "repair") {
 			keys = append(keys, "space select", "r repair selected")
 		}
 		keys = append(keys, "esc back")
@@ -270,7 +272,7 @@ func (m *tuiModel) homeView(w, room int) []string {
 	}
 	var findings []string
 	if r := m.v.Run; len(r.Findings) > 0 && !busy(r) {
-		actionable, informational := outstanding(r)
+		actionable, informational := engine.Outstanding(r)
 		findings = append(findings, "", styleBold.Render(" Findings")+" · "+findingCount(len(actionable), len(informational)))
 		for _, f := range append(actionable, informational...) {
 			findings = append(findings, fit("   "+findingRow(f), w))
@@ -340,7 +342,7 @@ func (m *tuiModel) idlePrompt() string {
 		return "Following this run. Press i for details."
 	case busy(r):
 		return "Work runs in the daemon. x cancels it; q detaches and leaves it running."
-	case r.Reviewer == nil && len(m.agents) == 0 && has(m.v.Actions, "prepare"):
+	case r.Reviewer == nil && len(m.agents) == 0 && slices.Contains(m.v.Actions, "prepare"):
 		return "Next: install an agent and sign in with its own CLI, then press r."
 	case r.Status == "clean-review":
 		return "Review complete: clean for this head. a lists further actions."
@@ -350,7 +352,7 @@ func (m *tuiModel) idlePrompt() string {
 	return "Nothing to start right now. a lists available actions; ? explains the rest."
 }
 
-func progressLabel(r *Run) string {
+func progressLabel(r *engine.Run) string {
 	switch {
 	case r.Status == "cancelling":
 		return "cancellation"
@@ -366,7 +368,7 @@ func (m *tuiModel) progressLine() string {
 	r := m.v.Run
 	stage, agent := "Independent review", ""
 	if r.Review != nil {
-		agent = agentName(backendOf(r.Review.Config), r.Review.Config.Model)
+		agent = agentName(engine.BackendOf(r.Review.Config), r.Review.Config.Model)
 	}
 	switch {
 	case r.Status == "cancelling":
@@ -410,7 +412,7 @@ func formatElapsed(d time.Duration) string {
 
 var stageIcons = map[string]string{"passed": "✓", "failed": "✗", "running": "…", "pending": "○", "needs-decision": "!", "not-applicable": "-", "accepted-risk": "!", "repaired-unreviewed": "!", "unknown-outcome": "?", "paused": "!", "cancelled": "✗"}
 
-func stageStrip(p *Pipeline) string {
+func stageStrip(p *engine.Pipeline) string {
 	var parts []string
 	for _, st := range p.Stages {
 		icon := stageIcons[st.Status]
@@ -422,7 +424,7 @@ func stageStrip(p *Pipeline) string {
 	return "Stages: " + strings.Join(parts, "  ")
 }
 
-func findingRow(f Finding) string {
+func findingRow(f engine.Finding) string {
 	return fmt.Sprintf("%s %s:%d  %s", f.Priority, f.File, f.Start, f.Explanation)
 }
 
@@ -515,7 +517,7 @@ func (m *tuiModel) setupView(w int) []string {
 
 func (m *tuiModel) findingsView(w, room int) []string {
 	r := m.v.Run
-	actionable, informational := outstanding(r)
+	actionable, informational := engine.Outstanding(r)
 	labels := map[string]string{}
 	for _, f := range actionable {
 		labels[f.ID] = "open"
@@ -523,8 +525,8 @@ func (m *tuiModel) findingsView(w, room int) []string {
 	for _, f := range informational {
 		labels[f.ID] = "info"
 	}
-	kinds := resolvedKinds(r)
-	canRepair := has(m.v.Actions, "repair")
+	kinds := engine.ResolvedKinds(r)
+	canRepair := slices.Contains(m.v.Actions, "repair")
 	ids := selectable(r)
 	selected := 0
 	var rows []string
@@ -536,7 +538,7 @@ func (m *tuiModel) findingsView(w, room int) []string {
 		box := ""
 		if canRepair {
 			box = "    "
-			if has(ids, f.ID) {
+			if slices.Contains(ids, f.ID) {
 				box = "[ ] "
 				if m.selected[f.ID] {
 					box = "[x] "
@@ -569,7 +571,7 @@ func (m *tuiModel) findingsView(w, room int) []string {
 			if i == m.cursor {
 				row = styleFocus.Render(row)
 			}
-			if canRepair && has(ids, f.ID) && m.selected[f.ID] {
+			if canRepair && slices.Contains(ids, f.ID) && m.selected[f.ID] {
 				row = fit(row+" [x]", left-1)
 			}
 			listRows[i] = row
@@ -598,7 +600,7 @@ func (m *tuiModel) findingsView(w, room int) []string {
 	return append(out, detail...)
 }
 
-func (m *tuiModel) findingDetail(f Finding, w int) []string {
+func (m *tuiModel) findingDetail(f engine.Finding, w int) []string {
 	var out []string
 	add := func(text string) { out = append(out, wrap(text, w)...) }
 	location := fmt.Sprintf("%s:%d", f.File, f.Start)
@@ -618,7 +620,7 @@ func (m *tuiModel) findingDetail(f Finding, w int) []string {
 	if f.Head != "" {
 		add("Reported for head " + targetLabel(f.Head))
 	}
-	for _, line := range responseLines(m.v.Run)[f.ID] {
+	for _, line := range engine.ResponseLines(m.v.Run)[f.ID] {
 		add(strings.TrimSpace(line))
 	}
 	return out
@@ -709,7 +711,7 @@ func (m *tuiModel) recoveryView(w, room int) []string {
 
 func (m *tuiModel) settingsView(w, room int) []string {
 	current := m.current()
-	sources := fieldSources(m.v.Run.Configs[len(m.v.Run.Configs)-1])
+	sources := engine.FieldSources(m.v.Run.Configs[len(m.v.Run.Configs)-1])
 	out := []string{styleBold.Render(" Settings draft") + styleDim.Render(" · changes apply only when you choose Apply or Save"), ""}
 	var rows []string
 	for i, name := range settingNames {
@@ -770,14 +772,14 @@ func (m *tuiModel) settingsHint() string {
 	targets := settingsTargets(m.v)
 	switch {
 	case m.cursor < len(settingNames):
-		source := fieldSources(m.v.Run.Configs[len(m.v.Run.Configs)-1])[settingKeys[m.cursor]]
+		source := engine.FieldSources(m.v.Run.Configs[len(m.v.Run.Configs)-1])[settingKeys[m.cursor]]
 		switch m.cursor {
 		case 4, 6:
 			backend := m.draft.ReviewerBackend
 			if m.cursor == 6 {
 				backend = m.draft.FixerBackend
 			}
-			if backend == backendPi {
+			if backend == engine.BackendPi {
 				models := strings.Join(m.models, ", ")
 				if m.modelsErr != "" {
 					models = "catalog unavailable: " + m.modelsErr
@@ -842,12 +844,12 @@ func (m *tuiModel) confirmView(w int) []string {
 
 func (m *tuiModel) homeSteps() []tuiStep {
 	steps := setupSteps(m.v, m.agents, m.suggestion)
-	if !has(m.v.Actions, "prepare") || len(m.agents) == 0 && m.v.Run.Reviewer == nil {
+	if !slices.Contains(m.v.Actions, "prepare") || len(m.agents) == 0 && m.v.Run.Reviewer == nil {
 		return steps
 	}
 	agent := m.planAgent()
 	state := stepTodo
-	if r := m.v.Run; r.Reviewer != nil && backendOf(*r.Reviewer) == agent {
+	if r := m.v.Run; r.Reviewer != nil && engine.BackendOf(*r.Reviewer) == agent {
 		state = stepDone
 	}
 	steps[0] = tuiStep{"Agent", state, agentLabel(agent, "")}
@@ -902,9 +904,9 @@ func (m *tuiModel) intentView(w, room int) []string {
 }
 
 func agentName(backend, model string) string {
-	name := backendNames[backend]
+	name := engine.BackendName(backend)
 	if name == "" {
-		name = backendNames[backendPi]
+		name = engine.BackendName(engine.BackendPi)
 	}
 	if model != "" {
 		name += " " + model

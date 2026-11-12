@@ -1,8 +1,11 @@
-package engine
+package terminal
 
 import (
 	"fmt"
+	"slices"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 )
 
 // tuiAction is one thing the terminal can offer. Op names the controller
@@ -41,13 +44,13 @@ var tuiActions = map[string]tuiAction{
 	"help":               {ID: "help", Label: "Help", Hint: "Keys and actions, including ones unavailable now."},
 }
 
-func busy(r *Run) bool {
+func busy(r *engine.Run) bool {
 	return r != nil && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing")
 }
 
 // followOnly reports a run the controller lets this client watch but not
 // change, such as a run owned by a host.
-func followOnly(v Response) bool {
+func followOnly(v engine.Response) bool {
 	for _, op := range v.Actions {
 		if op != "attach" && op != "inspect" {
 			return false
@@ -56,7 +59,7 @@ func followOnly(v Response) bool {
 	return true
 }
 
-func rulesFailed(v Response) bool {
+func rulesFailed(v engine.Response) bool {
 	for _, rule := range v.Rules {
 		if rule.Required && rule.Status == "failed" {
 			return true
@@ -65,7 +68,7 @@ func rulesFailed(v Response) bool {
 	return false
 }
 
-func labelled(id string, r *Run) tuiAction {
+func labelled(id string, r *engine.Run) tuiAction {
 	a := tuiActions[id]
 	if id == "rerun" && r != nil && r.Pause != nil {
 		a.Label, a.Hint = "Resume paused stage", "Run the paused stage again in a fresh session with the same input."
@@ -82,7 +85,7 @@ func labelled(id string, r *Run) tuiAction {
 	return a
 }
 
-func pipelineStarted(p *Pipeline) bool {
+func pipelineStarted(p *engine.Pipeline) bool {
 	for _, st := range p.Stages {
 		if st.Status != "pending" {
 			return true
@@ -93,13 +96,13 @@ func pipelineStarted(p *Pipeline) bool {
 
 // primaryAction picks the one next step Enter runs on the home screen. It is
 // derived from the controller's allowed actions and run state only.
-func primaryAction(v Response, agents []string) tuiAction {
+func primaryAction(v engine.Response, agents []string) tuiAction {
 	r := v.Run
 	if r == nil || busy(r) || followOnly(v) {
 		return tuiAction{}
 	}
-	allowed := func(op string) bool { return has(v.Actions, op) }
-	actionable, _ := outstanding(r)
+	allowed := func(op string) bool { return slices.Contains(v.Actions, op) }
+	actionable, _ := engine.Outstanding(r)
 	switch {
 	case r.Recovery != nil && allowed("recover"):
 		return labelled("recover", r)
@@ -141,13 +144,13 @@ func primaryAction(v Response, agents []string) tuiAction {
 
 // menuItems lists the actions menu. Mutations appear only when the
 // controller allows their operation and the client holds fresh state.
-func menuItems(v Response, fresh bool) []tuiAction {
+func menuItems(v engine.Response, fresh bool) []tuiAction {
 	r := v.Run
 	var items []tuiAction
 	if r == nil {
 		return items
 	}
-	allowed := func(op string) bool { return fresh && has(v.Actions, op) }
+	allowed := func(op string) bool { return fresh && slices.Contains(v.Actions, op) }
 	add := func(id string, ok bool) {
 		if ok {
 			items = append(items, labelled(id, r))
@@ -180,13 +183,9 @@ func menuItems(v Response, fresh bool) []tuiAction {
 
 // trustable reports an override file the repository status shows as present
 // but not applied; the controller still checks its digest.
-func trustable(v Response) bool {
+func trustable(v engine.Response) bool {
 	o := v.Repository
 	return o != nil && o.Status == "ignored" && o.Digest != "absent" && o.Digest != ""
-}
-
-func mutation(v Response, op string) Request {
-	return Request{Version: protocolMax, Op: op, RunID: v.RunID, Input: v.Input, Gate: v.Gate, Expected: v.Token, Action: opaque(), Client: "terminal"}
 }
 
 type tuiStep struct {
@@ -204,7 +203,7 @@ const (
 )
 
 func agentLabel(backend, model string) string {
-	name := backendNames[backend]
+	name := engine.BackendName(backend)
 	if name == "" {
 		name = backend
 	}
@@ -214,16 +213,16 @@ func agentLabel(backend, model string) string {
 	return name + " · " + model
 }
 
-func setupSteps(v Response, agents []string, suggestion string) []tuiStep {
+func setupSteps(v engine.Response, agents []string, suggestion string) []tuiStep {
 	r := v.Run
 	settings := r.Configs[len(r.Configs)-1].Settings
 	var steps []tuiStep
 	switch {
 	case r.Reviewer != nil:
-		steps = append(steps, tuiStep{"Agent", stepDone, agentLabel(backendOf(*r.Reviewer), r.Reviewer.Model)})
+		steps = append(steps, tuiStep{"Agent", stepDone, agentLabel(engine.BackendOf(*r.Reviewer), r.Reviewer.Model)})
 	case len(agents) == 0:
 		steps = append(steps, tuiStep{"Agent", stepFailed, "none found: install pi, claude or codex"})
-	case has(agents, settings.ReviewerBackend):
+	case slices.Contains(agents, settings.ReviewerBackend):
 		steps = append(steps, tuiStep{"Agent", stepTodo, agentLabel(settings.ReviewerBackend, settings.ReviewerModel) + " (installed)"})
 	default:
 		steps = append(steps, tuiStep{"Agent", stepTodo, "installed: " + strings.Join(agents, ", ")})
@@ -268,7 +267,7 @@ func targetLabel(target string) string {
 	return target
 }
 
-func reviewStep(v Response) tuiStep {
+func reviewStep(v engine.Response) tuiStep {
 	r := v.Run
 	limit := r.Configs[len(r.Configs)-1].Settings.Limit
 	budget := fmt.Sprintf("budget %d of %d used", r.ReviewUsed+r.RepairUsed, limit)
@@ -276,7 +275,7 @@ func reviewStep(v Response) tuiStep {
 	if r.Pipeline != nil || r.Configs[len(r.Configs)-1].Settings.Preset == "full" {
 		name = "Pipeline"
 	}
-	actionable, informational := outstanding(r)
+	actionable, informational := engine.Outstanding(r)
 	switch {
 	case r.Recovery != nil:
 		return tuiStep{name, stepFailed, "recovery required · " + budget}
@@ -291,7 +290,7 @@ func reviewStep(v Response) tuiStep {
 		if r.Pipeline.Outcome == "accepted-risk" {
 			state = stepWaiting
 		}
-		return tuiStep{name, state, strings.ToLower(outcomeLabels[r.Pipeline.Outcome]) + " · " + r.Pipeline.Status}
+		return tuiStep{name, state, strings.ToLower(engine.OutcomeLabel(r.Pipeline.Outcome)) + " · " + r.Pipeline.Status}
 	case r.Pipeline != nil && r.Pipeline.Failed != "":
 		return tuiStep{name, stepFailed, "stopped at " + r.Pipeline.Failed + " · " + budget}
 	case r.Status == "clean-review":
@@ -325,7 +324,7 @@ func statusWords(status string) string {
 
 // stateNotes explains the current state in plain words from structured
 // fields, so the home screen does not depend on blocker strings.
-func stateNotes(v Response, agents []string, fresh bool) []string {
+func stateNotes(v engine.Response, agents []string, fresh bool) []string {
 	r := v.Run
 	var notes []string
 	if r == nil {
@@ -336,13 +335,13 @@ func stateNotes(v Response, agents []string, fresh bool) []string {
 	}
 	if followOnly(v) {
 		if r.Host != nil {
-			notes = append(notes, "This run is owned by "+hostLabel(r.Host)+". You can follow it here but not change it.")
+			notes = append(notes, "This run is owned by "+engine.HostLabel(r.Host)+". You can follow it here but not change it.")
 		} else {
 			notes = append(notes, "This run can be followed but not changed from here.")
 		}
 		return notes
 	}
-	if r.Reviewer == nil && len(agents) == 0 && has(v.Actions, "prepare") {
+	if r.Reviewer == nil && len(agents) == 0 && slices.Contains(v.Actions, "prepare") {
 		notes = append(notes, "No supported agent found on PATH. Install Pi, Claude Code or Codex, sign in with its own CLI, then press r to recheck.")
 	}
 	for _, c := range v.Config {
@@ -352,17 +351,17 @@ func stateNotes(v Response, agents []string, fresh bool) []string {
 	}
 	handedBack := r.Repair != nil && r.Repair.Handback == "handed-back" || r.Pipeline != nil && r.Pipeline.Handback == "handed-back"
 	switch {
-	case handedBack && !has(v.Actions, "apply"):
+	case handedBack && !slices.Contains(v.Actions, "apply"):
 		notes = append(notes, "The fix is on your branch now. Start a new run to review it independently.")
-	case has(v.Actions, "new") && !has(v.Actions, "apply") && !busy(r) && r.Recovery == nil:
+	case slices.Contains(v.Actions, "new") && !slices.Contains(v.Actions, "apply") && !busy(r) && r.Recovery == nil:
 		notes = append(notes, "Your branch or head moved since this run started. Start a new run to review the current head.")
 	}
 	if r.Pause != nil && v.Explanation != "" {
 		explanation, _, _ := strings.Cut(v.Explanation, " Press ")
-		if has(v.Actions, "rerun") {
+		if slices.Contains(v.Actions, "rerun") {
 			explanation += " Enter resumes now."
 		}
-		if has(v.Actions, "cancel-auto-resume") {
+		if slices.Contains(v.Actions, "cancel-auto-resume") {
 			explanation += " The actions menu (a) cancels the automatic resume."
 		}
 		notes = append(notes, explanation+" Settings (s) changes the agent.")
@@ -384,8 +383,8 @@ func stateNotes(v Response, agents []string, fresh bool) []string {
 	if r.Host == nil && r.ReviewUsed+r.RepairUsed >= limit && !finished {
 		notes = append(notes, fmt.Sprintf("Budget exhausted: %d of %d rounds used. Raise the limit in Settings to continue.", r.ReviewUsed+r.RepairUsed, limit))
 	}
-	actionable, _ := outstanding(r)
-	if r.Status == "outstanding-findings" && len(actionable) > 0 && r.Repair == nil && r.RepairUsed == 0 && !has(v.Actions, "repair") && r.Host == nil {
+	actionable, _ := engine.Outstanding(r)
+	if r.Status == "outstanding-findings" && len(actionable) > 0 && r.Repair == nil && r.RepairUsed == 0 && !slices.Contains(v.Actions, "repair") && r.Host == nil {
 		notes = append(notes, "Selected repair is unavailable: it needs a trusted fixer.json with checks and findings on changed files.")
 	}
 	if x := r.Repair; x != nil && x.Status == "fixed-not-independently-rereviewed" {
@@ -395,7 +394,7 @@ func stateNotes(v Response, agents []string, fresh bool) []string {
 		notes = append(notes, "Handback refused: "+p.HandbackError)
 	}
 	if trustable(v) {
-		notes = append(notes, overrideLine(v.Repository)+".")
+		notes = append(notes, engine.OverrideLine(v.Repository)+".")
 	}
 	return notes
 }

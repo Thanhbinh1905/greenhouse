@@ -1,12 +1,15 @@
-package engine
+package terminal
 
 import (
 	"context"
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	sessionintent "github.com/Thanhbinh1905/greenhouse/internal/intent"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -32,22 +35,22 @@ type runSeq struct {
 }
 
 type intentMsg struct {
-	match intentMatch
+	match sessionintent.Match
 	err   error
 }
 
-type collector func(ctx context.Context, worktree, target, head string) (intentMatch, error)
+type collector func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error)
 
-func localCollector(ctx context.Context, worktree, target, head string) (intentMatch, error) {
+func localCollector(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return intentMatch{}, err
+		return sessionintent.Match{}, err
 	}
 	resolved, err := repository.CommittedTarget(worktree, target)
 	if err != nil {
-		return intentMatch{}, errors.New("the target " + target + " is not a commit here; choose another target")
+		return sessionintent.Match{}, errors.New("the target " + target + " is not a commit here; choose another target")
 	}
-	return collectIntent(ctx, home, worktree, resolved, head)
+	return sessionintent.Collect(ctx, home, worktree, resolved, head)
 }
 
 var runStepLabels = map[string]string{
@@ -66,9 +69,9 @@ func (m *tuiModel) planAgent() string {
 	case m.plan.agent != "":
 		return m.plan.agent
 	case r.Reviewer != nil:
-		return backendOf(*r.Reviewer)
+		return engine.BackendOf(*r.Reviewer)
 	}
-	if backend := m.current().ReviewerBackend; has(m.agents, backend) {
+	if backend := m.current().ReviewerBackend; slices.Contains(m.agents, backend) {
 		return backend
 	}
 	if len(m.agents) > 0 {
@@ -136,38 +139,38 @@ func (m *tuiModel) advance() tea.Cmd {
 	r, settings := m.v.Run, m.current()
 	agent, target := m.planAgent(), m.planTarget()
 	full := settings.Preset == "full"
-	allowed := func(op string) bool { return has(m.v.Actions, op) }
+	allowed := func(op string) bool { return slices.Contains(m.v.Actions, op) }
 	switch {
 	case seq.intent == "":
 		return m.collect(target)
-	case agent != settings.ReviewerBackend && (r.Reviewer == nil || backendOf(*r.Reviewer) != agent):
+	case agent != settings.ReviewerBackend && (r.Reviewer == nil || engine.BackendOf(*r.Reviewer) != agent):
 		draft := settings
 		draft.ReviewerBackend, draft.ReviewerModel = agent, ""
-		q := mutation(m.v, "apply")
+		q := engine.TerminalMutation(m.v, "apply")
 		q.Settings, q.Reason = &draft, "select installed agent"
 		return m.step("apply", q)
 	case r.Reviewer == nil || r.Intent != seq.intent || r.Target == "" || m.plan.target != "" && !sameTarget(r, m.plan.target):
-		q := mutation(m.v, "prepare")
+		q := engine.TerminalMutation(m.v, "prepare")
 		q.Intent, q.Target = seq.intent, target
 		return m.step("prepare", q)
 	case !m.v.RulesReady:
-		return m.step("resolve-rules", mutation(m.v, "resolve-rules"))
+		return m.step("resolve-rules", engine.TerminalMutation(m.v, "resolve-rules"))
 	case !full:
-		return m.step("review", mutation(m.v, "review"))
+		return m.step("review", engine.TerminalMutation(m.v, "review"))
 	case allowed("pipeline"):
-		return m.step("pipeline", mutation(m.v, "pipeline"))
+		return m.step("pipeline", engine.TerminalMutation(m.v, "pipeline"))
 	}
 	m.seq = nil
 	m.say("Run cannot start the pipeline in the current state. Nothing else was sent.")
 	return nil
 }
 
-func sameTarget(r *Run, target string) bool {
+func sameTarget(r *engine.Run, target string) bool {
 	resolved, err := repository.CommittedTarget(r.Submitted.Worktree, target)
 	return err == nil && resolved == r.Target
 }
 
-func (m *tuiModel) step(op string, q Request) tea.Cmd {
+func (m *tuiModel) step(op string, q engine.Request) tea.Cmd {
 	m.seq.step = op
 	if m.seq.sent[op] {
 		m.seq = nil
@@ -175,7 +178,7 @@ func (m *tuiModel) step(op string, q Request) tea.Cmd {
 		return nil
 	}
 	m.seq.sent[op] = true
-	if !has(m.v.Actions, op) {
+	if !slices.Contains(m.v.Actions, op) {
 		label := runStepLabels[op]
 		m.seq = nil
 		m.say("Run stopped: " + strings.ToLower(label) + " is not available in the current state. Nothing was sent.")
@@ -220,7 +223,7 @@ func (m *tuiModel) collected(msg intentMsg) tea.Cmd {
 	default:
 		m.candidates = nil
 		reason := "No local agent session started in this worktree mentions the changed files"
-		if msg.err != nil && !errors.Is(msg.err, errNoIntent) {
+		if msg.err != nil && !errors.Is(msg.err, sessionintent.ErrNoIntent) {
 			reason = "Intent collection failed: " + msg.err.Error()
 		}
 		m.question = reason + ". What should this change do?"
@@ -233,11 +236,11 @@ func (m *tuiModel) collected(msg intentMsg) tea.Cmd {
 
 // useSession asks for a shorter intent instead of cutting requests that do
 // not fit the controller's limit.
-func (m *tuiModel) useSession(s *intentSession) tea.Cmd {
+func (m *tuiModel) useSession(s *sessionintent.Session) tea.Cmd {
 	intent, ok := s.Intent()
 	if !ok {
 		m.candidates = nil
-		m.question = fmt.Sprintf("The requests in %s are too long for a review intent: %d bytes, at most %d. Nothing was cut or sent. Write the intent in your own words, keeping every requirement.", s.Label(), len(intent), intentLimit)
+		m.question = fmt.Sprintf("The requests in %s are too long for a review intent: %d bytes, at most %d. Nothing was cut or sent. Write the intent in your own words, keeping every requirement.", s.Label(), len(intent), sessionintent.Limit)
 		m.seq.step, m.screen = "question", screenIntent
 		m.edit("", "the change in your own words")
 		return nil
@@ -291,8 +294,8 @@ func (m *tuiModel) intentTyped(accept bool, value string) tea.Cmd {
 		m.stopRun()
 		return nil
 	}
-	if !validText(value) {
-		m.say(fmt.Sprintf("Describe the change in at most %d bytes, or press Esc to stop Run.", intentLimit))
+	if !engine.ValidText(value) {
+		m.say(fmt.Sprintf("Describe the change in at most %d bytes, or press Esc to stop Run.", sessionintent.Limit))
 		return nil
 	}
 	m.editing = false
@@ -307,7 +310,7 @@ func (m *tuiModel) intentLabel() (string, string) {
 	switch {
 	case intent == "":
 		return stepTodo, "collected from your agent session on Run"
-	case strings.HasPrefix(intent, collectedPrefix):
+	case strings.HasPrefix(intent, sessionintent.CollectedPrefix):
 		state := stepTodo
 		if m.v.Run.Intent == intent {
 			state = stepDone
@@ -319,13 +322,11 @@ func (m *tuiModel) intentLabel() (string, string) {
 	return stepTodo, intent + " · typed"
 }
 
-const collectedPrefix = "User request collected from "
-
 func intentSummary(intent string) string {
-	if !strings.HasPrefix(intent, collectedPrefix) {
+	if !strings.HasPrefix(intent, sessionintent.CollectedPrefix) {
 		return intent
 	}
-	source, body, _ := strings.Cut(strings.TrimPrefix(intent, collectedPrefix), ". These are the user's own words from that session, not a summary:\n\n")
+	source, body, _ := strings.Cut(strings.TrimPrefix(intent, sessionintent.CollectedPrefix), ". These are the user's own words from that session, not a summary:\n\n")
 	line, _, _ := strings.Cut(body, "\n")
 	return "“" + line + "” · collected from " + source
 }

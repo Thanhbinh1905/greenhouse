@@ -1,4 +1,4 @@
-package engine
+package terminal
 
 import (
 	"io"
@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 )
 
 func captureTerminal(t *testing.T, draw func()) string {
@@ -58,15 +60,15 @@ func TestDisplayIDFitsWithSeparator(t *testing.T) {
 func TestDisplayedFindingIDSelectsOnlyUniqueFinding(t *testing.T) {
 	id := strings.Repeat("a", 32) + strings.Repeat("b", 32)
 	displayed := displayID(id, 55)
-	ids, whole, err := parseSelection(displayed, []string{id})
+	ids, whole, err := engine.ParseSelection(displayed, []string{id})
 	if err != nil || whole || len(ids) != 1 || ids[0] != id {
 		t.Fatalf("displayed ID cannot select its finding: %v %t %v", ids, whole, err)
 	}
 	other := id[:30] + "cc" + id[32:]
-	if _, _, err := parseSelection(displayed, []string{id, other}); err == nil {
+	if _, _, err := engine.ParseSelection(displayed, []string{id, other}); err == nil {
 		t.Fatal("ambiguous abbreviated ID selected a finding")
 	}
-	if _, _, err := parseSelection(id+","+displayed, []string{id}); err == nil {
+	if _, _, err := engine.ParseSelection(id+","+displayed, []string{id}); err == nil {
 		t.Fatal("duplicate full and abbreviated selection accepted")
 	}
 }
@@ -117,8 +119,8 @@ func TestFinalReadyScreenKeepsActionableValuesWhole(t *testing.T) {
 	ref := "refs/heads/greenhouse/8281036a00c4cf49a236983480517711"
 	head := "2c6e7616ff282be4536a0c9f5c574c049acd2617"
 	url := "https://github.com/Thanhbinh1905/greenhouse-live-validation-t59-20261109/pull/2"
-	r := &Run{Pipeline: &Pipeline{Status: "ci-ready", Worktree: "/work", Ref: ref, Stages: []StageResult{
-		{Name: "push", Status: "passed", Head: head, Commands: []CheckResult{
+	r := &engine.Run{Pipeline: &engine.Pipeline{Status: "ci-ready", Worktree: "/work", Ref: ref, Stages: []engine.StageResult{
+		{Name: "push", Status: "passed", Head: head, Commands: []engine.CheckResult{
 			{Args: []string{"/usr/bin/git", "ls-remote", remote, ref}, Status: "passed"},
 			{Args: []string{"/usr/bin/git", "push", remote, head + ":" + ref}, Status: "passed"},
 		}},

@@ -2,7 +2,7 @@ package engine
 
 func legacyAgentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 	switch config.Backend {
-	case backendClaude:
+	case BackendClaude:
 		args := []string{"-p", "--output-format", "stream-json", "--verbose", "--model", config.Model, "--no-session-persistence", "--safe-mode", "--restricted", "--strict-mcp-config", "--disable-slash-commands", "--setting-sources", "", "--permission-prompts", "none"}
 		if role == "reviewer" {
 			args = append(args, "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--json-schema", schema)
@@ -10,7 +10,7 @@ func legacyAgentArgs(config ReviewerConfig, role, schema, prompt string) []strin
 			args = append(args, "--tools", "Read,Edit,Write,Grep,Glob", "--permission-mode", "acceptEdits")
 		}
 		return append(args, "--system-prompt", prompt)
-	case backendCodex:
+	case BackendCodex:
 		sandbox := "read-only"
 		if role == "fixer" {
 			sandbox = "workspace-write"

@@ -45,11 +45,11 @@ type Attempt struct {
 	Usage TokenUsage `json:"usage"`
 }
 
-var backendNames = map[string]string{backendPi: "Pi", backendClaude: "Claude", backendCodex: "Codex"}
+var backendNames = map[string]string{BackendPi: "Pi", BackendClaude: "Claude", BackendCodex: "Codex"}
 
 func recordAttempt(r *Run, a Attempt) {
 	if a.Backend == "" {
-		a.Backend = backendPi
+		a.Backend = BackendPi
 	}
 	if a.Kind == "review" && r.Review != nil && a.Execution == r.Review.ID {
 		a.Usage = r.Review.Usage
@@ -65,7 +65,7 @@ func recordAttempt(r *Run, a Attempt) {
 }
 
 func pauseRun(r *Run, stage, kind, role string, config ReviewerConfig, execution string, f *BackendFailure, now time.Time) {
-	r.Pause = &BackendPause{Stage: stage, Kind: kind, Role: role, Backend: backendOf(config), Model: config.Model, Reason: f.Reason, Message: f.Message, ResetAt: f.ResetAt, At: now.UTC().Format(time.RFC3339), Execution: execution}
+	r.Pause = &BackendPause{Stage: stage, Kind: kind, Role: role, Backend: BackendOf(config), Model: config.Model, Reason: f.Reason, Message: f.Message, ResetAt: f.ResetAt, At: now.UTC().Format(time.RFC3339), Execution: execution}
 	r.Status = "paused"
 	r.Stage = stage
 	r.Token = opaque()
@@ -161,7 +161,7 @@ func cancelAutoResume(r *Run, actor string) {
 	r.Events = append(r.Events, Event{Kind: "auto-resume-cancelled", Actor: actor, Reason: "manual action or settings change"})
 }
 
-func clock(at string) string {
+func Clock(at string) string {
 	t, err := time.Parse(time.RFC3339, at)
 	if err != nil {
 		return at
@@ -181,7 +181,7 @@ func pauseSentence(r *Run) string {
 	name := backendNames[p.Backend]
 	what := map[string]string{"quota": name + " quota exhausted.", "auth": name + " login missing; run the " + p.Backend + " CLI to log in.", "unavailable": name + " is unavailable."}[p.Reason]
 	if p.Reason == "quota" && p.ResetAt != "" {
-		what = strings.TrimSuffix(what, ".") + "; it resets at " + clock(p.ResetAt) + "."
+		what = strings.TrimSuffix(what, ".") + "; it resets at " + Clock(p.ResetAt) + "."
 	}
 	mode := r.Configs[len(r.Configs)-1].Settings.Mode
 	next := ""
@@ -189,7 +189,7 @@ func pauseSentence(r *Run) string {
 	case p.AutoResumeAt != "" && p.AutoAction == "fallback":
 		next = fmt.Sprintf(" %s mode will switch to %s %s now.", strings.ToUpper(mode[:1])+mode[1:], p.AutoTo.Backend, p.AutoTo.Model)
 	case p.AutoResumeAt != "":
-		next = fmt.Sprintf(" %s mode will resume at %s with the same agent.", strings.ToUpper(mode[:1])+mode[1:], clock(p.AutoResumeAt))
+		next = fmt.Sprintf(" %s mode will resume at %s with the same agent.", strings.ToUpper(mode[:1])+mode[1:], Clock(p.AutoResumeAt))
 	case p.AutoNote != "":
 		next = " " + p.AutoNote + "."
 	}
@@ -295,7 +295,7 @@ func readmitRepair(r *Run, old Repair) (*Repair, error) {
 		prompt = gateFixerPrompt
 	}
 	x := old
-	x.ID, x.Config, x.ConfigDigest, x.ExecutableDigest, x.Args = opaque(), cfg, digest(cfg), fixerDigest, fixerArgsFor(cfg, prompt)
+	x.ID, x.Config, x.ConfigDigest, x.ExecutableDigest, x.Args = opaque(), cfg, Digest(cfg), fixerDigest, fixerArgsFor(cfg, prompt)
 	x.Status, x.Writer, x.Log, x.Head, x.Parent, x.Diff, x.Checks = "admitted", "not-started", "", "", "", "", nil
 	x.Failure, x.Partial, x.PartialDigest, x.PartialBytes, x.Resumed, x.CostUSD, x.Tokens, x.Authority = nil, "", "", 0, true, 0, 0, ""
 	switch x.Budget {
@@ -440,7 +440,7 @@ func prepareRun(r *Run, intent, requested string) error {
 
 func rerunStage(s *Store, r *Run, actor string) error {
 	if p := r.Pipeline; p != nil {
-		if d := p.open(); d != nil {
+		if d := p.Open(); d != nil {
 			return errors.New("answer the open " + d.Kind + " decision first")
 		}
 		if p.Status != "cancelled" && p.Status != "needs-decision" {
@@ -494,7 +494,7 @@ func restartRun(s *Store, r *Run, source repository.Identity, actor string) *Run
 
 func rerunnable(r *Run) bool {
 	if p := r.Pipeline; p != nil {
-		return p.open() == nil && (p.Status == "cancelled" || p.Status == "needs-decision" && p.Failed != "")
+		return p.Open() == nil && (p.Status == "cancelled" || p.Status == "needs-decision" && p.Failed != "")
 	}
 	if r.Repair != nil {
 		return stoppedRepair(r.Repair)
@@ -551,7 +551,7 @@ func rerunRepair(r *Run, actor string) error {
 	return nil
 }
 
-func autoResumeLabel(s Settings) string {
+func AutoResumeLabel(s Settings) string {
 	switch {
 	case s.Mode == "ask":
 		return "off (always off in ask mode)"

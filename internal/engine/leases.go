@@ -21,7 +21,7 @@ type RefLease struct {
 }
 
 func leaseOwner() (string, string, error) {
-	h, err := home()
+	h, err := Home()
 	if err != nil {
 		return "", "", err
 	}
@@ -36,7 +36,7 @@ func leaseOwner() (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	return digest([]string{h, strings.TrimSpace(string(id))}), h, nil
+	return Digest([]string{h, strings.TrimSpace(string(id))}), h, nil
 }
 
 func leasePath(repository, ref string) string {

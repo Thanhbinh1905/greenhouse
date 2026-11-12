@@ -135,15 +135,15 @@ func field(event map[string]json.RawMessage, name string) string {
 
 func classifyBackend(backend string, exit int, stdout, stderr []byte, now time.Time) *BackendFailure {
 	if backend == "" {
-		backend = backendPi
+		backend = BackendPi
 	}
 	var failure *BackendFailure
 	switch backend {
-	case backendClaude:
+	case BackendClaude:
 		failure = classifyClaude(stdout)
-	case backendCodex:
+	case BackendCodex:
 		failure = classifyCodex(stdout, now)
-	case backendPi:
+	case BackendPi:
 		failure = classifyPi(exit, stdout, stderr)
 	}
 	structured := backendDiagnostics(stdout, nil)
@@ -166,7 +166,7 @@ func classifyBackend(backend string, exit int, stdout, stderr []byte, now time.T
 		failure = &BackendFailure{Reason: reason, Message: safeMessage(text), diagnosticOnly: true}
 	}
 	if failure != nil && failure.Reason == "auth" {
-		action := map[string]string{backendPi: "open pi and run /login", backendClaude: "run claude auth login", backendCodex: "run codex login"}[backend]
+		action := map[string]string{BackendPi: "open pi and run /login", BackendClaude: "run claude auth login", BackendCodex: "run codex login"}[backend]
 		failure.Message = "Native agent authentication failed; " + action + " outside Greenhouse, then retry. " + failure.Message
 	}
 	return failure
@@ -345,12 +345,12 @@ func classifyPi(exit int, stdout, stderr []byte) *BackendFailure {
 }
 
 const (
-	backendPi     = "pi"
-	backendClaude = "claude"
-	backendCodex  = "codex"
+	BackendPi     = "pi"
+	BackendClaude = "claude"
+	BackendCodex  = "codex"
 )
 
-var executionBackends = map[string]string{backendPi: "pi-json-v1", backendClaude: "claude-stream-json-v1", backendCodex: "codex-json-v1"}
+var executionBackends = map[string]string{BackendPi: "pi-json-v1", BackendClaude: "claude-stream-json-v1", BackendCodex: "codex-json-v1"}
 
 type BackendChoice struct {
 	Backend string `json:"backend"`
@@ -371,7 +371,7 @@ type BackendsConfig struct {
 
 func trustedBackends() (BackendsConfig, error) {
 	var config BackendsConfig
-	h, err := home()
+	h, err := Home()
 	if err != nil {
 		return config, err
 	}
@@ -423,9 +423,9 @@ func retryPolicy() RetryPolicy {
 	return RetryPolicy{MaxAttempts: 3, BaseSeconds: 60, MaxSeconds: 3600}
 }
 
-func installedAgents() []string {
+func InstalledAgents() []string {
 	var agents []string
-	for _, name := range []string{backendPi, backendClaude, backendCodex} {
+	for _, name := range []string{BackendPi, BackendClaude, BackendCodex} {
 		if _, err := nativeExecutable(name); err == nil {
 			agents = append(agents, name)
 		}
@@ -452,7 +452,7 @@ func nativeExecutable(name string) (string, error) {
 
 func trustedAgent(backend, model string) (ReviewerConfig, error) {
 	if backend == "" {
-		backend = backendPi
+		backend = BackendPi
 	}
 	if !validModelSelection(backend, model) {
 		return ReviewerConfig{}, fmt.Errorf("invalid %s model %q", backend, model)
@@ -462,8 +462,8 @@ func trustedAgent(backend, model string) (ReviewerConfig, error) {
 	if err != nil {
 		return cfg, err
 	}
-	if backend == backendCodex {
-		h, err := home()
+	if backend == BackendCodex {
+		h, err := Home()
 		if err != nil {
 			return cfg, err
 		}
@@ -527,7 +527,7 @@ func tomlString(s string) string {
 
 func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 	switch config.Backend {
-	case backendClaude:
+	case BackendClaude:
 		args := []string{"-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--safe-mode", "--strict-mcp-config", "--disable-slash-commands", "--setting-sources", "user", "--permission-prompts", "none"}
 		if role == "reviewer" {
 			args = append(args, "--tools", "Read,Grep,Glob", "--permission-mode", "dontAsk", "--json-schema", schema)
@@ -538,7 +538,7 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 			args = append(args, "--model", config.Model)
 		}
 		return append(args, "--system-prompt", prompt)
-	case backendCodex:
+	case BackendCodex:
 		sandbox := "read-only"
 		if role == "fixer" {
 			sandbox = "workspace-write"
@@ -580,7 +580,7 @@ func agentEnv(backend string) []string {
 		}
 		env = append(env, v)
 	}
-	if backend == backendCodex {
+	if backend == BackendCodex {
 		env = append(env, "RUST_LOG=codex_exec=info")
 	}
 	return env
@@ -653,7 +653,7 @@ func piAnswer(b []byte) (agentAnswer, error) {
 }
 
 func claudeAnswer(b []byte, tools []string) (agentAnswer, error) {
-	answer := agentAnswer{Provider: backendClaude}
+	answer := agentAnswer{Provider: BackendClaude}
 	var initTools []string
 	initModel, done := "", false
 	var err error
@@ -712,7 +712,7 @@ func claudeAnswer(b []byte, tools []string) (agentAnswer, error) {
 var codexModel = regexp.MustCompile(`SessionConfiguredEvent \{.*?\bmodel: "([^"]+)"`)
 
 func codexAnswer(stdout, stderr []byte, readOnly bool) (agentAnswer, error) {
-	answer := agentAnswer{Provider: backendCodex}
+	answer := agentAnswer{Provider: BackendCodex}
 	completed := false
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
 		switch field(event, "type") {
@@ -752,7 +752,7 @@ func codexAnswer(stdout, stderr []byte, readOnly bool) (agentAnswer, error) {
 
 func backendReportedModel(backend string, stdout, stderr []byte) string {
 	model := ""
-	if backend == backendCodex {
+	if backend == BackendCodex {
 		for _, line := range strings.Split(string(stderr), "\n") {
 			if match := codexModel.FindStringSubmatch(line); match != nil {
 				model = match[1]
@@ -761,10 +761,10 @@ func backendReportedModel(backend string, stdout, stderr []byte) string {
 		return model
 	}
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
-		if backend == backendClaude && field(event, "type") == "system" && field(event, "subtype") == "init" {
+		if backend == BackendClaude && field(event, "type") == "system" && field(event, "subtype") == "init" {
 			model = field(event, "model")
 		}
-		if (backend == backendPi || backend == "") && field(event, "type") == "message_end" {
+		if (backend == BackendPi || backend == "") && field(event, "type") == "message_end" {
 			var message struct {
 				Role  string `json:"role"`
 				Model string `json:"model"`
@@ -786,7 +786,7 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 	usage := TokenUsage{}
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
 		switch kind := field(event, "type"); {
-		case backend == backendClaude && kind == "result":
+		case backend == BackendClaude && kind == "result":
 			var result struct {
 				Cost  float64 `json:"total_cost_usd"`
 				Usage map[string]struct {
@@ -815,7 +815,7 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 				usage.CachedInputTokens += native.Cached
 				usage.Tokens += native.Input + native.Output
 			}
-		case backend == backendCodex && kind == "turn.completed":
+		case backend == BackendCodex && kind == "turn.completed":
 			var native struct {
 				Input  int `json:"input_tokens"`
 				Output int `json:"output_tokens"`
@@ -826,7 +826,7 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 			usage.OutputTokens += native.Output
 			usage.CachedInputTokens += native.Cached
 			usage.Tokens += native.Input + native.Output
-		case (backend == backendPi || backend == "") && kind == "message_end":
+		case (backend == BackendPi || backend == "") && kind == "message_end":
 			var m struct {
 				Role  string `json:"role"`
 				Usage struct {
@@ -851,9 +851,9 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 
 func agentReply(x *Execution, stdout, stderr []byte) (agentAnswer, error) {
 	switch x.Config.Backend {
-	case backendClaude:
+	case BackendClaude:
 		return claudeAnswer(stdout, []string{"Read", "Grep", "Glob"})
-	case backendCodex:
+	case BackendCodex:
 		return codexAnswer(stdout, stderr, true)
 	}
 	return piAnswer(stdout)
@@ -885,7 +885,7 @@ func (l *lineWatch) Write(p []byte) (int, error) {
 }
 
 func stallWatch(w io.Writer, backend string, cancel func()) io.Writer {
-	if backend != backendCodex {
+	if backend != BackendCodex {
 		return w
 	}
 	return &lineWatch{w: w, cancel: cancel}
@@ -914,7 +914,7 @@ func fixerAgent(cfg FixerConfig) ReviewerConfig {
 }
 
 func fixerArgsFor(cfg FixerConfig, prompt string) []string {
-	if cfg.Backend == "" || cfg.Backend == backendPi {
+	if cfg.Backend == "" || cfg.Backend == BackendPi {
 		args := fixerArgs(cfg.Model)
 		args[len(args)-1] = prompt
 		return args
@@ -923,9 +923,9 @@ func fixerArgsFor(cfg FixerConfig, prompt string) []string {
 }
 
 func fixerUnchanged(x *Repair) bool {
-	trusted, err := trustedFixerFor(backendOf(fixerAgent(x.Config)), x.Config.Model)
+	trusted, err := trustedFixerFor(BackendOf(fixerAgent(x.Config)), x.Config.Model)
 	fixerDigest, digestErr := executableDigest(x.Config.Executable)
-	return err == nil && digestErr == nil && digest(trusted) == x.ConfigDigest && fixerDigest == x.ExecutableDigest
+	return err == nil && digestErr == nil && Digest(trusted) == x.ConfigDigest && fixerDigest == x.ExecutableDigest
 }
 
 type fixerRun struct {
@@ -937,10 +937,10 @@ type fixerRun struct {
 }
 
 func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
-	backend := backendOf(fixerAgent(x.Config))
+	backend := BackendOf(fixerAgent(x.Config))
 	env := agentEnv(backend)
 	limit := 65536
-	if backend == backendPi {
+	if backend == BackendPi {
 		env = append(env, "PI_CODING_AGENT_SESSION_DIR="+agentDir)
 	} else {
 		limit = 4 * 1024 * 1024
@@ -975,9 +975,9 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	}
 	var answerErr error
 	switch backend {
-	case backendClaude:
+	case BackendClaude:
 		run.answer, answerErr = claudeAnswer(run.stdout, []string{"Read", "Edit", "Write", "Grep", "Glob"})
-	case backendCodex:
+	case BackendCodex:
 		run.answer, answerErr = codexAnswer(run.stdout, run.stderr, false)
 	default:
 		run.answer, _ = piAnswer(run.stdout)
@@ -991,14 +991,14 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 }
 
 func fixerModelReported(x *Repair, run fixerRun) error {
-	if backend := backendOf(fixerAgent(x.Config)); backend != backendPi && x.Config.Model != "" && run.answer.Model != x.Config.Model {
+	if backend := BackendOf(fixerAgent(x.Config)); backend != BackendPi && x.Config.Model != "" && run.answer.Model != x.Config.Model {
 		return fmt.Errorf("%s fixer reported model %q, not the requested %q", backend, run.answer.Model, x.Config.Model)
 	}
 	return nil
 }
 
 func fixerEscalation(x *Repair, run fixerRun) (string, string) {
-	if backendOf(fixerAgent(x.Config)) == backendPi {
+	if BackendOf(fixerAgent(x.Config)) == BackendPi {
 		return escalation(run.stdout)
 	}
 	return escalationText(run.answer.Text)

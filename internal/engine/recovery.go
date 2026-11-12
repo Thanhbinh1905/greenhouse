@@ -3,7 +3,6 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,14 +49,14 @@ func reconcileRecoveries(s *Store) (changed bool) {
 		if r.Recovery == nil {
 			continue
 		}
-		observed := runner.ObserveExecutors(r.Recovery.Execution, home)
+		observed := runner.ObserveExecutors(r.Recovery.Execution, Home)
 		if adoptRecorded(r, observed) {
 			changed = true
 			continue
 		}
-		before := digest(r.Recovery)
+		before := Digest(r.Recovery)
 		probeRecovery(r, observed)
-		changed = changed || digest(r.Recovery) != before
+		changed = changed || Digest(r.Recovery) != before
 	}
 	return changed
 }
@@ -170,7 +169,7 @@ func recordedCommands(p *Pipeline, stage string, observed []runner.ObservedExecu
 		if o.Exit != 0 {
 			res.Status = "failed"
 			out.Commands[i] = res
-			out.Status, out.Reason = "failed", fmt.Sprintf("%s exited %d", strings.Join(displayArgs(args), " "), o.Exit)
+			out.Status, out.Reason = "failed", fmt.Sprintf("%s exited %d", strings.Join(DisplayArgs(args), " "), o.Exit)
 			return out, len(observed) == i+1
 		}
 	}
@@ -187,7 +186,7 @@ func evidenceOf(observed []runner.ObservedExecutor) []runner.ExecutorEvidence {
 
 func probeRecovery(r *Run, observed []runner.ObservedExecutor) {
 	rec := r.Recovery
-	before := digest([]any{rec.Executors, rec.Candidate, rec.Adopt, rec.Options})
+	before := Digest([]any{rec.Executors, rec.Candidate, rec.Adopt, rec.Options})
 	rec.Executors = evidenceOf(observed)
 	rec.Candidate = observeCandidate(r)
 	rec.Options = []string{"inspect"}
@@ -202,7 +201,7 @@ func probeRecovery(r *Run, observed []runner.ObservedExecutor) {
 		}
 		rec.Options = append(rec.Options, "new-run")
 	}
-	if rec.ProbedAt == "" || digest([]any{rec.Executors, rec.Candidate, rec.Adopt, rec.Options}) != before {
+	if rec.ProbedAt == "" || Digest([]any{rec.Executors, rec.Candidate, rec.Adopt, rec.Options}) != before {
 		rec.ProbedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 }
@@ -238,7 +237,7 @@ func recoveryCandidate(r *Run) (worktree, ref, durable string) {
 	case r.Pipeline != nil && r.Pipeline.Worktree != "":
 		return r.Pipeline.Worktree, r.Pipeline.Ref, r.Candidate
 	case rec.Kind == "candidate":
-		if h, err := home(); err == nil {
+		if h, err := Home(); err == nil {
 			return filepath.Join(h, "candidates", r.ID), "refs/heads/greenhouse/" + r.ID, r.Candidate
 		}
 	}
@@ -347,7 +346,7 @@ func adoption(r *Run) (string, func() error) {
 			}
 		}
 		head := c.Observed
-		return "candidate commit " + short(head) + " matches the recorded repair; adopt it as fixed, not independently rereviewed", func() error {
+		return "candidate commit " + Short(head) + " matches the recorded repair; adopt it as fixed, not independently rereviewed", func() error {
 			done := *x
 			done.Head, done.Parent, done.Writer = head, x.Base, "stopped"
 			done.Status = "fixed-not-independently-rereviewed"
@@ -368,7 +367,7 @@ func adoption(r *Run) (string, func() error) {
 			return "", nil
 		}
 		head := c.Observed
-		return "candidate merge " + short(head) + " has the recorded candidate and target as parents; adopt the synchronized head", func() error {
+		return "candidate merge " + Short(head) + " has the recorded candidate and target as parents; adopt the synchronized head", func() error {
 			r.Pipeline.Active = &Step{ID: rec.Execution, Stage: "sync", Kind: "sync"}
 			r.Status = "running"
 			return completeStep(r, stepOutcome{Run: r.ID, Step: rec.Execution, Head: head, Stage: StageResult{Name: "sync", Status: "passed", Reason: "merged target without rebase; adopted after recovery"}})
@@ -408,10 +407,10 @@ func recoverRun(s *Store, r *Run, source repository.Identity, a Answer) (*Run, e
 	if rec == nil {
 		return nil, errors.New("no open recovery")
 	}
-	if !validText(a.Reason) {
+	if !ValidText(a.Reason) {
 		return nil, errors.New("reason required")
 	}
-	probeRecovery(r, runner.ObserveExecutors(rec.Execution, home))
+	probeRecovery(r, runner.ObserveExecutors(rec.Execution, Home))
 	if a.Choice == "inspect" {
 		r.Events = append(r.Events, Event{Kind: "recovery-inspect", Actor: a.Actor, Reason: a.Reason})
 		r.Token = opaque()
@@ -643,37 +642,4 @@ type CandidateEvidence struct {
 	Clean    bool   `json:"clean"`
 	Merging  bool   `json:"merging"`
 	Summary  string `json:"summary"`
-}
-
-func renderRecovery(w io.Writer, r *Run) {
-	if r.Predecessor != "" {
-		fmt.Fprintf(w, "Linked from run %s\n", r.Predecessor)
-	}
-	for _, old := range r.Recoveries {
-		if old.Answer != nil {
-			fmt.Fprintf(w, "Recovered %s: %s by %s: %s\n", old.Kind, old.Answer.Choice, old.Answer.Actor, old.Outcome)
-		}
-	}
-	rec := r.Recovery
-	if rec == nil {
-		return
-	}
-	fmt.Fprintf(w, "RECOVERY REQUIRED: %s at %s\n%s\n", rec.Kind, rec.Stage, rec.Reason)
-	if rec.ProbedAt == "" {
-		fmt.Fprintln(w, "Evidence: not probed yet")
-	}
-	for _, e := range rec.Executors {
-		fmt.Fprintf(w, "Executor %s: %s exit=%d %s\n", short(e.ID[:strings.LastIndex(e.ID, ".")])+e.ID[strings.LastIndex(e.ID, "."):], e.State, e.Exit, e.Detail)
-	}
-	if c := rec.Candidate; c != nil {
-		observed := short(c.Observed)
-		if observed == "" {
-			observed = "none"
-		}
-		fmt.Fprintf(w, "Candidate %s: %s\n  recorded %s observed %s\n", strings.TrimPrefix(c.Ref, "refs/heads/"), c.Summary, short(c.Durable), observed)
-	}
-	if rec.Adopt != "" {
-		fmt.Fprintln(w, "Adopt: "+rec.Adopt)
-	}
-	fmt.Fprintf(w, "Options: %s\n[e] answers recovery gate %s\n", strings.Join(rec.Options, ", "), short(rec.ID))
 }

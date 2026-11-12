@@ -42,7 +42,7 @@ func validatePlanGrants(grants []PlanGrant) error {
 		if g.Authority != "add-files" && g.Authority != "delete-files" {
 			return errors.New("grant authority must be add-files or delete-files")
 		}
-		if len(g.Stages) == 0 || len(g.Paths) == 0 || len(g.Paths) > 64 || !validText(g.Reason) {
+		if len(g.Stages) == 0 || len(g.Paths) == 0 || len(g.Paths) > 64 || !ValidText(g.Reason) {
 			return errors.New("each grant needs stages, paths and a reason")
 		}
 		for _, stage := range g.Stages {

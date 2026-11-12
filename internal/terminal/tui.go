@@ -1,4 +1,4 @@
-package engine
+package terminal
 
 import (
 	"errors"
@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	sessionintent "github.com/Thanhbinh1905/greenhouse/internal/intent"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/spinner"
@@ -18,14 +20,14 @@ import (
 )
 
 type tuiClient interface {
-	send(q Request, spawn bool) (Response, error)
+	send(q engine.Request, spawn bool) (engine.Response, error)
 }
 
 type daemonClient struct{ home, path string }
 
-func (c daemonClient) send(q Request, spawn bool) (Response, error) {
+func (c daemonClient) send(q engine.Request, spawn bool) (engine.Response, error) {
 	q.Path = c.path
-	return request(c.home, q, spawn)
+	return engine.Send(c.home, q, spawn)
 }
 
 func interactive() bool {
@@ -33,7 +35,7 @@ func interactive() bool {
 	return t != "" && t != "dumb" && term.IsTerminal(os.Stdin.Fd()) && term.IsTerminal(os.Stdout.Fd())
 }
 
-func terminal(h, path string) error {
+func Run(h, path string) error {
 	if interactive() {
 		return tuiTerminal(h, path)
 	}
@@ -41,7 +43,7 @@ func terminal(h, path string) error {
 }
 
 func tuiTerminal(h, path string) error {
-	v, err := call(h, Request{Version: protocolMax, Op: "attach", Path: path})
+	v, err := call(h, engine.Request{Version: engine.MaxVersion, Op: "attach", Path: path})
 	if err != nil {
 		return err
 	}
@@ -54,7 +56,7 @@ func tuiTerminal(h, path string) error {
 	updates := make(chan liveUpdate, 1)
 	stop := make(chan struct{})
 	go follow(h, path, v.Stream, v.Sequence, updates, stop)
-	m := newTUI(daemonClient{h, path}, v, installedAgents(), repository.SuggestTarget(path), updates)
+	m := newTUI(daemonClient{h, path}, v, engine.InstalledAgents(), repository.SuggestTarget(path), updates)
 	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	close(stop)
 	if err != nil {
@@ -69,7 +71,7 @@ func tuiTerminal(h, path string) error {
 type responseMsg struct {
 	op    string
 	label string
-	v     Response
+	v     engine.Response
 	err   error
 	run   bool
 }
@@ -78,7 +80,7 @@ type modelsMsg struct {
 	err    string
 }
 type transcriptMsg struct {
-	v   Response
+	v   engine.Response
 	err error
 }
 
@@ -97,7 +99,7 @@ const (
 type tuiModel struct {
 	client     tuiClient
 	updates    chan liveUpdate
-	v          Response
+	v          engine.Response
 	live       string
 	fresh      bool
 	pending    bool
@@ -116,7 +118,7 @@ type tuiModel struct {
 	plan       runPlan
 	seq        *runSeq
 	collector  collector
-	candidates []*intentSession
+	candidates []*sessionintent.Session
 	question   string
 
 	setupStep   int
@@ -130,13 +132,13 @@ type tuiModel struct {
 	recovery  struct{ step, choice int }
 	limitText string
 
-	draft     *Settings
+	draft     *engine.Settings
 	editing   bool
 	models    []string
 	modelsErr string
 
 	confirm  tuiAction
-	confirmQ Request
+	confirmQ engine.Request
 	back     string
 
 	pageTitle string
@@ -153,7 +155,7 @@ type tuiModel struct {
 	now        func() time.Time
 }
 
-func newTUI(client tuiClient, v Response, agents []string, suggestion string, updates chan liveUpdate) *tuiModel {
+func newTUI(client tuiClient, v engine.Response, agents []string, suggestion string, updates chan liveUpdate) *tuiModel {
 	input := textinput.New()
 	input.Prompt = "> "
 	input.Cursor.SetMode(cursor.CursorStatic)
@@ -182,7 +184,7 @@ func (m *tuiModel) tick() tea.Cmd {
 	return m.spin.Tick
 }
 
-func activeExecution(r *Run) string {
+func activeExecution(r *engine.Run) string {
 	if r == nil || !busy(r) {
 		return ""
 	}
@@ -200,7 +202,7 @@ func activeExecution(r *Run) string {
 
 // setView replaces the shown state. seen reports that an earlier state was
 // already on screen, so a newly running execution started while watched.
-func (m *tuiModel) setView(v Response, seen bool) {
+func (m *tuiModel) setView(v engine.Response, seen bool) {
 	if m.v.Run != nil && v.Run != nil && m.v.Run.ID != v.Run.ID {
 		m.selected = map[string]bool{}
 	}
@@ -215,19 +217,19 @@ func (m *tuiModel) setView(v Response, seen bool) {
 	r := v.Run
 	switch m.screen {
 	case screenDecision:
-		if v.Decision == nil || !has(v.Actions, "decide") {
+		if v.Decision == nil || !slices.Contains(v.Actions, "decide") {
 			m.home("The decision is no longer open.")
 		}
 	case screenRecovery:
-		if r == nil || r.Recovery == nil || !has(v.Actions, "recover") {
+		if r == nil || r.Recovery == nil || !slices.Contains(v.Actions, "recover") {
 			m.home("Recovery is no longer required.")
 		}
 	case screenSetup:
-		if !has(v.Actions, "prepare") {
+		if !slices.Contains(v.Actions, "prepare") {
 			m.home("Setup is no longer available for this run.")
 		}
 	case screenConfirm:
-		if m.confirm.Op != "" && m.confirm.Op != "trust" && !has(v.Actions, m.confirm.Op) {
+		if m.confirm.Op != "" && m.confirm.Op != "trust" && !slices.Contains(v.Actions, m.confirm.Op) {
 			m.home(m.confirm.Label + " is no longer available.")
 		}
 	}
@@ -257,7 +259,7 @@ func (m *tuiModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return model, cmd
 }
 
-func (m *tuiModel) ordered(v Response, actionResponse bool) bool {
+func (m *tuiModel) ordered(v engine.Response, actionResponse bool) bool {
 	return v.Run != nil && m.order.accepts(v, m.v, actionResponse)
 }
 
@@ -377,7 +379,7 @@ func (m *tuiModel) runAnswered(msg responseMsg) tea.Cmd {
 	return tea.Batch(m.advance(), m.tick())
 }
 
-func doneMessage(op, label string, v Response) string {
+func doneMessage(op, label string, v engine.Response) string {
 	switch op {
 	case "prepare":
 		return "Intent and target saved. Nothing has run yet."
@@ -404,8 +406,8 @@ func doneMessage(op, label string, v Response) string {
 	return label + ": done."
 }
 
-func (m *tuiModel) submit(label string, q Request) tea.Cmd {
-	allowed := has(m.v.Actions, q.Op) || q.Op == "trust" && trustable(m.v) && !followOnly(m.v)
+func (m *tuiModel) submit(label string, q engine.Request) tea.Cmd {
+	allowed := slices.Contains(m.v.Actions, q.Op) || q.Op == "trust" && trustable(m.v) && !followOnly(m.v)
 	switch {
 	case m.pending:
 		m.say("Still waiting for the previous action; nothing else was sent.")
@@ -427,7 +429,7 @@ func (m *tuiModel) submit(label string, q Request) tea.Cmd {
 }
 
 func (m *tuiModel) simple(a tuiAction) tea.Cmd {
-	return m.submit(a.Label, mutation(m.v, a.Op))
+	return m.submit(a.Label, engine.TerminalMutation(m.v, a.Op))
 }
 
 func (m *tuiModel) key(k tea.KeyMsg) tea.Cmd {
@@ -484,13 +486,13 @@ func homeTargets(m *tuiModel) []homeTarget {
 	} else {
 		out = append(out, homeTarget{})
 	}
-	if r := m.v.Run; r != nil && has(m.v.Actions, "prepare") && len(m.agents) > 0 && !busy(r) && m.seq == nil {
+	if r := m.v.Run; r != nil && slices.Contains(m.v.Actions, "prepare") && len(m.agents) > 0 && !busy(r) && m.seq == nil {
 		for i, name := range []string{"Agent", "Intent", "Target"} {
 			step := i
 			out = append(out, homeTarget{label: "edit " + strings.ToLower(name), step: name, run: func() tea.Cmd { m.openSetup(step); return nil }})
 		}
 	}
-	if r := m.v.Run; r != nil && has(m.v.Actions, "apply") && !busy(r) && m.seq == nil {
+	if r := m.v.Run; r != nil && slices.Contains(m.v.Actions, "apply") && !busy(r) && m.seq == nil {
 		out = append(out, homeTarget{label: "edit rules", step: "Rules", run: func() tea.Cmd { return m.openSettings(7) }})
 	}
 	return out
@@ -519,7 +521,7 @@ func (m *tuiModel) homeKey(key string) tea.Cmd {
 	case "f":
 		m.openFindings()
 	case "d":
-		if m.v.Decision != nil && has(m.v.Actions, "decide") {
+		if m.v.Decision != nil && slices.Contains(m.v.Actions, "decide") {
 			m.openDecision()
 		}
 	case "i":
@@ -531,15 +533,15 @@ func (m *tuiModel) homeKey(key string) tea.Cmd {
 			m.stopRun()
 			return nil
 		}
-		if has(m.v.Actions, "cancel") {
+		if slices.Contains(m.v.Actions, "cancel") {
 			return m.start(labelled("cancel", m.v.Run))
 		}
 		m.say("Nothing is running that can be cancelled.")
 	case "r":
-		m.agents = installedAgents()
+		m.agents = engine.InstalledAgents()
 		client := m.client
 		return func() tea.Msg {
-			v, err := client.send(Request{Version: protocolMax, Op: "inspect"}, true)
+			v, err := client.send(engine.Request{Version: engine.MaxVersion, Op: "inspect"}, true)
 			return liveUpdate{state: liveState(err), view: liveView(v, err)}
 		}
 	}
@@ -553,7 +555,7 @@ func liveState(err error) string {
 	return "live"
 }
 
-func liveView(v Response, err error) *Response {
+func liveView(v engine.Response, err error) *engine.Response {
 	if err != nil || v.Outcome != "ok" {
 		return nil
 	}
@@ -584,7 +586,7 @@ func (m *tuiModel) start(a tuiAction) tea.Cmd {
 	case "help":
 		m.openPage("Help", "help", helpText(m))
 	case "cancel", "new", "rerun-from-start", "migrate", "trust":
-		q := mutation(m.v, a.Op)
+		q := engine.TerminalMutation(m.v, a.Op)
 		switch a.Op {
 		case "trust":
 			q.Digest, q.Reason = m.v.Repository.Digest, "terminal trust"
@@ -598,7 +600,7 @@ func (m *tuiModel) start(a tuiAction) tea.Cmd {
 	return nil
 }
 
-func (m *tuiModel) ask(a tuiAction, q Request) {
+func (m *tuiModel) ask(a tuiAction, q engine.Request) {
 	m.confirm, m.confirmQ, m.back = a, q, m.screen
 	m.screen = screenConfirm
 	m.input.SetValue("")
@@ -643,8 +645,8 @@ func (m *tuiModel) editDone(accept bool) tea.Cmd {
 			}
 			return nil
 		}
-		if m.setupStep == 1 && len(value) > intentLimit {
-			m.say(fmt.Sprintf("The intent is %d bytes; a review intent holds at most %d. Nothing was cut.", len(value), intentLimit))
+		if m.setupStep == 1 && len(value) > sessionintent.Limit {
+			m.say(fmt.Sprintf("The intent is %d bytes; a review intent holds at most %d. Nothing was cut.", len(value), sessionintent.Limit))
 			return nil
 		}
 		if value == "" && m.setupStep == 2 {
@@ -675,14 +677,14 @@ func (m *tuiModel) editDone(accept bool) tea.Cmd {
 			m.recovery.step = 0
 			return nil
 		}
-		if !validText(value) {
+		if !engine.ValidText(value) {
 			m.say("A reason is required; it is recorded with the recovery.")
 			return nil
 		}
 		m.editing = false
 		m.input.Blur()
 		choice := m.v.Run.Recovery.Options[m.recovery.choice]
-		q := mutation(m.v, "recover")
+		q := engine.TerminalMutation(m.v, "recover")
 		q.Choice, q.Reason = choice, value
 		a := tuiAction{ID: "recover", Op: "recover", Label: "Recovery " + choice, Hint: "Records the recovery choice with your reason.", Confirm: choice}
 		m.ask(a, q)
@@ -795,15 +797,15 @@ func (m *tuiModel) openFindings() {
 	m.screen, m.cursor, m.expanded = screenFindings, 0, false
 }
 
-func selectable(r *Run) []string {
+func selectable(r *engine.Run) []string {
 	if r == nil || r.Review == nil || r.Review.Result == nil {
 		return nil
 	}
-	actionable, _ := outstanding(r)
-	reviewed := findingIDs(r.Review.Result.Findings)
+	actionable, _ := engine.Outstanding(r)
+	reviewed := engine.FindingIDs(r.Review.Result.Findings)
 	var ids []string
 	for _, f := range actionable {
-		if has(reviewed, f.ID) {
+		if slices.Contains(reviewed, f.ID) {
 			ids = append(ids, f.ID)
 		}
 	}
@@ -813,7 +815,7 @@ func selectable(r *Run) []string {
 func (m *tuiModel) findingsKey(key string) tea.Cmd {
 	r := m.v.Run
 	n := len(r.Findings)
-	canRepair := has(m.v.Actions, "repair")
+	canRepair := slices.Contains(m.v.Actions, "repair")
 	switch key {
 	case "esc":
 		if m.expanded {
@@ -832,7 +834,7 @@ func (m *tuiModel) findingsKey(key string) tea.Cmd {
 		switch {
 		case !canRepair:
 			m.say("Selected repair is not available now; findings can be read but not selected.")
-		case !has(selectable(r), id):
+		case !slices.Contains(selectable(r), id):
 			m.say("This finding cannot be repaired: it is informational, resolved or from an older head.")
 		default:
 			m.selected[id] = !m.selected[id]
@@ -844,7 +846,7 @@ func (m *tuiModel) findingsKey(key string) tea.Cmd {
 		}
 		var ids []string
 		for _, f := range r.Findings {
-			if m.selected[f.ID] && has(selectable(r), f.ID) {
+			if m.selected[f.ID] && slices.Contains(selectable(r), f.ID) {
 				ids = append(ids, f.ID)
 			}
 		}
@@ -852,7 +854,7 @@ func (m *tuiModel) findingsKey(key string) tea.Cmd {
 			m.say("Select at least one finding with Space first. Nothing was sent.")
 			return nil
 		}
-		q := mutation(m.v, "repair")
+		q := engine.TerminalMutation(m.v, "repair")
 		q.Selected = ids
 		a := labelled("repair", r)
 		a.Label = "Repair " + plural(len(ids), "finding")
@@ -958,7 +960,7 @@ func (m *tuiModel) decisionText(accept bool, value string) tea.Cmd {
 		return nil
 	}
 	if m.decision.step == 2 {
-		if _, err := parseCount(value); err != nil {
+		if _, err := engine.ParseCount(value); err != nil {
 			m.say(err.Error() + "; nothing submitted")
 			return nil
 		}
@@ -967,13 +969,13 @@ func (m *tuiModel) decisionText(accept bool, value string) tea.Cmd {
 		m.edit("", "why this answer")
 		return nil
 	}
-	if !validText(value) {
+	if !engine.ValidText(value) {
 		m.say("A reason is required; it is recorded with the decision.")
 		return nil
 	}
 	m.editing = false
 	m.input.Blur()
-	q := mutation(m.v, "decide")
+	q := engine.TerminalMutation(m.v, "decide")
 	q.Choice, q.Reason = m.decisionChoice(), value
 	if q.Choice == "repair" && d.Kind == "findings" {
 		q.Selected = m.groupSelection()
@@ -1008,19 +1010,19 @@ type settingsTarget struct {
 	op, target, label, scope string
 }
 
-func settingsTargets(v Response) []settingsTarget {
+func settingsTargets(v engine.Response) []settingsTarget {
 	var out []settingsTarget
-	if has(v.Actions, "apply") {
+	if slices.Contains(v.Actions, "apply") {
 		out = append(out, settingsTarget{"apply", "", "Apply to this run", "Adds a run-local snapshot. New runs keep their defaults."})
 	}
-	if has(v.Actions, "save") {
+	if slices.Contains(v.Actions, "save") {
 		out = append(out, settingsTarget{"save", "user", "Save as my default", "Changes per-user defaults for new runs. This run does not change."})
 		out = append(out, settingsTarget{"save", "repository", "Save to repository override", "Writes .greenhouse.json for new runs; it applies once the repository is trusted. This run does not change."})
 	}
 	return out
 }
 
-func (m *tuiModel) current() Settings {
+func (m *tuiModel) current() engine.Settings {
 	r := m.v.Run
 	return r.Configs[len(r.Configs)-1].Settings
 }
@@ -1035,7 +1037,7 @@ func (m *tuiModel) openSettings(cursor int) tea.Cmd {
 	if m.models == nil && m.modelsErr == "" {
 		client := m.client
 		return func() tea.Msg {
-			v, err := client.send(Request{Version: protocolMax, Op: "models"}, false)
+			v, err := client.send(engine.Request{Version: engine.MaxVersion, Op: "models"}, false)
 			switch {
 			case err != nil:
 				return modelsMsg{err: err.Error()}
@@ -1048,7 +1050,7 @@ func (m *tuiModel) openSettings(cursor int) tea.Cmd {
 	return nil
 }
 
-func fieldValue(s Settings, i int) string {
+func fieldValue(s engine.Settings, i int) string {
 	switch i {
 	case 0:
 		return s.Mode
@@ -1078,7 +1080,7 @@ func (m *tuiModel) setField(i int, value string) {
 	case 1:
 		d.Preset = value
 	case 2:
-		n, err := parseCount(value)
+		n, err := engine.ParseCount(value)
 		if err != nil {
 			m.say("Limit: " + err.Error() + ". The draft keeps " + strconv.Itoa(d.Limit) + ".")
 			return
@@ -1143,7 +1145,7 @@ func (m *tuiModel) settingsKey(key string) tea.Cmd {
 			m.edit(fieldValue(*m.draft, m.cursor), settingPlaceholder(m.cursor))
 		case m.cursor < len(settingNames)+len(targets):
 			t := targets[m.cursor-len(settingNames)]
-			q := mutation(m.v, t.op)
+			q := engine.TerminalMutation(m.v, t.op)
 			draft := *m.draft
 			q.Settings, q.Reason, q.Target = &draft, "terminal Settings", t.target
 			return m.submit(t.label, q)
@@ -1170,13 +1172,13 @@ func settingPlaceholder(i int) string {
 }
 
 func (m *tuiModel) draftChanged() bool {
-	return m.draft != nil && digest(*m.draft) != digest(m.current())
+	return m.draft != nil && engine.Digest(*m.draft) != engine.Digest(m.current())
 }
 
 func (m *tuiModel) openLogs() tea.Cmd {
 	client, run := m.client, m.v.RunID
 	return func() tea.Msg {
-		v, err := client.send(Request{Version: protocolMax, Op: "transcript", RunID: run}, false)
+		v, err := client.send(engine.Request{Version: engine.MaxVersion, Op: "transcript", RunID: run}, false)
 		return transcriptMsg{v, err}
 	}
 }

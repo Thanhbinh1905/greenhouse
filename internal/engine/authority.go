@@ -94,7 +94,7 @@ func has(list []string, want string) bool {
 	return false
 }
 
-func (p *Pipeline) open() *Decision {
+func (p *Pipeline) Open() *Decision {
 	for i := range p.Decisions {
 		if p.Decisions[i].Status == "open" {
 			return &p.Decisions[i]
@@ -114,7 +114,7 @@ func budgetOf(r *Run) *Budget {
 	return b
 }
 
-func outstanding(r *Run) (actionable, informational []Finding) {
+func Outstanding(r *Run) (actionable, informational []Finding) {
 	resolved := map[string]bool{}
 	if r.Pipeline != nil {
 		for _, x := range r.Pipeline.Resolutions {
@@ -124,7 +124,7 @@ func outstanding(r *Run) (actionable, informational []Finding) {
 	for _, f := range r.Findings {
 		switch {
 		case resolved[f.ID]:
-		case f.Priority == "P3" || !validText(f.Action):
+		case f.Priority == "P3" || !ValidText(f.Action):
 			informational = append(informational, f)
 		default:
 			actionable = append(actionable, f)
@@ -154,7 +154,7 @@ func repairableFindings(r *Run, findings []Finding) []Finding {
 	return out
 }
 
-func findingIDs(findings []Finding) []string {
+func FindingIDs(findings []Finding) []string {
 	var ids []string
 	for _, f := range findings {
 		ids = append(ids, f.ID)
@@ -191,7 +191,7 @@ func recordReview(r *Run, x *Execution) {
 		responses[resp.Finding] = resp.Response
 	}
 	responder, _ := pendingResponses(r)
-	actionable, informational := outstanding(r)
+	actionable, informational := Outstanding(r)
 	for _, f := range append(actionable, informational...) {
 		if reported[f.ID] {
 			continue
@@ -223,7 +223,7 @@ func repairedBy(p *Pipeline, finding Finding) string {
 }
 
 func decisionBinding(r *Run, stage string) string {
-	return digest([]any{r.Candidate, stageInputs(r, stage), r.Configs[len(r.Configs)-1].Settings.Limit})
+	return Digest([]any{r.Candidate, stageInputs(r, stage), r.Configs[len(r.Configs)-1].Settings.Limit})
 }
 
 func openDecision(r *Run, st *StageResult, status string, d Decision) {
@@ -240,7 +240,7 @@ func supersede(r *Run) {
 	if p == nil {
 		return
 	}
-	if d := p.open(); d != nil && !d.UserOnly && d.Binding != decisionBinding(r, d.Stage) {
+	if d := p.Open(); d != nil && !d.UserOnly && d.Binding != decisionBinding(r, d.Stage) {
 		d.Status = "superseded"
 		if p.Gate == d.ID {
 			p.Gate = ""
@@ -265,12 +265,12 @@ func yoloActor(r *Run) (string, bool) {
 
 func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 	p := r.Pipeline
-	actionable, _ := outstanding(r)
+	actionable, _ := Outstanding(r)
 	b := budgetOf(r)
 	reason = fmt.Sprintf("review cap reached (%d/%d: review %d + repair %d); %s", b.Total, b.Limit, b.Review, b.Repair, reason)
-	openDecision(r, st, "needs-decision", Decision{Kind: "cap", Findings: findingIDs(actionable), Options: capOptions(p), Reason: reason})
-	if actor, ok := yoloActor(r); ok && p.Plan.Yolo.Cap != "" && has(p.open().Options, p.Plan.Yolo.Cap) {
-		if _, err := applyChoice(s, r, p.open(), Answer{Choice: p.Plan.Yolo.Cap, Actor: actor, Reason: "trusted pipeline.json yolo cap policy"}); err == nil {
+	openDecision(r, st, "needs-decision", Decision{Kind: "cap", Findings: FindingIDs(actionable), Options: capOptions(p), Reason: reason})
+	if actor, ok := yoloActor(r); ok && p.Plan.Yolo.Cap != "" && has(p.Open().Options, p.Plan.Yolo.Cap) {
+		if _, err := applyChoice(s, r, p.Open(), Answer{Choice: p.Plan.Yolo.Cap, Actor: actor, Reason: "trusted pipeline.json yolo cap policy"}); err == nil {
 			return advancePipeline(s, r)
 		}
 	}
@@ -279,7 +279,7 @@ func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 
 func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 	p := r.Pipeline
-	actionable, _ := outstanding(r)
+	actionable, _ := Outstanding(r)
 	repairable := repairableFindings(r, actionable)
 	b := budgetOf(r)
 	if g := p.FinalFix; g != nil && g.RepairAllowed && g.Repair == 0 && len(repairable) > 0 {
@@ -311,7 +311,7 @@ func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 			reason = "repair refused: " + err.Error()
 		}
 	}
-	openDecision(r, st, "needs-decision", Decision{Kind: "findings", Findings: findingIDs(actionable), Options: options, Reason: reason})
+	openDecision(r, st, "needs-decision", Decision{Kind: "findings", Findings: FindingIDs(actionable), Options: options, Reason: reason})
 	return nil
 }
 
@@ -320,7 +320,7 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 	if !has(d.Options, a.Choice) {
 		return nil, errors.New("choice not offered by the open decision: " + a.Choice)
 	}
-	if !validText(a.Reason) {
+	if !ValidText(a.Reason) {
 		return nil, errors.New("reason required")
 	}
 	if d.UserOnly && (a.Actor == "auto" || strings.HasPrefix(a.Actor, "yolo:")) {
@@ -332,7 +332,7 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 	switch a.Choice {
 	case "repair":
 		if d.Kind == "findings" {
-			actionable, _ := outstanding(r)
+			actionable, _ := Outstanding(r)
 			grouped := map[string]bool{}
 			for _, id := range d.Findings {
 				grouped[id] = true
@@ -371,14 +371,14 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 			st.Status = "needs-decision"
 		}
 	case "accept-head":
-		actionable, _ := outstanding(r)
+		actionable, _ := Outstanding(r)
 		review := p.stage("review")
 		in := stageInputs(r, "review")
-		p.Acceptances = append(p.Acceptances, Acceptance{Decision: d.ID, Candidate: r.Candidate, Inputs: in, Config: r.Configs[len(r.Configs)-1].ID, Findings: findingIDs(actionable), Actor: a.Actor, Reason: a.Reason})
+		p.Acceptances = append(p.Acceptances, Acceptance{Decision: d.ID, Candidate: r.Candidate, Inputs: in, Config: r.Configs[len(r.Configs)-1].ID, Findings: FindingIDs(actionable), Actor: a.Actor, Reason: a.Reason})
 		review.Status, review.Inputs, review.Candidate = "accepted-risk", in, r.Candidate
 		review.Reason = fmt.Sprintf("review risk accepted by %s for this exact candidate and configuration (%d findings); not a clean pass", a.Actor, len(actionable))
 	case "final-fix":
-		actionable, _ := outstanding(r)
+		actionable, _ := Outstanding(r)
 		g := &FinalFix{Decision: d.ID, Actor: a.Actor, Reason: a.Reason, Candidate: r.Candidate, ReviewUsed: r.ReviewUsed, RepairUsed: r.RepairUsed, RepairAllowed: len(repairableFindings(r, actionable)) > 0}
 		p.FinalFix = g
 		if !g.RepairAllowed {
@@ -400,7 +400,7 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 		next = &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: r.Submitted, Candidate: r.Submitted.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], r.Configs[len(r.Configs)-1].Settings, "rethink of "+r.ID)}, Events: []Event{{Kind: "rethink", Actor: a.Actor, Reason: "successor of " + r.ID + ": " + a.Reason, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed}}}
 		r.Successor = next.ID
 		s.Runs[next.ID] = next
-		s.Slots[digest([]string{r.Submitted.Repository, r.Submitted.Worktree})] = next.ID
+		s.Slots[Digest([]string{r.Submitted.Repository, r.Submitted.Worktree})] = next.ID
 	case "discard":
 		resume = false
 		p.Status, r.Status = "discarded", "discarded"
@@ -455,13 +455,13 @@ func escalationText(text string) (string, string) {
 		Escalate string `json:"escalate"`
 		Reason   string `json:"reason"`
 	}
-	if _, err := exactFields([]byte(text), "escalate", "reason"); err != nil || json.Unmarshal([]byte(text), &answer) != nil || !authorityCategories[answer.Escalate] || !validText(answer.Reason) {
+	if _, err := exactFields([]byte(text), "escalate", "reason"); err != nil || json.Unmarshal([]byte(text), &answer) != nil || !authorityCategories[answer.Escalate] || !ValidText(answer.Reason) {
 		return "", ""
 	}
 	return answer.Escalate, answer.Reason
 }
 
-func parseSelection(line string, group []string) ([]string, bool, error) {
+func ParseSelection(line string, group []string) ([]string, bool, error) {
 	if line == "" {
 		return nil, true, nil
 	}
@@ -496,19 +496,19 @@ func parseSelection(line string, group []string) ([]string, bool, error) {
 	return ids, false, nil
 }
 
-func parseCount(text string) (int, error) {
+func ParseCount(text string) (int, error) {
 	if len(text) == 0 || len(text) > 4 || text[0] == '0' || strings.Trim(text, "0123456789") != "" {
 		return 0, errors.New("enter a whole number from 1 to 9999 with digits only")
 	}
 	return strconv.Atoi(text)
 }
 
-func parseDraft(text string) (string, string, int, error) {
+func ParseDraft(text string) (string, string, int, error) {
 	fields := strings.Split(text, " ")
 	if len(fields) != 3 {
 		return "", "", 0, errors.New("enter exactly mode, preset and limit separated by single spaces")
 	}
-	limit, err := parseCount(fields[2])
+	limit, err := ParseCount(fields[2])
 	if err != nil {
 		return "", "", 0, err
 	}

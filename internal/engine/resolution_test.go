@@ -189,7 +189,7 @@ func TestDeferralCitesAnsweredDecision(t *testing.T) {
 		t.Fatalf("a confirmed deferral is accepted risk, not a fix: %v", p)
 	}
 	screen := terminalOutput(t, bin, repo, home, "q\n")
-	if !strings.Contains(screen, "Response deferred") || !strings.Contains(screen, "authority "+short(gate)) {
+	if !strings.Contains(screen, "Response deferred") || !strings.Contains(screen, "authority "+Short(gate)) {
 		t.Fatalf("terminal must show the deferral and its authority:\n%s", screen)
 	}
 }

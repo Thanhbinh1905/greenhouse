@@ -1,4 +1,4 @@
-package engine
+package intent
 
 import (
 	"bufio"
@@ -8,13 +8,17 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
+
+const CollectedPrefix = "User request collected from "
 
 // Intent collection reads the local Claude Code, Codex and Pi session logs
 // that were started inside the reviewed worktree, picks the session whose
@@ -24,13 +28,13 @@ import (
 const (
 	intentWindow       = 72 * time.Hour
 	intentSessionBytes = 64 << 20
-	intentLimit        = 8192
+	Limit              = 8192
 	intentDecisive     = 0.85
 )
 
-var errNoIntent = errors.New("no local agent session started in this worktree mentions the changed files")
+var ErrNoIntent = errors.New("no local agent session started in this worktree mentions the changed files")
 
-type intentSession struct {
+type Session struct {
 	Agent    string
 	ID       string
 	Path     string
@@ -40,14 +44,14 @@ type intentSession struct {
 	Score    float64
 }
 
-type intentMatch struct {
-	Session    *intentSession
-	Candidates []*intentSession
+type Match struct {
+	Session    *Session
+	Candidates []*Session
 }
 
-func (s *intentSession) Label() string {
+func (s *Session) Label() string {
 	when := s.Last.Local().Format("2006-01-02 15:04")
-	return fmt.Sprintf("%s session %s (%s)", backendNames[s.Agent], short8(s.ID), when)
+	return fmt.Sprintf("%s session %s (%s)", engine.BackendName(s.Agent), short8(s.ID), when)
 }
 
 func short8(id string) string {
@@ -59,12 +63,12 @@ func short8(id string) string {
 
 // Intent returns the requests with their source, and false when they do not
 // fit the controller's intent limit; requests are never cut.
-func (s *intentSession) Intent() (string, bool) {
-	text := collectedPrefix + s.Label() + ". These are the user's own words from that session, not a summary:\n\n" + strings.Join(s.Requests, "\n\n")
-	return text, len(text) <= intentLimit
+func (s *Session) Intent() (string, bool) {
+	text := CollectedPrefix + s.Label() + ". These are the user's own words from that session, not a summary:\n\n" + strings.Join(s.Requests, "\n\n")
+	return text, len(text) <= Limit
 }
 
-func (s *intentSession) FirstLine() string {
+func (s *Session) FirstLine() string {
 	if len(s.Requests) == 0 {
 		return ""
 	}
@@ -81,8 +85,8 @@ func committerTime(worktree, rev string) (time.Time, error) {
 	return time.Unix(seconds, 0), err
 }
 
-func collectIntent(ctx context.Context, home, worktree, target, head string) (intentMatch, error) {
-	var match intentMatch
+func Collect(ctx context.Context, home, worktree, target, head string) (Match, error) {
+	var match Match
 	worktree, err := filepath.EvalSymlinks(worktree)
 	if err != nil {
 		return match, err
@@ -93,7 +97,7 @@ func collectIntent(ctx context.Context, home, worktree, target, head string) (in
 	}
 	files := strings.Fields(string(names))
 	if len(files) == 0 {
-		return match, errNoIntent
+		return match, ErrNoIntent
 	}
 	base, err := committerTime(worktree, target)
 	if err != nil {
@@ -104,8 +108,8 @@ func collectIntent(ctx context.Context, home, worktree, target, head string) (in
 		return match, err
 	}
 	since := base.Add(-intentWindow)
-	var sessions []*intentSession
-	for _, discover := range []func(string, string, time.Time) []*intentSession{claudeSessions, codexSessions, piSessions} {
+	var sessions []*Session
+	for _, discover := range []func(string, string, time.Time) []*Session{claudeSessions, codexSessions, piSessions} {
 		for _, s := range discover(home, worktree, since) {
 			if err := ctx.Err(); err != nil {
 				return match, err
@@ -129,7 +133,7 @@ func collectIntent(ctx context.Context, home, worktree, target, head string) (in
 	})
 	switch {
 	case len(sessions) == 0:
-		return match, errNoIntent
+		return match, ErrNoIntent
 	case len(sessions) == 1 || sessions[0].Score >= intentDecisive && sessions[1].Score < intentDecisive:
 		match.Session = sessions[0]
 	default:
@@ -215,8 +219,8 @@ func modTime(path string) time.Time {
 	return info.ModTime()
 }
 
-func claudeSessions(home, worktree string, since time.Time) []*intentSession {
-	var out []*intentSession
+func claudeSessions(home, worktree string, since time.Time) []*Session {
+	var out []*Session
 	for _, dir := range scopedDirs(filepath.Join(home, ".claude", "projects"), encodedPath(worktree)) {
 		for _, path := range recentLogs(dir, since) {
 			var first struct {
@@ -231,14 +235,14 @@ func claudeSessions(home, worktree string, since time.Time) []*intentSession {
 			if id == "" {
 				id = strings.TrimSuffix(filepath.Base(path), ".jsonl")
 			}
-			out = append(out, &intentSession{Agent: backendClaude, ID: id, Path: path, Started: parseTime(first.Timestamp), Last: modTime(path)})
+			out = append(out, &Session{Agent: engine.BackendClaude, ID: id, Path: path, Started: parseTime(first.Timestamp), Last: modTime(path)})
 		}
 	}
 	return out
 }
 
-func piSessions(home, worktree string, since time.Time) []*intentSession {
-	var out []*intentSession
+func piSessions(home, worktree string, since time.Time) []*Session {
+	var out []*Session
 	prefix := "--" + encodedPath(strings.TrimPrefix(worktree, "/"))
 	root := filepath.Join(home, ".pi", "agent", "sessions")
 	entries, err := os.ReadDir(root)
@@ -259,14 +263,14 @@ func piSessions(home, worktree string, since time.Time) []*intentSession {
 			if !firstRecord(path, &first, func() bool { return first.Type == "session" && first.CWD != "" }) || !inside(first.CWD, worktree) {
 				continue
 			}
-			out = append(out, &intentSession{Agent: backendPi, ID: first.ID, Path: path, Started: parseTime(first.Timestamp), Last: modTime(path)})
+			out = append(out, &Session{Agent: engine.BackendPi, ID: first.ID, Path: path, Started: parseTime(first.Timestamp), Last: modTime(path)})
 		}
 	}
 	return out
 }
 
-func codexSessions(home, worktree string, since time.Time) []*intentSession {
-	var out []*intentSession
+func codexSessions(home, worktree string, since time.Time) []*Session {
+	var out []*Session
 	root := filepath.Join(home, ".codex", "sessions")
 	for day := time.Date(since.Year(), since.Month(), since.Day(), 0, 0, 0, 0, time.Local); !day.After(time.Now()); day = day.AddDate(0, 0, 1) {
 		for _, path := range recentLogs(filepath.Join(root, day.Format("2006"), day.Format("01"), day.Format("02")), since) {
@@ -281,7 +285,7 @@ func codexSessions(home, worktree string, since time.Time) []*intentSession {
 			if !firstRecord(path, &first, func() bool { return first.Type == "session_meta" && first.Payload.CWD != "" }) || !inside(first.Payload.CWD, worktree) {
 				continue
 			}
-			out = append(out, &intentSession{Agent: backendCodex, ID: first.Payload.ID, Path: path, Started: parseTime(first.Payload.Timestamp), Last: modTime(path)})
+			out = append(out, &Session{Agent: engine.BackendCodex, ID: first.Payload.ID, Path: path, Started: parseTime(first.Payload.Timestamp), Last: modTime(path)})
 		}
 	}
 	return out
@@ -290,7 +294,7 @@ func codexSessions(home, worktree string, since time.Time) []*intentSession {
 // loadIntentSession reads the user's requests and scores how many changed
 // files the session mentions. Tool output counts toward matching only; it
 // never becomes intent text.
-func loadIntentSession(ctx context.Context, s *intentSession, worktree string, files []string) bool {
+func loadIntentSession(ctx context.Context, s *Session, worktree string, files []string) bool {
 	f, err := os.Open(s.Path)
 	if err != nil {
 		return false
@@ -309,8 +313,8 @@ func loadIntentSession(ctx context.Context, s *intentSession, worktree string, f
 				mentioned[file] = true
 			}
 		}
-		if text := userRequest(s.Agent, line); text != "" && !has(s.Requests, text) {
-			s.Requests = append(s.Requests, string(redact([]byte(text))))
+		if text := userRequest(s.Agent, line); text != "" && !slices.Contains(s.Requests, text) {
+			s.Requests = append(s.Requests, string(engine.Redact([]byte(text))))
 		}
 	}
 	overlap := len(mentioned)
@@ -324,7 +328,7 @@ func loadIntentSession(ctx context.Context, s *intentSession, worktree string, f
 func userRequest(agent string, line []byte) string {
 	var text string
 	switch agent {
-	case backendClaude:
+	case engine.BackendClaude:
 		var r struct {
 			Type    string `json:"type"`
 			IsMeta  bool   `json:"isMeta"`
@@ -336,7 +340,7 @@ func userRequest(agent string, line []byte) string {
 			return ""
 		}
 		text = contentText(r.Message.Content)
-	case backendPi:
+	case engine.BackendPi:
 		var r struct {
 			Type    string `json:"type"`
 			Message struct {
@@ -348,7 +352,7 @@ func userRequest(agent string, line []byte) string {
 			return ""
 		}
 		text = contentText(r.Message.Content)
-	case backendCodex:
+	case engine.BackendCodex:
 		var r struct {
 			Type    string `json:"type"`
 			Payload struct {

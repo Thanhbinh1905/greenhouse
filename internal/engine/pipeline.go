@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"net/url"
 	"os"
 	"os/exec"
@@ -106,7 +105,7 @@ var gateStages = map[string]bool{"test": true, "lint": true, "docs": true, "ci":
 
 func trustedPlan() (CommandPlan, map[string]string, error) {
 	var plan CommandPlan
-	h, e := home()
+	h, e := Home()
 	if e != nil {
 		return plan, nil, e
 	}
@@ -122,7 +121,7 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	if e = decodeConfig("pipeline.json", b, &plan); e != nil {
 		return plan, nil, configFailure(e, "invalid trusted pipeline.json")
 	}
-	if !validText(plan.Name) || !validText(plan.Email) || plan.RepairLimit < 0 || plan.RepairLimit > 20 {
+	if !ValidText(plan.Name) || !ValidText(plan.Email) || plan.RepairLimit < 0 || plan.RepairLimit > 20 {
 		return plan, nil, errors.New("invalid trusted pipeline.json")
 	}
 	digests := map[string]string{}
@@ -130,7 +129,7 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 		if len(commands) > 16 {
 			return plan, nil, errors.New("at most 16 commands per stage")
 		}
-		if reason, ok := plan.NotApplicable[stage]; ok && (len(commands) > 0 || !validText(reason)) {
+		if reason, ok := plan.NotApplicable[stage]; ok && (len(commands) > 0 || !ValidText(reason)) {
 			return plan, nil, errors.New("a not-applicable stage needs a reason and no commands: " + stage)
 		}
 		for _, args := range commands {
@@ -155,7 +154,7 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 	}
 	seenChecks := map[string]bool{}
 	for _, name := range plan.RequiredChecks {
-		if !validText(name) || seenChecks[name] {
+		if !ValidText(name) || seenChecks[name] {
 			return plan, nil, errors.New("required_checks must contain unique non-empty names")
 		}
 		seenChecks[name] = true
@@ -170,11 +169,11 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 		if stage != "test" && stage != "lint" && stage != "docs" && stage != "push" && stage != "pr" && stage != "ci" {
 			return plan, nil, errors.New("only pipeline stages may be not applicable")
 		}
-		if !validText(reason) {
+		if !ValidText(reason) {
 			return plan, nil, errors.New("not-applicable stages need a reason: " + stage)
 		}
 	}
-	if y := plan.Yolo; y != nil && (!validText(y.Actor) || len(y.Actor) > 64 || y.Cap != "" && y.Cap != "final-fix" && y.Cap != "accept-head") {
+	if y := plan.Yolo; y != nil && (!ValidText(y.Actor) || len(y.Actor) > 64 || y.Cap != "" && y.Cap != "final-fix" && y.Cap != "accept-head") {
 		return plan, nil, errors.New("yolo needs an actor name and a cap choice of final-fix or accept-head")
 	}
 	for _, stage := range plan.Repairs {
@@ -212,7 +211,7 @@ func safeRemote(remote string) bool {
 }
 
 func newPipeline(plan CommandPlan, digests map[string]string) *Pipeline {
-	p := &Pipeline{Status: "prepared", Plan: plan, CommandDigests: digests, PlanDigest: digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan)}
+	p := &Pipeline{Status: "prepared", Plan: plan, CommandDigests: digests, PlanDigest: Digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan)}
 	for _, name := range pipelineStages {
 		p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending"})
 	}
@@ -244,9 +243,9 @@ func stageInputs(r *Run, name string) string {
 	p := r.Pipeline
 	switch name {
 	case "intent":
-		return digest([]any{name, r.Intent, r.Target, p.PlanDigest})
+		return Digest([]any{name, r.Intent, r.Target, p.PlanDigest})
 	case "sync":
-		return digest([]any{name, r.Candidate, r.Target, p.PlanDigest})
+		return Digest([]any{name, r.Candidate, r.Target, p.PlanDigest})
 	case "review":
 		snapshot := effectiveRuleSnapshot(r)
 		if snapshot == nil {
@@ -261,21 +260,21 @@ func stageInputs(r *Run, name string) string {
 		if _, responses := pendingResponses(r); len(responses) > 0 {
 			parts = append(parts, responses)
 		}
-		return digest(parts)
+		return Digest(parts)
 	case "docs":
 		review := ""
 		if r.Review != nil {
 			review = r.Review.InputDigest
 		}
-		return digest([]any{name, r.Candidate, p.PlanDigest, review})
+		return Digest([]any{name, r.Candidate, p.PlanDigest, review})
 	case "ci":
 		pr := p.stage("pr")
 		if pr == nil {
-			return digest([]any{name, r.Candidate, p.PlanDigest, 0, ""})
+			return Digest([]any{name, r.Candidate, p.PlanDigest, 0, ""})
 		}
-		return digest([]any{name, r.Candidate, p.PlanDigest, pr.Number, pr.Head})
+		return Digest([]any{name, r.Candidate, p.PlanDigest, pr.Number, pr.Head})
 	}
-	return digest([]any{name, r.Candidate, p.PlanDigest})
+	return Digest([]any{name, r.Candidate, p.PlanDigest})
 }
 
 func invalidate(r *Run, repaired string) {
@@ -350,7 +349,7 @@ func admitPipeline(s *Store, r *Run) error {
 	if released(p) {
 		return errors.New("pipeline was " + p.Status)
 	}
-	if d := p.open(); d != nil {
+	if d := p.Open(); d != nil {
 		return errors.New("answer the open " + d.Kind + " decision first")
 	}
 	if custodyHeld(s, r) {
@@ -426,7 +425,7 @@ func advancePipeline(s *Store, r *Run) *Step {
 					continue
 				}
 			case "needs-decision":
-				if st.Name == "review" && p.open() == nil {
+				if st.Name == "review" && p.Open() == nil {
 					return findingsNext(s, r, st)
 				}
 			case "failed":
@@ -634,7 +633,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 	if len(selected) > 0 {
 		authorities, respond = deferralAuthorities(r), responseContract
 	}
-	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Authorities: authorities, Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
+	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Authorities: authorities, Config: cfg, ConfigDigest: Digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Stage, Reason, Diff string
 		Paths                             []string
@@ -650,7 +649,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 		return errors.New("repair input exceeds 2 MiB")
 	}
 	x.InputDigest = runner.BytesDigest(x.Input)
-	x.Binding = digest([]any{r.Input, r.Candidate, st.Inputs, x.InputDigest, x.ConfigDigest, fixerDigest})
+	x.Binding = Digest([]any{r.Input, r.Candidate, st.Inputs, x.InputDigest, x.ConfigDigest, fixerDigest})
 	p.Repairs = append(p.Repairs, x)
 	used := p.RepairUsed + 1
 	added := &p.Repairs[len(p.Repairs)-1]
@@ -768,7 +767,7 @@ func completeStep(r *Run, o stepOutcome) error {
 		switch o.Status {
 		case "clean-review", "outstanding-findings":
 			recordReview(r, x)
-			actionable, informational := outstanding(r)
+			actionable, informational := Outstanding(r)
 			st.Status, st.Reason = "passed", "independent review clean with complete coverage"
 			if len(o.Result.Findings) > 0 {
 				st.Reason = "independent review reported only informational findings"
@@ -1028,7 +1027,7 @@ func runStageCommands(ctx context.Context, p Pipeline, stage, candidate string) 
 		res, err := runGateCommand(ctx, p.Worktree, args, p.CommandDigests)
 		out.Commands = append(out.Commands, res)
 		if err != nil {
-			out.Status, out.Reason = "unknown-outcome", strings.Join(displayArgs(args), " ")+": "+err.Error()
+			out.Status, out.Reason = "unknown-outcome", strings.Join(DisplayArgs(args), " ")+": "+err.Error()
 			return out
 		}
 		if res.Status == "cancelled" {
@@ -1036,7 +1035,7 @@ func runStageCommands(ctx context.Context, p Pipeline, stage, candidate string) 
 			return out
 		}
 		if res.Status != "passed" {
-			out.Status, out.Reason = "failed", fmt.Sprintf("%s exited %d", strings.Join(displayArgs(args), " "), res.Exit)
+			out.Status, out.Reason = "failed", fmt.Sprintf("%s exited %d", strings.Join(DisplayArgs(args), " "), res.Exit)
 			if res.Status == "authority-changed" {
 				out.Status, out.Reason = "needs-decision", res.Log
 			}
@@ -1055,7 +1054,7 @@ func ensureCandidate(r *Run) error {
 	if p.Worktree != "" {
 		return nil
 	}
-	h, e := home()
+	h, e := Home()
 	if e != nil {
 		return e
 	}
@@ -1460,31 +1459,14 @@ var outcomeLabels = map[string]string{
 	"accepted-risk": "ACCEPTED RISK (review risk accepted, not a clean pass)",
 }
 
-var stageMarkers = map[string]string{
-	"passed":              "[pass]",
-	"repaired-unreviewed": "[REPAIRED, NOT REVIEWED]",
-	"failed":              "[FAIL]",
-	"not-applicable":      "[n/a]",
-	"unconfigured":        "[UNCONFIGURED]",
-	"needs-decision":      "[DECISION]",
-	"accepted-risk":       "[ACCEPTED RISK]",
-	"unknown-outcome":     "[UNKNOWN]",
-	"running":             "[running]",
-	"pending":             "[ ]",
-	"stale":               "[stale]",
-	"cancelled":           "[cancelled]",
-	"unsupported":         "[unsupported]",
-	"paused":              "[PAUSED]",
-}
-
-func short(id string) string {
+func Short(id string) string {
 	if len(id) > 12 {
 		return id[:12]
 	}
 	return id
 }
 
-func displayArgs(args []string) []string {
+func DisplayArgs(args []string) []string {
 	var out []string
 	for i := 0; i < len(args); i++ {
 		switch {
@@ -1493,104 +1475,10 @@ func displayArgs(args []string) []string {
 		case args[i] == "-c" && i+1 < len(args):
 			i++
 		case len(args[i]) == 40 || len(args[i]) == 64:
-			out = append(out, short(args[i]))
+			out = append(out, Short(args[i]))
 		default:
 			out = append(out, args[i])
 		}
 	}
 	return out
-}
-
-func renderPipeline(w io.Writer, r *Run, details bool) {
-	p := r.Pipeline
-	fmt.Fprintf(w, "Pipeline: %s", p.Status)
-	if p.Failed != "" && p.Status != "running" {
-		fmt.Fprintf(w, " | stopped at %s", p.Failed)
-	}
-	fmt.Fprintf(w, "\nGate repairs: %d/%d (counted apart from the review cap)\n", p.RepairUsed, p.RepairLimit)
-	if outcome := outcomeLabels[p.Outcome]; outcome != "" && (p.Status == "locally-ready" || p.Status == "ci-ready") {
-		fmt.Fprintln(w, "Outcome: "+outcome)
-	}
-	if g := p.FinalFix; g != nil {
-		fmt.Fprintf(w, "Final-fix by %s: repair %d/1, final review %d/1\n", g.Actor, g.Repair, g.Review)
-	}
-	for _, d := range p.Decisions {
-		if d.Answer != nil {
-			fmt.Fprintf(w, "Decided %s: %s by %s: %s\n", d.Kind, d.Answer.Choice, d.Answer.Actor, d.Answer.Reason)
-		}
-	}
-	if d := p.open(); d != nil {
-		fmt.Fprintf(w, "DECISION REQUIRED: %s | gate %s\n", d.Kind, short(d.ID))
-		if d.UserOnly {
-			fmt.Fprintf(w, "User-only authority: %s\n", d.Category)
-		}
-		fmt.Fprintln(w, d.Reason)
-		if len(d.Findings) > 0 {
-			var ids []string
-			width := terminalWidth()
-			for _, id := range d.Findings {
-				ids = append(ids, displayID(id, width))
-			}
-			fmt.Fprintln(w, "Grouped findings: "+strings.Join(ids, ", "))
-		}
-		fmt.Fprintf(w, "Options: %s\n[d] answers this decision\n", strings.Join(d.Options, ", "))
-	}
-	if p.Worktree != "" {
-		fmt.Fprintf(w, "Candidate ref: %s\n", strings.TrimPrefix(p.Ref, "refs/heads/"))
-		if details {
-			fmt.Fprintf(w, "Candidate worktree: %s\n", p.Worktree)
-		}
-	}
-	if n := len(p.Repairs); n > 0 && p.Repairs[n-1].Confinement != nil {
-		fmt.Fprintln(w, confinementLine(p.Repairs[n-1].Confinement))
-	}
-	if p.Handback != "" {
-		fmt.Fprintf(w, "Handback: %s %s\n", p.Handback, p.HandbackError)
-	}
-	if len(p.Conflict) > 0 {
-		fmt.Fprintf(w, "Target conflict: %s\n[m] authorizes the fixer\n", strings.Join(p.Conflict, ", "))
-	}
-	for _, st := range p.Stages {
-		marker := stageMarkers[st.Status]
-		if marker == "" {
-			marker = "[" + st.Status + "]"
-		}
-		if st.Status == "passed" && st.Repairs > 0 {
-			marker = "[pass after repair, rereviewed]"
-		}
-		fmt.Fprintf(w, "%s %s\n", marker, st.Name)
-		if st.Head != "" {
-			fmt.Fprintf(w, "  head %s\n", st.Head)
-		}
-		if st.URL != "" {
-			fmt.Fprintf(w, "  PR %s\n", st.URL)
-		}
-		if st.Reason != "" {
-			fmt.Fprintln(w, "  "+st.Reason)
-		}
-		if st.Inputs != "" {
-			fmt.Fprintf(w, "  in %s", st.Inputs[:8])
-			if st.Candidate != "" {
-				fmt.Fprintf(w, " cand %s", st.Candidate[:8])
-			}
-			fmt.Fprintf(w, " runs %d fixes %d\n", st.Runs, st.Repairs)
-		}
-		for _, c := range st.Commands {
-			args := c.Args
-			if !details {
-				args = displayArgs(args)
-			}
-			fmt.Fprintf(w, "  $ %s\n    exit=%d %s\n", strings.Join(args, " "), c.Exit, c.Status)
-			if c.Output == "" || c.Status == "passed" && !details {
-				continue
-			}
-			lines := strings.Split(strings.TrimRight(c.Output, "\n"), "\n")
-			if !details && len(lines) > 3 {
-				lines = lines[len(lines)-3:]
-			}
-			for _, line := range lines {
-				fmt.Fprintln(w, "    | "+line)
-			}
-		}
-	}
 }

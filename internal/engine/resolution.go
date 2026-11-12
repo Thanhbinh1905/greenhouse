@@ -87,7 +87,7 @@ func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
 			return nil, fmt.Errorf("duplicate resolution response for %s", r.Finding)
 		case resolutionKinds[r.Response] == "":
 			return nil, fmt.Errorf("resolution response %q is not fixed, disputed or deferred", r.Response)
-		case !validText(r.Reason):
+		case !ValidText(r.Reason):
 			return nil, fmt.Errorf("resolution response for %s needs a reason", r.Finding)
 		case r.Response == "deferred" && !authorities[r.Authority]:
 			return nil, fmt.Errorf("deferred resolution response for %s cites no answered decision", r.Finding)
@@ -219,7 +219,7 @@ func validateResolutions(fields map[string]json.RawMessage, v *Verdict, x *Execu
 	}
 	seen := map[string]bool{}
 	for _, c := range v.Resolutions {
-		if !want[c.Finding] || seen[c.Finding] || (c.Check != "confirmed" && c.Check != "rejected") || !validText(c.Reason) {
+		if !want[c.Finding] || seen[c.Finding] || (c.Check != "confirmed" && c.Check != "rejected") || !ValidText(c.Reason) {
 			return errors.New("invalid resolution check")
 		}
 		seen[c.Finding] = true
@@ -230,7 +230,7 @@ func validateResolutions(fields map[string]json.RawMessage, v *Verdict, x *Execu
 	return nil
 }
 
-func resolvedKinds(r *Run) map[string]string {
+func ResolvedKinds(r *Run) map[string]string {
 	out := map[string]string{}
 	if r.Pipeline == nil {
 		return out
@@ -244,7 +244,7 @@ func resolvedKinds(r *Run) map[string]string {
 	return out
 }
 
-func responseLines(r *Run) map[string][]string {
+func ResponseLines(r *Run) map[string][]string {
 	out := map[string][]string{}
 	var x *Repair
 	if r.Pipeline != nil {
@@ -268,7 +268,7 @@ func responseLines(r *Run) map[string][]string {
 	for _, resp := range x.Responses {
 		line := "  Response " + resp.Response + ": " + resp.Reason
 		if resp.Authority != "" {
-			line += " | authority " + short(resp.Authority)
+			line += " | authority " + Short(resp.Authority)
 		}
 		check := "  Review check pending"
 		if c, ok := checks[resp.Finding]; ok {

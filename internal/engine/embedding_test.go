@@ -100,7 +100,7 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	}
 
 	for _, op := range []string{"repair", "resolve-conflict", "pipeline", "handback", "decide", "rerun-from-start", "save"} {
-		refused := hostCall(t, bin, repo, home, v, op, "host-"+op, map[string]any{"selected": findingIDs(nil), "choice": "accept-head"})
+		refused := hostCall(t, bin, repo, home, v, op, "host-"+op, map[string]any{"selected": FindingIDs(nil), "choice": "accept-head"})
 		if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "the host owns") {
 			t.Fatalf("host mode must delegate %s: %v", op, refused)
 		}

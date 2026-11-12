@@ -44,7 +44,7 @@ type feed struct {
 func newFeed(s *Store) *feed {
 	f := &feed{stream: opaque(), seen: map[string]string{}}
 	for id, r := range s.Runs {
-		f.seen[id] = digest(r)
+		f.seen[id] = Digest(r)
 	}
 	return f
 }
@@ -57,7 +57,7 @@ func (f *feed) observe(s *Store) {
 	sort.Strings(ids)
 	for _, id := range ids {
 		r := s.Runs[id]
-		d := digest(r)
+		d := Digest(r)
 		if f.seen[id] == d {
 			continue
 		}
@@ -157,57 +157,4 @@ func (f *feed) close() {
 		w.conn.Close()
 	}
 	f.waiters = nil
-}
-
-type liveUpdate struct {
-	state string
-	view  *Response
-}
-
-func follow(h, path, stream string, after uint64, updates chan liveUpdate, stop <-chan struct{}) {
-	for {
-		v, err := request(h, Request{Version: protocolMax, Op: "watch", Path: path, Stream: stream, After: after, WaitMS: 25000}, false)
-		u := liveUpdate{state: "live"}
-		if err == nil && v.Outcome == "ok" {
-			stream, after, u.view = v.Stream, v.Sequence, &v
-		} else {
-			stream, u.state = "", "reconnecting (daemon unavailable)"
-		}
-		select {
-		case <-updates:
-		default:
-		}
-		select {
-		case updates <- u:
-		case <-stop:
-			return
-		}
-		if u.view == nil {
-			select {
-			case <-stop:
-				return
-			case <-time.After(time.Second):
-			}
-		}
-	}
-}
-
-type snapshotOrder map[string]bool
-
-// Action responses carry the sequence committed before their own change.
-// Only the follower may introduce a stream; action responses may be delayed.
-func (o snapshotOrder) accepts(update, current Response, actionResponse bool) bool {
-	switch {
-	case o[update.Stream]:
-		return false
-	case update.Stream != current.Stream:
-		return !actionResponse
-	}
-	return update.Sequence > current.Sequence || actionResponse && update.Sequence == current.Sequence
-}
-
-func (o snapshotOrder) adopt(next, current Response) {
-	if next.Stream != current.Stream && current.Stream != "" {
-		o[current.Stream] = true
-	}
 }

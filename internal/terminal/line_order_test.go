@@ -1,4 +1,4 @@
-package engine
+package terminal
 
 import (
 	"bufio"
@@ -12,6 +12,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 )
 
 func TestLineOrderingHelper(t *testing.T) {
@@ -50,7 +52,7 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 					}
 					go func() {
 						defer conn.Close()
-						var q Request
+						var q engine.Request
 						if json.NewDecoder(conn).Decode(&q) != nil {
 							return
 						}
@@ -79,7 +81,8 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 							v = onStream(state, "daemon-C", 1, "token-C")
 							v.Run.Status = "cancelled"
 						}
-						stamp(&v, q.Version)
+						v.Version = q.Version
+						v.Protocol = &engine.Protocol{Version: v.Version, Min: 1, Max: engine.MaxVersion}
 						json.NewEncoder(conn).Encode(v)
 						if q.Op == "watch" {
 							close(sent)

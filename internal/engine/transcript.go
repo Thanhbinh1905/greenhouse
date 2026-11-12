@@ -2,7 +2,6 @@ package engine
 
 import (
 	"bytes"
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -39,7 +38,7 @@ func secretName(name string) bool {
 	return false
 }
 
-func redact(b []byte) []byte {
+func Redact(b []byte) []byte {
 	for _, variable := range os.Environ() {
 		name, value, _ := strings.Cut(variable, "=")
 		if secretName(name) && len(value) >= 8 {
@@ -55,7 +54,7 @@ func redact(b []byte) []byte {
 func transcriptName(run string) string { return filepath.Join("transcripts", run+".log") }
 
 func appendTranscript(run, header string, stdout, stderr []byte) {
-	h, err := home()
+	h, err := Home()
 	if err != nil || run == "" {
 		return
 	}
@@ -77,7 +76,7 @@ func appendTranscript(run, header string, stdout, stderr []byte) {
 	section.WriteString("\n--- stderr ---\n")
 	section.Write(stderr)
 	section.WriteString("\n")
-	out := redact(section.Bytes())
+	out := Redact(section.Bytes())
 	if room := transcriptLimit - len(transcriptOmitted) - int(info.Size()); len(out) > room {
 		out = append(out[:max(room, 0)], transcriptOmitted...)
 	}
@@ -85,7 +84,7 @@ func appendTranscript(run, header string, stdout, stderr []byte) {
 }
 
 func readTranscript(run string) (*TranscriptView, error) {
-	h, err := home()
+	h, err := Home()
 	if err != nil {
 		return nil, err
 	}
@@ -96,22 +95,4 @@ func readTranscript(run string) (*TranscriptView, error) {
 	}
 	view.Bytes, view.Content = len(b), string(b)
 	return view, nil
-}
-
-const transcriptTailLines = 40
-
-func transcriptPage(run string, t *TranscriptView) string {
-	var page strings.Builder
-	fmt.Fprintf(&page, "Transcript log for run %s\nRedacted raw reviewer and fixer output; normal use never needs it.\nFile: %s | %d of %d bytes\n", run, t.Path, t.Bytes, t.Limit)
-	if t.Bytes == 0 {
-		page.WriteString("No agent has run yet.\n")
-		return page.String()
-	}
-	lines := strings.Split(strings.TrimRight(t.Content, "\n"), "\n")
-	if len(lines) > transcriptTailLines {
-		fmt.Fprintf(&page, "Showing the last %d of %d lines; AXI op transcript returns all of it.\n", transcriptTailLines, len(lines))
-		lines = lines[len(lines)-transcriptTailLines:]
-	}
-	page.WriteString(strings.Join(lines, "\n") + "\n")
-	return page.String()
 }

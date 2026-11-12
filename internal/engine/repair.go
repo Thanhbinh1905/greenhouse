@@ -103,7 +103,7 @@ func executableDigest(path string) (string, error) {
 
 func trustedFixer() (FixerConfig, error) {
 	var cfg FixerConfig
-	h, e := home()
+	h, e := Home()
 	if e != nil {
 		return cfg, e
 	}
@@ -125,7 +125,7 @@ func trustedFixer() (FixerConfig, error) {
 	if cfg.Email == "" {
 		cfg.Email = "greenhouse@example.invalid"
 	}
-	if !validText(cfg.Name) || !validText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
+	if !ValidText(cfg.Name) || !ValidText(cfg.Email) || len(cfg.Checks) == 0 || len(cfg.Checks) > 16 {
 		return cfg, errors.New("repair requires explicitly trusted check commands in fixer.json")
 	}
 
@@ -142,7 +142,7 @@ func trustedFixer() (FixerConfig, error) {
 	return cfg, nil
 }
 func repairBinding(r *Run, cfg FixerConfig, executable string, checks []string, selected []Finding) string {
-	return digest(struct {
+	return Digest(struct {
 		Intent, Input, Candidate, Target, Diff string
 		Config                                 Snapshot
 		Review                                 string
@@ -174,7 +174,7 @@ func repairable(r *Run) bool {
 		return false
 	}
 	for _, f := range r.Review.Result.Findings {
-		if f.Priority != "P3" && validText(f.Action) && f.Head == r.Candidate {
+		if f.Priority != "P3" && ValidText(f.Action) && f.Head == r.Candidate {
 			return true
 		}
 	}
@@ -218,7 +218,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	var names []string
 	for _, id := range q.Selected {
 		f, ok := found[id]
-		if !ok || seen[id] || f.Head != r.Candidate || f.Priority == "P3" || !validText(f.Action) {
+		if !ok || seen[id] || f.Head != r.Candidate || f.Priority == "P3" || !ValidText(f.Action) {
 			return errors.New("stale, duplicate, informational or nonactionable finding")
 		}
 		seen[id] = true
@@ -242,7 +242,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	if e != nil {
 		return e
 	}
-	h, e := home()
+	h, e := Home()
 	if e != nil {
 		return e
 	}
@@ -258,7 +258,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 		}
 	}
 	id := opaque()
-	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready", Run: r.ID}
+	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: Digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready", Run: r.ID}
 	x.Authorities = deferralAuthorities(r)
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Diff string
