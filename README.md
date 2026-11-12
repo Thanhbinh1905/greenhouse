@@ -28,7 +28,7 @@ Selected repair still requires explicitly trusted checks in `fixer.json`. Full d
 ## Build and open
 
 ```sh
-go build -o greenhouse .
+go build -o greenhouse ./cmd/greenhouse
 cd /path/to/a/git/worktree
 /path/to/greenhouse
 ```
@@ -370,7 +370,7 @@ go test ./...
 go test -race ./...
 go vet ./...
 test -z "$(gofmt -l *.go)"
-go build -o "$TMPDIR/greenhouse" .
+go build -o "$TMPDIR/greenhouse" ./cmd/greenhouse
 python3 tools/terminal_check.py "$TMPDIR/greenhouse" docs/evidence
 python3 tools/native_start_check.py "$TMPDIR/greenhouse" docs/evidence/native
 python3 tools/recovery_check.py "$TMPDIR/greenhouse" docs/evidence/recovery
