@@ -16,10 +16,10 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@v4
+      - name: Set TMPDIR
+        run: echo "TMPDIR=$RUNNER_TEMP" >> "$GITHUB_ENV"
       - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
