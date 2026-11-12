@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 const currentConfigVersion = 2
@@ -206,8 +208,8 @@ func migrateConfig(actor, reason, action string) ([]Migration, error) {
 		if decodeConfig(name, migrated, after) != nil || digest(before) != digest(after) {
 			return nil, fmt.Errorf("%s: migration would not be lossless; no file was changed", name)
 		}
-		backup := fmt.Sprintf("%s.v%d-%s.bak", name, version, bytesDigest(b)[:12])
-		pending = append(pending, pendingMigration{Migration{File: name, From: version, To: currentConfigVersion, Backup: backup, Before: bytesDigest(b), After: bytesDigest(migrated), Actor: actor, Reason: reason, Action: action}, b, migrated, path, filepath.Join(h, backup)})
+		backup := fmt.Sprintf("%s.v%d-%s.bak", name, version, runner.BytesDigest(b)[:12])
+		pending = append(pending, pendingMigration{Migration{File: name, From: version, To: currentConfigVersion, Backup: backup, Before: runner.BytesDigest(b), After: runner.BytesDigest(migrated), Actor: actor, Reason: reason, Action: action}, b, migrated, path, filepath.Join(h, backup)})
 	}
 	var records []Migration
 	for _, m := range pending {

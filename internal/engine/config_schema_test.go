@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func writeRaw(t *testing.T, path, content string) {
@@ -102,12 +104,12 @@ func TestLegacyConfigurationMigratesExplicitlyWithBackup(t *testing.T) {
 			t.Fatalf("incomplete migration record: %v", record)
 		}
 		backup, err := os.ReadFile(filepath.Join(home, record["backup"].(string)))
-		if err != nil || string(backup) != legacy[name] || record["before"] != bytesDigest(backup) {
+		if err != nil || string(backup) != legacy[name] || record["before"] != runner.BytesDigest(backup) {
 			t.Fatalf("backup of %s does not hold the original bytes: %v %q", name, err, backup)
 		}
 		info, _ := os.Stat(filepath.Join(home, record["backup"].(string)))
 		after, _ := os.ReadFile(filepath.Join(home, name))
-		if info.Mode().Perm() != 0600 || record["after"] != bytesDigest(after) {
+		if info.Mode().Perm() != 0600 || record["after"] != runner.BytesDigest(after) {
 			t.Fatalf("backup mode or after digest wrong: %v %v", info.Mode(), record)
 		}
 		var old, current map[string]json.RawMessage

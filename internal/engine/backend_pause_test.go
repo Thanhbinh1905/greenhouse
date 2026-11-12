@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func setModes(t *testing.T, root, backend string, modes ...string) {
@@ -131,7 +133,7 @@ func TestPipelineRepairPauseRestoresCandidateAndResumes(t *testing.T) {
 		t.Fatalf("partial edits must be kept as evidence: %v", last)
 	}
 	paused := p["repairs"].([]any)[0].(map[string]any)
-	if paused["status"] != "paused" || paused["partial_digest"] != bytesDigest([]byte(paused["partial"].(string))) || paused["partial_bytes"].(float64) == 0 {
+	if paused["status"] != "paused" || paused["partial_digest"] != runner.BytesDigest([]byte(paused["partial"].(string))) || paused["partial_bytes"].(float64) == 0 {
 		t.Fatalf("the paused repair keeps its edits with digest and size: %v", paused)
 	}
 	v = mutate(t, bin, repo, home, v, "resume", "resume-repair", nil)

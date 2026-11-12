@@ -19,6 +19,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type BackendFailure struct {
@@ -467,9 +469,9 @@ func trustedAgent(backend, model string) (ReviewerConfig, error) {
 		cfg.InstructionsFile = filepath.Join(h, "native-instructions.txt")
 		ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 		defer cancel()
-		out, stderr := &boundedBuffer{limit: 65536}, &boundedBuffer{limit: 65536}
-		_, err = runProcess(ctx, "", executable, []string{"mcp", "list", "--json"}, nil, agentEnv(backend), out, stderr)
-		if err != nil || out.exceeded {
+		out, stderr := runner.NewBuffer(65536), runner.NewBuffer(65536)
+		_, err = runner.RunProcess(ctx, "", executable, []string{"mcp", "list", "--json"}, nil, agentEnv(backend), out, stderr)
+		if err != nil || out.Exceeded() {
 			return cfg, errors.New("cannot inspect Codex MCP configuration safely; run codex mcp list")
 		}
 		var servers []struct {
@@ -946,25 +948,25 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	env = append(env, "TMPDIR="+scratch)
 	policy, confinement := confinementFor("fixer", fixerAgent(x.Config), []string{x.Worktree, scratch})
 	x.Confinement = &confinement
-	exe, args, err := confinedCommand(policy, x.Config.Executable, x.Args)
+	exe, args, err := runner.ConfinedCommand(policy, x.Config.Executable, x.Args)
 	if err != nil {
 		return fixerRun{log: "confinement launcher unavailable", err: err}
 	}
 	runCtx, stop := context.WithCancel(ctx)
 	defer stop()
-	out, stderr := &boundedBuffer{limit: limit}, &boundedBuffer{limit: 65536}
-	code, err := runProcess(runCtx, x.Worktree, exe, args, x.Input, env, stallWatch(out, backend, stop), stderr)
+	out, stderr := runner.NewBuffer(limit), runner.NewBuffer(65536)
+	code, err := runner.RunProcess(runCtx, x.Worktree, exe, args, x.Input, env, stallWatch(out, backend, stop), stderr)
 	appendTranscript(x.Run, fmt.Sprintf("fixer %s | %s %s | exit=%d", x.ID, backend, x.Config.Model, code), out.Bytes(), stderr.Bytes())
-	run := fixerRun{log: fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded), stdout: out.Bytes(), stderr: stderr.Bytes(), err: err}
-	if reason, failed := confinementFailed(code, run.stderr); failed && err == nil {
+	run := fixerRun{log: fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.Exceeded() || stderr.Exceeded()), stdout: out.Bytes(), stderr: stderr.Bytes(), err: err}
+	if reason, failed := runner.ConfinementFailed(code, run.stderr); failed && err == nil {
 		run.log += "; " + reason
 		run.err = errors.New(reason)
 		return run
 	}
-	if err == nil && (out.exceeded || stderr.exceeded) {
+	if err == nil && (out.Exceeded() || stderr.Exceeded()) {
 		run.err = errors.New("bounded output exceeded")
 	}
-	if !errors.Is(err, ErrWriterTreeUnknown) && ctx.Err() == nil && !out.exceeded {
+	if !errors.Is(err, runner.ErrWriterTreeUnknown) && ctx.Err() == nil && !out.Exceeded() {
 		run.failure = classifyBackend(backend, code, run.stdout, run.stderr, time.Now())
 		if run.failure != nil && (run.failure.diagnosticOnly || run.failure.Reason == "model_mismatch") {
 			run.failure = nil

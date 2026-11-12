@@ -5,14 +5,16 @@ import (
 	"errors"
 	"strings"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func nativeModelCatalog(executable string) (map[string]bool, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	out, stderr := &boundedBuffer{limit: 65536}, &boundedBuffer{limit: 65536}
-	_, err := runProcess(ctx, "", executable, []string{"--list-models", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files", "--no-approve", "--offline"}, nil, agentEnv(backendPi), out, stderr)
-	if err != nil || out.exceeded {
+	out, stderr := runner.NewBuffer(65536), runner.NewBuffer(65536)
+	_, err := runner.RunProcess(ctx, "", executable, []string{"--list-models", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files", "--no-approve", "--offline"}, nil, agentEnv(backendPi), out, stderr)
+	if err != nil || out.Exceeded() {
 		return nil, errors.New("pi model catalog unavailable; use pi --list-models")
 	}
 	catalog := map[string]bool{}
