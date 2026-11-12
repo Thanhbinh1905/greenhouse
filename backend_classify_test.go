@@ -190,3 +190,28 @@ func TestDiagnosticRedactsCamelCaseAPIKey(t *testing.T) {
 		}
 	}
 }
+
+func TestClassificationUsesTerminalStructuredOutcome(t *testing.T) {
+	for _, c := range []struct{ backend, failure string }{
+		{"pi", `{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"404 model not found"}}`},
+		{"codex", `{"type":"turn.failed","error":{"message":"model not found"}}`},
+		{"claude", `{"type":"result","is_error":true,"api_error_status":401,"result":"authentication failed"}`},
+	} {
+		t.Run(c.backend, func(t *testing.T) {
+			var success []byte
+			if c.backend == "pi" {
+				success = []byte(`{"type":"message_end","message":{"role":"assistant","stopReason":"stop"}}`)
+			} else {
+				success, _, _ = recorded(t, c.backend, "success")
+			}
+			recovered := append([]byte(c.failure+"\n"), success...)
+			if got := classifyBackend(c.backend, 0, recovered, nil, time.Now()); got != nil {
+				t.Fatalf("recovered failure classified: %+v", got)
+			}
+			terminal := append(append([]byte{}, success...), []byte("\n"+c.failure)...)
+			if got := classifyBackend(c.backend, 0, terminal, nil, time.Now()); got == nil {
+				t.Fatal("terminal structured failure ignored")
+			}
+		})
+	}
+}

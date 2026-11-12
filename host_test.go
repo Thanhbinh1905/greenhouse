@@ -101,3 +101,53 @@ func TestHostCodexDefaultModelUsage(t *testing.T) {
 		t.Fatalf("attempt total differs: %v", attempts)
 	}
 }
+
+func TestHostRecoveredStructuredError(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	installFake(t, home, `print(json.dumps({'type':'message_end','message':{'role':'assistant','stopReason':'error','errorMessage':'404 model not found','content':[]}}))`)
+	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
+	v := axi(t, bin, repo, home, string(b))
+	v = hostPrepare(t, bin, repo, home, v, target, "-recovered-error")
+	v = hostCall(t, bin, repo, home, v, "review", "recovered-review", map[string]any{"grant": "recovered-round"})
+	if v["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", v)
+	}
+	result := hostSettle(t, bin, repo, home)["host_result"].(map[string]any)
+	if result["verdict"] != "findings" || len(result["findings"].([]any)) != 1 || result["reason"] != nil || result["diagnostic"] != nil {
+		t.Fatalf("recovered final findings discarded: %v", result)
+	}
+}
+
+func TestHostRecoveredCodexError(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	installFake(t, home, "")
+	root := installAgentCLIs(t, home)
+	path := filepath.Join(root, "fake-codex")
+	script, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, path, strings.Replace(string(script), "text=verdict()", "print(json.dumps({'type':'error','message':'stream disconnected before completion; reconnecting 1/5'}))\ntext=verdict()", 1))
+	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
+	v := axi(t, bin, repo, home, string(b))
+	v = hostPrepare(t, bin, repo, home, v, target, "-codex-recovery")
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 1, "rules": []string{"unslop"}, "reviewer_backend": "codex", "reviewer_model": "", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	v = hostCall(t, bin, repo, home, v, "apply", "codex-recovery", map[string]any{"settings": settings})
+	v = hostCall(t, bin, repo, home, v, "resolve-rules", "codex-recovery-rules", nil)
+	v = hostCall(t, bin, repo, home, v, "review", "codex-recovery-review", map[string]any{"grant": "codex-recovery-round"})
+	if v["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", v)
+	}
+	result := hostSettle(t, bin, repo, home)["host_result"].(map[string]any)
+	if result["status"] != "clean-review" || result["verdict"] != "clean" || result["model"] != "gpt-5.6-luna" || result["reason"] != nil || result["diagnostic"] != nil {
+		t.Fatalf("recovered clean verdict discarded: %v", result)
+	}
+}

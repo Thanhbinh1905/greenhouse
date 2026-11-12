@@ -55,6 +55,8 @@ func backendDiagnostics(stdout, stderr []byte) string {
 	var messages []string
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
 		switch field(event, "type") {
+		case "turn.completed":
+			messages = nil
 		case "error":
 			messages = append(messages, field(event, "message"))
 		case "result":
@@ -62,8 +64,11 @@ func backendDiagnostics(stdout, stderr []byte) string {
 				IsError bool   `json:"is_error"`
 				Result  string `json:"result"`
 			}
-			if json.Unmarshal(mapJSON(event), &result) == nil && result.IsError {
-				messages = append(messages, result.Result)
+			if json.Unmarshal(mapJSON(event), &result) == nil {
+				messages = nil
+				if result.IsError {
+					messages = append(messages, result.Result)
+				}
 			}
 		case "message_end":
 			var message struct {
@@ -71,8 +76,11 @@ func backendDiagnostics(stdout, stderr []byte) string {
 				Stop  string `json:"stopReason"`
 				Error string `json:"errorMessage"`
 			}
-			if json.Unmarshal(event["message"], &message) == nil && message.Role == "assistant" && message.Stop == "error" {
-				messages = append(messages, message.Error)
+			if json.Unmarshal(event["message"], &message) == nil && message.Role == "assistant" {
+				messages = nil
+				if message.Stop == "error" {
+					messages = append(messages, message.Error)
+				}
 			}
 		case "turn.failed":
 			var failure struct {
@@ -181,7 +189,11 @@ func classifyClaude(stdout []byte) *BackendFailure {
 				APIError string `json:"api_error"`
 				Result   string `json:"result"`
 			}
-			if json.Unmarshal(mapJSON(event), &result) != nil || !result.IsError {
+			if json.Unmarshal(mapJSON(event), &result) != nil {
+				return
+			}
+			failure = nil
+			if !result.IsError {
 				return
 			}
 			status := 0
@@ -259,8 +271,10 @@ func classifyCodex(stdout []byte, now time.Time) *BackendFailure {
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
 		switch field(event, "type") {
 		case "error":
+			failure = nil
 			last = field(event, "message")
 		case "turn.failed":
+			failure = nil
 			var e struct {
 				Message string `json:"message"`
 			}
@@ -270,6 +284,7 @@ func classifyCodex(stdout []byte, now time.Time) *BackendFailure {
 				failure = &BackendFailure{Reason: reason, Message: safeMessage(e.Message)}
 			}
 		case "turn.completed":
+			failure = nil
 			last = ""
 		}
 	})
