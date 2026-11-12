@@ -1,4 +1,4 @@
-module greenhouse
+module github.com/Thanhbinh1905/greenhouse
 
 go 1.24.2
 
