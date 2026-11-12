@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 const overrideName = ".greenhouse.json"
@@ -115,7 +117,7 @@ func overrideDigest(b []byte) string {
 	if b == nil {
 		return "absent"
 	}
-	return bytesDigest(b)
+	return runner.BytesDigest(b)
 }
 
 func repositoryDefaults(s *Store, id Identity) (Settings, map[string]string, RepositoryStatus) {
@@ -259,7 +261,7 @@ func saveRepositoryOverride(s *Store, id Identity, settings Settings, actor, rea
 	if err := replaceFile(status.Path, content, 0644); err != nil {
 		return err
 	}
-	s.Trust[id.Repository] = Trust{Repository: id.Repository, Path: status.Path, Digest: bytesDigest(content), Actor: actor, Reason: "saved: " + reason, Action: action}
+	s.Trust[id.Repository] = Trust{Repository: id.Repository, Path: status.Path, Digest: runner.BytesDigest(content), Actor: actor, Reason: "saved: " + reason, Action: action}
 	return nil
 }
 
@@ -325,7 +327,7 @@ func sourceClean(worktree, trusted string) error {
 			continue
 		}
 		if len(entry) > 3 && entry[3:] == overrideName && (entry[:2] == "??" || entry[:2] == " M") {
-			if _, b, err := readOverride(worktree); err == nil && b != nil && bytesDigest(b) == trusted {
+			if _, b, err := readOverride(worktree); err == nil && b != nil && runner.BytesDigest(b) == trusted {
 				continue
 			}
 		}

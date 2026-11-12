@@ -5,6 +5,8 @@ import (
 	"errors"
 	"io"
 	"reflect"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type InputCriterion struct {
@@ -55,7 +57,7 @@ func emitInput(w io.Writer, s RuleSnapshot, role string) (InputIdentity, error) 
 			continue
 		}
 		p, err := parsePack(r.Bytes)
-		if err != nil || r.Digest != bytesDigest(r.Bytes) || !reflect.DeepEqual(p, r.Pack) {
+		if err != nil || r.Digest != runner.BytesDigest(r.Bytes) || !reflect.DeepEqual(p, r.Pack) {
 			return InputIdentity{}, errors.New("resolved pack content mismatch")
 		}
 		for _, c := range r.Pack.Criteria {
@@ -77,5 +79,5 @@ func emitInput(w io.Writer, s RuleSnapshot, role string) (InputIdentity, error) 
 	if e != nil {
 		return InputIdentity{}, e
 	}
-	return InputIdentity{role, s.Candidate, s.ID, bytesDigest(b), b}, nil
+	return InputIdentity{role, s.Candidate, s.ID, runner.BytesDigest(b), b}, nil
 }

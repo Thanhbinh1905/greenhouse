@@ -22,6 +22,8 @@ import (
 	"time"
 	"unicode"
 	"unsafe"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type Settings struct {
@@ -335,7 +337,7 @@ func load(h string) (*Store, error) {
 		}
 		if r.Review != nil {
 			x := r.Review
-			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != bytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != bytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || !reviewArgsMatch(x) {
+			if r.ReviewUsed < 1 && x.Status != "paused" || x.ID == "" || x.Backend != executionBackends[backendOf(x.Config)] || x.InputDigest != runner.BytesDigest(x.Input) || x.ConfigDigest != reviewerConfigDigest(x.Config) || x.Rules.Digest != runner.BytesDigest(x.Rules.Content) || (x.Rules.Candidate != r.Candidate && r.Pipeline == nil && (r.Repair == nil || x.Rules.Candidate != r.Repair.Base)) || !reviewArgsMatch(x) {
 				return nil, errors.New("invalid durable review evidence")
 			}
 		}
@@ -979,7 +981,7 @@ func daemon(h string) error {
 		failure                     *BackendFailure
 		answer                      agentAnswer
 		snapshot                    string
-		confinement                 *Confinement
+		confinement                 *runner.Confinement
 	}
 	type repairProgress struct {
 		run, id string
@@ -1054,7 +1056,7 @@ func daemon(h string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			active[r.ID] = cancel
 			o := stepOutcome{Run: r.ID, Step: step.ID}
-			ctx = withExecutor(ctx, step.ID)
+			ctx = runner.WithExecutor(ctx, step.ID, home)
 			pc, target, candidate, source := *p, r.Target, r.Candidate, r.Submitted
 			var review Execution
 			if r.Review != nil {
@@ -1123,7 +1125,7 @@ func daemon(h string) error {
 				}
 				ctx, cancel := context.WithCancel(context.Background())
 				active[r.ID] = cancel
-				ctx = withExecutor(ctx, x.ID)
+				ctx = runner.WithExecutor(ctx, x.ID, home)
 				go func(runID string, repair Repair, source Identity, ctx context.Context, cancel context.CancelFunc) {
 					defer cancel()
 					executeRepair(ctx, &repair, source, func(value *Repair) bool {

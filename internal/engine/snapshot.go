@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type TreeSnapshot struct {
@@ -40,9 +42,9 @@ const (
 func treeListing(worktree, commit string) ([]byte, []treeEntry, error) {
 	c := exec.Command("git", "-C", worktree, "ls-tree", "-r", "-z", "-l", "--full-tree", commit)
 	c.Env = gitEnv()
-	out := &boundedBuffer{limit: 64 << 20}
+	out := runner.NewBuffer(64 << 20)
 	c.Stdout = out
-	if err := c.Run(); err != nil || out.exceeded {
+	if err := c.Run(); err != nil || out.Exceeded() {
 		return nil, nil, errors.New("cannot list the candidate tree")
 	}
 	var entries []treeEntry
@@ -83,7 +85,7 @@ func snapshotOf(worktree, commit string) (*TreeSnapshot, error) {
 	if err != nil {
 		return nil, errors.New("cannot resolve the candidate tree")
 	}
-	s := &TreeSnapshot{Commit: commit, Tree: strings.TrimSpace(string(tree)), Digest: bytesDigest(listing), Entries: len(entries)}
+	s := &TreeSnapshot{Commit: commit, Tree: strings.TrimSpace(string(tree)), Digest: runner.BytesDigest(listing), Entries: len(entries)}
 	for _, e := range entries {
 		s.Bytes += e.size
 	}
@@ -106,7 +108,7 @@ func materializeWithOpen(worktree string, s *TreeSnapshot, root string, openFile
 	if err != nil {
 		return err
 	}
-	if bytesDigest(listing) != s.Digest {
+	if runner.BytesDigest(listing) != s.Digest {
 		return errors.New("candidate tree differs from the admitted snapshot")
 	}
 	if err := os.Mkdir(root, 0700); err != nil {
@@ -309,7 +311,7 @@ func reverifySnapshot(x *Execution) string {
 	if err != nil {
 		return "unverified: the candidate tree is unavailable"
 	}
-	if bytesDigest(listing) != x.Snapshot.Digest {
+	if runner.BytesDigest(listing) != x.Snapshot.Digest {
 		return "failed: the candidate tree differs from the bound digest"
 	}
 	tree := filepath.Join(dir, "tree")
@@ -326,7 +328,7 @@ func reverifySnapshot(x *Execution) string {
 	return "verified after restart: the review copy matches the bound digest"
 }
 
-func recordReviewEvidence(x *Execution, check string, confinement *Confinement) {
+func recordReviewEvidence(x *Execution, check string, confinement *runner.Confinement) {
 	if confinement != nil {
 		x.Confinement = confinement
 	}

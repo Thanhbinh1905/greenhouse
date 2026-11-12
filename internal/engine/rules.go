@@ -2,8 +2,6 @@ package engine
 
 import (
 	"bytes"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +13,8 @@ import (
 	"syscall"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 const maxPackBytes = 65536
@@ -56,7 +56,6 @@ var builtins = map[string]string{
 	"no-comments": `{"version":1,"id":"no-comments","criteria":[{"id":"necessary-comments","classification":"required","text":"Flag changed comments that merely narrate code or explain an obvious edit. Keep external-quirk explanations, license notices, generated markers, directives and required documentation comments.","repair_guidance":"Remove only redundant changed comments; retain comments that explain constraints not evident in code and every listed exception."}]}`,
 }
 
-func bytesDigest(b []byte) string { h := sha256.Sum256(b); return hex.EncodeToString(h[:]) }
 func validText(s string) bool {
 	if strings.TrimSpace(s) == "" || len(s) > 8192 || !utf8.ValidString(s) {
 		return false
@@ -175,7 +174,7 @@ func resolveRules(r *Run) RuleSnapshot {
 		}
 		if err == nil && len(raw) <= maxPackBytes {
 			e.Bytes = raw
-			e.Digest = bytesDigest(raw)
+			e.Digest = runner.BytesDigest(raw)
 		}
 		var p *RulePack
 		if err == nil {

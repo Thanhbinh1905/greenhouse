@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestReviewRequiresExplicitIntent(t *testing.T) {
@@ -148,7 +150,7 @@ func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
 	if err := json.Unmarshal(identity.Content, &retained); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(delivered, retained) || identity.Digest != bytesDigest(identity.Content) {
+	if !reflect.DeepEqual(delivered, retained) || identity.Digest != runner.BytesDigest(identity.Content) {
 		t.Fatal("emitted criteria differ from retained input identity")
 	}
 	if mutate(t, bin, repo, home, done, "review", "review-2", nil)["outcome"] != "refused" {

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type CommandPlan struct {
@@ -94,7 +96,7 @@ type stepOutcome struct {
 	Failure     *BackendFailure
 	Answer      agentAnswer
 	Snapshot    string
-	Confinement *Confinement
+	Confinement *runner.Confinement
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
@@ -645,7 +647,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 	if len(x.Input) > 2*1024*1024 {
 		return errors.New("repair input exceeds 2 MiB")
 	}
-	x.InputDigest = bytesDigest(x.Input)
+	x.InputDigest = runner.BytesDigest(x.Input)
 	x.Binding = digest([]any{r.Input, r.Candidate, st.Inputs, x.InputDigest, x.ConfigDigest, fixerDigest})
 	p.Repairs = append(p.Repairs, x)
 	used := p.RepairUsed + 1
@@ -848,14 +850,14 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 		return res, nil
 	}
 	out := &tailBuffer{limit: 16384}
-	code, err := runProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), out, out)
+	code, err := runner.RunProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), out, out)
 	res.Exit = code
 	res.Output = out.String()
 	res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", code, out.total, out.truncated())
 	switch {
-	case errors.Is(err, ErrWriterTreeUnknown):
+	case errors.Is(err, runner.ErrWriterTreeUnknown):
 		res.Status = "unknown-outcome"
-		return res, ErrWriterTreeUnknown
+		return res, runner.ErrWriterTreeUnknown
 	case errors.Is(err, context.Canceled):
 		res.Status = "cancelled"
 	case err != nil || code != 0:
@@ -1249,7 +1251,7 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		run := runFixer(ctx, x, filepath.Join(agentDir, "agent"))
 		e = run.err
 		x.Log = run.log
-		if errors.Is(e, ErrWriterTreeUnknown) {
+		if errors.Is(e, runner.ErrWriterTreeUnknown) {
 			merging = false
 			x.Status = "unknown-outcome"
 			return e

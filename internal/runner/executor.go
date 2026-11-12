@@ -1,4 +1,4 @@
-package engine
+package runner
 
 import (
 	"bytes"
@@ -23,7 +23,7 @@ import (
 // that kept the inherited descriptor lives, captures bounded output in
 // `<id>.out` and `<id>.err`, and writes `<id>.json` only after it reaped its
 // whole process tree. A restarted daemon reads these files instead of PIDs.
-type executorRecord struct {
+type ExecutorRecord struct {
 	InputDigest string `json:"input_digest"`
 	Exit        int    `json:"exit"`
 	Stopped     bool   `json:"stopped"`
@@ -33,27 +33,28 @@ type executorRecord struct {
 }
 
 const (
-	executorStdoutLimit = 4 * 1024 * 1024
-	executorStderrLimit = 65536
-	executorTimeout     = 10 * time.Minute
-	exitDetachedOutput  = 253
+	StdoutLimit        = 4 * 1024 * 1024
+	StderrLimit        = 65536
+	Timeout            = 10 * time.Minute
+	exitDetachedOutput = 253
 )
 
-var errDetachedOutput = errors.New("a descendant kept the output open after the executor exited")
+var ErrDetachedOutput = errors.New("a descendant kept the output open after the executor exited")
 
 type executorSequence struct {
-	base string
-	next atomic.Int32
+	base        string
+	resolveHome func() (string, error)
+	next        atomic.Int32
 }
 
 type executorKey struct{}
 
-func withExecutor(ctx context.Context, base string) context.Context {
-	return context.WithValue(ctx, executorKey{}, &executorSequence{base: base})
+func WithExecutor(ctx context.Context, base string, resolveHome func() (string, error)) context.Context {
+	return context.WithValue(ctx, executorKey{}, &executorSequence{base: base, resolveHome: resolveHome})
 }
 
-func executorDir() (string, error) {
-	h, err := home()
+func executorDir(resolveHome func() (string, error)) (string, error) {
+	h, err := resolveHome()
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +67,7 @@ func nextExecutor(ctx context.Context) string {
 	if seq == nil {
 		return "-"
 	}
-	dir, err := executorDir()
+	dir, err := executorDir(seq.resolveHome)
 	if err != nil {
 		return "-"
 	}
@@ -171,8 +172,8 @@ func runChild(args []string) int {
 			return 254
 		}
 		defer stderr.Close()
-		out = &capturedOutput{file: stdout, limit: executorStdoutLimit + 1, pass: os.Stdout}
-		errOut = &capturedOutput{file: stderr, limit: executorStderrLimit + 1, pass: os.Stderr}
+		out = &capturedOutput{file: stdout, limit: StdoutLimit + 1, pass: os.Stdout}
+		errOut = &capturedOutput{file: stderr, limit: StderrLimit + 1, pass: os.Stderr}
 		child.Stdout, child.Stderr = out, errOut
 	}
 	if err := child.Start(); err != nil {
@@ -210,7 +211,7 @@ func runChild(args []string) int {
 	if record != "-" {
 		out.file.Sync()
 		errOut.file.Sync()
-		data, _ := json.Marshal(executorRecord{InputDigest: bytesDigest(input), Exit: code, Stopped: stopped, Reaped: reaped, Stdout: out.total, Stderr: errOut.total})
+		data, _ := json.Marshal(ExecutorRecord{InputDigest: BytesDigest(input), Exit: code, Stopped: stopped, Reaped: reaped, Stdout: out.total, Stderr: errOut.total})
 		if writeFileDurably(record+".json", data) != nil {
 			return 254
 		}
@@ -221,18 +222,18 @@ func runChild(args []string) int {
 	return code
 }
 
-type executorEvidence struct {
+type ExecutorEvidence struct {
 	ID     string `json:"id"`
 	State  string `json:"state"`
 	Exit   int    `json:"exit"`
 	Detail string `json:"detail,omitempty"`
 }
 
-type observedExecutor struct {
-	executorEvidence
-	record executorRecord
-	stdout []byte
-	stderr []byte
+type ObservedExecutor struct {
+	ExecutorEvidence
+	Record ExecutorRecord
+	Stdout []byte
+	Stderr []byte
 }
 
 func leaseHeld(path string) bool {
@@ -248,38 +249,38 @@ func leaseHeld(path string) bool {
 	return false
 }
 
-func observeExecutors(base string) []observedExecutor {
-	dir, err := executorDir()
+func ObserveExecutors(base string, resolveHome func() (string, error)) []ObservedExecutor {
+	dir, err := executorDir(resolveHome)
 	if err != nil {
 		return nil
 	}
 	leases, _ := filepath.Glob(filepath.Join(dir, base+".*.lease"))
 	sort.Slice(leases, func(i, j int) bool { return executorIndex(leases[i]) < executorIndex(leases[j]) })
-	var out []observedExecutor
+	var out []ObservedExecutor
 	for _, lease := range leases {
 		path := strings.TrimSuffix(lease, ".lease")
-		o := observedExecutor{executorEvidence: executorEvidence{ID: filepath.Base(path), State: "unverified", Exit: -1}}
+		o := ObservedExecutor{ExecutorEvidence: ExecutorEvidence{ID: filepath.Base(path), State: "unverified", Exit: -1}}
 		if leaseHeld(lease) {
 			o.State, o.Detail = "running", "a live process holds the executor lease"
 			out = append(out, o)
 			continue
 		}
 		data, err := os.ReadFile(path + ".json")
-		if err != nil || json.Unmarshal(data, &o.record) != nil {
+		if err != nil || json.Unmarshal(data, &o.Record) != nil {
 			o.Detail = "the runner left no complete exit record"
 			out = append(out, o)
 			continue
 		}
-		o.Exit = o.record.Exit
+		o.Exit = o.Record.Exit
 		switch {
-		case !o.record.Reaped:
+		case !o.Record.Reaped:
 			o.Detail = "the runner could not verify that its process tree was reaped"
-		case o.record.Stopped:
+		case o.Record.Stopped:
 			o.State, o.Detail = "stopped", "the runner stopped the child before it finished"
 		default:
 			o.State = "exited"
-			o.stdout, _ = readBounded(path+".out", executorStdoutLimit+1)
-			o.stderr, _ = readBounded(path+".err", executorStderrLimit+1)
+			o.Stdout, _ = readBounded(path+".out", StdoutLimit+1)
+			o.Stderr, _ = readBounded(path+".err", StderrLimit+1)
 		}
 		out = append(out, o)
 	}

@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 const fixturePiCatalog = `import sys
@@ -106,7 +108,7 @@ func TestRepairRunnerDeathMarksWriterUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, err := runBounded(context.Background(), root, script, nil, nil, "")
-	if !errors.Is(err, ErrWriterTreeUnknown) {
+	if !errors.Is(err, runner.ErrWriterTreeUnknown) {
 		t.Fatalf("killed runner did not preserve unknown writer outcome: %v", err)
 	}
 	deadline := time.Now().Add(3 * time.Second)

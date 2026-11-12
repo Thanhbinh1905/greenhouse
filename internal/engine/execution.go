@@ -15,6 +15,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type ReviewerConfig struct {
@@ -75,7 +77,7 @@ type Execution struct {
 	Paths        []string             `json:"paths"`
 	Snapshot     *TreeSnapshot        `json:"snapshot,omitempty"`
 	Responses    []ResolutionResponse `json:"responses,omitempty"`
-	Confinement  *Confinement         `json:"confinement,omitempty"`
+	Confinement  *runner.Confinement  `json:"confinement,omitempty"`
 	Thinking     string               `json:"thinking,omitempty"`
 	Status       string               `json:"status"`
 	Log          string               `json:"log"`
@@ -100,10 +102,10 @@ func gitRead(path string, args ...string) ([]byte, error) {
 		}
 	}
 	c.Env = append(c.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
-	b := &boundedBuffer{limit: 1024 * 1024}
+	b := runner.NewBuffer(1024 * 1024)
 	c.Stdout = b
 	err := c.Run()
-	if b.exceeded {
+	if b.Exceeded() {
 		return nil, errors.New("committed input exceeds 1 MiB")
 	}
 	return b.Bytes(), err
@@ -281,7 +283,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		return nil, errors.New("source moved during admission")
 	}
 	r.ReviewBase, r.ReviewBaseReason = base, baseReason
-	return &Execution{ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: bytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -315,20 +317,6 @@ func candidateFiles(worktree, candidate string, names []string) ([]reviewFile, e
 	return files, nil
 }
 
-type boundedBuffer struct {
-	bytes.Buffer
-	limit    int
-	exceeded bool
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	n := len(p)
-	if b.Len()+n > b.limit {
-		b.exceeded = true
-		return n, nil
-	}
-	return b.Buffer.Write(p)
-}
 func reviewerArgs(model string) []string {
 	args := []string{"--print", "--mode", "json", "--no-session", "--tools", "read,grep,find,ls", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-themes", "--no-approve", "--offline"}
 	if model != "" {
@@ -355,7 +343,7 @@ type reviewOutcome struct {
 	Failure     *BackendFailure
 	Answer      agentAnswer
 	Snapshot    string
-	Confinement *Confinement
+	Confinement *runner.Confinement
 }
 
 func executeReview(ctx context.Context, x *Execution) reviewOutcome {
@@ -397,18 +385,18 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 		env = append(env, "PI_CODING_AGENT_SESSION_DIR="+filepath.Join(dir, "sessions"))
 	}
 	policy, confinement := confinementFor("reviewer", x.Config, state)
-	exe, args, e := confinedCommand(policy, x.Config.Executable, x.Args)
+	exe, args, e := runner.ConfinedCommand(policy, x.Config.Executable, x.Args)
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable", Confinement: &confinement}
 	}
-	ctx, cancel := context.WithTimeout(ctx, executorTimeout)
+	ctx, cancel := context.WithTimeout(ctx, runner.Timeout)
 	defer cancel()
-	out, stderr := &boundedBuffer{limit: executorStdoutLimit}, &boundedBuffer{limit: executorStderrLimit}
-	exitCode, err := runProcess(withExecutor(ctx, x.ID), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
+	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
+	exitCode, err := runner.RunProcess(runner.WithExecutor(ctx, x.ID, home), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
 	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, backendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
 	done := reviewFrom(x, exitCode, out, stderr, err, ctx.Err() != nil)
 	done.Confinement = &confinement
-	if reason, failed := confinementFailed(exitCode, stderr.Bytes()); failed {
+	if reason, failed := runner.ConfinementFailed(exitCode, stderr.Bytes()); failed {
 		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; " + reason, Answer: done.Answer, Confinement: &confinement}
 	}
 	if e = verifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
@@ -418,19 +406,19 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	return done
 }
 
-func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err error, cancelled bool) reviewOutcome {
-	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
+func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err error, cancelled bool) reviewOutcome {
+	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.Exceeded() || stderr.Exceeded())
 	usage := agentAnswer{Model: backendReportedModel(x.Config.Backend, out.Bytes(), stderr.Bytes())}
 	usage.Usage = agentTokenUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
 	usage.CostUSD, usage.Tokens = usage.Usage.CostUSD, usage.Usage.Tokens
-	usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+	usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 	usage.Reason = "crash"
 	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
 		usage.Reason = "missing_binary"
 	}
-	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.exceeded {
+	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.Exceeded() {
 		usage.Reason = failure.Reason
-		usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+		usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 		if usage.Diagnostic == "" {
 			usage.Diagnostic = failure.Message
 		}
@@ -450,8 +438,8 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err erro
 		usage.Reason = "cancelled"
 		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 	}
-	if err != nil || out.exceeded || stderr.exceeded {
-		if out.exceeded || stderr.exceeded {
+	if err != nil || out.Exceeded() || stderr.Exceeded() {
+		if out.Exceeded() || stderr.Exceeded() {
 			usage.Reason = "output_limit"
 		}
 		if usage.Diagnostic == "" {
@@ -467,7 +455,7 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err erro
 	answer.Diagnostic = usage.Diagnostic
 	answer.Reason = "invalid_output"
 	if e != nil {
-		answer.Diagnostic = diagnosticExcerpt(e.Error()+"\n"+backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+		answer.Diagnostic = diagnosticExcerpt(e.Error()+"\n"+backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 		if strings.Contains(e.Error(), "model") {
 			answer.Reason = "model_mismatch"
 		}
@@ -475,7 +463,7 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err erro
 	}
 	result, e := verdictFrom(answer, x)
 	if e != nil {
-		answer.Diagnostic = diagnosticExcerpt(e.Error()+"\n"+backendDiagnostics(out.Bytes(), stderr.Bytes()), out.exceeded || stderr.exceeded)
+		answer.Diagnostic = diagnosticExcerpt(e.Error()+"\n"+backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 		if strings.Contains(e.Error(), "model") {
 			answer.Reason = "model_mismatch"
 		}
@@ -491,7 +479,7 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *boundedBuffer, err erro
 	answer.Reason, answer.Diagnostic = "", ""
 	if status == "inconclusive" {
 		answer.Reason = "inconclusive"
-		answer.Diagnostic = diagnosticExcerpt("backend returned an inconclusive verdict\n"+stderr.String(), stderr.exceeded)
+		answer.Diagnostic = diagnosticExcerpt("backend returned an inconclusive verdict\n"+stderr.String(), stderr.Exceeded())
 	}
 	return reviewOutcome{Status: status, Result: result, Log: log, Answer: answer}
 }

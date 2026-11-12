@@ -10,12 +10,11 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
-	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type FixerConfig struct {
@@ -78,7 +77,7 @@ type Repair struct {
 	CostUSD          float64              `json:"cost_usd,omitempty"`
 	Tokens           int                  `json:"tokens,omitempty"`
 	Thinking         string               `json:"thinking,omitempty"`
-	Confinement      *Confinement         `json:"confinement,omitempty"`
+	Confinement      *runner.Confinement  `json:"confinement,omitempty"`
 	Authorities      []DeferralAuthority  `json:"authorities,omitempty"`
 	Responses        []ResolutionResponse `json:"responses,omitempty"`
 	LeaseEpoch       int                  `json:"lease_epoch,omitempty"`
@@ -271,7 +270,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	if len(x.Input) > 2*1024*1024 {
 		return errors.New("repair input exceeds 2 MiB")
 	}
-	x.InputDigest = bytesDigest(x.Input)
+	x.InputDigest = runner.BytesDigest(x.Input)
 	r.Repair = x
 	r.RepairUsed++
 	r.Status = "writing"
@@ -405,99 +404,20 @@ func repairScope(x *Repair) (string, error) {
 	return string(diff), nil
 }
 
-var ErrWriterTreeUnknown = errors.New("writer descendant cleanup could not be verified")
-
-func init() {
-	if len(os.Args) > 2 && os.Args[1] == "_run-child" {
-		os.Exit(runChild(os.Args[2:]))
-	}
-}
-
-func reapChildTree() bool {
-	children := filepath.Join("/proc/self/task", fmt.Sprint(os.Getpid()), "children")
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		data, err := os.ReadFile(children)
-		if err != nil {
-			return false
-		}
-		pids := strings.Fields(string(data))
-		if len(pids) == 0 {
-			return true
-		}
-		for _, child := range pids {
-			if pid, err := strconv.Atoi(child); err == nil {
-				syscall.Kill(pid, syscall.SIGKILL)
-			}
-		}
-		var status syscall.WaitStatus
-		for {
-			pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
-			if err != nil || pid <= 0 {
-				break
-			}
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-	return false
-}
-
 func runBounded(ctx context.Context, dir, exe string, args []string, input []byte, agentDir string) (int, string, error) {
 	env := reviewerEnv()
 	if agentDir != "" {
 		env = append(env, "PI_CODING_AGENT_DIR="+agentDir)
 	}
-	out, stderr := &boundedBuffer{limit: 65536}, &boundedBuffer{limit: 65536}
-	code, e := runProcess(ctx, dir, exe, args, input, env, out, stderr)
-	log := fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.exceeded || stderr.exceeded)
-	if e == nil && (out.exceeded || stderr.exceeded) {
+	out, stderr := runner.NewBuffer(65536), runner.NewBuffer(65536)
+	code, e := runner.RunProcess(ctx, dir, exe, args, input, env, out, stderr)
+	log := fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.Exceeded() || stderr.Exceeded())
+	if e == nil && (out.Exceeded() || stderr.Exceeded()) {
 		e = errors.New("bounded output exceeded")
 	}
 	return code, log, e
 }
 
-func runProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, executorTimeout)
-	defer cancel()
-	self, err := os.Executable()
-	if err != nil {
-		return -1, err
-	}
-	deadline := strconv.FormatInt(time.Now().Add(executorTimeout+30*time.Second).Unix(), 10)
-	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", nextExecutor(ctx), deadline, exe}, args...)...)
-	cmd.Dir = dir
-	cmd.WaitDelay = 5 * time.Second
-	cmd.Cancel = func() error {
-		if cmd.Process == nil {
-			return os.ErrProcessDone
-		}
-		return cmd.Process.Signal(syscall.SIGTERM)
-	}
-	cmd.Env = env
-	cmd.Stdin = bytes.NewReader(input)
-	cmd.Stdout = stdout
-	cmd.Stderr = stderr
-	e := cmd.Run()
-	code := -1
-	if cmd.ProcessState != nil {
-		code = cmd.ProcessState.ExitCode()
-	}
-	if code == 254 || errors.Is(e, exec.ErrWaitDelay) {
-		return code, ErrWriterTreeUnknown
-	}
-	if cmd.ProcessState != nil {
-		if status, ok := cmd.ProcessState.Sys().(syscall.WaitStatus); ok && status.Signaled() {
-			return code, ErrWriterTreeUnknown
-		}
-	}
-	if ctx.Err() != nil {
-		return code, ctx.Err()
-	}
-	if code == exitDetachedOutput && e != nil {
-		return code, errDetachedOutput
-	}
-	return code, e
-}
 func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint func(*Repair) bool) {
 	save := func() bool { return checkpoint(x) }
 	fail := func(status string, e error) { x.Status = status; x.Log = e.Error(); save() }
@@ -570,7 +490,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 	run := runFixer(ctx, x, filepath.Join(agentDir, "agent"))
 	e = run.err
 	x.Log = run.log
-	if errors.Is(e, ErrWriterTreeUnknown) {
+	if errors.Is(e, runner.ErrWriterTreeUnknown) {
 		x.Writer = "unknown"
 		fail("unknown-outcome", e)
 		return
@@ -660,7 +580,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		res.Exit = code
 		res.Log = log
 		res.Status = "passed"
-		if errors.Is(err, ErrWriterTreeUnknown) {
+		if errors.Is(err, runner.ErrWriterTreeUnknown) {
 			res.Status = "unknown-outcome"
 			x.Status = "unknown-outcome"
 			x.Writer = "unknown"

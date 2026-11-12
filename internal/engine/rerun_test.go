@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestRerunFailedGateKeepsEarlierStagesAndBudget(t *testing.T) {
@@ -143,7 +145,7 @@ func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
 			}
 			kept := prior[0].(map[string]any)
 			partial, _ := kept["partial"].(string)
-			if !strings.Contains(partial, "+half") || kept["partial_digest"] != bytesDigest([]byte(partial)) || kept["partial_bytes"] != float64(len(partial)) {
+			if !strings.Contains(partial, "+half") || kept["partial_digest"] != runner.BytesDigest([]byte(partial)) || kept["partial_bytes"] != float64(len(partial)) {
 				t.Fatalf("the stopped repair's committed and uncommitted edits must be kept with digest and size before the candidate is reset: %v", kept)
 			}
 			worktree := run["repair"].(map[string]any)["worktree"].(string)
@@ -172,7 +174,7 @@ func priorEvidence(t *testing.T, prior any, content string) string {
 	t.Helper()
 	kept := prior.(map[string]any)
 	partial, _ := kept["partial"].(string)
-	if !strings.Contains(partial, content) || kept["partial_digest"] != bytesDigest([]byte(partial)) || kept["partial_bytes"] != float64(len(partial)) {
+	if !strings.Contains(partial, content) || kept["partial_digest"] != runner.BytesDigest([]byte(partial)) || kept["partial_bytes"] != float64(len(partial)) {
 		t.Fatalf("prior repair must keep %q with its own digest and size: %v", content, kept)
 	}
 	return kept["partial_digest"].(string)

@@ -3,6 +3,8 @@ package engine
 import (
 	"errors"
 	"reflect"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func validateRuleSnapshots(r *Run) error {
@@ -29,7 +31,7 @@ func validateRuleSnapshots(r *Run) error {
 			if e.Selection != base.Selection || e.Source != base.Source || e.Required != base.Required {
 				return errors.New("invalid rule source")
 			}
-			if len(e.Bytes) > maxPackBytes || (len(e.Bytes) > 0 && e.Digest != bytesDigest(e.Bytes)) {
+			if len(e.Bytes) > maxPackBytes || (len(e.Bytes) > 0 && e.Digest != runner.BytesDigest(e.Bytes)) {
 				return errors.New("invalid rule content digest")
 			}
 			switch e.Status {

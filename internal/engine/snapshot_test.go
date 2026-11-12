@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type failingSnapshotWriter struct{}
@@ -119,7 +121,7 @@ json.dump(probe,open(root+'/snapshot-probe.json','w'))
 		t.Fatalf("review snapshot evidence = %v, want tree %s", snapshot, tree)
 	}
 	listing := git(t, repo, "ls-tree", "-r", "-z", "-l", "--full-tree", candidate)
-	if snapshot["digest"] != bytesDigest([]byte(listing)) {
+	if snapshot["digest"] != runner.BytesDigest([]byte(listing)) {
 		t.Fatalf("snapshot digest %v does not bind the candidate tree listing", snapshot["digest"])
 	}
 	captured, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))

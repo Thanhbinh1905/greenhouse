@@ -6,6 +6,8 @@ import (
 	"errors"
 	"reflect"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type failedInputWriter struct{}
@@ -22,7 +24,7 @@ func TestFixtureInstructionDeliveryNotCompliance(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		s.Rules = append(s.Rules, RuleEvidence{Status: "resolved", Pack: p, Bytes: []byte(builtins[name]), Digest: bytesDigest([]byte(builtins[name]))})
+		s.Rules = append(s.Rules, RuleEvidence{Status: "resolved", Pack: p, Bytes: []byte(builtins[name]), Digest: runner.BytesDigest([]byte(builtins[name]))})
 	}
 	var reviewer, fixer bytes.Buffer
 	a, e := emitInput(&reviewer, s, "reviewer")
@@ -52,7 +54,7 @@ func TestFixtureInstructionDeliveryNotCompliance(t *testing.T) {
 	if _, err := emitInput(&bytes.Buffer{}, s, "reviewer"); err == nil {
 		t.Fatal("tampered content emitted")
 	}
-	if a.Digest != bytesDigest(reviewer.Bytes()) || b.Digest != bytesDigest(fixer.Bytes()) || a.Digest == b.Digest {
+	if a.Digest != runner.BytesDigest(reviewer.Bytes()) || b.Digest != runner.BytesDigest(fixer.Bytes()) || a.Digest == b.Digest {
 		t.Fatal("incorrect exact input identity")
 	}
 }

@@ -8,23 +8,25 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type Recovery struct {
-	ID            string             `json:"id"`
-	Kind          string             `json:"kind"`
-	Stage         string             `json:"stage,omitempty"`
-	Execution     string             `json:"execution,omitempty"`
-	Reason        string             `json:"reason"`
-	Executors     []executorEvidence `json:"executors,omitempty"`
-	Candidate     *CandidateEvidence `json:"candidate,omitempty"`
-	Adopt         string             `json:"adopt,omitempty"`
-	Options       []string           `json:"options"`
-	Partial       string             `json:"partial,omitempty"`
-	PartialDigest string             `json:"partial_digest,omitempty"`
-	ProbedAt      string             `json:"probed_at,omitempty"`
-	Answer        *Answer            `json:"answer,omitempty"`
-	Outcome       string             `json:"outcome,omitempty"`
+	ID            string                    `json:"id"`
+	Kind          string                    `json:"kind"`
+	Stage         string                    `json:"stage,omitempty"`
+	Execution     string                    `json:"execution,omitempty"`
+	Reason        string                    `json:"reason"`
+	Executors     []runner.ExecutorEvidence `json:"executors,omitempty"`
+	Candidate     *CandidateEvidence        `json:"candidate,omitempty"`
+	Adopt         string                    `json:"adopt,omitempty"`
+	Options       []string                  `json:"options"`
+	Partial       string                    `json:"partial,omitempty"`
+	PartialDigest string                    `json:"partial_digest,omitempty"`
+	ProbedAt      string                    `json:"probed_at,omitempty"`
+	Answer        *Answer                   `json:"answer,omitempty"`
+	Outcome       string                    `json:"outcome,omitempty"`
 }
 
 func requireRecovery(r *Run, kind, stage, execution, reason string) {
@@ -47,7 +49,7 @@ func reconcileRecoveries(s *Store) (changed bool) {
 		if r.Recovery == nil {
 			continue
 		}
-		observed := observeExecutors(r.Recovery.Execution)
+		observed := runner.ObserveExecutors(r.Recovery.Execution, home)
 		if adoptRecorded(r, observed) {
 			changed = true
 			continue
@@ -75,19 +77,19 @@ func needsProbe(s *Store) bool {
 	return false
 }
 
-func outputBuffer(b []byte, limit int) *boundedBuffer {
-	out := &boundedBuffer{limit: limit}
+func outputBuffer(b []byte, limit int) *runner.Buffer {
+	out := runner.NewBuffer(limit)
 	out.Write(b)
 	return out
 }
 
-func adoptRecorded(r *Run, observed []observedExecutor) bool {
+func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 	rec := r.Recovery
 	var adopted string
 	switch rec.Kind {
 	case "review":
 		x := r.Review
-		var verdicts []observedExecutor
+		var verdicts []runner.ObservedExecutor
 		for _, o := range observed {
 			if strings.HasPrefix(o.ID, rec.Execution+".catalog.") {
 				if o.State != "exited" {
@@ -97,7 +99,7 @@ func adoptRecorded(r *Run, observed []observedExecutor) bool {
 				verdicts = append(verdicts, o)
 			}
 		}
-		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || verdicts[0].State != "exited" || verdicts[0].record.InputDigest != x.InputDigest {
+		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || verdicts[0].State != "exited" || verdicts[0].Record.InputDigest != x.InputDigest {
 			return false
 		}
 		o := verdicts[0]
@@ -105,7 +107,7 @@ func adoptRecorded(r *Run, observed []observedExecutor) bool {
 		if o.Exit != 0 {
 			runErr = fmt.Errorf("exit status %d", o.Exit)
 		}
-		done := reviewFrom(x, o.Exit, outputBuffer(o.stdout, executorStdoutLimit), outputBuffer(o.stderr, executorStderrLimit), runErr, false)
+		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, false)
 		check := reverifySnapshot(x)
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}
@@ -149,7 +151,7 @@ func adoptRecorded(r *Run, observed []observedExecutor) bool {
 	return true
 }
 
-func recordedCommands(p *Pipeline, stage string, observed []observedExecutor) (StageResult, bool) {
+func recordedCommands(p *Pipeline, stage string, observed []runner.ObservedExecutor) (StageResult, bool) {
 	out := StageResult{Name: stage, Status: "passed", Reason: "all configured commands exited 0"}
 	commands := p.commands(stage)
 	for i, args := range commands {
@@ -158,9 +160,9 @@ func recordedCommands(p *Pipeline, stage string, observed []observedExecutor) (S
 		}
 		o := observed[i]
 		tail := &tailBuffer{limit: 16384}
-		tail.Write(o.stdout)
-		tail.Write(o.stderr)
-		tail.total = int(o.record.Stdout + o.record.Stderr)
+		tail.Write(o.Stdout)
+		tail.Write(o.Stderr)
+		tail.total = int(o.Record.Stdout + o.Record.Stderr)
 		res := CheckResult{Args: args, ExecutableDigest: p.CommandDigests[args[0]], Exit: o.Exit, Output: tail.String(), Status: "passed"}
 		res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", o.Exit, tail.total, tail.truncated())
 		out.Commands = append(out.Commands, res)
@@ -174,15 +176,15 @@ func recordedCommands(p *Pipeline, stage string, observed []observedExecutor) (S
 	return out, len(observed) == len(commands)
 }
 
-func evidenceOf(observed []observedExecutor) []executorEvidence {
-	var out []executorEvidence
+func evidenceOf(observed []runner.ObservedExecutor) []runner.ExecutorEvidence {
+	var out []runner.ExecutorEvidence
 	for _, o := range observed {
-		out = append(out, o.executorEvidence)
+		out = append(out, o.ExecutorEvidence)
 	}
 	return out
 }
 
-func probeRecovery(r *Run, observed []observedExecutor) {
+func probeRecovery(r *Run, observed []runner.ObservedExecutor) {
 	rec := r.Recovery
 	before := digest([]any{rec.Executors, rec.Candidate, rec.Adopt, rec.Options})
 	rec.Executors = evidenceOf(observed)
@@ -408,7 +410,7 @@ func recoverRun(s *Store, r *Run, source Identity, a Answer) (*Run, error) {
 	if !validText(a.Reason) {
 		return nil, errors.New("reason required")
 	}
-	probeRecovery(r, observeExecutors(rec.Execution))
+	probeRecovery(r, runner.ObserveExecutors(rec.Execution, home))
 	if a.Choice == "inspect" {
 		r.Events = append(r.Events, Event{Kind: "recovery-inspect", Actor: a.Actor, Reason: a.Reason})
 		r.Token = opaque()

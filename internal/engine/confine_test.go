@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"net"
 	"net/url"
 	"os"
@@ -13,6 +14,22 @@ import (
 	"testing"
 	"unsafe"
 )
+
+const (
+	landlockCreateRuleset = 444
+	prSetNoNewPriv        = 38
+)
+
+func landlockABI() (int, error) {
+	if runtime.GOOS != "linux" {
+		return 0, fmt.Errorf("OS confinement is implemented only on Linux")
+	}
+	abi, _, errno := syscall.Syscall(landlockCreateRuleset, 0, 0, 1)
+	if errno != 0 {
+		return 0, fmt.Errorf("landlock unavailable: %v", errno)
+	}
+	return int(abi), nil
+}
 
 const probeScript = `
 import json,os,socket,sys
