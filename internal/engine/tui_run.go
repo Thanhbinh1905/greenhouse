@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -42,7 +43,7 @@ func localCollector(ctx context.Context, worktree, target, head string) (intentM
 	if err != nil {
 		return intentMatch{}, err
 	}
-	resolved, err := committedTarget(worktree, target)
+	resolved, err := repository.CommittedTarget(worktree, target)
 	if err != nil {
 		return intentMatch{}, errors.New("the target " + target + " is not a commit here; choose another target")
 	}
@@ -162,7 +163,7 @@ func (m *tuiModel) advance() tea.Cmd {
 }
 
 func sameTarget(r *Run, target string) bool {
-	resolved, err := committedTarget(r.Submitted.Worktree, target)
+	resolved, err := repository.CommittedTarget(r.Submitted.Worktree, target)
 	return err == nil && resolved == r.Target
 }
 

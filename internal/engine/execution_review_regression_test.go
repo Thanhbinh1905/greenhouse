@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 func TestExecutableFindingInSpacePath(t *testing.T) {
@@ -131,16 +133,16 @@ func TestReviewDiffBase(t *testing.T) {
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "candidate")
 	candidate := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	if base, reason, err := reviewDiffBase(repo, target, candidate); err != nil || base != target || reason != "" {
+	if base, reason, err := repository.ReviewDiffBase(repo, target, candidate); err != nil || base != target || reason != "" {
 		t.Fatalf("ancestor target: base=%s reason=%s err=%v", base, reason, err)
 	}
 	git(t, repo, "checkout", "--orphan", "unrelated")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "unrelated")
 	unrelated := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	if base, reason, err := reviewDiffBase(repo, unrelated, candidate); err != nil || base != unrelated || !strings.Contains(reason, "no merge-base") {
+	if base, reason, err := repository.ReviewDiffBase(repo, unrelated, candidate); err != nil || base != unrelated || !strings.Contains(reason, "no merge-base") {
 		t.Fatalf("unrelated histories must retain target with a reason: base=%s reason=%s err=%v", base, reason, err)
 	}
-	if _, _, err := reviewDiffBase(repo, "missing-commit", candidate); err == nil || !strings.Contains(err.Error(), "cannot compute review merge-base") {
+	if _, _, err := repository.ReviewDiffBase(repo, "missing-commit", candidate); err == nil || !strings.Contains(err.Error(), "cannot compute review merge-base") {
 		t.Fatalf("Git failures must not fall back silently: %v", err)
 	}
 }

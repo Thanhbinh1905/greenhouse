@@ -1,4 +1,4 @@
-package engine
+package forge
 
 import (
 	"bytes"
@@ -208,7 +208,7 @@ func (g GitHubForge) Checks(ctx context.Context, owner, repo, head string, pullN
 	return true, "all required checks passed for exact head", nil
 }
 
-func configuredForge() (GitHubForge, error) {
+func Configured() (GitHubForge, error) {
 	base := os.Getenv("GREENHOUSE_GITHUB_API")
 	if base != "" {
 		parsed, err := url.Parse(base)

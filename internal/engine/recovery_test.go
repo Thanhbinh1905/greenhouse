@@ -11,6 +11,8 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 func copyStateHome(t *testing.T, from, to string) {
@@ -219,7 +221,7 @@ sys.exit(p.returncode)
 
 func TestRecoveryNewRunCarriesHostIdentityAndSpentGrants(t *testing.T) {
 	t.Parallel()
-	source := Identity{Repository: "/repo", Branch: "main", Head: "head"}
+	source := repository.Identity{Repository: "/repo", Branch: "main", Head: "head"}
 	host := &Host{Name: "fake-host", ID: "task-7"}
 	r := &Run{
 		ID: "run-1", Submitted: source, Host: host, HostGrants: []string{"grant-1", "grant-2"},

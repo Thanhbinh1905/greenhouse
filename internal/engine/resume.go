@@ -6,6 +6,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 type BackendPause struct {
@@ -403,15 +405,15 @@ func switchBackend(r *Run, role string, to BackendChoice, actor, reason string) 
 }
 
 func prepareRun(r *Run, intent, requested string) error {
-	target, err := committedTarget(r.Submitted.Worktree, requested)
+	target, err := repository.CommittedTarget(r.Submitted.Worktree, requested)
 	if err != nil {
 		return err
 	}
-	base, baseReason, err := reviewDiffBase(r.Submitted.Worktree, target, r.Candidate)
+	base, baseReason, err := repository.ReviewDiffBase(r.Submitted.Worktree, target, r.Candidate)
 	if err != nil {
 		return err
 	}
-	diff, err := gitRead(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
+	diff, err := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
 	if err != nil {
 		return errors.New("cannot capture complete bounded diff")
 	}
@@ -473,7 +475,7 @@ func rerunStage(s *Store, r *Run, actor string) error {
 	return nil
 }
 
-func restartRun(s *Store, r *Run, source Identity, actor string) *Run {
+func restartRun(s *Store, r *Run, source repository.Identity, actor string) *Run {
 	settings := r.Configs[len(r.Configs)-1].Settings
 	next := &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}, Host: r.Host, HostGrants: r.HostGrants}
 	if r.Intent != "" && r.Target != "" {
@@ -516,11 +518,11 @@ func rerunRepair(r *Run, actor string) error {
 	}
 	_, statErr := os.Stat(old.Worktree)
 	if statErr == nil {
-		id, err := resolve(old.Worktree)
+		id, err := repository.Resolve(old.Worktree)
 		if err != nil || id.Branch != old.Ref {
 			return errors.New("candidate branch changed after the repair stopped; recovery required")
 		}
-		if _, err := gitRead(old.Worktree, "merge-base", "--is-ancestor", old.Base, id.Head); err != nil {
+		if _, err := repository.Read(old.Worktree, "merge-base", "--is-ancestor", old.Base, id.Head); err != nil {
 			return errors.New("candidate no longer descends from the repair base; recovery required")
 		}
 		if old.PartialDigest == "" {
@@ -559,13 +561,4 @@ func autoResumeLabel(s Settings) string {
 		return "on"
 	}
 	return "on (default in " + s.Mode + " mode)"
-}
-
-func suggestTarget(path string) string {
-	for _, name := range []string{"refs/remotes/origin/HEAD", "main", "master", "HEAD^"} {
-		if _, err := committedTarget(path, name); err == nil {
-			return name
-		}
-	}
-	return ""
 }

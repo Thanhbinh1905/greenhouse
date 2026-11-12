@@ -6,6 +6,8 @@ import (
 	"net"
 	"sort"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 const (
@@ -98,7 +100,7 @@ func (f *feed) subscribe(s *Store, c net.Conn, q Request) (Response, bool) {
 	if q.WaitMS < 0 || q.WaitMS > maxWaitMillis {
 		return refuse(errors.New("wait_ms must be between 0 and 60000"))
 	}
-	id, e := resolve(q.Path)
+	id, e := repository.Resolve(q.Path)
 	if e != nil {
 		return refuse(e)
 	}

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 type ResolutionResponse struct {
@@ -104,7 +106,7 @@ func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
 }
 
 func fixedResponsesEdited(x *Repair) error {
-	out, err := gitRead(x.Worktree, "diff", "--name-only", "-z", "HEAD", "--")
+	out, err := repository.Read(x.Worktree, "diff", "--name-only", "-z", "HEAD", "--")
 	if err != nil {
 		return err
 	}

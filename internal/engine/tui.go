@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/spinner"
 	"github.com/charmbracelet/bubbles/textinput"
@@ -53,7 +54,7 @@ func tuiTerminal(h, path string) error {
 	updates := make(chan liveUpdate, 1)
 	stop := make(chan struct{})
 	go follow(h, path, v.Stream, v.Sequence, updates, stop)
-	m := newTUI(daemonClient{h, path}, v, installedAgents(), suggestTarget(path), updates)
+	m := newTUI(daemonClient{h, path}, v, installedAgents(), repository.SuggestTarget(path), updates)
 	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	close(stop)
 	if err != nil {

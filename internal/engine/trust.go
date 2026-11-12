@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -120,7 +121,7 @@ func overrideDigest(b []byte) string {
 	return runner.BytesDigest(b)
 }
 
-func repositoryDefaults(s *Store, id Identity) (Settings, map[string]string, RepositoryStatus) {
+func repositoryDefaults(s *Store, id repository.Identity) (Settings, map[string]string, RepositoryStatus) {
 	settings, sources := s.Defaults, userSources(s)
 	path, b, err := readOverride(id.Worktree)
 	status := RepositoryStatus{Path: path, Digest: overrideDigest(b)}
@@ -249,7 +250,7 @@ func overrideContent(settings, base Settings) []byte {
 	return []byte(out.String())
 }
 
-func saveRepositoryOverride(s *Store, id Identity, settings Settings, actor, reason, action string) error {
+func saveRepositoryOverride(s *Store, id repository.Identity, settings Settings, actor, reason, action string) error {
 	_, _, status := repositoryDefaults(s, id)
 	if status.Trusted == nil || status.Trusted.Digest != status.Digest {
 		return errors.New("trust this repository and its current override file before saving to it")
@@ -265,7 +266,7 @@ func saveRepositoryOverride(s *Store, id Identity, settings Settings, actor, rea
 	return nil
 }
 
-func initialSnapshot(s *Store, id Identity) Snapshot {
+func initialSnapshot(s *Store, id repository.Identity) Snapshot {
 	settings, sources, status := repositoryDefaults(s, id)
 	source := s.DefaultsSource
 	if status.Status == "applied" {
@@ -318,7 +319,7 @@ func overrideLine(o *RepositoryStatus) string {
 }
 
 func sourceClean(worktree, trusted string) error {
-	status, err := gitRead(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	status, err := repository.Read(worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if err != nil {
 		return errors.New("source dirty state is ambiguous; candidate preserved")
 	}

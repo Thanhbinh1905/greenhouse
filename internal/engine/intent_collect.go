@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 // Intent collection reads the local Claude Code, Codex and Pi session logs
@@ -71,7 +73,7 @@ func (s *intentSession) FirstLine() string {
 }
 
 func committerTime(worktree, rev string) (time.Time, error) {
-	b, err := gitRead(worktree, "show", "-s", "--format=%ct", rev, "--")
+	b, err := repository.Read(worktree, "show", "-s", "--format=%ct", rev, "--")
 	if err != nil {
 		return time.Time{}, err
 	}
@@ -85,7 +87,7 @@ func collectIntent(ctx context.Context, home, worktree, target, head string) (in
 	if err != nil {
 		return match, err
 	}
-	names, err := gitRead(worktree, "diff", "--name-only", "--no-renames", target, head, "--")
+	names, err := repository.Read(worktree, "diff", "--name-only", "--no-renames", target, head, "--")
 	if err != nil {
 		return match, errors.New("cannot list the changed files")
 	}

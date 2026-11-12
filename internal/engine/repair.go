@@ -14,6 +14,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -152,7 +153,7 @@ func repairBinding(r *Run, cfg FixerConfig, executable string, checks []string, 
 		Executable                             string
 		Checks                                 []string
 		Selected                               []Finding
-		Source                                 Identity
+		Source                                 repository.Identity
 	}{r.Intent, r.Input, r.Submitted.Head, r.Target, r.SelectedDiff, r.Configs[len(r.Configs)-1], r.Review.ID, r.Review.Rules, r.Review.Result.Findings, cfg, fixerArgs(cfg.Model), executable, checks, selected, r.Submitted})
 }
 func fixerArgs(model string) []string {
@@ -279,11 +280,11 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	return nil
 }
 func gitHazards(path string) error {
-	b, e := gitRead(path, "config", "--get-regexp", `^(filter\.|core\.(hooksPath|fsmonitor)|commit\.gpgsign|core\.attributesfile)`)
+	b, e := repository.Read(path, "config", "--get-regexp", `^(filter\.|core\.(hooksPath|fsmonitor)|commit\.gpgsign|core\.attributesfile)`)
 	if e == nil && len(b) > 0 {
 		return errors.New("configured hooks, filters, signing, attributes or fsmonitor requirements unsupported")
 	}
-	hooks, e := gitRead(path, "rev-parse", "--path-format=absolute", "--git-path", "hooks")
+	hooks, e := repository.Read(path, "rev-parse", "--path-format=absolute", "--git-path", "hooks")
 	if e != nil {
 		return e
 	}
@@ -304,10 +305,10 @@ func gitHazards(path string) error {
 }
 func controllerGit(path string, args ...string) ([]byte, error) {
 	prefix := []string{"-c", "core.hooksPath=/dev/null", "-c", "core.fsmonitor=false", "-c", "commit.gpgsign=false"}
-	return gitRead(path, append(prefix, args...)...)
+	return repository.Read(path, append(prefix, args...)...)
 }
 func candidateSafe(x *Repair, head string) error {
-	id, e := resolve(x.Worktree)
+	id, e := repository.Resolve(x.Worktree)
 	if e != nil || id.Worktree != x.Worktree || id.Branch != x.Ref || id.Head != head {
 		return errors.New("candidate identity moved; preserve private candidate for recovery")
 	}
@@ -348,7 +349,7 @@ func repairScope(x *Repair) (string, error) {
 	if e := candidateSafe(x, x.Base); e != nil {
 		return "", e
 	}
-	b, e := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	b, e := repository.Read(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if e != nil {
 		return "", e
 	}
@@ -391,7 +392,7 @@ func repairScope(x *Repair) (string, error) {
 			return "", e
 		}
 	}
-	diff, e := gitRead(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")
+	diff, e := repository.Read(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")
 	if e != nil {
 		return "", e
 	}
@@ -418,7 +419,7 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 	return code, log, e
 }
 
-func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint func(*Repair) bool) {
+func executeRepair(ctx context.Context, x *Repair, source repository.Identity, checkpoint func(*Repair) bool) {
 	save := func() bool { return checkpoint(x) }
 	fail := func(status string, e error) { x.Status = status; x.Log = e.Error(); save() }
 	lock, err := os.OpenFile(filepath.Join(source.Repository, "greenhouse-writer.lock"), os.O_CREATE|os.O_RDWR, 0600)
@@ -432,7 +433,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		return
 	}
 	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	current, e := resolve(source.Worktree)
+	current, e := repository.Resolve(source.Worktree)
 	if e != nil || current != source {
 		fail("refused", errors.New("source moved before writer start"))
 		return
@@ -646,7 +647,7 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("unknown-outcome", e)
 		return
 	}
-	staged, e := gitRead(x.Worktree, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")
+	staged, e := repository.Read(x.Worktree, "diff", "--cached", "--no-ext-diff", "--no-textconv", "--binary", "HEAD", "--")
 	if e != nil || string(staged) != diff {
 		fail("unknown-outcome", errors.New("staged diff differs from checked diff"))
 		return
@@ -655,13 +656,13 @@ func executeRepair(ctx context.Context, x *Repair, source Identity, checkpoint f
 		fail("unknown-outcome", e)
 		return
 	}
-	id, e := resolve(x.Worktree)
+	id, e := repository.Resolve(x.Worktree)
 	if e != nil {
 		fail("unknown-outcome", e)
 		return
 	}
 	x.Head = id.Head
-	parent, e := gitRead(x.Worktree, "rev-parse", "HEAD^")
+	parent, e := repository.Read(x.Worktree, "rev-parse", "HEAD^")
 	if e != nil || strings.TrimSpace(string(parent)) != x.Base {
 		fail("unknown-outcome", errors.New("unexpected commit parent"))
 		return
@@ -701,16 +702,16 @@ func handback(r *Run, trusted string) error {
 		return errors.New("no repair candidate")
 	}
 	if x.Handback == "handed-back" {
-		id, e := resolve(r.Submitted.Worktree)
+		id, e := repository.Resolve(r.Submitted.Worktree)
 		if e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && id.Branch == r.Submitted.Branch && id.Head == x.Head {
 			return nil
 		}
 		return errors.New("recorded handback outcome does not match source; preserve recovery evidence")
 	}
-	sourceNow, sourceErr := resolve(r.Submitted.Worktree)
+	sourceNow, sourceErr := repository.Resolve(r.Submitted.Worktree)
 	if sourceErr == nil && sourceNow.Repository == r.Submitted.Repository && sourceNow.Worktree == r.Submitted.Worktree && sourceNow.Branch == r.Submitted.Branch && sourceNow.Head == x.Head {
-		candidateNow, err := resolve(x.Worktree)
-		parent, parentErr := gitRead(x.Worktree, "rev-parse", "HEAD^")
+		candidateNow, err := repository.Resolve(x.Worktree)
+		parent, parentErr := repository.Read(x.Worktree, "rev-parse", "HEAD^")
 		if err == nil && candidateNow.Head == x.Head && candidateNow.Branch == x.Ref && parentErr == nil && strings.TrimSpace(string(parent)) == x.Base {
 			x.Handback = "handed-back"
 			r.Candidate = x.Head
@@ -734,26 +735,26 @@ func handback(r *Run, trusted string) error {
 	if e := gitHazards(r.Submitted.Worktree); e != nil {
 		return e
 	}
-	source, e := resolve(r.Submitted.Worktree)
+	source, e := repository.Resolve(r.Submitted.Worktree)
 	if e != nil || source != r.Submitted {
 		return errors.New("source branch, head or worktree moved; candidate preserved")
 	}
-	candidate, e := resolve(x.Worktree)
+	candidate, e := repository.Resolve(x.Worktree)
 	if e != nil || candidate.Head != x.Head || candidate.Branch != x.Ref {
 		return errors.New("candidate identity changed; preserve recovery evidence")
 	}
-	candidateStatus, e := gitRead(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
+	candidateStatus, e := repository.Read(x.Worktree, "status", "--porcelain=v1", "-z", "--untracked-files=all")
 	if e != nil || len(candidateStatus) != 0 {
 		return errors.New("candidate dirty state is ambiguous; preserve recovery evidence")
 	}
-	parent, e := gitRead(x.Worktree, "rev-parse", "HEAD^")
+	parent, e := repository.Read(x.Worktree, "rev-parse", "HEAD^")
 	if e != nil || strings.TrimSpace(string(parent)) != x.Base {
 		return errors.New("candidate lineage changed")
 	}
 	if e = sourceClean(r.Submitted.Worktree, trusted); e != nil {
 		return e
 	}
-	index, e := gitRead(r.Submitted.Worktree, "rev-parse", "--path-format=absolute", "--git-path", "index.lock")
+	index, e := repository.Read(r.Submitted.Worktree, "rev-parse", "--path-format=absolute", "--git-path", "index.lock")
 	if e != nil {
 		return e
 	}
@@ -763,14 +764,14 @@ func handback(r *Run, trusted string) error {
 	if !os.IsNotExist(e) {
 		return e
 	}
-	latest, e := resolve(r.Submitted.Worktree)
+	latest, e := repository.Resolve(r.Submitted.Worktree)
 	if e != nil || latest != r.Submitted {
 		return errors.New("source moved before guarded handback; candidate preserved")
 	}
 	if _, e = controllerGit(r.Submitted.Worktree, "merge", "--ff-only", x.Head); e != nil {
 		return errors.New("guarded handback outcome unknown or refused; candidate preserved")
 	}
-	after, e := resolve(r.Submitted.Worktree)
+	after, e := repository.Resolve(r.Submitted.Worktree)
 	if e != nil || after.Head != x.Head {
 		return errors.New("handback outcome unknown; inspect source and candidate refs")
 	}

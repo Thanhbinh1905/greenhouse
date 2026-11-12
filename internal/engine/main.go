@@ -23,6 +23,7 @@ import (
 	"unicode"
 	"unsafe"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -36,12 +37,6 @@ type Settings struct {
 	FixerBackend    string   `json:"fixer_backend"`
 	FixerModel      string   `json:"fixer_model"`
 	AutoResume      string   `json:"auto_resume,omitempty"`
-}
-type Identity struct {
-	Repository string `json:"repository"`
-	Worktree   string `json:"worktree"`
-	Branch     string `json:"branch"`
-	Head       string `json:"head"`
 }
 type Snapshot struct {
 	ID           string            `json:"id"`
@@ -63,37 +58,37 @@ type Event struct {
 	To     string `json:"to,omitempty"`
 }
 type Run struct {
-	Intent        string          `json:"intent,omitempty"`
-	Reviewer      *ReviewerConfig `json:"reviewer,omitempty"`
-	SelectedDiff  string          `json:"selected_diff,omitempty"`
-	Findings      []Finding       `json:"findings,omitempty"`
-	Review        *Execution      `json:"review,omitempty"`
-	RuleSnapshots []RuleSnapshot  `json:"rule_snapshots,omitempty"`
-	ID            string          `json:"id"`
-	Input         string          `json:"input"`
-	Token         string          `json:"token"`
-	Submitted     Identity        `json:"submitted"`
-	Target        string          `json:"target"`
-	Candidate     string          `json:"candidate"`
-	Stage         string          `json:"stage"`
-	Status        string          `json:"status"`
-	Configs       []Snapshot      `json:"configs"`
-	ReviewUsed    int             `json:"review_used"`
-	RepairUsed    int             `json:"repair_used"`
-	Repair        *Repair         `json:"repair,omitempty"`
-	Pipeline      *Pipeline       `json:"pipeline,omitempty"`
-	Events        []Event         `json:"events"`
-	Predecessor   string          `json:"predecessor,omitempty"`
-	Successor     string          `json:"successor,omitempty"`
-	Pause         *BackendPause   `json:"pause,omitempty"`
-	Attempts      []Attempt       `json:"attempts,omitempty"`
-	AutoRetries   int             `json:"auto_retries,omitempty"`
-	PriorRepairs  []Repair        `json:"prior_repairs,omitempty"`
-	Recovery      *Recovery       `json:"recovery,omitempty"`
-	Recoveries    []Recovery      `json:"recoveries,omitempty"`
-	Inherited     *Inheritance    `json:"inherited,omitempty"`
-	Host          *Host           `json:"host,omitempty"`
-	HostGrants    []string        `json:"host_grants,omitempty"`
+	Intent        string              `json:"intent,omitempty"`
+	Reviewer      *ReviewerConfig     `json:"reviewer,omitempty"`
+	SelectedDiff  string              `json:"selected_diff,omitempty"`
+	Findings      []Finding           `json:"findings,omitempty"`
+	Review        *Execution          `json:"review,omitempty"`
+	RuleSnapshots []RuleSnapshot      `json:"rule_snapshots,omitempty"`
+	ID            string              `json:"id"`
+	Input         string              `json:"input"`
+	Token         string              `json:"token"`
+	Submitted     repository.Identity `json:"submitted"`
+	Target        string              `json:"target"`
+	Candidate     string              `json:"candidate"`
+	Stage         string              `json:"stage"`
+	Status        string              `json:"status"`
+	Configs       []Snapshot          `json:"configs"`
+	ReviewUsed    int                 `json:"review_used"`
+	RepairUsed    int                 `json:"repair_used"`
+	Repair        *Repair             `json:"repair,omitempty"`
+	Pipeline      *Pipeline           `json:"pipeline,omitempty"`
+	Events        []Event             `json:"events"`
+	Predecessor   string              `json:"predecessor,omitempty"`
+	Successor     string              `json:"successor,omitempty"`
+	Pause         *BackendPause       `json:"pause,omitempty"`
+	Attempts      []Attempt           `json:"attempts,omitempty"`
+	AutoRetries   int                 `json:"auto_retries,omitempty"`
+	PriorRepairs  []Repair            `json:"prior_repairs,omitempty"`
+	Recovery      *Recovery           `json:"recovery,omitempty"`
+	Recoveries    []Recovery          `json:"recoveries,omitempty"`
+	Inherited     *Inheritance        `json:"inherited,omitempty"`
+	Host          *Host               `json:"host,omitempty"`
+	HostGrants    []string            `json:"host_grants,omitempty"`
 
 	ReviewBase       string `json:"review_base,omitempty"`
 	ReviewBaseReason string `json:"review_base_reason,omitempty"`
@@ -205,41 +200,6 @@ func reviewerConfigDigest(config ReviewerConfig) string {
 		}{config.Executable, config.Model})
 	}
 	return digest(config)
-}
-func resolve(path string) (Identity, error) {
-	run := func(args ...string) (string, error) {
-		c := exec.Command("git", append([]string{"-C", path}, args...)...)
-		for _, variable := range os.Environ() {
-			if !strings.HasPrefix(variable, "GIT_") {
-				c.Env = append(c.Env, variable)
-			}
-		}
-		c.Env = append(c.Env, "GIT_OPTIONAL_LOCKS=0")
-		b, e := c.Output()
-		return strings.TrimSpace(string(b)), e
-	}
-	root, e := run("rev-parse", "--show-toplevel")
-	if e != nil {
-		return Identity{}, errors.New("a Git worktree with a commit is required")
-	}
-	root, e = filepath.EvalSymlinks(root)
-	if e != nil {
-		return Identity{}, e
-	}
-	common, e := run("rev-parse", "--path-format=absolute", "--git-common-dir")
-	if e != nil {
-		return Identity{}, e
-	}
-	common, e = filepath.EvalSymlinks(common)
-	if e != nil {
-		return Identity{}, e
-	}
-	head, e := run("rev-parse", "--verify", "HEAD")
-	if e != nil {
-		return Identity{}, e
-	}
-	branch, _ := run("symbolic-ref", "-q", "HEAD")
-	return Identity{common, root, branch, head}, nil
 }
 func home() (string, error) {
 	h := os.Getenv("GREENHOUSE_HOME")
@@ -436,7 +396,7 @@ func view(s *Store, r *Run) Response {
 		v.Input = r.Input
 		v.Token = r.Token
 		v.Gate = currentGate(r)
-		id, e := resolve(r.Submitted.Worktree)
+		id, e := repository.Resolve(r.Submitted.Worktree)
 		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "cancelling" && r.Status != "writing" && r.Status != "recovery-required"
 		held := custodyHeld(s, r)
 		if held {
@@ -605,7 +565,7 @@ func handleRequest(s *Store, q Request) Response {
 	if e := checkVersion(q); e != nil {
 		return fail(e.Error(), nil)
 	}
-	id, e := resolve(q.Path)
+	id, e := repository.Resolve(q.Path)
 	if e != nil {
 		return fail(e.Error(), nil)
 	}
@@ -1126,7 +1086,7 @@ func daemon(h string) error {
 				ctx, cancel := context.WithCancel(context.Background())
 				active[r.ID] = cancel
 				ctx = runner.WithExecutor(ctx, x.ID, home)
-				go func(runID string, repair Repair, source Identity, ctx context.Context, cancel context.CancelFunc) {
+				go func(runID string, repair Repair, source repository.Identity, ctx context.Context, cancel context.CancelFunc) {
 					defer cancel()
 					executeRepair(ctx, &repair, source, func(value *Repair) bool {
 						ack := make(chan bool, 1)
@@ -1843,7 +1803,7 @@ func lineTerminal(h, path string) error {
 				return nil
 			}
 			q.Intent = input
-			suggestion := suggestTarget(path)
+			suggestion := repository.SuggestTarget(path)
 			terminalPrompt("Review committed changes against Git target [%s]:\n> ", suggestion)
 			if !scan() {
 				return nil
@@ -2079,7 +2039,7 @@ func finishReview(r *Run, done reviewOutcome) {
 	if r.Status == "cancelling" {
 		status = "cancelled"
 	}
-	id, err := resolve(r.Submitted.Worktree)
+	id, err := repository.Resolve(r.Submitted.Worktree)
 	if err != nil || id != r.Submitted {
 		status = "stale"
 	}

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -125,7 +126,7 @@ func typed(text string) []string {
 
 func tuiState(status string, actions ...string) Response {
 	r := tuiRun(status)
-	r.Submitted = Identity{Branch: "refs/heads/feat", Head: strings.Repeat("a", 40)}
+	r.Submitted = repository.Identity{Branch: "refs/heads/feat", Head: strings.Repeat("a", 40)}
 	return Response{Outcome: "ok", RunID: r.ID, Input: r.Input, Token: r.Token, Gate: "none", Run: r, Actions: append([]string{"attach", "inspect"}, actions...)}
 }
 
