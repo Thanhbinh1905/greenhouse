@@ -1,6 +1,6 @@
 # Review evaluation runs
 
-Each directory is one live run of `go run ./eval run` over the whole corpus. See [the README](../../../README.md#review-evaluation) for the command and metric definitions.
+Each directory is one live run of `go run ./cmd/eval run` over the whole corpus. See [the README](../../../README.md#review-evaluation) for the command and metric definitions.
 
 ## Configuration
 
@@ -94,7 +94,7 @@ Recall remains 100% (13/13), high-severity recall remains 100% (9/9), and precis
 
 File, origin, rule and an overlapping range of at most 15 lines only make a finding eligible. Credit comes from `adjudications.json` in each run directory. It holds one record per eligible finding: case, finding index, a SHA-256 digest of the finding as scored, expected defect ID, verdict (`detects`, `different-defect` or `duplicate`) and a one-sentence rationale that quotes the finding. The scorer refuses records that do not match the finding digest, do not quote the finding, name an expected defect at another location, or contradict the detection order. An eligible finding without a record earns no credit.
 
-`go run ./eval judge` writes the records. Each eligible finding goes to a separate Pi process with no tools and no session, which sees only the eligible expected defects and the finding. The judge model, Pi version and full prompt are in each file. For these runs the judge was `openai/gpt-6.1-sol`; it judged 99 findings for $0.18 and every answer was valid. It returned 95 `detects` and 4 `different-defect`: negative `page` or `size` arguments in `bug-pagination-bounds` (02 and 05), and concurrent `Save` calls sharing a temporary file in `bug-swallowed-write-error` (06 and 07). The first scorer, which checked location alone, had credited those four as duplicates. A manual reading of all four `different-defect` records and the multi-line `detects` records agreed with each verdict. Findings recorded before the runner kept the `action` field carry only the explanation.
+`go run ./cmd/eval judge` writes the records. Each eligible finding goes to a separate Pi process with no tools and no session, which sees only the eligible expected defects and the finding. The judge model, Pi version and full prompt are in each file. For these runs the judge was `openai/gpt-6.1-sol`; it judged 99 findings for $0.18 and every answer was valid. It returned 95 `detects` and 4 `different-defect`: negative `page` or `size` arguments in `bug-pagination-bounds` (02 and 05), and concurrent `Save` calls sharing a temporary file in `bug-swallowed-write-error` (06 and 07). The first scorer, which checked location alone, had credited those four as duplicates. A manual reading of all four `different-defect` records and the multi-line `detects` records agreed with each verdict. Findings recorded before the runner kept the `action` field carry only the explanation.
 
 ## Remaining weaknesses
 
