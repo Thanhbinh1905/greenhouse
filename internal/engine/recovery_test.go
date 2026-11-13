@@ -163,14 +163,28 @@ func TestAdoptedGateRepairCommitContinuesPipeline(t *testing.T) {
 	os.MkdirAll(wrapper, 0700)
 	marker := filepath.Join(root, "kill-after-commit")
 	os.WriteFile(marker, []byte("1"), 0600)
-	writeExecutable(t, filepath.Join(wrapper, "git"), `#!/usr/bin/python3
-import json,os,subprocess,sys
-args=sys.argv[1:]
-p=subprocess.run([`+quotePython(realGit)+`]+args)
-if p.returncode == 0 and 'commit' in args and any('/candidates/' in a for a in args) and os.path.exists(`+quotePython(marker)+`):
-    os.kill(json.load(open(os.path.join(os.environ['GREENHOUSE_HOME'],'pid'))),9)
-    os.unlink(`+quotePython(marker)+`)
-sys.exit(p.returncode)
+	writeExecutable(t, filepath.Join(wrapper, "git"), `#!/bin/sh
+commit=false
+candidate=false
+for arg do
+    case "$arg" in
+        commit) commit=true ;;
+        */candidates/*) candidate=true ;;
+    esac
+done
+if ! "$commit" || ! "$candidate"; then
+    exec `+quotePython(realGit)+` "$@"
+fi
+`+quotePython(realGit)+` "$@"
+status=$?
+if [ "$status" -eq 0 ] && [ -f `+quotePython(marker)+` ]; then
+    /usr/bin/python3 - <<'PYTHON'
+import json,os
+os.kill(json.load(open(os.path.join(os.environ['GREENHOUSE_HOME'],'pid'))),9)
+os.unlink(`+quotePython(marker)+`)
+PYTHON
+fi
+exit "$status"
 `)
 	path := "PATH=" + wrapper + string(os.PathListSeparator) + os.Getenv("PATH")
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
