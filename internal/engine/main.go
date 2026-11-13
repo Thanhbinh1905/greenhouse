@@ -1388,12 +1388,8 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 	e = json.NewDecoder(c).Decode(&v)
 	if e == nil && q.Op == "stop" && checkVersion(q) == nil && v.Outcome == "refused" &&
 		(v.Error == "unsupported operation: stop" || strings.HasPrefix(v.Error, "unsupported protocol version") && (v.Protocol == nil || v.Protocol.Max == 1)) {
-		e = stopLegacyDaemon(h, c)
-		if e == nil {
-			v = Response{Outcome: "ok", Explanation: "daemon stopped"}
-			stamp(&v, q.Version)
-		}
-		return v, e
+		v.Error = "daemon does not support stop; let its work settle, then stop it with SIGTERM to the PID in GREENHOUSE_HOME/pid after confirming that process is the Greenhouse daemon"
+		return v, nil
 	}
 	if e == nil && q.Op == "stop" && v.Outcome == "ok" {
 		e = waitDaemonStopped(h, true)

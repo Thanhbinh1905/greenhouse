@@ -370,6 +370,6 @@ If no daemon is running, `explanation` is `daemon is not running`.
 Neither form starts a daemon. The client waits up to five seconds for shutdown to release the state-home lock.
 Shutdown removes the `pid` file. Restart never signals stored PIDs; SIGTERM handling remains available.
 
-If the daemon predates `stop`, the client verifies the PID file against the Unix socket peer and checks the executable and `daemon` argument.
-It refuses active work, recovery, or scheduled resumes, then sends SIGTERM through a pidfd and waits up to five seconds for exit.
-Hosts must stop admitting new work during legacy shutdown. An unverified process is never signalled. The fallback needs Linux pidfd support and applies to AXI as well as the CLI.
+If the daemon predates `stop`, the CLI exits non-zero and AXI returns `outcome: "refused"` with manual shutdown instructions.
+Let its work settle, then stop it with SIGTERM to the PID in `GREENHOUSE_HOME/pid` after confirming that process is the Greenhouse daemon.
+Neither client signals a legacy process or removes its PID file.
