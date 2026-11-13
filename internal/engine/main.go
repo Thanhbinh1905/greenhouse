@@ -926,10 +926,19 @@ func Daemon(h string) error {
 	if e = os.WriteFile(filepath.Join(h, "pid"), pid, 0600); e != nil {
 		return e
 	}
+	defer os.Remove(filepath.Join(h, "pid"))
+	signalDone := make(chan struct{})
+	defer close(signalDone)
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
-	go func() { <-signals; l.Close() }()
+	go func() {
+		select {
+		case <-signals:
+			l.Close()
+		case <-signalDone:
+		}
+	}()
 	type completion struct {
 		run, execution, status, log string
 		result                      *Verdict
@@ -1254,6 +1263,24 @@ func Daemon(h string) error {
 		e = dec.Decode(&q)
 		var v Response
 		committed := events.seq
+		if e == nil && q.Op == "stop" {
+			v = Response{Outcome: "ok"}
+			if err := checkVersion(q); err != nil {
+				v.Outcome, v.Error = "refused", err.Error()
+			} else if len(active) > 0 || needsProbe(s) {
+				v.Outcome, v.Error = "refused", "daemon is busy; let running work settle before stopping"
+			}
+			if v.Outcome == "ok" {
+				v.Explanation = "daemon stopped"
+			}
+			stamp(&v, q.Version)
+			json.NewEncoder(c).Encode(v)
+			c.Close()
+			if v.Outcome == "ok" {
+				return nil
+			}
+			continue
+		}
 		if e == nil && q.Op == "watch" {
 			var parked bool
 			if v, parked = events.subscribe(s, c, q); parked {
@@ -1313,6 +1340,9 @@ func Daemon(h string) error {
 
 func Send(h string, q Request, spawn bool) (Response, error) {
 	var v Response
+	if q.Op == "stop" {
+		spawn = false
+	}
 	socket := filepath.Join(h, "socket")
 	c, e := net.DialTimeout("unix", socket, time.Second)
 	if e != nil && spawn {
@@ -1337,6 +1367,17 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 		}
 	}
 	if e != nil {
+		if q.Op == "stop" && (errors.Is(e, syscall.ENOENT) || errors.Is(e, syscall.ECONNREFUSED)) {
+			if err := waitDaemonStopped(h, false); err != nil {
+				return v, err
+			}
+			v = Response{Outcome: "ok", Explanation: "daemon is not running"}
+			if err := checkVersion(q); err != nil {
+				v.Outcome, v.Error = "refused", err.Error()
+			}
+			stamp(&v, q.Version)
+			return v, nil
+		}
 		return v, fmt.Errorf("daemon unavailable: %w", e)
 	}
 	defer c.Close()
@@ -1345,6 +1386,14 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 		return v, e
 	}
 	e = json.NewDecoder(c).Decode(&v)
+	if e == nil && q.Op == "stop" && checkVersion(q) == nil && v.Outcome == "refused" &&
+		(v.Error == "unsupported operation: stop" || strings.HasPrefix(v.Error, "unsupported protocol version") && (v.Protocol == nil || v.Protocol.Max == 1)) {
+		v.Error = "daemon does not support stop; let its work settle, then stop it with SIGTERM to the PID in GREENHOUSE_HOME/pid after confirming that process is the Greenhouse daemon"
+		return v, nil
+	}
+	if e == nil && q.Op == "stop" && v.Outcome == "ok" {
+		e = waitDaemonStopped(h, true)
+	}
 	return v, e
 }
 

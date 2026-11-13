@@ -21,6 +21,7 @@ func Main() {
   greenhouse axi          Read one JSON request from stdin; write one JSON
                           response to stdout. Invoke once per request.
   greenhouse daemon       Run the local state daemon.
+  greenhouse stop         Stop the daemon; refuse while work is running.
   greenhouse [-h|--help]   Show this help (also: greenhouse axi --help).
 
 Host review (protocol version 2):
@@ -43,6 +44,16 @@ Complete host requests and response fields: docs/embedding.md
 			e = terminal.Run(h, path)
 		case len(os.Args) == 2 && os.Args[1] == "daemon":
 			e = engine.Daemon(h)
+		case len(os.Args) == 2 && os.Args[1] == "stop":
+			var v engine.Response
+			v, e = engine.Send(h, engine.Request{Version: engine.MaxVersion, Op: "stop"}, false)
+			if e == nil {
+				if v.Outcome != "ok" {
+					e = errors.New(v.Error)
+				} else {
+					fmt.Fprintln(os.Stdout, v.Explanation)
+				}
+			}
 		case len(os.Args) == 2 && os.Args[1] == "axi":
 			var q engine.Request
 			d := json.NewDecoder(io.LimitReader(os.Stdin, 65536))
@@ -58,7 +69,7 @@ Complete host requests and response fields: docs/embedding.md
 				}
 			}
 		default:
-			e = errors.New("usage: greenhouse [axi|daemon]")
+			e = errors.New("usage: greenhouse [axi|daemon|stop]")
 		}
 	}
 	if e != nil {

@@ -31,8 +31,13 @@ A client sends the highest version it speaks. On a version refusal it reads `pro
 The terminal needs version 2 for live events. Against an older daemon it exits with:
 
 ```text
-the running Greenhouse daemon speaks only protocol 1, and this client needs protocol 2. Let its work settle, stop it with SIGTERM to the PID in GREENHOUSE_HOME/pid, then run greenhouse again
+the running Greenhouse daemon speaks only protocol 1, and this client needs protocol 2. Let its work settle, then stop it with SIGTERM to the PID in GREENHOUSE_HOME/pid after confirming that process is the Greenhouse daemon. Then run greenhouse again
 ```
+
+For current daemons, run `greenhouse stop` with the daemon's `GREENHOUSE_HOME`.
+If a daemon predates `stop`, the command exits non-zero and gives this manual shutdown step:
+let its work settle, then stop it with SIGTERM to the PID in `GREENHOUSE_HOME/pid` after confirming that process is the Greenhouse daemon.
+The command never signals a legacy process. Restart never signals stored PIDs.
 
 Against a daemon whose range excludes version 2 it names both ranges and asks for a matching Greenhouse. The terminal never stops or replaces a daemon on its own; a running daemon keeps its protocol until it is stopped.
 
