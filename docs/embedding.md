@@ -353,3 +353,23 @@ Then the host repeats the review round with a new grant.
 `TestEmbeddedHostOwnsDelivery` drives a fake host through the daemon, AXI and terminal with an isolated HOME, real Git and a fake reviewer. It proves two grants buy exactly two reviewer invocations and no fixer, a Greenhouse `limit` of 1 does not stop the host's second round, the successor keeps usage, and no candidate ref, private worktree, lease or remote ref appears. `TestHostOwnershipBoundaries` covers standalone takeover and a second host, and `TestHostReviewResumesUnderItsGrant` covers a paused review that resumes under its grant.
 
 `TestHostFindingIdentityAcrossRounds` exercises two host review rounds through the daemon with real Git and a fake reviewer. It checks that shifted code and reworded explanations preserve the ID, while edited code changes it.
+
+## Stop the daemon
+
+Run `greenhouse stop` with the daemon's `GREENHOUSE_HOME`, or send an AXI request:
+
+```sh
+printf '%s\n' '{"version":2,"op":"stop"}' | greenhouse axi
+```
+
+This administrative operation applies to the entire state home and needs no run token, host identity, or grant.
+The daemon refuses with `outcome: "refused"` and `error: "daemon is busy; let running work settle before stopping"` while work runs.
+Let work settle and retry. A refusal leaves running children untouched.
+On success, `outcome` is `ok` and `explanation` is `daemon stopped`.
+If no daemon is running, `explanation` is `daemon is not running`.
+Neither form starts a daemon. The client waits up to five seconds for shutdown to release the state-home lock.
+Shutdown removes the `pid` file. Restart never signals stored PIDs; SIGTERM handling remains available.
+
+If the daemon predates `stop`, the CLI exits non-zero and AXI returns `outcome: "refused"` with manual shutdown instructions.
+Let its work settle, then stop it with SIGTERM to the PID in `GREENHOUSE_HOME/pid` after confirming that process is the Greenhouse daemon.
+Neither client signals a legacy process or removes its PID file.
