@@ -34,6 +34,8 @@ if mode=='findings':
 if mode=='mixed':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':p,'origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':e,'action':'Fix the sample','rule':'','head':b['Head']} for p,e in [('P1','Sample is wrong'),('P2','Sample is vague'),('P3','Sample could be shorter')]]
+    v['findings'][1].update(origin='policy',rule='unslop/plain-prose')
+    v['findings'][2].update(file='README.md')
 if b.get('Responses'):
     check=open(root+'/review-check').read().strip() if os.path.exists(root+'/review-check') else 'confirmed'
     v['resolutions']=[{'finding':r['finding'],'check':check,'reason':'checked against the candidate'} for r in b['Responses']]
