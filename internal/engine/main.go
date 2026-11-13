@@ -1386,6 +1386,15 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 		return v, e
 	}
 	e = json.NewDecoder(c).Decode(&v)
+	if e == nil && q.Op == "stop" && checkVersion(q) == nil && v.Outcome == "refused" &&
+		(v.Error == "unsupported operation: stop" || strings.HasPrefix(v.Error, "unsupported protocol version") && (v.Protocol == nil || v.Protocol.Max == 1)) {
+		e = stopLegacyDaemon(h, c)
+		if e == nil {
+			v = Response{Outcome: "ok", Explanation: "daemon stopped"}
+			stamp(&v, q.Version)
+		}
+		return v, e
+	}
 	if e == nil && q.Op == "stop" && v.Outcome == "ok" {
 		e = waitDaemonStopped(h, true)
 	}
