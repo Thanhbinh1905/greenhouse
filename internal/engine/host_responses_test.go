@@ -118,6 +118,15 @@ sys.exit(0)
 				t.Fatalf("resolution: %v", check)
 			}
 		}
+		if round == 2 {
+			latest := result["findings"].([]any)
+			if len(latest) != len(responses) {
+				t.Fatalf("rejected responses must retain both findings: %v", result)
+			}
+			for i, finding := range latest {
+				responses[i]["finding"] = finding.(map[string]any)["id"]
+			}
+		}
 		if before != git(t, repo, "status", "--porcelain") || refs != git(t, repo, "show-ref") {
 			t.Fatal("review modified author worktree or refs")
 		}
