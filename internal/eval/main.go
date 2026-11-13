@@ -1,7 +1,7 @@
-// Command eval measures Greenhouse independent review against a fixed corpus
+// Package eval measures Greenhouse independent review against a fixed corpus
 // of small Git changes with known findings. It is a development tool and is
 // not part of the greenhouse executable.
-package main
+package eval
 
 import (
 	"encoding/json"
@@ -15,14 +15,14 @@ import (
 )
 
 const usage = `usage:
-  go run ./eval check [-corpus dir]
-  go run ./eval judge -model provider/id [-pi path] [-parallel n] [-corpus dir] [-split tune|holdout|all] run-dir...
-  go run ./eval rescore [-corpus dir] [-split tune|holdout|all] run-dir...
-  go run ./eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-split tune|holdout|all] [-parallel n]
-  go run ./eval fix-check [-corpus dir]
-  go run ./eval fix-run -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
+  go run ./cmd/eval check [-corpus dir]
+  go run ./cmd/eval judge -model provider/id [-pi path] [-parallel n] [-corpus dir] [-split tune|holdout|all] run-dir...
+  go run ./cmd/eval rescore [-corpus dir] [-split tune|holdout|all] run-dir...
+  go run ./cmd/eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-split tune|holdout|all] [-parallel n]
+  go run ./cmd/eval fix-check [-corpus dir]
+  go run ./cmd/eval fix-run -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
 
-func main() {
+func Main() {
 	if cfg := os.Getenv(shimEnv); cfg != "" {
 		os.Exit(runShim(cfg))
 	}
@@ -38,9 +38,9 @@ func main() {
 
 func dispatch(sub string, args []string) error {
 	fs := flag.NewFlagSet(sub, flag.ContinueOnError)
-	defaultCorpus := "eval/testdata/corpus"
+	defaultCorpus := "internal/eval/testdata/corpus"
 	if strings.HasPrefix(sub, "fix-") {
-		defaultCorpus = "eval/testdata/fixer"
+		defaultCorpus = "internal/eval/testdata/fixer"
 	}
 	split := "all"
 	if sub == "run" || sub == "judge" || sub == "rescore" {

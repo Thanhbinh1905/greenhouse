@@ -383,13 +383,13 @@ Set `TMPDIR` to an isolated scratch directory. Integration fixtures use private 
 
 ## Review evaluation
 
-`eval/` is a development command that measures independent review with a real model. It is not part of the `greenhouse` executable, and `go test ./...` never calls a model.
+`cmd/eval/` is a development command that measures independent review with a real model. It is not part of the `greenhouse` executable, and `go test ./...` never calls a model.
 
-The corpus in `eval/testdata/corpus` holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, and clean changes. Each `case.json` records the change intent, the selected rules, and every expected finding by file, candidate line range, origin, rule, severity, and acceptable priorities. `noise` lists lines that must not be flagged. `corpus.json` lists the cases and a revision number; reports also record a digest of every corpus byte. Each expected finding has an `id`. After a ground-truth change, `go run ./eval rescore docs/evidence/review-eval/*/` scores the recorded findings again from their adjudication records.
+The corpus in `internal/eval/testdata/corpus` holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, and clean changes. Each `case.json` records the change intent, the selected rules, and every expected finding by file, candidate line range, origin, rule, severity, and acceptable priorities. `noise` lists lines that must not be flagged. `corpus.json` lists the cases and a revision number; reports also record a digest of every corpus byte. Each expected finding has an `id`. After a ground-truth change, `go run ./cmd/eval rescore docs/evidence/review-eval/*/` scores the recorded findings again from their adjudication records.
 
 ```sh
-go run ./eval check
-go run ./eval run -model openai/gpt-5.6-luna \
+go run ./cmd/eval check
+go run ./cmd/eval run -model openai/gpt-5.6-luna \
   -parallel 4 -label "what changed" -out docs/evidence/review-eval/NN-name
 ```
 
@@ -400,7 +400,7 @@ For each case, `run` commits fixed base and head trees and drives Greenhouse thr
 `report.md` summarizes a run; `report.json` holds the configuration, every case record, and the summary. Each case directory holds `input.json` (the exact stdin bytes), `argv.json`, `events.jsonl` (Pi's events without streaming deltas), and `timing.json`. The metrics are:
 
 - A finding is eligible for an expected finding when file, origin, and rule are equal, the line ranges overlap, and the finding spans at most 15 lines. Eligibility earns no credit by itself.
-- `adjudications.json` holds one record per eligible finding: finding index and digest, expected defect ID, verdict (`detects`, `different-defect`, or `duplicate`), and a one-sentence rationale quoting the finding. `run` produces it with a separate judge call per finding (`-judge-model`, default `-model`); `go run ./eval judge -model provider/id run-dir` produces it for saved runs. The judge model and prompt are recorded. An eligible finding without a record earns no credit.
+- `adjudications.json` holds one record per eligible finding: finding index and digest, expected defect ID, verdict (`detects`, `different-defect`, or `duplicate`), and a one-sentence rationale quoting the finding. `run` produces it with a separate judge call per finding (`-judge-model`, default `-model`); `go run ./cmd/eval judge -model provider/id run-dir` produces it for saved runs. The judge model and prompt are recorded. An eligible finding without a record earns no credit.
 - Recall is detected over expected findings; high-severity recall counts only planted `high` findings. Precision is matching findings over all findings.
 - Priority accuracy counts detections whose priority is in the expected list.
 - A false positive detects and duplicates nothing; a `different-defect` record makes it a wrong-defect false positive. A blocking result is a P0 or P1 false positive; an inconclusive review on a clean case also blocks.
@@ -412,13 +412,13 @@ For each case, `run` commits fixed base and head trees and drives Greenhouse thr
 
 ## Fixer evaluation
 
-`go run ./eval fix-run` measures selected-finding repair with a real model through the product's one-pass repair path. Like the review evaluation, it is development-only, and `go test ./...` never calls a model.
+`go run ./cmd/eval fix-run` measures selected-finding repair with a real model through the product's one-pass repair path. Like the review evaluation, it is development-only, and `go test ./...` never calls a model.
 
-`eval/testdata/fixer` holds nine defect cases and one dispute case. Each records base and head trees, findings, selected findings, the expected response (`fixed` or `disputed`), and the allowed edit ranges. Defect cases include a reference repair in `fix/`; every case has hidden tests in `hidden/`. Hidden `TestAccept` tests check the selected finding; `TestRegress` tests and the candidate's own tests check behavior that must survive. The fixer never sees the hidden tests. `go run ./eval fix-check`, also run by `go test ./eval`, proves that every acceptance test of a fixed case fails on the head while the other tests pass, and that the reference repair passes every test inside the scope.
+`internal/eval/testdata/fixer` holds nine defect cases and one dispute case. Each records base and head trees, findings, selected findings, the expected response (`fixed` or `disputed`), and the allowed edit ranges. Defect cases include a reference repair in `fix/`; every case has hidden tests in `hidden/`. Hidden `TestAccept` tests check the selected finding; `TestRegress` tests and the candidate's own tests check behavior that must survive. The fixer never sees the hidden tests. `go run ./cmd/eval fix-check`, also run by `go test ./internal/eval`, proves that every acceptance test of a fixed case fails on the head while the other tests pass, and that the reference repair passes every test inside the scope.
 
 ```sh
-go run ./eval fix-check
-go run ./eval fix-run -parallel 4 \
+go run ./cmd/eval fix-check
+go run ./cmd/eval fix-run -parallel 4 \
   -label "what changed" -out docs/evidence/fixer-eval/NN-name
 ```
 
