@@ -223,7 +223,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	}
 	var responses []ResolutionResponse
 	var checked []reviewResponse
-	if responder, pending := pendingResponses(r); full && responder != nil {
+	if responder, pending := pendingResponses(r); (full || r.Host != nil) && responder != nil && len(pending) > 0 {
 		responses, checked = pending, reviewResponses(responder)
 		contract += resolutionContract
 	}

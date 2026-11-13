@@ -79,6 +79,66 @@ Failed or inconclusive reviews include a classified `reason` and a credential-re
 
 A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
 
+## Responses to earlier findings
+
+A host `review` request accepts an optional `responses` array. Responses attach atomically to that review and its grant. There is no separate response operation or authorization. Omitting `responses`, or sending an empty array, starts a review without responses. Greenhouse does not carry responses into a later grant automatically. A paused review retains its responses on resume or rerun.
+
+Each response has:
+
+- `finding`: an ID from the latest settled review's findings in this run.
+- `response`: `fixed` or `disputed`.
+- `reason`: required for `disputed`; optional for `fixed`. A non-empty reason must contain non-whitespace text, valid UTF-8, at most 8,192 bytes, and no control characters except tabs and newlines.
+
+A host may respond to a subset of the findings. A successor created with `new` by the same host inherits the latest settled findings. This lets the host respond after committing an author repair. A completed review replaces that set, including when its findings array is empty. A failed, cancelled, stale, or inconclusive review does not replace it.
+
+Greenhouse refuses unknown finding IDs, duplicate IDs, other response values, invalid reasons, and any non-empty `authority` value. Deferral remains a standalone decision operation. Responses require protocol 2 and the owning host's `review` request. Standalone clients, other hosts, and other operations cannot submit responses. Validation failure consumes no grant and leaves the run token unchanged.
+
+Replaying the identical request with the same `action_id` returns its recorded receipt, including after the review settles. Reusing that action ID with different input is refused. Each new round still needs an unused grant and current run, input, gate, and token values.
+
+Complete request:
+
+```json
+{
+  "version": 2,
+  "op": "review",
+  "run_id": "<latest run_id>",
+  "input_id": "<latest input_id>",
+  "gate_id": "<latest gate_id>",
+  "expected": "<latest token>",
+  "action_id": "review-round-2",
+  "reason": "Review the author responses",
+  "host": {"name": "posse", "id": "greenhouse/t69"},
+  "grant": "round-2",
+  "responses": [
+    {
+      "finding": "<first finding id from the latest settled review>",
+      "response": "fixed",
+      "reason": "The author corrected the bounds check"
+    },
+    {
+      "finding": "<second finding id from the latest settled review>",
+      "response": "disputed",
+      "reason": "The caller already rejects empty input"
+    }
+  ]
+}
+```
+
+The reviewer receives each response with its prior finding through the same `Responses` input and resolution contract used after standalone repairs. Greenhouse does not edit the worktree or require an uncommitted edit for a host's `fixed` claim. The reviewer checks the committed candidate independently.
+
+A settled `host_result` includes `resolutions` when the review checked responses:
+
+```json
+{
+  "resolutions": [
+    {"finding": "<first finding id>", "check": "confirmed", "reason": "The candidate now checks the bound"},
+    {"finding": "<second finding id>", "check": "rejected", "reason": "The caller accepts empty input"}
+  ]
+}
+```
+
+Each response requires exactly one reviewer check. For `fixed`, `confirmed` means the candidate resolves the finding. For `disputed`, `confirmed` means the prior finding was not a defect. `rejected` rejects the author's claim. A defect that remains must also appear in `findings`. Missing, duplicate, or unknown checks make the review inconclusive. Hosts must still read `verdict` and `current`; responses do not change verdict semantics.
+
 ## Request examples
 
 Each request block below is a complete JSON request to `greenhouse axi`, invoked from the candidate worktree. AXI reads one request per invocation. It writes one response envelope on stdout and replaces any request `path` with the invoking directory.

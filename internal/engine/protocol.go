@@ -23,7 +23,7 @@ func checkVersion(q Request) error {
 	if q.Version < 2 && q.Op == "watch" {
 		return errors.New("watch requires protocol version 2")
 	}
-	if q.Version < 2 && (q.Host != nil || q.Grant != "") {
+	if q.Version < 2 && (q.Host != nil || q.Grant != "" || q.Responses != nil) {
 		return errors.New("host mode requires protocol version 2")
 	}
 	return nil

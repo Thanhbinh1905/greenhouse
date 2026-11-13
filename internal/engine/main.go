@@ -84,6 +84,8 @@ type Run struct {
 	Recoveries    []Recovery          `json:"recoveries,omitempty"`
 	Inherited     *Inheritance        `json:"inherited,omitempty"`
 	Host          *Host               `json:"host,omitempty"`
+	HostFindings  []Finding           `json:"host_findings,omitempty"`
+	HostResponses *Repair             `json:"host_responses,omitempty"`
 	HostGrants    []string            `json:"host_grants,omitempty"`
 
 	ReviewBase       string `json:"review_base,omitempty"`
@@ -112,6 +114,8 @@ type Request struct {
 	WaitMS   int       `json:"wait_ms,omitempty"`
 	Host     *Host     `json:"host,omitempty"`
 	Grant    string    `json:"grant,omitempty"`
+
+	Responses []ResolutionResponse `json:"responses,omitempty"`
 }
 type Response struct {
 	Models      []string          `json:"models,omitempty"`
@@ -565,6 +569,9 @@ func handleRequest(s *Store, q Request) Response {
 	if e != nil {
 		return fail(e.Error(), nil)
 	}
+	if q.Responses != nil && (q.Host == nil || q.Op != "review") {
+		return fail("responses require a host review request", nil)
+	}
 	if q.Op == "models" {
 		config, err := trustedReviewer()
 		if err != nil {
@@ -736,7 +743,7 @@ func handleRequest(s *Store, q Request) Response {
 		r = restartRun(s, r, id, actor)
 		s.Slots[slot] = r.ID
 	} else if q.Op == "review" && r.Host != nil {
-		if err := admitHostReview(r, q.Grant); err != nil {
+		if err := admitHostReview(r, q.Grant, q.Responses); err != nil {
 			return fail(err.Error(), r)
 		}
 	} else if q.Op == "review" {
@@ -1421,6 +1428,9 @@ func finishReview(r *Run, done reviewOutcome) {
 	r.Status, r.Review.Status, r.Review.Log = status, status, done.Log
 	r.Review.Result = done.Result
 	if done.Result != nil {
+		if r.Host != nil && (status == "clean-review" || status == "outstanding-findings") {
+			r.HostFindings = append([]Finding{}, done.Result.Findings...)
+		}
 		index := map[string]int{}
 		for i, f := range r.Findings {
 			index[f.ID] = i

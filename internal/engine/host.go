@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"slices"
 )
@@ -12,20 +13,21 @@ type Host struct {
 }
 
 type HostResult struct {
-	Host     Host      `json:"host"`
-	Grant    string    `json:"grant"`
-	Review   string    `json:"review_id"`
-	Head     string    `json:"head"`
-	Target   string    `json:"target"`
-	Status   string    `json:"status"`
-	Verdict  string    `json:"verdict,omitempty"`
-	Current  bool      `json:"current"`
-	Findings []Finding `json:"findings"`
-	Rules    string    `json:"rules_digest"`
-	Config   string    `json:"config_digest"`
-	Input    string    `json:"input_digest"`
-	Backend  string    `json:"backend"`
-	Model    string    `json:"model"`
+	Host        Host              `json:"host"`
+	Grant       string            `json:"grant"`
+	Review      string            `json:"review_id"`
+	Head        string            `json:"head"`
+	Target      string            `json:"target"`
+	Status      string            `json:"status"`
+	Verdict     string            `json:"verdict,omitempty"`
+	Current     bool              `json:"current"`
+	Findings    []Finding         `json:"findings"`
+	Resolutions []ResolutionCheck `json:"resolutions,omitempty"`
+	Rules       string            `json:"rules_digest"`
+	Config      string            `json:"config_digest"`
+	Input       string            `json:"input_digest"`
+	Backend     string            `json:"backend"`
+	Model       string            `json:"model"`
 
 	Reason           string     `json:"reason,omitempty"`
 	Diagnostic       string     `json:"diagnostic,omitempty"`
@@ -87,20 +89,43 @@ func hostRefusal(r *Run, q Request) string {
 	return ""
 }
 
-func admitHostReview(r *Run, grant string) error {
+func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error {
 	if !ValidText(grant) || len(grant) > 256 {
 		return errors.New("host review requires grant: the host's review authorization identity")
 	}
 	if slices.Contains(r.HostGrants, grant) {
 		return errors.New("grant already used: " + grant)
 	}
+
+	var response *Repair
+	if len(responses) > 0 {
+		response = &Repair{ID: opaque(), Stage: "review", Selected: latestHostFindings(r)}
+		data, err := json.Marshal(map[string]any{"responses": responses})
+		if err != nil {
+			return err
+		}
+		response.Responses, err = parseResponseItems(string(data), response, true)
+		if err != nil {
+			return err
+		}
+	}
+	previous := r.HostResponses
+	r.HostResponses = response
 	if err := admitReviewAgain(r); err != nil {
+		r.HostResponses = previous
 		return err
 	}
 	r.Review.Grant = grant
 	r.HostGrants = append(r.HostGrants, grant)
 	r.Events = append(r.Events, Event{Kind: "host-review", Actor: r.Host.Name, Reason: "grant " + grant})
 	return nil
+}
+
+func latestHostFindings(r *Run) []Finding {
+	if x := r.Review; x != nil && x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings") {
+		return x.Result.Findings
+	}
+	return r.HostFindings
 }
 
 func hostSuccessor(r *Run, next *Run, host *Host) {
@@ -111,6 +136,7 @@ func hostSuccessor(r *Run, next *Run, host *Host) {
 	next.Predecessor, r.Successor = r.ID, next.ID
 	next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 	next.Inherited = &Inheritance{From: r.ID, Review: r.ReviewUsed, Repair: r.RepairUsed}
+	next.HostFindings = append([]Finding(nil), latestHostFindings(r)...)
 	next.HostGrants = append([]string(nil), r.HostGrants...)
 }
 
@@ -129,6 +155,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	}
 	if x.Result != nil {
 		v.Verdict, v.Findings = x.Result.Verdict, x.Result.Findings
+		v.Resolutions = x.Result.Resolutions
 	}
 	return v
 }

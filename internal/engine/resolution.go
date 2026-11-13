@@ -52,6 +52,10 @@ func deferralAuthorities(r *Run) []DeferralAuthority {
 }
 
 func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
+	return parseResponseItems(text, x, false)
+}
+
+func parseResponseItems(text string, x *Repair, host bool) ([]ResolutionResponse, error) {
 	fields, err := exactFields([]byte(text), "responses")
 	if err != nil {
 		return nil, errors.New("missing resolution response object")
@@ -85,9 +89,11 @@ func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
 			return nil, fmt.Errorf("resolution response names unselected finding %q", r.Finding)
 		case seen[r.Finding]:
 			return nil, fmt.Errorf("duplicate resolution response for %s", r.Finding)
+		case host && r.Response != "fixed" && r.Response != "disputed":
+			return nil, fmt.Errorf("host resolution response %q is not fixed or disputed", r.Response)
 		case resolutionKinds[r.Response] == "":
 			return nil, fmt.Errorf("resolution response %q is not fixed, disputed or deferred", r.Response)
-		case !ValidText(r.Reason):
+		case !ValidText(r.Reason) && !(host && r.Response == "fixed" && r.Reason == ""):
 			return nil, fmt.Errorf("resolution response for %s needs a reason", r.Finding)
 		case r.Response == "deferred" && !authorities[r.Authority]:
 			return nil, fmt.Errorf("deferred resolution response for %s cites no answered decision", r.Finding)
@@ -98,7 +104,7 @@ func parseResponses(text string, x *Repair) ([]ResolutionResponse, error) {
 		out = append(out, r)
 	}
 	for id := range selected {
-		if !seen[id] {
+		if !host && !seen[id] {
 			return nil, fmt.Errorf("missing resolution response for %s", id)
 		}
 	}
@@ -136,6 +142,9 @@ func anyFixed(responses []ResolutionResponse) bool {
 }
 
 func pendingResponses(r *Run) (*Repair, []ResolutionResponse) {
+	if r.Host != nil && r.HostResponses != nil {
+		return r.HostResponses, r.HostResponses.Responses
+	}
 	if r.Pipeline == nil {
 		return nil, nil
 	}
