@@ -1,6 +1,6 @@
 # Fixer evaluation runs
 
-Each directory is one live run of `go run ./eval fix-run` over the whole fixer corpus. See [the README](../../../README.md#fixer-evaluation) for the command and metric definitions.
+Each directory is one live run of `go run ./cmd/eval fix-run` over the whole fixer corpus. See [the README](../../../README.md#fixer-evaluation) for the command and metric definitions.
 
 ## Configuration
 
@@ -47,8 +47,8 @@ The instructions name no case, file or defect from the corpus.
 ## Reproducing
 
 ```sh
-go run ./eval fix-check
-OPENAI_API_KEY=... go run ./eval fix-run -base-url http://127.0.0.1:8317/v1 -parallel 4 \
+go run ./cmd/eval fix-check
+OPENAI_API_KEY=... go run ./cmd/eval fix-run -base-url http://127.0.0.1:8317/v1 -parallel 4 \
   -label "what changed" -out docs/evidence/fixer-eval/NN-name
 ```
 

@@ -50,7 +50,7 @@ Public cases use exact commits from three repositories. Twenty reverse fixes and
 | colinhacks/zod | 12 | MIT | `LICENSE-zod-3f1189b28e38.txt` |
 | rust-itertools/itertools | 22 | MIT option | `LICENSE-itertools-7576269ea71f.txt` |
 
-[The source inventory](../../../eval/testdata/corpus/SOURCES.md) lists every public case, commit link, license and file. Per-case derivations record excerpt coordinates and transformations. Excerpts retain changed declarations and their supporting class or implementation headers. Unrelated declarations and imports are omitted. The excerpts are not standalone upstream packages.
+[The source inventory](../../../internal/eval/testdata/corpus/SOURCES.md) lists every public case, commit link, license and file. Per-case derivations record excerpt coordinates and transformations. Excerpts retain changed declarations and their supporting class or implementation headers. Unrelated declarations and imports are omitted. The excerpts are not standalone upstream packages.
 
 Thirty new synthetic cases cover ten unchanged-caller contracts, ten security boundaries and ten judgment decisions. Python callers exercise serialization, time, money, result shape, retry and security contracts. Judgment cases cover deadlines, negative caching, replica failover, notification concurrency, logging, eviction, page caps, jitter, compression and polling. Their contracts leave the disputed decision open; a matching concern is acceptable, not required.
 
@@ -67,12 +67,12 @@ A judgment case has allowed ranges with an origin, optional policy rule and rati
 All commands below passed on this branch. Heavy Go commands ran sequentially with the required CPU and build limits:
 
 ```sh
-taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS=-p=1 go run ./eval check
-taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS=-p=1 go test ./eval/... -p 1 -parallel 1 -count=1
-taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS=-p=1 go vet ./eval/...
-gofmt -l eval/*.go
+taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS=-p=1 go run ./cmd/eval check
+taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS=-p=1 go test ./internal/eval/... -p 1 -parallel 1 -count=1
+taskset -c 10,11 nice -n 15 env GOMAXPROCS=2 GOFLAGS=-p=1 go vet ./internal/eval/...
+gofmt -l internal/eval/*.go
 git diff --check
-python3 -B eval/validate_fixtures.py
+python3 -B internal/eval/validate_fixtures.py
 ```
 
 The full eval suite passed. Formatting and vet emitted no output. The deterministic `check` printed the counts above and the revision 5 digest. It enforces source minima, real-source strata, hold-out counts, source-commit grouping, language mix, actual change sizes, cross-file structure and judgment ranges. Tests mutate a valid corpus to prove rejection of count, split, license, language and size violations. Strict loader tests cover missing or invalid metadata, public provenance, manifest identity and range constraints. CLI tests prove hold-out filtering for rescoring and judging; the fake judge fails if an excluded tune finding reaches it.
