@@ -109,6 +109,7 @@ func TestStopLegacyDaemon(t *testing.T) {
 	for _, version := range []int{1, 2} {
 		t.Run(strconv.Itoa(version), func(t *testing.T) {
 			bin, repo, home := fixture(t)
+			t.Cleanup(func() { os.Remove(filepath.Join(home, "pid")) })
 			_, source, _, _ := runtime.Caller(0)
 			mainPath := filepath.Join(filepath.Dir(source), "main.go")
 			content, err := os.ReadFile(mainPath)
