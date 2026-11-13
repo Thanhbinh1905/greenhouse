@@ -163,14 +163,28 @@ func TestAdoptedGateRepairCommitContinuesPipeline(t *testing.T) {
 	os.MkdirAll(wrapper, 0700)
 	marker := filepath.Join(root, "kill-after-commit")
 	os.WriteFile(marker, []byte("1"), 0600)
-	writeExecutable(t, filepath.Join(wrapper, "git"), `#!/usr/bin/python3
-import json,os,subprocess,sys
-args=sys.argv[1:]
-p=subprocess.run([`+quotePython(realGit)+`]+args)
-if p.returncode == 0 and 'commit' in args and any('/candidates/' in a for a in args) and os.path.exists(`+quotePython(marker)+`):
-    os.unlink(`+quotePython(marker)+`)
-    os.kill(json.load(open(os.path.join(os.environ['GREENHOUSE_HOME'],'pid'))),9)
-sys.exit(p.returncode)
+	writeExecutable(t, filepath.Join(wrapper, "git"), `#!/bin/sh
+commit=false
+candidate=false
+for arg do
+    case "$arg" in
+        commit) commit=true ;;
+        */candidates/*) candidate=true ;;
+    esac
+done
+if ! "$commit" || ! "$candidate"; then
+    exec `+quotePython(realGit)+` "$@"
+fi
+`+quotePython(realGit)+` "$@"
+status=$?
+if [ "$status" -eq 0 ] && [ -f `+quotePython(marker)+` ]; then
+    /usr/bin/python3 - <<'PYTHON'
+import json,os
+os.kill(json.load(open(os.path.join(os.environ['GREENHOUSE_HOME'],'pid'))),9)
+os.unlink(`+quotePython(marker)+`)
+PYTHON
+fi
+exit "$status"
 `)
 	path := "PATH=" + wrapper + string(os.PathListSeparator) + os.Getenv("PATH")
 	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
@@ -191,6 +205,7 @@ sys.exit(p.returncode)
 	if _, err := os.Stat(marker); err == nil {
 		t.Fatalf("the repair never committed: %v", runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`, path))["pipeline"])
 	}
+	waitDaemonExit(t, home)
 	var recovered map[string]any
 	for time.Now().Before(deadline) {
 		recovered = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`, path)
@@ -216,6 +231,42 @@ sys.exit(p.returncode)
 	}
 	if got := countLines(t, filepath.Join(root, "fix-invocations")); got["test"] != 1 {
 		t.Fatalf("adoption reran the fixer: %v", got)
+	}
+}
+
+func TestPipelineStartSurvivesSlowCandidateCreation(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := pipelineFixture(t, repairPlan)
+	stopDaemonAndWait(t, home)
+	realGit, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrapper := filepath.Join(filepath.Dir(home), "slow-git-bin")
+	if err := os.MkdirAll(wrapper, 0700); err != nil {
+		t.Fatal(err)
+	}
+	writeExecutable(t, filepath.Join(wrapper, "git"), `#!/usr/bin/python3
+import os,sys,time
+args=sys.argv[1:]
+if 'worktree' in args and 'add' in args:
+    time.sleep(5.1)
+os.execv(`+quotePython(realGit)+`,[`+quotePython(realGit)+`]+args)
+`)
+	path := "PATH=" + wrapper + string(os.PathListSeparator) + os.Getenv("PATH")
+	prepare := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": v["gate_id"], "action_id": "prepare-slow-git", "intent": "Change the sample", "target": runOf(t, v)["target"]}
+	b, _ := json.Marshal(prepare)
+	v = axi(t, bin, repo, home, string(b), path)
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	started := mutate(t, bin, repo, home, v, "pipeline", "slow-start", nil)
+	if started["outcome"] != "ok" {
+		t.Fatalf("slow candidate creation lost the pipeline admission response: %v", started)
+	}
+	done := waitPipeline(t, bin, repo, home)
+	if stageOf(t, done, "sync")["status"] != "passed" || stageOf(t, done, "test")["status"] != "passed" {
+		t.Fatalf("slow candidate creation did not pass synchronization and tests: %v", done)
 	}
 }
 
@@ -303,6 +354,11 @@ func TestRecoveryNewRunKeepsFinalFixGrantAcrossPrepare(t *testing.T) {
 func stopDaemonAndWait(t *testing.T, home string) {
 	t.Helper()
 	stopDaemon(t, home)
+	waitDaemonExit(t, home)
+}
+
+func waitDaemonExit(t *testing.T, home string) {
+	t.Helper()
 	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
 	if err != nil {
 		t.Fatal(err)
