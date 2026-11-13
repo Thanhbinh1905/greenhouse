@@ -71,7 +71,9 @@ Every host request carries `host`:
 }
 ```
 
-`verdict` is `clean`, `findings` or `inconclusive`, and is empty until the review settles. `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`; an ID is stable across rounds for the same root cause.
+`verdict` is `clean`, `findings` or `inconclusive`, and is empty until the review settles. `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`.
+
+For new reviews, the ID is the lowercase SHA-256 hex digest of the JSON array `[origin, file, rule, normalized_code]`. Greenhouse reads lines `start` through `end` (inclusive) from `file` at the reviewed `head`. For each line, it joins `strings.Fields(line)` with one ASCII space, which trims and collapses Unicode whitespace. It drops blank lines and joins the remaining lines with a newline (`\n`). JSON encoding uses Go's `encoding/json.Marshal`. Line numbers, head, explanation, priority, and action are excluded. Shifting lines or rewording explanations preserves the ID; changing normalized code changes it. Findings with the same ID keep the first finding in reviewer order, including its priority and explanation. Stored reviews retain their IDs; executions admitted before this rule retain the legacy identity calculation.
 
 Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports input, output, cached-input, and total tokens, plus cost in USD. Unknown values stay zero; totals retain each backend's accounting.
 
@@ -409,3 +411,5 @@ Then the host repeats the review round with a new grant.
 ## Verification
 
 `TestEmbeddedHostOwnsDelivery` drives a fake host through the daemon, AXI and terminal with an isolated HOME, real Git and a fake reviewer. It proves two grants buy exactly two reviewer invocations and no fixer, a Greenhouse `limit` of 1 does not stop the host's second round, the successor keeps usage, and no candidate ref, private worktree, lease or remote ref appears. `TestHostOwnershipBoundaries` covers standalone takeover and a second host, and `TestHostReviewResumesUnderItsGrant` covers a paused review that resumes under its grant.
+
+`TestHostFindingIdentityAcrossRounds` exercises two host review rounds through the daemon with real Git and a fake reviewer. It checks that shifted code and reworded explanations preserve the ID, while edited code changes it.
