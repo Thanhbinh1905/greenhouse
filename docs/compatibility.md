@@ -13,9 +13,11 @@ Every request carries `version`. This daemon accepts protocol versions 1 and 2 a
 | Version | Adds |
 | --- | --- |
 | 1 | Lifecycle, settings, review, repair, pipeline, decisions and recovery operations |
-| 2 | `watch` event subscriptions, host mode (`host`, `grant`, `host_result`) |
+| 2 | `watch` event subscriptions, host mode (`host`, `grant`, `responses`, `host_result`) |
 
-A request outside the supported range is refused with `unsupported protocol version N; this daemon supports 1-2` and the `protocol` block, and changes nothing. A version-1 request that uses `watch`, `host` or `grant` is refused with `requires protocol version 2`.
+A request outside the supported range is refused with `unsupported protocol version N; this daemon supports 1-2` and the `protocol` block, and changes nothing. A version-1 request that uses `watch`, `host`, `grant`, or `responses` is refused with `requires protocol version 2`.
+
+Host review responses keep protocol version 2. The optional `review.responses` request field and `host_result.resolutions` response field are additive. Omitting responses preserves existing behavior. An older daemon refuses the unknown request field; existing protocol-2 clients continue to work. See [host responses](embedding.md#responses-to-earlier-findings).
 
 Rules within one version:
 
