@@ -1247,7 +1247,7 @@ func Daemon(h string) error {
 			}
 			c = conn
 		}
-		c.SetDeadline(time.Now().Add(5 * time.Second))
+		c.SetReadDeadline(time.Now().Add(5 * time.Second))
 		var q Request
 		dec := json.NewDecoder(io.LimitReader(c, 65536))
 		dec.DisallowUnknownFields()
@@ -1268,6 +1268,7 @@ func Daemon(h string) error {
 			v = handle(&next, q)
 			if e = persist(h, &next); e != nil {
 				v = Response{Version: 1, Outcome: "error", Error: "storage commit failed: " + e.Error()}
+				c.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				json.NewEncoder(c).Encode(v)
 				c.Close()
 				return e
@@ -1306,6 +1307,7 @@ func Daemon(h string) error {
 			}
 		}
 		stamp(&v, q.Version)
+		c.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		json.NewEncoder(c).Encode(v)
 		c.Close()
 	}

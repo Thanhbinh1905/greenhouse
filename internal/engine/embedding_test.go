@@ -205,8 +205,9 @@ if '--list-models' in sys.argv:
  print('fixture model')
  sys.exit(0)
 root=os.path.dirname(__file__)
-open(root+'/reviewer-pid','w').write(str(os.getpid()))
-open(root+'/runner-pid','w').write(str(os.getppid()))
+with open(root+'/runner-pid','w') as f: f.write(str(os.getppid()))
+with open(root+'/reviewer-pid.tmp','w') as f: f.write(str(os.getpid()))
+os.rename(root+'/reviewer-pid.tmp',root+'/reviewer-pid')
 while not os.path.exists(root+'/release-review'):
  time.sleep(0.01)
 b=json.load(sys.stdin)
@@ -256,6 +257,7 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 			if err = syscall.Kill(daemonPID, syscall.SIGKILL); err != nil {
 				t.Fatal(err)
 			}
+			waitDaemonExit(t, home)
 			if choice == "adopt" {
 				if err = os.WriteFile(filepath.Join(root, "release-review"), nil, 0600); err != nil {
 					t.Fatal(err)
