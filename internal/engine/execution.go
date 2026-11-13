@@ -93,6 +93,8 @@ type Execution struct {
 	Usage            TokenUsage `json:"usage"`
 	ReviewBase       string     `json:"review_base,omitempty"`
 	ReviewBaseReason string     `json:"review_base_reason,omitempty"`
+
+	FindingIdentity string `json:"finding_identity,omitempty"`
 }
 
 func trustedReviewer() (ReviewerConfig, error) {
@@ -246,7 +248,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		return nil, errors.New("source moved during admission")
 	}
 	r.ReviewBase, r.ReviewBaseReason = base, baseReason
-	return &Execution{ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: agentArgs(cfg, "reviewer", verdictSchema(full, len(responses) > 0), reviewerPrompt), Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -508,6 +510,8 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		rules[c.Pack+"/"+c.Rule] = true
 	}
 	ids := map[string]bool{}
+	files := map[string][]string{}
+	kept := make([]Finding, 0, len(v.Findings))
 	ranges := changedRanges(x.Diff)
 	for i := range v.Findings {
 		f := &v.Findings[i]
@@ -523,12 +527,43 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		if !inside {
 			return nil, errors.New("finding range outside changed hunks")
 		}
-		f.ID = Digest([]any{f.Origin, f.File, f.Start, f.End, f.Rule, strings.Join(strings.Fields(f.Explanation), " ")})
+		if x.FindingIdentity == "" {
+			f.ID = Digest([]any{f.Origin, f.File, f.Start, f.End, f.Rule, strings.Join(strings.Fields(f.Explanation), " ")})
+		} else if x.FindingIdentity == "code-v1" {
+			lines, ok := files[f.File]
+			if !ok {
+				content, err := repository.Read(x.Source.Worktree, "cat-file", "blob", f.Head+":"+f.File)
+				if err != nil {
+					return nil, errors.New("cannot read finding content at reviewed head")
+				}
+				if len(content) > 0 {
+					lines = strings.Split(strings.TrimSuffix(string(content), "\n"), "\n")
+				}
+				files[f.File] = lines
+			}
+			if f.End > len(lines) {
+				return nil, errors.New("finding range outside reviewed file")
+			}
+			var normalized []string
+			for _, line := range lines[f.Start-1 : f.End] {
+				if line = strings.Join(strings.Fields(line), " "); line != "" {
+					normalized = append(normalized, line)
+				}
+			}
+			f.ID = Digest([]any{f.Origin, f.File, f.Rule, strings.Join(normalized, "\n")})
+		} else {
+			return nil, errors.New("unknown finding identity version")
+		}
 		if ids[f.ID] {
-			return nil, errors.New("duplicate finding")
+			if x.FindingIdentity == "" {
+				return nil, errors.New("duplicate finding")
+			}
+			continue
 		}
 		ids[f.ID] = true
+		kept = append(kept, *f)
 	}
+	v.Findings = kept
 	if x.Full {
 		if _, err := exactFields(fields["documentation"], "status", "reason"); err != nil || v.Documentation == nil || (v.Documentation.Status != "documented" && v.Documentation.Status != "not-needed" && v.Documentation.Status != "missing") || !ValidText(v.Documentation.Reason) {
 			return nil, errors.New("missing or invalid documentation assessment")

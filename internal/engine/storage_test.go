@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,6 +70,12 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	run := store.Runs[v["run_id"].(string)]
+	run.Review.FindingIdentity = ""
+	for i := range run.Review.Result.Findings {
+		f := &run.Review.Result.Findings[i]
+		f.ID = Digest([]any{f.Origin, f.File, f.Start, f.End, f.Rule, strings.Join(strings.Fields(f.Explanation), " ")})
+	}
+	legacyFindings := append([]Finding(nil), run.Review.Result.Findings...)
 	legacyDigests := map[string]string{}
 	for i := range run.Configs {
 		cfg := run.Configs[i]
@@ -105,6 +112,9 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 	upgradedStore, err := load(home)
 	if err != nil {
 		t.Fatalf("legacy evidence rejected by upgrade: %v", err)
+	}
+	if !reflect.DeepEqual(upgradedStore.Runs[run.ID].Review.Result.Findings, legacyFindings) {
+		t.Fatal("stored legacy finding IDs changed during upgrade")
 	}
 	persist(home, upgradedStore)
 	upgraded := axi(t, bin, repo, home, `{"version":1,"op":"inspect","run_id":"`+v["run_id"].(string)+`"}`)
