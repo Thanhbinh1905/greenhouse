@@ -77,7 +77,29 @@ For new reviews, the ID is the lowercase SHA-256 hex digest of the JSON array `[
 
 Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports input, output, cached-input, and total tokens, plus cost in USD. Unknown values stay zero; totals retain each backend's accounting.
 
+A review that exceeds the 10-minute executor limit keeps `status: "cancelled"` and reports `reason: "timeout"`. Its diagnostic names the executor limit. An explicit cancellation reports `reason: "cancelled"`. Standalone and full-pipeline reviews retain the reason in `run.review.reason`, `host_result.reason`, and `run.attempts[].reason`, together with reported model and usage metadata.
+
 A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
+
+## Review input and admission refusals
+
+`Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
+
+Small files have full numbered content. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. Windows that still exceed either limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
+
+A gitlink has a synthetic `Files` entry: `1: Subproject commit <new pin>`. Findings on that path use line 1. Finding identities normalize this synthetic content using the same `code-v1` calculation as text. `Submodules` contains `Path`, `Old`, `New`, `Log`, `Diff`, and `Truncated`. Pins come from the review base and candidate trees. Logs and diffs each retain at most 128 KiB; `Truncated` and an omission marker identify shortened ranges. Added or removed gitlinks have no two-pin range.
+
+Greenhouse resolves submodule objects locally through the initialized worktree, its `.git` file, or the common Git directory's `modules/<name>` repository. The name comes from the candidate `.gitmodules`. Admission never fetches or initializes a submodule.
+
+The complete JSON bundle must fit within 2 MiB. Admission refusals retain `outcome: "refused"` and `error`, and add `error_code` and `retryable: false`:
+
+| `error_code` | Meaning |
+|---|---|
+| `review_input_too_large` | The bundle, candidate blob, or numbered hunk windows exceed a limit. The bundle error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The bundle check also reports `submodules` bytes when present. |
+| `unsupported_binary_diff` | A binary patch cannot be reviewed. The error names the path. |
+| `submodule_unavailable` | A submodule pin is unavailable locally. The error names the path and both pins. |
+
+These fields are additive in existing protocol versions. Retrying the same input cannot resolve these refusals.
 
 ## Responses to earlier findings
 

@@ -107,7 +107,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 		if o.Exit != 0 {
 			runErr = fmt.Errorf("exit status %d", o.Exit)
 		}
-		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, false)
+		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, nil)
 		check := reverifySnapshot(x)
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}

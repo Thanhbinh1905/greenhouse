@@ -118,6 +118,8 @@ type Request struct {
 	Responses []ResolutionResponse `json:"responses,omitempty"`
 }
 type Response struct {
+	ErrorCode   string            `json:"error_code,omitempty"`
+	Retryable   *bool             `json:"retryable,omitempty"`
 	Models      []string          `json:"models,omitempty"`
 	RuleScope   string            `json:"rule_scope,omitempty"`
 	Rules       []RuleEvidence    `json:"rules,omitempty"`
@@ -744,11 +746,11 @@ func handleRequest(s *Store, q Request) Response {
 		s.Slots[slot] = r.ID
 	} else if q.Op == "review" && r.Host != nil {
 		if err := admitHostReview(r, q.Grant, q.Responses); err != nil {
-			return fail(err.Error(), r)
+			return refusalResponse(view(s, r), err)
 		}
 	} else if q.Op == "review" {
 		if err := admitReview(r); err != nil {
-			return fail(err.Error(), r)
+			return refusalResponse(view(s, r), err)
 		}
 	} else if q.Op == "repair" {
 		if err := admitRepair(s, r, q); err != nil {
@@ -756,7 +758,7 @@ func handleRequest(s *Store, q Request) Response {
 		}
 	} else if q.Op == "pipeline" {
 		if err := admitPipeline(s, r); err != nil {
-			return fail(err.Error(), r)
+			return refusalResponse(view(s, r), err)
 		}
 		r.Token = opaque()
 	} else if q.Op == "resolve-conflict" {

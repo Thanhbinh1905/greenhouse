@@ -230,7 +230,7 @@ func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []map[string]string{{"Path": "keep.txt", "Lines": "1: a\n2: changed\n3: c\n"}}
-	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "Files") {
+	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "omission markers") || !strings.Contains(c.Input.Contract, "Submodules") {
 		t.Fatalf("delivered files = %v contract = %s", c.Input.Files, c.Input.Contract)
 	}
 }
@@ -249,7 +249,7 @@ func TestReviewFailureMetadata(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			x := &Execution{Config: ReviewerConfig{Backend: c.backend}}
-			done := reviewFrom(x, c.code, outputBuffer([]byte(c.stdout), 65536), outputBuffer([]byte(c.stderr), 65536), nil, false)
+			done := reviewFrom(x, c.code, outputBuffer([]byte(c.stdout), 65536), outputBuffer([]byte(c.stderr), 65536), nil, nil)
 			if done.Answer.Reason != c.reason || done.Answer.Diagnostic == "" || strings.Contains(done.Answer.Diagnostic, "fake-value") {
 				t.Fatalf("bad metadata: %+v", done.Answer)
 			}
@@ -259,7 +259,7 @@ func TestReviewFailureMetadata(t *testing.T) {
 
 func TestFailedCodexReviewKeepsReportedModel(t *testing.T) {
 	_, stderr, _ := recorded(t, "codex", "success")
-	done := reviewFrom(&Execution{Config: ReviewerConfig{Backend: "codex"}}, 1, outputBuffer(nil, 65536), outputBuffer(stderr, 65536), nil, false)
+	done := reviewFrom(&Execution{Config: ReviewerConfig{Backend: "codex"}}, 1, outputBuffer(nil, 65536), outputBuffer(stderr, 65536), nil, nil)
 	if done.Answer.Model != "gpt-5.6-luna" {
 		t.Fatalf("reported model lost: %+v", done.Answer)
 	}
@@ -272,7 +272,7 @@ func TestNewDiagnosticsPreserveStoppedReviewBehavior(t *testing.T) {
 		err    error
 		reason string
 	}{{stderr: "401 Unauthorized", reason: "auth"}, {err: os.ErrNotExist, reason: "missing_binary"}} {
-		done := reviewFrom(x, 1, outputBuffer(nil, 65536), outputBuffer([]byte(c.stderr), 65536), c.err, false)
+		done := reviewFrom(x, 1, outputBuffer(nil, 65536), outputBuffer([]byte(c.stderr), 65536), c.err, nil)
 		if done.Status != "inconclusive" || done.Failure != nil || done.Answer.Reason != c.reason {
 			t.Fatalf("diagnostics changed stop behavior: %+v", done)
 		}
@@ -297,7 +297,7 @@ func TestReviewRoundPreservesReportedModelOnInconclusiveReply(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			x := &Execution{Config: ReviewerConfig{Backend: c.backend}}
-			done := reviewFrom(x, 0, outputBuffer([]byte(c.stdout), 65536), outputBuffer([]byte(c.stderr), 65536), nil, false)
+			done := reviewFrom(x, 0, outputBuffer([]byte(c.stdout), 65536), outputBuffer([]byte(c.stderr), 65536), nil, nil)
 			retainReviewMetadata(x, done)
 			r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: x}
 			if got := hostResult(r, true).Model; got != c.model {
@@ -313,7 +313,7 @@ func TestReviewRoundPreservesReportedModelOnInconclusiveReply(t *testing.T) {
 func TestReviewRoundClassifiesStructuredZeroExitModelFailure(t *testing.T) {
 	stdout := []byte(`{"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"reported-model","stopReason":"error","errorMessage":"404 model not found","content":[]}}`)
 	x := &Execution{Config: ReviewerConfig{Backend: "pi"}}
-	done := reviewFrom(x, 0, outputBuffer(stdout, 65536), outputBuffer(nil, 65536), nil, false)
+	done := reviewFrom(x, 0, outputBuffer(stdout, 65536), outputBuffer(nil, 65536), nil, nil)
 	retainReviewMetadata(x, done)
 	result := hostResult(&Run{Host: &Host{Name: "host", ID: "1"}, Review: x}, true)
 	if result.Reason != "model_mismatch" {

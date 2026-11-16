@@ -749,6 +749,7 @@ func completeStep(r *Run, o stepOutcome) error {
 			return errors.New("review identity mismatch")
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
+		retainReviewMetadata(x, reviewOutcome{Status: o.Status, Log: o.Log, Answer: o.Answer})
 		recordReviewEvidence(x, o.Snapshot, o.Confinement)
 		x.Thinking = o.Answer.Thinking
 		recordAttempt(r, Attempt{Execution: x.ID, Stage: st.Name, Kind: "review", Role: "reviewer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: o.Status, Reason: failureReason(o.Failure), Message: failureMessage(o.Failure), CostUSD: o.Answer.CostUSD, Tokens: o.Answer.Tokens, Thinking: o.Answer.Thinking})
