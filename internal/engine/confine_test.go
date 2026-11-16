@@ -299,7 +299,7 @@ open(cwd+'/sample.txt','w').write('tampered\n')`)
 	v = waitReview(t, bin, repo, home)
 	review := runOf(t, v)["review"].(map[string]any)
 	c := review["confinement"].(map[string]any)
-	if c["status"] != "degraded" || c["network"] != "unrestricted" || !strings.Contains(c["reason"].(string), "landlock unavailable") {
+	if c["status"] != "degraded" || c["network"] != "unrestricted" || !strings.Contains(c["reason"].(string), "Landlock unavailable") {
 		t.Fatalf("missing degraded confinement record: %v", c)
 	}
 	snapshot := review["snapshot"].(map[string]any)
@@ -310,7 +310,7 @@ open(cwd+'/sample.txt','w').write('tampered\n')`)
 		t.Fatalf("candidate changed: %q", got)
 	}
 	screen := terminalOutput(t, bin, repo, home, "q\n")
-	if !strings.Contains(screen, "Confinement: reviewer DEGRADED") || !strings.Contains(screen, "landlock unavailable") || !strings.Contains(screen, "Snapshot:") {
+	if !strings.Contains(screen, "Confinement: reviewer DEGRADED") || !strings.Contains(screen, "Landlock unavailable") || !strings.Contains(screen, "Snapshot:") {
 		t.Fatalf("terminal must show degraded confinement:\n%s", screen)
 	}
 }
