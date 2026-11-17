@@ -77,7 +77,7 @@ For new reviews, the ID is the lowercase SHA-256 hex digest of the JSON array `[
 
 Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports input, output, cached-input, and total tokens, plus cost in USD. Unknown values stay zero; totals retain each backend's accounting.
 
-A review that exceeds the 10-minute executor limit keeps `status: "cancelled"` and reports `reason: "timeout"`. Its diagnostic names the executor limit. An explicit cancellation reports `reason: "cancelled"`. Standalone and full-pipeline reviews retain the reason in `run.review.reason`, `host_result.reason`, and `run.attempts[].reason`, together with reported model and usage metadata.
+A review that exceeds the configured executor limit (`executor_timeout`, default `45m`) keeps `status: "cancelled"` and reports `reason: "timeout"`. Its diagnostic names the executor limit. An explicit cancellation reports `reason: "cancelled"`. Standalone and full-pipeline reviews retain the reason in `run.review.reason`, `host_result.reason`, and `run.attempts[].reason`, together with reported model and usage metadata.
 
 A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
 

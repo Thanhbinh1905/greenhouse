@@ -5,17 +5,24 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestTimeoutReviewMetadata(t *testing.T) {
+	expired, stop := context.WithDeadline(runner.WithProcessTimeout(context.Background(), 7*time.Minute), time.Unix(0, 0))
+	defer stop()
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
 	for _, c := range []struct {
 		reason string
-		err    error
-	}{{"timeout", context.DeadlineExceeded}, {"cancelled", context.Canceled}} {
+		ctx    context.Context
+	}{{"timeout", expired}, {"cancelled", cancelled}} {
 		t.Run(c.reason, func(t *testing.T) {
 			x := &Execution{ID: "review", Config: ReviewerConfig{Backend: "pi"}}
 			stdout := []byte(`{"type":"message_end","message":{"role":"assistant","model":"reported","usage":{"input":100,"output":20,"totalTokens":120,"cost":{"total":0.5}}}}`)
-			done := reviewFrom(x, -1, outputBuffer(stdout, 65536), outputBuffer(nil, 65536), nil, c.err)
+			done := reviewFrom(x, -1, outputBuffer(stdout, 65536), outputBuffer(nil, 65536), nil, executorStop(c.ctx))
 			retainReviewMetadata(x, done)
 			r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: x}
 			recordAttempt(r, Attempt{Execution: x.ID, Kind: "review"})
@@ -32,7 +39,7 @@ func TestTimeoutReviewMetadata(t *testing.T) {
 			if x.ReportedModel != "reported" || x.Usage.Tokens != 120 || host.Usage != x.Usage || r.Attempts[0].Usage != x.Usage {
 				t.Fatal("stopped review lost reported usage")
 			}
-			if c.reason == "timeout" && !strings.Contains(x.Diagnostic, "10m0s") {
+			if c.reason == "timeout" && !strings.Contains(x.Diagnostic, "7m0s") {
 				t.Fatalf("missing executor limit: %s", x.Diagnostic)
 			}
 		})
@@ -42,7 +49,7 @@ func TestTimeoutReviewMetadata(t *testing.T) {
 func TestTimeoutPipelineMetadata(t *testing.T) {
 	want := TokenUsage{Tokens: 120, InputTokens: 100, OutputTokens: 20}
 	r := &Run{Status: "running", Review: &Execution{ID: "review"}, Pipeline: &Pipeline{Stages: []StageResult{{Name: "review"}}, Active: &Step{ID: "review", Kind: "review", Stage: "review"}}}
-	answer := agentAnswer{Reason: "timeout", Diagnostic: "executor limit 10m0s exceeded", Model: "reported", Usage: want}
+	answer := agentAnswer{Reason: "timeout", Diagnostic: "review executor limit 45m0s exceeded: context deadline exceeded", Model: "reported", Usage: want}
 	if err := completeStep(r, stepOutcome{Step: "review", Status: "cancelled", Answer: answer}); err != nil {
 		t.Fatal(err)
 	}

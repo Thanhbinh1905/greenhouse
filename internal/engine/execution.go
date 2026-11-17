@@ -392,12 +392,12 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable", Confinement: &confinement}
 	}
-	ctx, cancel := context.WithTimeout(ctx, runner.Timeout)
+	ctx, cancel := runner.ProcessContext(ctx)
 	defer cancel()
 	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
 	exitCode, err := runner.RunProcess(runner.WithExecutor(ctx, x.ID, Home), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
 	appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, BackendOf(x.Config), x.Config.Model, exitCode), out.Bytes(), stderr.Bytes())
-	done := reviewFrom(x, exitCode, out, stderr, err, ctx.Err())
+	done := reviewFrom(x, exitCode, out, stderr, err, executorStop(ctx))
 	done.Confinement = &confinement
 	if reason, failed := runner.ConfinementFailed(exitCode, stderr.Bytes()); failed {
 		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; " + reason, Answer: done.Answer, Confinement: &confinement}
@@ -407,6 +407,14 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	}
 	done.Snapshot = "unchanged"
 	return done
+}
+
+func executorStop(ctx context.Context) error {
+	err := ctx.Err()
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("review executor limit %s exceeded: %w", runner.ProcessTimeout(ctx), err)
+	}
+	return err
 }
 
 func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err error, contextErr error) reviewOutcome {
@@ -419,7 +427,7 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err erro
 		usage.Reason = "cancelled"
 		if errors.Is(contextErr, context.DeadlineExceeded) {
 			usage.Reason = "timeout"
-			usage.Diagnostic = fmt.Sprintf("review executor limit %s exceeded", runner.Timeout)
+			usage.Diagnostic = contextErr.Error()
 		}
 		return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 	}
