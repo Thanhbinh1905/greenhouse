@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/Thanhbinh1905/greenhouse/internal/testutil"
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 func runOf(t *testing.T, v map[string]any) map[string]any {
@@ -131,7 +131,7 @@ func TestLifecycleSettingsAndIdentity(t *testing.T) {
 
 func stopDaemon(t *testing.T, home string) {
 	t.Helper()
-	if err := testutil.StopDaemon(home); err != nil {
+	if err := daemonutil.StopDaemon(home); err != nil {
 		t.Fatal(err)
 	}
 }

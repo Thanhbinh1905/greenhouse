@@ -16,7 +16,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Thanhbinh1905/greenhouse/internal/testutil"
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 type fixOptions struct {
@@ -189,7 +189,7 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
 	defer func() {
-		if err := testutil.StopDaemon(home); err != nil {
+		if err := daemonutil.StopDaemon(home); err != nil {
 			rec.Error = err.Error()
 			rec.Status = "eval-error"
 		}

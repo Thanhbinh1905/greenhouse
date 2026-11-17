@@ -11,7 +11,7 @@ import (
 	"syscall"
 	"testing"
 
-	"github.com/Thanhbinh1905/greenhouse/internal/testutil"
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -33,7 +33,7 @@ func registerDaemonCleanup(t *testing.T, home string) {
 		return
 	}
 	t.Cleanup(func() {
-		if err := testutil.StopDaemon(home); err != nil {
+		if err := daemonutil.StopDaemon(home); err != nil {
 			t.Error(err)
 		}
 	})
