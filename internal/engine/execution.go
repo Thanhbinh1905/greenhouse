@@ -354,7 +354,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable", Confinement: &confinement}
 	}
-	ctx, cancel := context.WithTimeout(ctx, runner.Timeout)
+	ctx, cancel := runner.ProcessContext(ctx)
 	defer cancel()
 	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
 	exitCode, err := runner.RunProcess(runner.WithExecutor(ctx, x.ID, Home), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)
@@ -381,7 +381,7 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err erro
 	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
 		usage.Reason = "missing_binary"
 	}
-	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); failure != nil && !out.Exceeded() {
+	if failure := classifyBackend(x.Config.Backend, exitCode, out.Bytes(), stderr.Bytes(), time.Now()); !cancelled && failure != nil && !out.Exceeded() {
 		usage.Reason = failure.Reason
 		usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 		if usage.Diagnostic == "" {
@@ -392,10 +392,6 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err erro
 		}
 		if !failure.diagnosticOnly && (failure.Reason == "auth" || failure.Reason == "quota" || failure.Reason == "unavailable") {
 			return reviewOutcome{Status: "paused", Failure: failure, Log: log + "; backend " + failure.Reason + ": " + failure.Message, Answer: usage}
-		}
-		if cancelled {
-			usage.Reason = "cancelled"
-			return reviewOutcome{Status: "cancelled", Log: log, Answer: usage}
 		}
 		return reviewOutcome{Status: "inconclusive", Log: log, Answer: usage}
 	}

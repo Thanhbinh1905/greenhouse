@@ -144,6 +144,7 @@ func stopDaemon(t *testing.T, home string) {
 	for time.Now().Before(deadline) {
 		c, e := net.DialTimeout("unix", filepath.Join(home, "socket"), 50*time.Millisecond)
 		if e != nil {
+			waitDaemonExit(t, home)
 			return
 		}
 		c.Close()
