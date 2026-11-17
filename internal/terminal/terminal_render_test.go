@@ -28,6 +28,20 @@ func captureTerminal(t *testing.T, draw func()) string {
 	return string(b)
 }
 
+func TestRuleDigestFitsAtNarrowWidthAndRemainsAvailable(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	got := ruleDigestLine(digest, 56)
+	if len([]rune(got)) > 56 {
+		t.Fatalf("digest line exceeds terminal width: %q", got)
+	}
+	if !strings.Contains(got, "…") {
+		t.Fatalf("narrow digest was not abbreviated: %q", got)
+	}
+	if full := ruleDigestLine(digest, 80); full != "Digest: "+digest {
+		t.Fatalf("full digest not available at wider width: %q", full)
+	}
+}
+
 func TestScreenWrapsAtWordBoundaries(t *testing.T) {
 	text := strings.Repeat("word ", 15) + "configuration is untrusted"
 	got := captureTerminal(t, func() { screen(text) })

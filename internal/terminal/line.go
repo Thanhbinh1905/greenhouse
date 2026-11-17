@@ -103,6 +103,21 @@ func terminalText(text string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+func ruleDigestLine(digest string, width int) string {
+	const label = "Digest: "
+	available := width - len(label)
+	runes := []rune(digest)
+	if len(runes) <= available {
+		return label + digest
+	}
+	if available <= 1 {
+		return label + "…"
+	}
+	remaining := available - 1
+	left := remaining / 2
+	return label + string(runes[:left]) + "…" + string(runes[len(runes)-(remaining-left):])
+}
+
 func statePage(v engine.Response, live string, details bool) string {
 	var page strings.Builder
 	r := v.Run
@@ -133,7 +148,7 @@ func statePage(v engine.Response, live string, details bool) string {
 		fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Host: %s | grant %s | %s | current %t", engine.HostLabel(&x.Host), x.Grant, outcome, x.Current), terminalWidth()))
 	}
 	for _, rule := range v.Rules {
-		fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\nDigest: %s\n", rule.Selection, rule.Status, rule.Required, rule.Source, rule.Digest)
+		fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\n%s\n", rule.Selection, rule.Status, rule.Required, rule.Source, ruleDigestLine(rule.Digest, terminalWidth()))
 		if rule.Error != "" {
 			fmt.Fprintln(&page, "Load error: "+rule.Error)
 		}
