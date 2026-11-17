@@ -193,7 +193,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 		return errors.New("combined budget exhausted or unsupported preset")
 	}
 	if custodyHeld(s, r) {
-		return errors.New("repository candidate custody is already held")
+		return custodyError(r)
 	}
 	cfg, e := admitFixer(settings.FixerBackend, settings.FixerModel)
 	if e != nil {
@@ -422,17 +422,16 @@ func runBounded(ctx context.Context, dir, exe string, args []string, input []byt
 func executeRepair(ctx context.Context, x *Repair, source repository.Identity, checkpoint func(*Repair) bool) {
 	save := func() bool { return checkpoint(x) }
 	fail := func(status string, e error) { x.Status = status; x.Log = e.Error(); save() }
-	lock, err := os.OpenFile(filepath.Join(source.Repository, "greenhouse-writer.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	unlock, err := lockWriter(source)
+	if errors.Is(err, errWriterConflict) {
+		fail("writer-conflict", err)
+		return
+	}
 	if err != nil {
 		fail("failed", err)
 		return
 	}
-	defer lock.Close()
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		fail("writer-conflict", errors.New("another linked-worktree writer owns the repository"))
-		return
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer unlock()
 	current, e := repository.Resolve(source.Worktree)
 	if e != nil || current != source {
 		fail("refused", errors.New("source moved before writer start"))

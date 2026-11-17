@@ -320,9 +320,20 @@ func localOnlyPipeline(p *Pipeline) bool {
 	return true
 }
 
+func writerScope(id repository.Identity) string {
+	if id.Branch != "" {
+		return "branch " + strings.TrimPrefix(id.Branch, "refs/heads/")
+	}
+	return "worktree " + id.Worktree
+}
+
+func sharesSource(a, b repository.Identity) bool {
+	return a.Repository == b.Repository && (a.Worktree == b.Worktree || a.Branch != "" && a.Branch == b.Branch)
+}
+
 func custodyHeld(s *Store, r *Run) bool {
 	for _, other := range s.Runs {
-		if other.ID == r.ID || other.Submitted.Repository != r.Submitted.Repository {
+		if other.ID == r.ID || !sharesSource(other.Submitted, r.Submitted) {
 			continue
 		}
 		if repairHeld(other.Repair) {
@@ -333,6 +344,10 @@ func custodyHeld(s *Store, r *Run) bool {
 		}
 	}
 	return false
+}
+
+func custodyError(r *Run) error {
+	return errors.New("candidate custody for " + writerScope(r.Submitted) + " is already held by another run")
 }
 
 func admitPipeline(s *Store, r *Run) error {
@@ -353,7 +368,7 @@ func admitPipeline(s *Store, r *Run) error {
 		return errors.New("answer the open " + d.Kind + " decision first")
 	}
 	if custodyHeld(s, r) {
-		return errors.New("repository candidate custody is already held")
+		return custodyError(r)
 	}
 	if r.Submitted.Branch == "" {
 		return errors.New("full pipeline requires a source branch")
@@ -1095,16 +1110,30 @@ func gitArgv(identity CommandPlan, args ...string) []string {
 	return append(prefix, args...)
 }
 
-func withWriterLock(repository string, fn func() error) error {
-	lock, err := os.OpenFile(filepath.Join(repository, "greenhouse-writer.lock"), os.O_CREATE|os.O_RDWR, 0600)
+var errWriterConflict = errors.New("another writer owns")
+
+func lockWriter(source repository.Identity) (func(), error) {
+	dir := filepath.Join(source.Repository, "greenhouse-writers")
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	lock, err := os.OpenFile(filepath.Join(dir, Digest([]string{writerScope(source)})+".lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		return nil, err
+	}
+	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		lock.Close()
+		return nil, fmt.Errorf("%w %s", errWriterConflict, writerScope(source))
+	}
+	return func() { lock.Close() }, nil
+}
+
+func withWriterLock(source repository.Identity, fn func() error) error {
+	unlock, err := lockWriter(source)
 	if err != nil {
 		return err
 	}
-	defer lock.Close()
-	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		return errors.New("another linked-worktree writer owns the repository")
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer unlock()
 	return fn()
 }
 
@@ -1206,7 +1235,7 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		}
 		save()
 	}
-	err := withWriterLock(source.Repository, func() error {
+	err := withWriterLock(source, func() error {
 		if current, e := repository.Resolve(source.Worktree); e != nil || current != source {
 			return errors.New("source moved before writer start")
 		}
@@ -1369,7 +1398,7 @@ func handbackPipeline(r *Run, trusted string) error {
 		p.Handback = "handed-back"
 		return nil
 	}
-	return withWriterLock(r.Submitted.Repository, func() error {
+	return withWriterLock(r.Submitted, func() error {
 		if e := gitHazards(r.Submitted.Worktree); e != nil {
 			return e
 		}

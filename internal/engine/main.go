@@ -400,7 +400,7 @@ func view(s *Store, r *Run) Response {
 		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "cancelling" && r.Status != "writing" && r.Status != "recovery-required"
 		held := custodyHeld(s, r)
 		if held {
-			v.Blocked = append(v.Blocked, "another run holds unpublished or ambiguous repository candidate custody; writer actions blocked")
+			v.Blocked = append(v.Blocked, "another run holds unpublished or ambiguous candidate custody for "+writerScope(r.Submitted)+"; writer actions blocked")
 		}
 		if safe {
 			if id == r.Submitted {
@@ -761,7 +761,7 @@ func handleRequest(s *Store, q Request) Response {
 		r.Token = opaque()
 	} else if q.Op == "resolve-conflict" {
 		if custodyHeld(s, r) {
-			return fail("repository candidate custody is already held", r)
+			return fail(custodyError(r).Error(), r)
 		}
 		if err := admitConflictRepair(r, q); err != nil {
 			return fail(err.Error(), r)
@@ -777,7 +777,7 @@ func handleRequest(s *Store, q Request) Response {
 			return fail("no open decision for this gate", r)
 		}
 		if custodyHeld(s, r) {
-			return fail("repository candidate custody is already held", r)
+			return fail(custodyError(r).Error(), r)
 		}
 		actor := q.Client
 		if actor != "terminal" {
@@ -1009,7 +1009,7 @@ func Daemon(h string) error {
 			}
 			step := p.Active
 			if step != nil && step.Kind == "sync" {
-				if err := withWriterLock(r.Submitted.Repository, func() error { return ensureCandidate(r) }); err != nil {
+				if err := withWriterLock(r.Submitted, func() error { return ensureCandidate(r) }); err != nil {
 					p.Active = nil
 					if errors.Is(err, errCandidateUnknown) {
 						holdRecovery(r, "candidate", step.Stage, step.ID, err.Error())
