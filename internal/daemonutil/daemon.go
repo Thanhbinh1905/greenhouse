@@ -13,6 +13,14 @@ import (
 )
 
 func StopDaemon(home string) error {
+	return signalDaemon(home, syscall.SIGTERM)
+}
+
+func KillDaemon(home string) error {
+	return signalDaemon(home, syscall.SIGKILL)
+}
+
+func signalDaemon(home string, signal syscall.Signal) error {
 	b, err := os.ReadFile(filepath.Join(home, "pid"))
 	if os.IsNotExist(err) {
 		return nil
@@ -44,7 +52,7 @@ func StopDaemon(home string) error {
 	if !ownsHome(pid, home) {
 		return nil
 	}
-	if err := syscall.Kill(pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
+	if err := syscall.Kill(pid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
 		return err
 	}
 	if err := waitForLockRelease(lock, time.Now().Add(5*time.Second)); err != nil {
