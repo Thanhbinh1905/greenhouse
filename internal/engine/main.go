@@ -23,17 +23,31 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
+type executorDuration string
+
+func (d *executorDuration) UnmarshalJSON(data []byte) error {
+	var value *string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		return errors.New("executor_timeout must be a string")
+	}
+	*d = executorDuration(*value)
+	return nil
+}
+
 type Settings struct {
-	Mode            string   `json:"mode"`
-	Preset          string   `json:"preset"`
-	Limit           int      `json:"limit"`
-	Rules           []string `json:"rules"`
-	ReviewerBackend string   `json:"reviewer_backend"`
-	ReviewerModel   string   `json:"reviewer_model"`
-	FixerBackend    string   `json:"fixer_backend"`
-	FixerModel      string   `json:"fixer_model"`
-	ExecutorTimeout string   `json:"executor_timeout,omitempty"`
-	AutoResume      string   `json:"auto_resume,omitempty"`
+	Mode            string           `json:"mode"`
+	Preset          string           `json:"preset"`
+	Limit           int              `json:"limit"`
+	Rules           []string         `json:"rules"`
+	ReviewerBackend string           `json:"reviewer_backend"`
+	ReviewerModel   string           `json:"reviewer_model"`
+	FixerBackend    string           `json:"fixer_backend"`
+	FixerModel      string           `json:"fixer_model"`
+	ExecutorTimeout executorDuration `json:"executor_timeout,omitempty"`
+	AutoResume      string           `json:"auto_resume,omitempty"`
 }
 type Snapshot struct {
 	ID           string            `json:"id"`
@@ -540,12 +554,12 @@ func executorTimeout(s Settings) time.Duration {
 	if s.ExecutorTimeout == "" {
 		return runner.DefaultTimeout
 	}
-	d, _ := time.ParseDuration(s.ExecutorTimeout)
+	d, _ := time.ParseDuration(string(s.ExecutorTimeout))
 	return d
 }
 
 func valid(s Settings) bool {
-	timeout, err := time.ParseDuration(s.ExecutorTimeout)
+	timeout, err := time.ParseDuration(string(s.ExecutorTimeout))
 	if s.ExecutorTimeout != "" && (err != nil || timeout <= 0) {
 		return false
 	}

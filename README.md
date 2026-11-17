@@ -307,7 +307,7 @@ Still unsupported in step 4: mechanical lint autofix.
 
 ### Recovery after interruption
 
-Every reviewer, fixer, check, stage command and pipeline Git command runs through the runner and gets an executor record under `GREENHOUSE_HOME/executors/`. The runner holds `<id>.lease` with `flock` and passes the descriptor to the child, captures bounded output in `<id>.out` and `<id>.err`, and writes `<id>.json` with the exit code and input digest only after it reaped the whole process tree. When the daemon dies, its executors keep running until they finish or reach the 10-minute runner deadline; nothing signals them by PID.
+Every reviewer, fixer, check, stage command and pipeline Git command runs through the runner and gets an executor record under `GREENHOUSE_HOME/executors/`. The runner holds `<id>.lease` with `flock` and passes the descriptor to the child, captures bounded output in `<id>.out` and `<id>.err`, and writes `<id>.json` with the exit code and input digest only after it reaped the whole process tree. When the daemon dies, its executors keep running until they finish or reach the configured `executor_timeout` deadline (default `45m`), plus the 30-second supervisor cleanup allowance; nothing signals them by PID.
 
 On restart, and every 250 ms while an orphaned executor still holds its lease, the daemon probes the open recovery:
 

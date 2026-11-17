@@ -191,6 +191,9 @@ func parseOverride(b []byte, base Settings) (Settings, []string, error) {
 	if err := json.Unmarshal(merged, &settings); err != nil {
 		return base, nil, fmt.Errorf("%s: %v", overrideName, err)
 	}
+	if settings.ExecutorTimeout == "" {
+		settings.ExecutorTimeout = base.ExecutorTimeout
+	}
 	if err := narrows(settings, base); err != nil {
 		return base, nil, err
 	}

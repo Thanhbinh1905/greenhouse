@@ -3,6 +3,7 @@ package engine
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -57,14 +58,14 @@ func TestExecutorTimeoutSettings(t *testing.T) {
 	}
 	for _, value := range []string{"45m", "1s", "90m", "250ms"} {
 		settings := store.Defaults
-		settings.ExecutorTimeout = value
+		settings.ExecutorTimeout = executorDuration(value)
 		if !valid(settings) {
 			t.Errorf("valid duration rejected: %s", value)
 		}
 	}
 	for _, value := range []string{"0", "0s", "-1m", "45", "forever", "999999999999999999999h"} {
 		settings := store.Defaults
-		settings.ExecutorTimeout = value
+		settings.ExecutorTimeout = executorDuration(value)
 		if valid(settings) {
 			t.Errorf("invalid duration accepted: %s", value)
 		}
@@ -188,4 +189,50 @@ with open(root+'/executor-deadline','w') as f: f.write(args[3].decode())`)
 		t.Fatalf("configured hour did not reach review supervisor: %s", remaining)
 	}
 	t.Logf("review supervisor deadline is %s after launch", remaining)
+}
+
+func TestEmptyExecutorTimeoutOverrideInheritsUserValue(t *testing.T) {
+	store, err := load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := store.Defaults
+	base.ExecutorTimeout = "90m"
+	settings, _, err := parseOverride([]byte(`{"version":1,"executor_timeout":""}`), base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.ExecutorTimeout != "90m" {
+		t.Fatalf("empty override replaced user timeout: got %q, want 90m", settings.ExecutorTimeout)
+	}
+}
+
+func TestExecutorTimeoutRejectsNonStringJSON(t *testing.T) {
+	for _, value := range []string{"null", "123", "true", "[]", "{}"} {
+		t.Run(value, func(t *testing.T) {
+			var request Request
+			if err := json.Unmarshal([]byte(`{"settings":{"executor_timeout":`+value+`}}`), &request); err == nil {
+				t.Errorf("request accepted non-string timeout: %s", value)
+			}
+			store, err := load(t.TempDir())
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, _, err := parseOverride([]byte(`{"version":1,"executor_timeout":`+value+`}`), store.Defaults); err == nil {
+				t.Errorf("override accepted non-string timeout: %s", value)
+			}
+		})
+	}
+}
+
+func TestExecutorTimeoutNullRejectedThroughCLI(t *testing.T) {
+	bin, repo, home := fixture(t)
+	cmd := exec.Command(bin, "axi")
+	cmd.Dir = repo
+	cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "GORACE=atexit_sleep_ms=0")
+	cmd.Stdin = strings.NewReader(`{"version":1,"op":"apply","settings":{"executor_timeout":null}}`)
+	data, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(data), "executor_timeout must be a string") {
+		t.Fatalf("CLI accepted null timeout: %s (%v)", data, err)
+	}
 }
