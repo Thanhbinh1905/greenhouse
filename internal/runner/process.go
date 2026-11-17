@@ -52,14 +52,29 @@ func reapChildTree() bool {
 	return false
 }
 
+type processTimeoutKey struct{}
+
+func WithProcessTimeout(ctx context.Context, timeout time.Duration) context.Context {
+	return context.WithValue(ctx, processTimeoutKey{}, timeout)
+}
+
+func ProcessContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	timeout, ok := ctx.Value(processTimeoutKey{}).(time.Duration)
+	if !ok {
+		timeout = DefaultTimeout
+	}
+	return context.WithTimeout(ctx, timeout)
+}
+
 func RunProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {
-	ctx, cancel := context.WithTimeout(ctx, Timeout)
+	ctx, cancel := ProcessContext(ctx)
 	defer cancel()
 	self, err := os.Executable()
 	if err != nil {
 		return -1, err
 	}
-	deadline := strconv.FormatInt(time.Now().Add(Timeout+30*time.Second).Unix(), 10)
+	expires, _ := ctx.Deadline()
+	deadline := strconv.FormatInt(expires.Add(30*time.Second).Unix(), 10)
 	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", nextExecutor(ctx), deadline, exe}, args...)...)
 	cmd.Dir = dir
 	cmd.WaitDelay = 5 * time.Second
