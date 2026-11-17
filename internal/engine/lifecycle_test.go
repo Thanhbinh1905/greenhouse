@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall"
 	"testing"
-	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/testutil"
 )
 
 func runOf(t *testing.T, v map[string]any) map[string]any {
@@ -131,25 +131,9 @@ func TestLifecycleSettingsAndIdentity(t *testing.T) {
 
 func stopDaemon(t *testing.T, home string) {
 	t.Helper()
-	b, e := os.ReadFile(filepath.Join(home, "pid"))
-	if e != nil {
-		t.Fatal(e)
+	if err := testutil.StopDaemon(home); err != nil {
+		t.Fatal(err)
 	}
-	var pid int
-	json.Unmarshal(b, &pid)
-	if e = syscall.Kill(pid, syscall.SIGTERM); e != nil {
-		t.Fatal(e)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		c, e := net.DialTimeout("unix", filepath.Join(home, "socket"), 50*time.Millisecond)
-		if e != nil {
-			return
-		}
-		c.Close()
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("daemon did not stop")
 }
 func TestRestartAndUnknownWriter(t *testing.T) {
 	t.Parallel()

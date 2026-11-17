@@ -2,7 +2,6 @@ package engine
 
 import (
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +10,8 @@ import (
 	"sync"
 	"syscall"
 	"testing"
-	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/testutil"
 )
 
 func git(t *testing.T, dir string, args ...string) string {
@@ -24,6 +24,21 @@ func git(t *testing.T, dir string, args ...string) string {
 	}
 	return string(b)
 }
+
+var daemonCleanupHomes sync.Map
+
+func registerDaemonCleanup(t *testing.T, home string) {
+	t.Helper()
+	if _, loaded := daemonCleanupHomes.LoadOrStore(home, struct{}{}); loaded {
+		return
+	}
+	t.Cleanup(func() {
+		if err := testutil.StopDaemon(home); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 func fixture(t *testing.T) (string, string, string) {
 	t.Helper()
 	root, err := os.MkdirTemp("", "gh-")
@@ -49,41 +64,12 @@ func fixture(t *testing.T) (string, string, string) {
 	nativeHome := filepath.Join(root, "native-agent")
 	os.Mkdir(nativeHome, 0700)
 	os.WriteFile(filepath.Join(nativeHome, "models.json"), []byte(`{"providers":{"fixture":{"models":[{"id":"model","reasoning":true}]}}}`), 0600)
-	t.Cleanup(func() {
-		b, err := os.ReadFile(filepath.Join(home, "pid"))
-		if os.IsNotExist(err) {
-			return
-		}
-		if err != nil {
-			t.Errorf("read daemon pid: %v", err)
-			return
-		}
-		var pid int
-		if err := json.Unmarshal(b, &pid); err != nil {
-			t.Errorf("decode daemon pid: %v", err)
-			return
-		}
-		if pid <= 0 {
-			t.Errorf("invalid daemon pid %d", pid)
-			return
-		}
-		if err := syscall.Kill(pid, syscall.SIGTERM); err != nil && !errors.Is(err, syscall.ESRCH) {
-			t.Errorf("stop daemon %d: %v", pid, err)
-			return
-		}
-		deadline := time.Now().Add(5 * time.Second)
-		for time.Now().Before(deadline) {
-			if err := syscall.Kill(pid, 0); errors.Is(err, syscall.ESRCH) {
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
-		}
-		t.Errorf("daemon %d outlived fixture cleanup", pid)
-	})
+	registerDaemonCleanup(t, home)
 	return bin, repo, home
 }
 func axi(t *testing.T, bin, repo, home, request string, env ...string) map[string]any {
 	t.Helper()
+	registerDaemonCleanup(t, home)
 	c := exec.Command(bin, "axi")
 	c.Dir = repo
 	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
@@ -124,6 +110,25 @@ func TestFixtureStopsDaemonOnCleanup(t *testing.T) {
 	})
 	if err := syscall.Kill(pid, 0); err == nil {
 		t.Fatalf("daemon %d outlived fixture cleanup", pid)
+	}
+}
+
+func TestFixtureStopsSecondaryDaemonOnCleanup(t *testing.T) {
+	bin, repo, home := fixture(t)
+	secondaryHome := filepath.Join(filepath.Dir(home), "secondary-state")
+	var pid int
+	t.Run("daemon", func(t *testing.T) {
+		axi(t, bin, repo, secondaryHome, `{"version":1,"op":"attach"}`)
+		b, err := os.ReadFile(filepath.Join(secondaryHome, "pid"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(b, &pid); err != nil {
+			t.Fatal(err)
+		}
+	})
+	if err := syscall.Kill(pid, 0); err == nil {
+		t.Fatalf("secondary daemon %d outlived fixture cleanup", pid)
 	}
 }
 

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/testutil"
 )
 
 type fixOptions struct {
@@ -142,8 +144,8 @@ func (a axiClient) settle(timeout time.Duration, field string, busy ...string) (
 	}
 }
 
-func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings map[string]any, work string, k FixCase, capture string) FixRecord {
-	rec := FixRecord{ID: k.ID, Selected: map[string]string{}, Tests: TestOutcomes{}}
+func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings map[string]any, work string, k FixCase, capture string) (rec FixRecord) {
+	rec = FixRecord{ID: k.ID, Selected: map[string]string{}, Tests: TestOutcomes{}}
 	fail := func(err error) FixRecord {
 		rec.Error = err.Error()
 		if rec.Status == "" {
@@ -186,7 +188,12 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 		return fail(err)
 	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
-	defer stopDaemon(home)
+	defer func() {
+		if err := testutil.StopDaemon(home); err != nil {
+			rec.Error = err.Error()
+			rec.Status = "eval-error"
+		}
+	}()
 	v, err := a.call(map[string]any{"op": "attach"})
 	if err != nil {
 		return fail(err)
