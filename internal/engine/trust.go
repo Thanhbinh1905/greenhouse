@@ -23,7 +23,7 @@ const (
 	sourceRunLocal   = "run-local"
 )
 
-var settingFields = []string{"mode", "preset", "limit", "rules", "reviewer_backend", "reviewer_model", "fixer_backend", "fixer_model", "auto_resume"}
+var settingFields = []string{"mode", "preset", "limit", "rules", "reviewer_backend", "reviewer_model", "fixer_backend", "fixer_model", "executor_timeout", "auto_resume"}
 
 var authorityKeys = map[string]bool{"executable": true, "checks": true, "test": true, "lint": true, "docs": true, "commands": true, "grants": true, "repairs": true, "repair_limit": true, "remote": true, "required_checks": true, "yolo": true, "providers": true, "provider": true, "fallback": true, "claude": true, "codex": true, "name": true, "email": true}
 

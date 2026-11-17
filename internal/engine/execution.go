@@ -354,7 +354,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable", Confinement: &confinement}
 	}
-	ctx, cancel := context.WithTimeout(ctx, runner.Timeout)
+	ctx, cancel := runner.ProcessContext(ctx)
 	defer cancel()
 	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
 	exitCode, err := runner.RunProcess(runner.WithExecutor(ctx, x.ID, Home), tree, exe, args, x.Input, env, stallWatch(out, x.Config.Backend, cancel), stderr)

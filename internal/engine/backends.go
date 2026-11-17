@@ -953,7 +953,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	if err != nil {
 		return fixerRun{log: "confinement launcher unavailable", err: err}
 	}
-	runCtx, stop := context.WithCancel(ctx)
+	runCtx, stop := runner.ProcessContext(ctx)
 	defer stop()
 	out, stderr := runner.NewBuffer(limit), runner.NewBuffer(65536)
 	code, err := runner.RunProcess(runCtx, x.Worktree, exe, args, x.Input, env, stallWatch(out, backend, stop), stderr)

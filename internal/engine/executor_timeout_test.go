@@ -1,0 +1,191 @@
+package engine
+
+import (
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
+)
+
+func TestConfiguredReviewExecutorTimeout(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, "time.sleep(30)")
+	settings := runOf(t, v)["configs"].([]any)
+	config := settings[len(settings)-1].(map[string]any)["settings"].(map[string]any)
+	config["executor_timeout"] = "1s"
+	v = mutate(t, bin, repo, home, v, "apply", "short-timeout", config)
+	if v["outcome"] != "ok" {
+		t.Fatalf("configured timeout rejected: %v", v)
+	}
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "timeout-rules", nil)
+	v = mutate(t, bin, repo, home, v, "review", "start", nil)
+	if v["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", v)
+	}
+	v = waitReview(t, bin, repo, home)
+	review := runOf(t, v)["review"].(map[string]any)
+	if review["result"] != nil {
+		t.Fatalf("executor did not stop at configured timeout: %v", v)
+	}
+	records, err := filepath.Glob(filepath.Join(home, "executors", "*.json"))
+	if err != nil || len(records) == 0 {
+		t.Fatalf("no executor records: %v %v", records, err)
+	}
+	data, err := os.ReadFile(records[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record runner.ExecutorRecord
+	if err := json.Unmarshal(data, &record); err != nil || !record.Stopped || !record.Reaped {
+		t.Fatalf("executor did not stop and reap: %s (%v)", data, err)
+	}
+	t.Logf("stopped executor evidence: %s", data)
+}
+
+func TestExecutorTimeoutSettings(t *testing.T) {
+	store, err := load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := executorTimeout(store.Defaults); got != 45*time.Minute {
+		t.Fatalf("default timeout: %v", got)
+	}
+	for _, value := range []string{"45m", "1s", "90m", "250ms"} {
+		settings := store.Defaults
+		settings.ExecutorTimeout = value
+		if !valid(settings) {
+			t.Errorf("valid duration rejected: %s", value)
+		}
+	}
+	for _, value := range []string{"0", "0s", "-1m", "45", "forever", "999999999999999999999h"} {
+		settings := store.Defaults
+		settings.ExecutorTimeout = value
+		if valid(settings) {
+			t.Errorf("invalid duration accepted: %s", value)
+		}
+	}
+	if executorTimeout(Settings{}) != 45*time.Minute {
+		t.Fatal("legacy settings lost default timeout")
+	}
+}
+
+func TestConfiguredFixerExecutorTimeout(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	configs := runOf(t, v)["configs"].([]any)
+	settings := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)
+	settings["executor_timeout"] = "2s"
+	v = mutate(t, bin, repo, home, v, "apply", "fixer-timeout", settings)
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "fixer-rules", nil)
+	v = mutate(t, bin, repo, home, v, "review", "review", nil)
+	v = waitReview(t, bin, repo, home)
+	if runOf(t, v)["status"] != "outstanding-findings" {
+		t.Fatal(v)
+	}
+	fake := filepath.Join(filepath.Dir(home), "sleeping-fixer")
+	if err := os.WriteFile(fake, []byte("#!/usr/bin/python3\nimport time\ntime.sleep(30)\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	config := FixerConfig{Executable: fake, Model: "fixture/model", Name: "Test", Email: "test@example.invalid", Checks: [][]string{{"/bin/true"}}}
+	data, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeConfigBytes(filepath.Join(home, "fixer.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	v = repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v))
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	v = waitRepair(t, bin, repo, home)
+	repair := runOf(t, v)["repair"].(map[string]any)
+	records, err := filepath.Glob(filepath.Join(home, "executors", repair["id"].(string)+".*.json"))
+	if err != nil || len(records) != 1 {
+		t.Fatalf("executor records: %v %v; repair=%v", records, err, repair)
+	}
+	data, err = os.ReadFile(records[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var record runner.ExecutorRecord
+	if err := json.Unmarshal(data, &record); err != nil || !record.Stopped || !record.Reaped {
+		t.Fatalf("fixer did not stop and reap: %s (%v)", data, err)
+	}
+	t.Logf("stopped fixer evidence: %s", data)
+}
+
+func TestExecutorTimeoutSavedAndInherited(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	configs := runOf(t, v)["configs"].([]any)
+	settings := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)
+	settings["executor_timeout"] = "90m"
+	v = mutate(t, bin, repo, home, v, "apply", "long-timeout", settings)
+	delete(settings, "executor_timeout")
+	v = mutate(t, bin, repo, home, v, "apply", "inherit-timeout", settings)
+	configs = runOf(t, v)["configs"].([]any)
+	if got := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)["executor_timeout"]; got != "90m" {
+		t.Fatalf("timeout was not inherited: %v", got)
+	}
+	settings["executor_timeout"] = "1h"
+	v = mutate(t, bin, repo, home, v, "save", "save-timeout", settings)
+	if v["outcome"] != "ok" || v["defaults"].(map[string]any)["executor_timeout"] != "1h" {
+		t.Fatalf("timeout was not saved: %v", v)
+	}
+	killRepairDaemon(t, home)
+	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	if v["defaults"].(map[string]any)["executor_timeout"] != "1h" {
+		t.Fatalf("saved timeout lost after restart: %v", v)
+	}
+}
+
+func TestExecutorTimeoutRepositoryOverride(t *testing.T) {
+	store, err := load(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	settings, _, err := parseOverride([]byte(`{"version":1,"executor_timeout":"90m"}`), store.Defaults)
+	if err != nil || executorTimeout(settings) != 90*time.Minute {
+		t.Fatalf("timeout override: %v %v", settings, err)
+	}
+	if _, _, err := parseOverride([]byte(`{"version":1,"executor_timeout":"-1s"}`), store.Defaults); err == nil {
+		t.Fatal("invalid override accepted")
+	}
+}
+
+func TestConfiguredReviewDeadlineExceedsTenMinutes(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `with open('/proc/'+str(os.getppid())+'/cmdline','rb') as f: args=f.read().split(b'\x00')
+with open(root+'/executor-deadline','w') as f: f.write(args[3].decode())`)
+	configs := runOf(t, v)["configs"].([]any)
+	settings := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)
+	settings["executor_timeout"] = "1h"
+	v = mutate(t, bin, repo, home, v, "apply", "long-review-timeout", settings)
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "long-review-rules", nil)
+	started := time.Now()
+	v = mutate(t, bin, repo, home, v, "review", "long-review", nil)
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	v = waitReview(t, bin, repo, home)
+	if runOf(t, v)["status"] != "outstanding-findings" {
+		t.Fatal(v)
+	}
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(home), "executor-deadline"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline, err := strconv.ParseInt(strings.TrimSpace(string(data)), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	remaining := time.Unix(deadline, 0).Sub(started)
+	if remaining < time.Hour || remaining > time.Hour+time.Minute {
+		t.Fatalf("configured hour did not reach review supervisor: %s", remaining)
+	}
+	t.Logf("review supervisor deadline is %s after launch", remaining)
+}

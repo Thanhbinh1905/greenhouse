@@ -35,7 +35,7 @@ type ExecutorRecord struct {
 const (
 	StdoutLimit        = 4 * 1024 * 1024
 	StderrLimit        = 65536
-	Timeout            = 10 * time.Minute
+	DefaultTimeout     = 45 * time.Minute
 	exitDetachedOutput = 253
 )
 

@@ -97,6 +97,7 @@ Copy `run_id`, `input_id`, `gate_id`, and `token` from the response into a mutat
     "reviewer_model": "openai/gpt-5.6-luna",
     "fixer_backend": "pi",
     "fixer_model": "openai/gpt-5.6-luna",
+    "executor_timeout": "45m",
     "auto_resume": "on"
   }
 }
@@ -119,6 +120,8 @@ The `handback` action is separate. It fast-forwards the original source branch o
 The terminal `f` action requests selected finding IDs for repair; `h` requests handback. AXI requests place the selected ID list in `selected`. All states, selected findings, check results, commit identities, handback status, and budget usage are available in the same run snapshot. There are no publication commands. An unknown repair outcome is answered with [recovery](#recovery-after-interruption).
 
 Defaults are `auto`, `one-pass`, a combined limit of 4, and selected `unslop` and `no-comments` names. The numeric limit is provisional. Valid limits are 1 through 1000; reductions cannot erase consumed usage. Modes apply to the full preset; see [modes and decisions](#modes-and-decisions). A one-pass repair always needs an explicit selection.
+
+`executor_timeout` limits each reviewer or fixer executor, including its descendants. The default is `45m`. Use a positive Go duration string such as `30s`, `45m`, or `1h`; zero, negative, malformed, and overflowing durations are refused. Omitted or empty values inherit the current setting, falling back to `45m` for older configurations. Apply changes to a run with `apply`, or save them as user defaults with `save`. Trusted repository overrides may also set this field. Parent cancellation and earlier parent deadlines still stop execution. The child supervisor uses the executor deadline plus 30 seconds for cleanup after a daemon interruption.
 
 ### Events
 
