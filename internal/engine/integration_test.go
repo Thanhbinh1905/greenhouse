@@ -2,14 +2,15 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
-	"syscall"
 	"testing"
+	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
@@ -95,6 +96,25 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	}
 	return r
 }
+func waitProcessExit(t *testing.T, pid int) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+		if os.IsNotExist(err) {
+			return
+		}
+		if err == nil {
+			fields := strings.Fields(string(b))
+			if len(fields) > 2 && fields[2] == "Z" {
+				return
+			}
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("process %d remained alive after cleanup", pid)
+}
+
 func TestFixtureStopsDaemonOnCleanup(t *testing.T) {
 	var pid int
 	t.Run("daemon", func(t *testing.T) {
@@ -108,9 +128,7 @@ func TestFixtureStopsDaemonOnCleanup(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if err := syscall.Kill(pid, 0); err == nil {
-		t.Fatalf("daemon %d outlived fixture cleanup", pid)
-	}
+	waitProcessExit(t, pid)
 }
 
 func TestFixtureStopsSecondaryDaemonOnCleanup(t *testing.T) {
@@ -127,9 +145,7 @@ func TestFixtureStopsSecondaryDaemonOnCleanup(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	if err := syscall.Kill(pid, 0); err == nil {
-		t.Fatalf("secondary daemon %d outlived fixture cleanup", pid)
-	}
+	waitProcessExit(t, pid)
 }
 
 func TestConcurrentAttach(t *testing.T) {

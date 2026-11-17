@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 func StopDaemon(home string) error {
@@ -21,62 +23,123 @@ func KillDaemon(home string) error {
 }
 
 func signalDaemon(home string, signal syscall.Signal) error {
-	b, err := os.ReadFile(filepath.Join(home, "pid"))
-	if os.IsNotExist(err) {
-		return nil
+	return signalDaemonWith(home, signal, func(pid int) (int, error) { return unix.PidfdOpen(pid, 0) }, "/proc")
+}
+
+func signalDaemonWith(home string, signal syscall.Signal, openPidfd func(int) (int, error), procRoot string) error {
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		b, err := os.ReadFile(filepath.Join(home, "pid"))
+		if os.IsNotExist(err) {
+			released, err := tryAcquireStateLock(home)
+			if err != nil {
+				return err
+			}
+			if released {
+				return nil
+			}
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		var pid int
+		if err := json.Unmarshal(b, &pid); err != nil {
+			released, lockErr := tryAcquireStateLock(home)
+			if lockErr != nil {
+				return lockErr
+			}
+			if released {
+				return err
+			}
+			time.Sleep(10 * time.Millisecond)
+			continue
+		}
+		if pid <= 0 {
+			return fmt.Errorf("invalid daemon pid %d", pid)
+		}
+		lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
+		if os.IsNotExist(err) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		released, err := tryAcquireLock(lock)
+		if err != nil {
+			lock.Close()
+			return err
+		}
+		if released {
+			lock.Close()
+			return nil
+		}
+		pidfd, err := openPidfd(pid)
+		if err != nil {
+			lock.Close()
+			return fmt.Errorf("open pidfd for daemon %d: %w", pid, err)
+		}
+		if !ownsHome(pid, home, procRoot) {
+			unix.Close(pidfd)
+			lock.Close()
+			return fmt.Errorf("daemon %d does not match state home; refusing to signal", pid)
+		}
+		err = unix.PidfdSendSignal(pidfd, signal, nil, 0)
+		unix.Close(pidfd)
+		if err != nil && !errors.Is(err, syscall.ESRCH) {
+			lock.Close()
+			return err
+		}
+		if err := waitForLockRelease(lock, deadline); err != nil {
+			lock.Close()
+			return fmt.Errorf("daemon %d: %w", pid, err)
+		}
+		return lock.Close()
 	}
-	if err != nil {
-		return err
-	}
-	var pid int
-	if err := json.Unmarshal(b, &pid); err != nil {
-		return err
-	}
-	if pid <= 0 {
-		return fmt.Errorf("invalid daemon pid %d", pid)
-	}
+	return fmt.Errorf("daemon pid remained unavailable while state lock was held")
+}
+
+func tryAcquireStateLock(home string) (bool, error) {
 	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_RDWR, 0600)
 	if os.IsNotExist(err) {
-		return nil
+		return true, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	defer lock.Close()
-	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err == nil {
-		syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		return nil
-	} else if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
-		return err
+	return tryAcquireLock(lock)
+}
+
+func tryAcquireLock(lock *os.File) (bool, error) {
+	err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+	if err == nil {
+		return true, syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
 	}
-	if !ownsHome(pid, home) {
-		return nil
+	if errors.Is(err, syscall.EWOULDBLOCK) || errors.Is(err, syscall.EAGAIN) {
+		return false, nil
 	}
-	if err := syscall.Kill(pid, signal); err != nil && !errors.Is(err, syscall.ESRCH) {
-		return err
-	}
-	if err := waitForLockRelease(lock, time.Now().Add(5*time.Second)); err != nil {
-		return fmt.Errorf("daemon %d: %w", pid, err)
-	}
-	return nil
+	return false, err
 }
 
 func waitForLockRelease(lock *os.File, deadline time.Time) error {
 	for time.Now().Before(deadline) {
-		err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
-		if err == nil {
-			return syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		}
-		if !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN) {
+		released, err := tryAcquireLock(lock)
+		if err != nil {
 			return err
+		}
+		if released {
+			return nil
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
 	return fmt.Errorf("did not release its state lock")
 }
 
-func ownsHome(pid int, home string) bool {
-	cmdline, err := os.ReadFile(fmt.Sprintf("/proc/%d/cmdline", pid))
+func ownsHome(pid int, home, procRoot string) bool {
+	proc := filepath.Join(procRoot, fmt.Sprint(pid))
+	cmdline, err := os.ReadFile(filepath.Join(proc, "cmdline"))
 	if err != nil {
 		return false
 	}
@@ -84,19 +147,20 @@ func ownsHome(pid int, home string) bool {
 	if len(args) != 2 || filepath.Base(string(args[0])) != "greenhouse" || string(args[1]) != "daemon" {
 		return false
 	}
-	environ, err := os.ReadFile(fmt.Sprintf("/proc/%d/environ", pid))
-	if err == nil {
-		want := "GREENHOUSE_HOME=" + home
-		found := false
-		for _, entry := range bytes.Split(environ, []byte{0}) {
-			if string(entry) == want {
-				found = true
-				break
-			}
+	environ, err := os.ReadFile(filepath.Join(proc, "environ"))
+	if err != nil {
+		return false
+	}
+	want := "GREENHOUSE_HOME=" + home
+	found := false
+	for _, entry := range bytes.Split(environ, []byte{0}) {
+		if string(entry) == want {
+			found = true
+			break
 		}
-		if !found {
-			return false
-		}
+	}
+	if !found {
+		return false
 	}
 	conn, err := net.DialTimeout("unix", filepath.Join(home, "socket"), 50*time.Millisecond)
 	if err != nil {
