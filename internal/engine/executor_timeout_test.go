@@ -13,9 +13,13 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
+const partialQuotaThenSleep = `print('{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"429: quota exhausted"}}', flush=True)
+time.sleep(30)
+`
+
 func TestConfiguredReviewExecutorTimeout(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
-	installFake(t, home, "time.sleep(30)")
+	installFake(t, home, partialQuotaThenSleep)
 	settings := runOf(t, v)["configs"].([]any)
 	config := settings[len(settings)-1].(map[string]any)["settings"].(map[string]any)
 	config["executor_timeout"] = "1s"
@@ -30,8 +34,8 @@ func TestConfiguredReviewExecutorTimeout(t *testing.T) {
 	}
 	v = waitReview(t, bin, repo, home)
 	review := runOf(t, v)["review"].(map[string]any)
-	if review["result"] != nil {
-		t.Fatalf("executor did not stop at configured timeout: %v", v)
+	if review["result"] != nil || runOf(t, v)["pause"] != nil || review["status"] == "paused" {
+		t.Fatalf("timed-out review status=%v pause=%v", review["status"], runOf(t, v)["pause"])
 	}
 	records, err := filepath.Glob(filepath.Join(home, "executors", "*.json"))
 	if err != nil || len(records) == 0 {
@@ -88,7 +92,7 @@ func TestConfiguredFixerExecutorTimeout(t *testing.T) {
 		t.Fatal(v)
 	}
 	fake := filepath.Join(filepath.Dir(home), "sleeping-fixer")
-	if err := os.WriteFile(fake, []byte("#!/usr/bin/python3\nimport time\ntime.sleep(30)\n"), 0700); err != nil {
+	if err := os.WriteFile(fake, []byte("#!/usr/bin/python3\nimport time\n"+partialQuotaThenSleep), 0700); err != nil {
 		t.Fatal(err)
 	}
 	config := FixerConfig{Executable: fake, Model: "fixture/model", Name: "Test", Email: "test@example.invalid", Checks: [][]string{{"/bin/true"}}}
@@ -105,6 +109,10 @@ func TestConfiguredFixerExecutorTimeout(t *testing.T) {
 	}
 	v = waitRepair(t, bin, repo, home)
 	repair := runOf(t, v)["repair"].(map[string]any)
+	if repair["status"] != "fixer-failed" || repair["failure"] != nil || runOf(t, v)["pause"] != nil {
+		t.Fatalf("timed-out fixer status=%v failure=%v pause=%v", repair["status"], repair["failure"], runOf(t, v)["pause"])
+	}
+
 	records, err := filepath.Glob(filepath.Join(home, "executors", repair["id"].(string)+".*.json"))
 	if err != nil || len(records) != 1 {
 		t.Fatalf("executor records: %v %v; repair=%v", records, err, repair)

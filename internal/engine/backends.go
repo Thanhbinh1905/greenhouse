@@ -967,7 +967,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	if err == nil && (out.Exceeded() || stderr.Exceeded()) {
 		run.err = errors.New("bounded output exceeded")
 	}
-	if !errors.Is(err, runner.ErrWriterTreeUnknown) && ctx.Err() == nil && !out.Exceeded() {
+	if !errors.Is(err, runner.ErrWriterTreeUnknown) && runCtx.Err() == nil && !out.Exceeded() {
 		run.failure = classifyBackend(backend, code, run.stdout, run.stderr, time.Now())
 		if run.failure != nil && (run.failure.diagnosticOnly || run.failure.Reason == "model_mismatch") {
 			run.failure = nil
