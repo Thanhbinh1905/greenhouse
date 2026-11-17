@@ -23,16 +23,31 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
+type executorDuration string
+
+func (d *executorDuration) UnmarshalJSON(data []byte) error {
+	var value *string
+	if err := json.Unmarshal(data, &value); err != nil {
+		return err
+	}
+	if value == nil {
+		return errors.New("executor_timeout must be a string")
+	}
+	*d = executorDuration(*value)
+	return nil
+}
+
 type Settings struct {
-	Mode            string   `json:"mode"`
-	Preset          string   `json:"preset"`
-	Limit           int      `json:"limit"`
-	Rules           []string `json:"rules"`
-	ReviewerBackend string   `json:"reviewer_backend"`
-	ReviewerModel   string   `json:"reviewer_model"`
-	FixerBackend    string   `json:"fixer_backend"`
-	FixerModel      string   `json:"fixer_model"`
-	AutoResume      string   `json:"auto_resume,omitempty"`
+	Mode            string           `json:"mode"`
+	Preset          string           `json:"preset"`
+	Limit           int              `json:"limit"`
+	Rules           []string         `json:"rules"`
+	ReviewerBackend string           `json:"reviewer_backend"`
+	ReviewerModel   string           `json:"reviewer_model"`
+	FixerBackend    string           `json:"fixer_backend"`
+	FixerModel      string           `json:"fixer_model"`
+	ExecutorTimeout executorDuration `json:"executor_timeout,omitempty"`
+	AutoResume      string           `json:"auto_resume,omitempty"`
 }
 type Snapshot struct {
 	ID           string            `json:"id"`
@@ -257,7 +272,7 @@ func persist(h string, s *Store) error {
 	return d.Sync()
 }
 func load(h string) (*Store, error) {
-	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: defaultAgent(), FixerBackend: defaultAgent()}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
+	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: defaultAgent(), FixerBackend: defaultAgent(), ExecutorTimeout: "45m"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
 	b, e := os.ReadFile(filepath.Join(h, "state.json"))
 	if os.IsNotExist(e) {
 		return s, nil
@@ -535,7 +550,19 @@ func pipelineCustody(r *Run) bool {
 	p := r.Pipeline
 	return p != nil && p.Worktree != "" && !released(p) && r.Candidate != r.Submitted.Head && p.Handback != "handed-back"
 }
+func executorTimeout(s Settings) time.Duration {
+	if s.ExecutorTimeout == "" {
+		return runner.DefaultTimeout
+	}
+	d, _ := time.ParseDuration(string(s.ExecutorTimeout))
+	return d
+}
+
 func valid(s Settings) bool {
+	timeout, err := time.ParseDuration(string(s.ExecutorTimeout))
+	if s.ExecutorTimeout != "" && (err != nil || timeout <= 0) {
+		return false
+	}
 	return (s.Mode == "auto" || s.Mode == "ask" || s.Mode == "yolo") && (s.Preset == "one-pass" || s.Preset == "full") && s.Limit >= 1 && s.Limit <= 1000 && len(s.Rules) <= 32 && validModelSelection(s.ReviewerBackend, s.ReviewerModel) && validModelSelection(s.FixerBackend, s.FixerModel) && (s.AutoResume == "" || s.AutoResume == "on" || s.AutoResume == "off")
 }
 func withModelDefaults(s Settings, defaults Settings) Settings {
@@ -810,7 +837,14 @@ func handleRequest(s *Store, q Request) Response {
 		r.Token = opaque()
 	} else if q.Op == "apply" || q.Op == "save" {
 		if q.Settings != nil {
-			normalized := withModelDefaults(*q.Settings, r.Configs[len(r.Configs)-1].Settings)
+			current := r.Configs[len(r.Configs)-1].Settings
+			normalized := withModelDefaults(*q.Settings, current)
+			if normalized.ExecutorTimeout == "" {
+				normalized.ExecutorTimeout = current.ExecutorTimeout
+				if normalized.ExecutorTimeout == "" {
+					normalized.ExecutorTimeout = "45m"
+				}
+			}
 			q.Settings = &normalized
 		}
 		if q.Settings == nil || !valid(*q.Settings) {
@@ -1028,6 +1062,7 @@ func Daemon(h string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			active[r.ID] = cancel
 			o := stepOutcome{Run: r.ID, Step: step.ID}
+			ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 			ctx = runner.WithExecutor(ctx, step.ID, Home)
 			pc, target, candidate, source := *p, r.Target, r.Candidate, r.Submitted
 			var review Execution
@@ -1097,6 +1132,7 @@ func Daemon(h string) error {
 				}
 				ctx, cancel := context.WithCancel(context.Background())
 				active[r.ID] = cancel
+				ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 				ctx = runner.WithExecutor(ctx, x.ID, Home)
 				go func(runID string, repair Repair, source repository.Identity, ctx context.Context, cancel context.CancelFunc) {
 					defer cancel()
@@ -1126,6 +1162,7 @@ func Daemon(h string) error {
 			}
 			ctx, cancel := context.WithCancel(context.Background())
 			active[r.ID] = cancel
+			ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 			runID, x := r.ID, *r.Review
 			go func() {
 				reviewed := executeReview(ctx, &x)

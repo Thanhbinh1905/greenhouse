@@ -953,7 +953,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	if err != nil {
 		return fixerRun{log: "confinement launcher unavailable", err: err}
 	}
-	runCtx, stop := context.WithCancel(ctx)
+	runCtx, stop := runner.ProcessContext(ctx)
 	defer stop()
 	out, stderr := runner.NewBuffer(limit), runner.NewBuffer(65536)
 	code, err := runner.RunProcess(runCtx, x.Worktree, exe, args, x.Input, env, stallWatch(out, backend, stop), stderr)
@@ -967,7 +967,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	if err == nil && (out.Exceeded() || stderr.Exceeded()) {
 		run.err = errors.New("bounded output exceeded")
 	}
-	if !errors.Is(err, runner.ErrWriterTreeUnknown) && ctx.Err() == nil && !out.Exceeded() {
+	if !errors.Is(err, runner.ErrWriterTreeUnknown) && runCtx.Err() == nil && !out.Exceeded() {
 		run.failure = classifyBackend(backend, code, run.stdout, run.stderr, time.Now())
 		if run.failure != nil && (run.failure.diagnosticOnly || run.failure.Reason == "model_mismatch") {
 			run.failure = nil
