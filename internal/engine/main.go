@@ -850,8 +850,11 @@ func handleRequest(s *Store, q Request) Response {
 		if err := admitPipeline(s, r); err != nil {
 			return fail(err.Error(), r)
 		}
-		if q.Title != "" {
+		if r.Pipeline.PullTitle == "" {
 			r.Pipeline.PullTitle = q.Title
+			if r.Pipeline.PullTitle == "" {
+				r.Pipeline.PullTitle = conventionalPullTitle(r.Pipeline.Intent)
+			}
 		}
 		r.Token = opaque()
 	} else if q.Op == "resolve-conflict" {

@@ -16,9 +16,9 @@ import (
 	"time"
 )
 
-func startPipelineWithTitle(t *testing.T, bin, repo, home string, v map[string]any, title string) map[string]any {
+func startPipelineWithTitle(t *testing.T, bin, repo, home string, v map[string]any, action, title string) map[string]any {
 	t.Helper()
-	request := map[string]any{"version": 1, "op": "pipeline", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": v["gate_id"], "action_id": "start", "reason": "test adjustment", "title": title}
+	request := map[string]any{"version": 1, "op": "pipeline", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": v["gate_id"], "action_id": action, "reason": "test adjustment", "title": title}
 	b, _ := json.Marshal(request)
 	return axi(t, bin, repo, home, string(b))
 }
@@ -70,7 +70,7 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 		}
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
 	})
-	started := startPipelineWithTitle(t, bin, repo, home, attached, "feat(pipeline): publish reviewed candidate")
+	started := startPipelineWithTitle(t, bin, repo, home, attached, "start", "feat(pipeline): publish reviewed candidate")
 	if started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
@@ -87,6 +87,30 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 		t.Fatalf("delivery command-runner evidence was lost: %v", stageOf(t, done, "push"))
 	}
 	verifyDeliveryEvidence(t, home, bare, run)
+}
+
+func TestPipelineStartPersistsDerivedTitleAndRejectsChanges(t *testing.T) {
+	_, repo, home, prepared := pipelineFixture(t, func(root string) map[string]any {
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
+	})
+	stopDaemon(t, home)
+	s, err := load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := s.Runs[prepared["run_id"].(string)]
+	request := Request{Version: 1, Op: "pipeline", Path: repo, RunID: r.ID, Expected: r.Token, Input: r.Input, Gate: currentGate(r), Action: "start", Reason: "test adjustment"}
+	if got := handleRequest(s, request); got.Outcome != "ok" {
+		t.Fatal(got)
+	}
+	if r.Pipeline.PullTitle != "feat: Change the sample" {
+		t.Fatalf("derived title was not persisted at pipeline start: %q", r.Pipeline.PullTitle)
+	}
+	r.Status, r.Pipeline.Status = "needs-decision", "needs-decision"
+	request.Expected, request.Input, request.Gate, request.Action, request.Title = r.Token, r.Input, currentGate(r), "change-title", "fix: use another title"
+	if got := handleRequest(s, request); got.Outcome != "refused" || !strings.Contains(got.Error, "title is immutable") || r.Pipeline.PullTitle != "feat: Change the sample" {
+		t.Fatalf("pipeline retry changed its title: %+v title=%q", got, r.Pipeline.PullTitle)
+	}
 }
 
 func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {

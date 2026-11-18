@@ -1,6 +1,6 @@
 # Embedding contract
 
-Start the full pipeline with an optional `title` request field or `axi pipeline --title`. Supply a conventional-commit title, such as `feat(auth): reject expired tokens`. If you omit the title, Greenhouse derives one from the run intent. The trusted `pipeline.json` configures delivery but does not supply the PR title.
+Start the full pipeline with an optional `title` request field or `axi pipeline --title`. Supply a conventional-commit title, such as `feat(auth): reject expired tokens`. If you omit the title, Greenhouse derives and persists one from the run intent. The legacy `pull_title` field in trusted `pipeline.json` remains accepted for compatibility but is ignored; it does not set the PR title.
 
 A host such as Posse can use Greenhouse as its independent reviewer without running a second delivery pipeline. In host mode Greenhouse runs reviews and reports exact-head verdicts. The host keeps every other responsibility.
 

@@ -27,6 +27,7 @@ type CommandPlan struct {
 	GitHubOwner    string            `json:"github_owner"`
 	GitHubRepo     string            `json:"github_repo"`
 	PullBase       string            `json:"pull_base"`
+	PullTitle      string            `json:"pull_title,omitempty"`
 	RequiredChecks []string          `json:"required_checks,omitempty"`
 	Email          string            `json:"email"`
 	Test           [][]string        `json:"test,omitempty"`
