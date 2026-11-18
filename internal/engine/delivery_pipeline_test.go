@@ -105,6 +105,7 @@ func TestPipelineStartPersistsDerivedTitleAndRejectsChanges(t *testing.T) {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
 	})
 	stopDaemon(t, home)
+	t.Setenv("GREENHOUSE_HOME", home)
 	s, err := load(home)
 	if err != nil {
 		t.Fatal(err)
@@ -562,7 +563,7 @@ func TestInterruptedDeliveryStagesReconcileFromDurableState(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
 			settings := Settings{Mode: "auto", Preset: "full", Limit: 4, Rules: []string{"unslop"}}
-			run := &Run{ID: "run", Input: "input", Token: "token", Candidate: "candidate", Status: "running", Configs: []Snapshot{{ID: "config", Settings: settings}}, Pipeline: newPipeline(CommandPlan{}, map[string]string{})}
+			run := &Run{ID: "run", Input: "input", Token: "token", Candidate: "candidate", Status: "running", Configs: []Snapshot{{ID: "config", Settings: settings}}, Pipeline: newPipeline(CommandPlan{}, map[string]string{}, "per-user")}
 			run.Pipeline.Status = "running"
 			run.Pipeline.Active = &Step{ID: "step", Stage: name, Kind: "delivery"}
 			st := run.Pipeline.stage(name)

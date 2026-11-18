@@ -236,7 +236,9 @@ While a run is paused, change the reviewer or fixer backend and model in Setting
 
 ## Full pipeline
 
-Apply the `full` preset, then Prepare. Prepare also reads a private `pipeline.json` from `GREENHOUSE_HOME` with mode 0600 and records its commands and executable digests. Repository files never add commands.
+Apply the `full` preset, then Prepare. Prepare reads `.greenhouse-pipeline.json` from the repository when that file exists. Otherwise, it reads the private `pipeline.json` from `GREENHOUSE_HOME` with mode 0600. The repository file overrides the per-user plan as a whole; an untrusted repository file never falls back to the per-user plan. The repository plan must be trusted before Prepare can load it. Inspect the repository status, then send `trust` with the reported `pipeline_digest`. A file change invalidates that trust. `run.pipeline.plan_sources` identifies the source for each plan field, and the pipeline records command executable digests.
+
+The repository file uses the same version-2 schema as `pipeline.json`, including `"budget_unit":"rounds"`. It can declare test, docs, lint, forge delivery, required checks, and the PR base. The existing repository `trust` action handles both `.greenhouse.json` and `.greenhouse-pipeline.json`; trust each file by its reported digest. The per-user `pipeline.json` remains the fallback.
 
 ```json
 {"version":2,"budget_unit":"rounds","name":"Greenhouse","email":"greenhouse@example.invalid",
@@ -277,7 +279,7 @@ The mode decides who answers a question the pipeline cannot settle alone:
 
 - `ask`: every repair waits for an answer. The actionable findings of one review form one decision of kind `findings`; one answer authorizes the whole group or a selected subset. A failing gate that the plan may repair opens a `gate-repair` decision.
 - `auto` (the default): the controller repairs actionable findings and authorized gates without asking. It parks at the review cap and for user-only authority.
-- `yolo`: as `auto`, and the `yolo` entry of `pipeline.json` names the actor that also answers the cap decision with its `cap` choice (`final-fix` or `accept-head`). Without that entry, YOLO parks the questions `auto` would have answered. The YOLO actor never answers a user-only decision, rethinks, discards or raises the cap.
+- `yolo`: as `auto`, and the `yolo` entry of the effective pipeline plan names the actor that also answers the cap decision with its `cap` choice (`final-fix` or `accept-head`). Without that entry, YOLO parks the questions `auto` would have answered. The YOLO actor never answers a user-only decision, rethinks, discards or raises the cap.
 
 A finding repair runs the fixer on the files of the selected findings and commits a new candidate, which reruns review and every gate. A finding is resolved only when the next independent review confirms the fixer's [resolution response](#resolution-responses) and does not report the finding again. A later review that reports it again reopens it: the finding takes the new report's head and data, and its resolution records the reopening review in `reopened`. `run.pipeline.resolutions` records the repair, review, candidate and kind of each resolution.
 
@@ -295,9 +297,9 @@ A repair that needs authority beyond the approved intent parks a user-only `auth
 
 A repair never adds or deletes files by default. When it does, the controller commits nothing, keeps the edits in the repair's `partial`, restores the candidate, and parks the `authority` decision with category `add-files` or `destructive` and the attempted paths in `authority_paths`. Answering `grant` records a run grant for exactly those paths at that stage; the stage then repairs again within its normal budget. Only the User can answer it: neither `auto` nor the YOLO actor can.
 
-A grant can also be declared in the trusted `pipeline.json`. `authority` is `add-files` or `delete-files`, `stages` lists `review`, `test`, `lint`, `docs` or `ci`, and each path is a repository-relative file or a directory ending in `/`. A reason is required. A repository override can never declare a grant.
+A grant can also be declared in either trusted pipeline plan. `authority` is `add-files` or `delete-files`, `stages` lists `review`, `test`, `lint`, `docs` or `ci`, and each path is a repository-relative file or a directory ending in `/`. A reason is required. A repository override can never declare a grant.
 
-`run.pipeline.grants` lists every grant with its source (`pipeline.json` or `run`), actor, reason, and deciding decision. The fixer input lists the grants of its stage, and each repair records the changes it made under a grant in `granted`, for example `add-files:testdata/case.json`. Changed file modes, executable new files, and edits outside the authorized paths still park a decision that a grant cannot answer.
+`run.pipeline.grants` lists every grant with its source (`pipeline.json`, `.greenhouse-pipeline.json`, or `run`), actor, reason, and deciding decision. The fixer input lists the grants of its stage, and each repair records the changes it made under a grant in `granted`, for example `add-files:testdata/case.json`. Changed file modes, executable new files, and edits outside the authorized paths still park a decision that a grant cannot answer.
 
 Answer the open decision with `decide` (terminal `d`). The terminal accepts an option exactly as listed, a limit in digits, and finding IDs as shown, separated by commas or spaces. Narrow screens abbreviate long finding IDs with `…`; a displayed finding ID selects only a unique matching finding. Other values wider than the screen, such as URLs and refs, are printed whole on their own line. Full IDs remain available through AXI. Only an empty line selects the whole group. Other input selects the listed IDs after validation. The request carries the usual run, input, token and action fields, `gate_id` set to the decision ID, `choice`, a `reason`, and `selected` or `limit` where the choice needs them:
 

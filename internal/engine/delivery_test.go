@@ -55,7 +55,7 @@ func TestDeliveryPipelinePushesCreatesPRAndWaitsForExactChecks(t *testing.T) {
 		t.Fatal(err)
 	}
 	p := Pipeline{Plan: CommandPlan{Name: "Test", Email: "test@example.invalid", Remote: bare, GitHubOwner: "acme", GitHubRepo: "garden", PullBase: "main", RequiredChecks: []string{"ci"}}, CommandDigests: map[string]string{gitPath: gitDigest}, Worktree: repo, Ref: "refs/heads/greenhouse/test"}
-	p.Stages = newPipeline(p.Plan, p.CommandDigests).Stages
+	p.Stages = newPipeline(p.Plan, p.CommandDigests, "per-user").Stages
 	var prCreated int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

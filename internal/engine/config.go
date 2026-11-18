@@ -82,11 +82,12 @@ func decodeConfig(name string, b []byte, out any) error {
 		return schemaError{fmt.Sprintf("%s uses schema version %d; migrate it to version %d (terminal u, AXI op migrate); a backup is kept", name, version, currentConfigVersion)}
 	}
 	delete(fields, "version")
-	if name == "pipeline.json" {
+	if name == "pipeline.json" || name == pipelinePlanName {
 		if err := budgetUnit(name, fields); err != nil {
 			return err
 		}
 		delete(fields, "budget_unit")
+		delete(fields, "pull_title")
 	}
 	rest, _ := json.Marshal(fields)
 	d := json.NewDecoder(bytes.NewReader(rest))

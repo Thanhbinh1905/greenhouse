@@ -134,6 +134,7 @@ func statePage(v engine.Response, live string, details bool) string {
 	}
 	if o := v.Repository; o != nil {
 		fmt.Fprintln(&page, engine.OverrideLine(o))
+		fmt.Fprintln(&page, engine.PipelinePlanLine(o))
 	}
 	for _, cfg := range v.Config {
 		if cfg.Status == "retired" {
@@ -592,14 +593,18 @@ func lineTerminal(h, path string) error {
 			if o == nil {
 				continue
 			}
-			terminalPrompt("Trust %s of this repository (digest %.12s)? Its values apply to new runs. Type trust:\n> ", ".greenhouse.json", o.Digest)
+			digest, name := o.Digest, ".greenhouse.json"
+			if o.Status != "ignored" && o.PipelineStatus == "ignored" && o.PipelineDigest != "absent" {
+				digest, name = o.PipelineDigest, ".greenhouse-pipeline.json"
+			}
+			terminalPrompt("Trust %s of this repository (digest %.12s)? It applies to new runs. Type trust:\n> ", name, digest)
 			if !scan() {
 				return nil
 			}
 			if input != "trust" {
 				continue
 			}
-			q.Op, q.Digest, q.Reason = "trust", o.Digest, "terminal trust"
+			q.Op, q.Digest, q.Reason = "trust", digest, "terminal trust"
 		} else if op == "u" {
 			terminalPrompt("Migrate older configuration files? Each keeps a backup. Type migrate:\n> ")
 			if !scan() {

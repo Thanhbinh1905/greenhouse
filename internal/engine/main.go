@@ -715,10 +715,16 @@ func handleRequest(s *Store, q Request) Response {
 		if !ValidText(q.Reason) {
 			return fail("reason required", r)
 		}
-		if q.Digest != status.Digest {
-			return fail("override file changed or was not inspected; inspect it again before trusting", r)
+		if q.Digest == status.PipelineDigest && status.PipelineStatus != "absent" {
+			s.Trust[pipelineTrustKey(id)] = Trust{Repository: id.Repository, PipelinePath: status.PipelinePath, PipelineDigest: status.PipelineDigest, Actor: actor, Reason: q.Reason, Action: q.Action}
+		} else if q.Digest == status.Digest {
+			trust := s.Trust[id.Repository]
+			trust.Repository, trust.Path, trust.Digest = id.Repository, status.Path, status.Digest
+			trust.Actor, trust.Reason, trust.Action = actor, q.Reason, q.Action
+			s.Trust[id.Repository] = trust
+		} else {
+			return fail("repository configuration changed or was not inspected; inspect it again before trusting", r)
 		}
-		s.Trust[id.Repository] = Trust{Repository: id.Repository, Path: status.Path, Digest: status.Digest, Actor: actor, Reason: q.Reason, Action: q.Action}
 		v := view(s, r)
 		s.Receipts[q.Action] = Receipt{d, frozen(v)}
 		return v
@@ -791,7 +797,7 @@ func handleRequest(s *Store, q Request) Response {
 		if ownReviews(r) != 0 || !ValidText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
 			return fail("immutable review intent required before dispatch", r)
 		}
-		if err := prepareRun(r, q.Intent, q.Target); err != nil {
+		if err := prepareRun(s, r, q.Intent, q.Target); err != nil {
 			return fail(err.Error(), r)
 		}
 		r.Token = opaque()
@@ -835,7 +841,7 @@ func handleRequest(s *Store, q Request) Response {
 			settings := candidate.Configs[len(candidate.Configs)-1].Settings
 			settings.Preset = "full"
 			candidate.Configs = append(candidate.Configs, Snapshot{ID: opaque(), Settings: settings, Source: "pipeline intent"})
-			if err := prepareRun(&candidate, q.Intent, q.Target); err != nil {
+			if err := prepareRun(s, &candidate, q.Intent, q.Target); err != nil {
 				return fail(err.Error(), r)
 			}
 			candidate.RuleSnapshots = append(candidate.RuleSnapshots, resolveRules(&candidate))
