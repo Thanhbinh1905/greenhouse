@@ -16,8 +16,22 @@ import (
 
 func watch(t *testing.T, bin, repo, home string, stream any, after any, waitMS int) map[string]any {
 	t.Helper()
-	b, _ := json.Marshal(map[string]any{"version": 2, "op": "watch", "stream": stream, "after": after, "wait_ms": waitMS})
-	return axi(t, bin, repo, home, string(b))
+	budget := time.Duration(waitMS) * time.Millisecond
+	if budget == 0 {
+		budget = time.Second
+	}
+	deadline := time.Now().Add(budget)
+	for {
+		b, _ := json.Marshal(map[string]any{"version": 2, "op": "watch", "stream": stream, "after": after, "wait_ms": waitMS})
+		v := axi(t, bin, repo, home, string(b))
+		if v["outcome"] != "refused" || v["error"] != "storage commit in progress; retry the read request" || !time.Now().Before(deadline) {
+			return v
+		}
+		time.Sleep(min(20*time.Millisecond, time.Until(deadline)))
+		if waitMS > 0 {
+			waitMS = max(0, int(time.Until(deadline).Milliseconds()))
+		}
+	}
 }
 
 func TestEventSubscriptionRecoversThroughSnapshots(t *testing.T) {
@@ -59,9 +73,18 @@ func TestEventSubscriptionRecoversThroughSnapshots(t *testing.T) {
 	after = notified["sequence"]
 
 	during := watch(t, bin, repo, home, stream, after, 300)
-	if during["wait"] != "elapsed" || runOf(t, during)["status"] != "running" {
-		t.Fatalf("elapsed wait during a review: %v", during)
+	if during["wait"] != "elapsed" && during["wait"] != "events" || runOf(t, during)["status"] != "running" {
+		t.Fatalf("wait during a review: %v", during)
 	}
+	if during["wait"] == "events" {
+		for _, value := range during["events"].([]any) {
+			event := value.(map[string]any)
+			if event["kind"] != "step-started" || event["command"] == nil {
+				t.Fatalf("unexpected event during running review: %v", event)
+			}
+		}
+	}
+	after = during["sequence"]
 	settled := map[string]any{}
 	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
 		settled = watch(t, bin, repo, home, stream, after, 5000)
@@ -171,5 +194,24 @@ func TestTerminalFollowsEventsWithoutInput(t *testing.T) {
 	}
 	if after := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`); runOf(t, after)["review_used"] != float64(1) {
 		t.Fatalf("terminal changed the run: %v", after)
+	}
+}
+
+func TestFeedRestartDoesNotDuplicateStageLogs(t *testing.T) {
+	stage := StageResult{Name: "test", Status: "passed", Runs: 1}
+	run := &Run{ID: "run", Token: "before", Pipeline: &Pipeline{Stages: []StageResult{stage}}}
+	store := &Store{Runs: map[string]*Run{run.ID: run}}
+	feed := newFeed(store)
+	var recorded []StageResult
+	feed.recordStage = func(_ string, stage StageResult) { recorded = append(recorded, stage) }
+	run.Token = "after"
+	feed.observe(store)
+	if len(recorded) != 0 {
+		t.Fatal("restart appended historical stage output again")
+	}
+	run.Pipeline.Stages[0].Runs++
+	feed.observe(store)
+	if len(recorded) != 1 || recorded[0].Runs != 2 {
+		t.Fatalf("new attempt was not recorded once: %+v", recorded)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/forge"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
@@ -17,11 +18,17 @@ const (
 )
 
 type FeedEvent struct {
-	Sequence uint64 `json:"sequence"`
-	Run      string `json:"run_id"`
-	Stage    string `json:"stage"`
-	Status   string `json:"status"`
-	Token    string `json:"token"`
+	Checks    []forge.CheckState `json:"checks,omitempty"`
+	Kind      string             `json:"kind,omitempty"`
+	Execution string             `json:"execution,omitempty"`
+	Command   []string           `json:"command,omitempty"`
+	ExitCode  *int               `json:"exit_code,omitempty"`
+	ElapsedMS *int64             `json:"elapsed_ms,omitempty"`
+	Sequence  uint64             `json:"sequence"`
+	Run       string             `json:"run_id"`
+	Stage     string             `json:"stage"`
+	Status    string             `json:"status"`
+	Token     string             `json:"token"`
 }
 
 type waiter struct {
@@ -34,17 +41,24 @@ type waiter struct {
 // The feed is not persisted: a new stream after restart makes clients resync
 // from a snapshot.
 type feed struct {
-	stream  string
-	seq     uint64
-	log     []FeedEvent
-	seen    map[string]string
-	waiters []*waiter
+	recordStage func(string, StageResult)
+	stream      string
+	seq         uint64
+	log         []FeedEvent
+	stageSeen   map[string]string
+	seen        map[string]string
+	waiters     []*waiter
 }
 
 func newFeed(s *Store) *feed {
-	f := &feed{stream: opaque(), seen: map[string]string{}}
+	f := &feed{stream: opaque(), seen: map[string]string{}, stageSeen: map[string]string{}}
 	for id, r := range s.Runs {
 		f.seen[id] = Digest(r)
+		if r.Pipeline != nil {
+			for _, stage := range r.Pipeline.Stages {
+				f.stageSeen[r.ID+":"+stage.Name] = Digest(stage)
+			}
+		}
 	}
 	return f
 }
@@ -67,11 +81,35 @@ func (f *feed) observe(s *Store) {
 			continue
 		}
 		f.seen[id] = d
-		f.seq++
-		f.log = append(f.log, FeedEvent{Sequence: f.seq, Run: id, Stage: r.Stage, Status: r.Status, Token: r.Token})
-		if len(f.log) > feedLimit {
-			f.log = f.log[len(f.log)-feedLimit:]
+		if p := r.Pipeline; p != nil {
+			for _, stage := range p.Stages {
+				key := r.ID + ":" + stage.Name
+				digest := Digest(stage)
+				if f.stageSeen[key] == digest {
+					continue
+				}
+				f.stageSeen[key] = digest
+				if f.recordStage != nil {
+					f.recordStage(r.ID, stage)
+				}
+			}
 		}
+		kind := "run-changed"
+		if r.Pipeline != nil && r.Pipeline.Open() != nil {
+			kind = "decision"
+		} else if r.Status == "paused" || r.Status == "needs-decision" || r.Status == "recovery-required" {
+			kind = "park"
+		}
+		f.append(FeedEvent{Run: id, Stage: r.Stage, Status: r.Status, Token: r.Token, Kind: kind})
+	}
+}
+
+func (f *feed) append(event FeedEvent) {
+	f.seq++
+	event.Sequence = f.seq
+	f.log = append(f.log, event)
+	if len(f.log) > feedLimit {
+		f.log = f.log[len(f.log)-feedLimit:]
 	}
 }
 
@@ -80,7 +118,7 @@ func (f *feed) since(s *Store, q Request, repository string) (events []FeedEvent
 		return nil, true
 	}
 	for _, e := range f.log {
-		if r := s.Runs[e.Run]; e.Sequence > q.After && r != nil && r.Submitted.Repository == repository {
+		if r := s.Runs[e.Run]; e.Sequence > q.After && r != nil && r.Submitted.Repository == repository && (q.RunID == "" || q.RunID == r.ID) {
 			events = append(events, e)
 		}
 	}
@@ -88,7 +126,7 @@ func (f *feed) since(s *Store, q Request, repository string) (events []FeedEvent
 }
 
 func (f *feed) answer(s *Store, q Request, events []FeedEvent, wait string) Response {
-	v := handle(s, Request{Version: q.Version, Op: "inspect", Path: q.Path, Host: q.Host})
+	v := handle(s, Request{Version: q.Version, Op: "inspect", Path: q.Path, RunID: q.RunID, Host: q.Host})
 	v.Stream, v.Sequence, v.Events, v.Wait = f.stream, f.seq, events, wait
 	return v
 }
@@ -109,6 +147,19 @@ func (f *feed) subscribe(s *Store, c net.Conn, q Request) (Response, bool) {
 	if e != nil {
 		return refuse(e)
 	}
+	if q.Op == "logs" {
+		v := handle(s, q)
+		if v.Outcome != "ok" || !q.Follow || v.Logs.Next > v.Logs.Offset || q.WaitMS == 0 || logsComplete(v.Run, q.Step) {
+			return v, false
+		}
+		if len(f.waiters) >= waiterLimit {
+			return refuse(errors.New("too many waiting subscribers; retry later"))
+		}
+		q.RunID = v.RunID
+		c.SetDeadline(time.Time{})
+		f.waiters = append(f.waiters, &waiter{conn: c, q: q, repository: id.Repository, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
+		return Response{}, true
+	}
 	events, resync := f.since(s, q, id.Repository)
 	switch {
 	case resync:
@@ -128,6 +179,41 @@ func (f *feed) subscribe(s *Store, c net.Conn, q Request) (Response, bool) {
 func (f *feed) flush(s *Store, now time.Time) {
 	kept := f.waiters[:0]
 	for _, w := range f.waiters {
+		if w.q.Op == "pipeline" {
+			v := handle(s, Request{Version: w.q.Version, Op: "inspect", Path: w.q.Path, RunID: w.q.RunID, Host: w.q.Host})
+			if v.Outcome == "ok" && executionActive(v.Run) && now.Before(w.deadline) {
+				kept = append(kept, w)
+				continue
+			}
+			v.Stream, v.Sequence = f.stream, f.seq
+			v.Wait = "settled"
+			if executionActive(v.Run) {
+				v.Wait = "elapsed"
+			}
+			stamp(&v, w.q.Version)
+			w.conn.SetWriteDeadline(now.Add(2 * time.Second))
+			json.NewEncoder(w.conn).Encode(v)
+			w.conn.Close()
+			continue
+		}
+		if w.q.Op == "logs" {
+			v := handle(s, w.q)
+			if v.Outcome == "ok" && v.Logs.Next == v.Logs.Offset && !logsComplete(v.Run, w.q.Step) && now.Before(w.deadline) {
+				kept = append(kept, w)
+				continue
+			}
+			v.Wait = "elapsed"
+			if v.Logs != nil && v.Logs.Next > v.Logs.Offset {
+				v.Wait = "output"
+			} else if logsComplete(v.Run, w.q.Step) {
+				v.Wait = "complete"
+			}
+			stamp(&v, w.q.Version)
+			w.conn.SetWriteDeadline(now.Add(2 * time.Second))
+			json.NewEncoder(w.conn).Encode(v)
+			w.conn.Close()
+			continue
+		}
 		events, resync := f.since(s, w.q, w.repository)
 		var v Response
 		switch {
@@ -153,6 +239,9 @@ func (f *feed) next(now time.Time) time.Duration {
 	wait := time.Hour
 	for _, w := range f.waiters {
 		wait = min(wait, max(w.deadline.Sub(now), 0))
+		if w.q.Op == "logs" {
+			wait = min(wait, 100*time.Millisecond)
+		}
 	}
 	return wait
 }
@@ -162,4 +251,8 @@ func (f *feed) close() {
 		w.conn.Close()
 	}
 	f.waiters = nil
+}
+
+func executionActive(r *Run) bool {
+	return r != nil && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing")
 }
