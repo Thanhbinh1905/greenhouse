@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 func TestStoppedDaemonCanRestartWithPendingRequest(t *testing.T) {
@@ -51,7 +53,9 @@ func TestStoppedDaemonCanRestartWithPendingRequest(t *testing.T) {
 		}
 		time.Sleep(time.Millisecond)
 	}
-	stopDaemon(t, home)
+	if err := daemonutil.KillDaemon(home); err != nil {
+		t.Fatal(err)
+	}
 	v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	if v["outcome"] != "ok" {
 		t.Fatalf("restart failed: %v", v)
