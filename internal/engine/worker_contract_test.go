@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/forge"
 )
 
 func workerCommand(t *testing.T, bin, repo, home string, args ...string) map[string]any {
@@ -159,6 +161,48 @@ func TestWorkerDeliveryContract(t *testing.T) {
 			t.Fatalf("missing %s output", step)
 		}
 	}
+
+	stopDaemonAndWait(t, home)
+	persisted, err := load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := persisted.Runs[state["run_id"].(string)]
+	ci := run.Pipeline.stage("ci")
+	original := ci.Checks
+	failed := "failure"
+	for _, evidence := range []struct {
+		name     string
+		required []string
+		checks   []forge.CheckState
+	}{
+		{"absent", []string{"fixture-ci"}, nil},
+		{"incomplete", []string{"fixture-ci", "missing-ci"}, original},
+		{"duplicate", []string{"fixture-ci"}, append(append([]forge.CheckState{}, original...), original...)},
+		{"wrong-name", []string{"fixture-ci"}, []forge.CheckState{{Name: "other", Status: "completed", Conclusion: original[0].Conclusion, Head: head}}},
+		{"pending", []string{"fixture-ci"}, []forge.CheckState{{Name: "fixture-ci", Status: "in_progress", Head: head}}},
+		{"failed", []string{"fixture-ci"}, []forge.CheckState{{Name: "fixture-ci", Status: "completed", Conclusion: &failed, Head: head}}},
+		{"missing-conclusion", []string{"fixture-ci"}, []forge.CheckState{{Name: "fixture-ci", Status: "completed", Head: head}}},
+		{"stale", []string{"fixture-ci"}, []forge.CheckState{{Name: "fixture-ci", Status: "completed", Conclusion: original[0].Conclusion, Head: "stale"}}},
+	} {
+		run.Pipeline.Plan.RequiredChecks, ci.Checks = evidence.required, evidence.checks
+		if err := persist(home, persisted); err != nil {
+			t.Fatal(err)
+		}
+		inspected := workerCommand(t, bin, repo, home, "inspect")
+		if inspected["delivery"].(map[string]any)["current"] != false {
+			t.Fatalf("delivery.current accepted %s required-check evidence", evidence.name)
+		}
+		stopDaemonAndWait(t, home)
+	}
+	run.Pipeline.Plan.RequiredChecks = []string{"fixture-ci"}
+	ci.Checks = original
+	if err := persist(home, persisted); err != nil {
+		t.Fatal(err)
+	}
+	if workerCommand(t, bin, repo, home, "inspect")["delivery"].(map[string]any)["current"] != true {
+		t.Fatal("complete required-check evidence must remain current after restart")
+	}
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "advance source")
 	if workerCommand(t, bin, repo, home, "inspect")["delivery"].(map[string]any)["current"] != false {
 		t.Fatal("source movement must invalidate delivery evidence")
@@ -288,5 +332,30 @@ func TestWorkerPipelineRejectsInvalidIntent(t *testing.T) {
 		if after["token"] != before["token"] || runOf(t, after)["intent"] != runOf(t, before)["intent"] {
 			t.Fatal("invalid intent mutated the run")
 		}
+	}
+}
+
+func TestWorkerPipelineRedactsSnapshotOutput(t *testing.T) {
+	t.Parallel()
+	const secret = "abcdefgh1234567890"
+	bin, repo, home, _ := pipelineFixture(t, func(root string) map[string]any {
+		plan := localPlan(root)
+		command := filepath.Join(root, "secret-gate")
+		writeExecutable(t, command, "#!/usr/bin/python3\nprint('token="+secret+"')\n")
+		plan["test"] = [][]string{{command}}
+		return plan
+	})
+	state := workerCommand(t, bin, repo, home, "pipeline", "--wait", "30s")
+	encoded, _ := json.Marshal(state)
+	durable, err := os.ReadFile(filepath.Join(home, "state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(encoded), secret) || strings.Contains(string(durable), secret) {
+		t.Fatal("raw command secret leaked into AXI snapshot or durable state")
+	}
+	output := stageOf(t, state, "test")["commands"].([]any)[0].(map[string]any)["output"].(string)
+	if !strings.Contains(output, "[REDACTED]") {
+		t.Fatalf("missing redaction: %s", output)
 	}
 }

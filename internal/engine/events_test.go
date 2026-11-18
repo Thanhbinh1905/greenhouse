@@ -182,3 +182,22 @@ func TestTerminalFollowsEventsWithoutInput(t *testing.T) {
 		t.Fatalf("terminal changed the run: %v", after)
 	}
 }
+
+func TestFeedRestartDoesNotDuplicateStageLogs(t *testing.T) {
+	stage := StageResult{Name: "test", Status: "passed", Runs: 1}
+	run := &Run{ID: "run", Token: "before", Pipeline: &Pipeline{Stages: []StageResult{stage}}}
+	store := &Store{Runs: map[string]*Run{run.ID: run}}
+	feed := newFeed(store)
+	var recorded []StageResult
+	feed.recordStage = func(_ string, stage StageResult) { recorded = append(recorded, stage) }
+	run.Token = "after"
+	feed.observe(store)
+	if len(recorded) != 0 {
+		t.Fatal("restart appended historical stage output again")
+	}
+	run.Pipeline.Stages[0].Runs++
+	feed.observe(store)
+	if len(recorded) != 1 || recorded[0].Runs != 2 {
+		t.Fatalf("new attempt was not recorded once: %+v", recorded)
+	}
+}

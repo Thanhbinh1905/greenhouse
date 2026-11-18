@@ -54,6 +54,11 @@ func newFeed(s *Store) *feed {
 	f := &feed{stream: opaque(), seen: map[string]string{}, stageSeen: map[string]string{}}
 	for id, r := range s.Runs {
 		f.seen[id] = Digest(r)
+		if r.Pipeline != nil {
+			for _, stage := range r.Pipeline.Stages {
+				f.stageSeen[r.ID+":"+stage.Name] = Digest(stage)
+			}
+		}
 	}
 	return f
 }

@@ -61,3 +61,39 @@ func TestStepCompletionClassifiesExecutorErrors(t *testing.T) {
 		}
 	}
 }
+
+func TestStandaloneLogFollowOnlyWaitsForActiveStep(t *testing.T) {
+	for _, active := range []struct{ stage, step, status string }{
+		{"independent-review", "review", "running"},
+		{"selected-repair", "repair", "writing"},
+		{"selected-repair", "repair", "cancelling"},
+	} {
+		run := &Run{Stage: active.stage, Status: active.status}
+		for _, step := range []string{"review", "repair", "test", "docs", "lint", "push", "pr", "ci"} {
+			if got, want := logsComplete(run, step), step != active.step; got != want {
+				t.Errorf("%s during %s: complete=%t, want %t", step, active.stage, got, want)
+			}
+		}
+	}
+}
+
+func TestSnapshotTailRedactsBeforeTruncation(t *testing.T) {
+	t.Setenv("WORKER_SECRET", "a-secret-across-chunks")
+	tail := &tailBuffer{limit: 32}
+	writer := &logWriter{output: tail}
+	writer.Write([]byte("a-secret-"))
+	writer.Write([]byte("across-chunks\n"))
+	writer.Write([]byte("safe output\n"))
+	writer.flush()
+	if strings.Contains(tail.String(), "across-chunks") || !strings.Contains(tail.String(), "safe output") {
+		t.Fatalf("redaction must precede tail truncation: %q", tail.String())
+	}
+}
+
+func TestRecoveredCommandsRedactSnapshotOutput(t *testing.T) {
+	plan := &Pipeline{Plan: CommandPlan{Test: [][]string{{"test"}}}}
+	result, complete := recordedCommands(plan, "test", []runner.ObservedExecutor{{ExecutorEvidence: runner.ExecutorEvidence{State: "exited"}, Stdout: []byte("token=abcdefgh1234567890\n")}})
+	if !complete || strings.Contains(result.Commands[0].Output, "abcdefgh1234567890") || !strings.Contains(result.Commands[0].Output, "[REDACTED]") {
+		t.Fatalf("recovered output is not redacted: %+v", result)
+	}
+}

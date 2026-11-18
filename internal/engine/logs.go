@@ -123,6 +123,7 @@ func (w synchronizedWriter) Write(p []byte) (int, error) {
 }
 
 type logWriter struct {
+	output    io.Writer
 	run, step string
 	pending   []byte
 	discard   bool
@@ -153,10 +154,14 @@ func (w *logWriter) Write(data []byte) (int, error) {
 	return n, nil
 }
 func (w *logWriter) flush() {
+	data := w.pending
 	if w.discard {
-		appendLog(w.run, w.step, []byte("[oversized output line omitted]\n"))
-	} else if len(w.pending) > 0 {
-		appendLog(w.run, w.step, w.pending)
+		data = []byte("[oversized output line omitted]\n")
+	}
+	if w.output != nil {
+		w.output.Write(Redact(data))
+	} else if len(data) > 0 {
+		appendLog(w.run, w.step, data)
 	}
 	w.pending = nil
 	w.discard = false
@@ -221,5 +226,12 @@ func logsComplete(r *Run, step string) bool {
 		active := r.Pipeline.Active
 		return active.Stage != step && !(step == "repair" && (active.Kind == "repair" || active.Kind == "conflict"))
 	}
-	return false
+	switch r.Stage {
+	case "independent-review":
+		return step != "review"
+	case "selected-repair":
+		return step != "repair"
+	default:
+		return true
+	}
 }

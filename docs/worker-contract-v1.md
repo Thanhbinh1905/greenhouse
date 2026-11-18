@@ -164,8 +164,8 @@ if the step is inactive or the run has stopped. `wait` is `output`, `complete`,
 or `elapsed` after a parked follow request. Advance with `next`; use `watch`
 to wait for a future step to start.
 
-Process output is redacted before storage, using the transcript's environment
-secret names and token patterns. Complete lines become readable while a process
+Stage logs and retained command output are redacted before storage, using the
+transcript's environment secret names and token patterns. Complete lines become readable while a process
 runs. An unfinished line is withheld until a newline or process completion;
 lines larger than 4 MiB are omitted. Command headers, exit summaries, stage
 results, and CI observations share the same stream. PR and CI use structured
@@ -196,7 +196,9 @@ The top-level `delivery` contains:
 - `checks`: one entry per required check, with `name`, `status`, `conclusion`,
   and `head`. A missing observation has status `unobserved`.
 - `current`: whether the source identity and private candidate still match the
-  run, and the pushed head, PR head, and passed CI evidence name that candidate.
+  run, the pushed head and PR head name that candidate, and every required check
+  has completed successfully for it. Missing, duplicate, or stale check evidence
+  makes `current` false.
 
 Check `delivery.current`, compare `delivery.pushed_head` with `run.candidate`,
 and require every required check to have `status: "completed"`,

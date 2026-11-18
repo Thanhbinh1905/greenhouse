@@ -853,7 +853,9 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 		return res, nil
 	}
 	out := &tailBuffer{limit: 16384}
-	code, err := runner.RunProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), out, out)
+	safeOut := &logWriter{output: out}
+	code, err := runner.RunProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), safeOut, safeOut)
+	safeOut.flush()
 	res.Exit = code
 	res.Output = out.String()
 	res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", code, out.total, out.truncated())
