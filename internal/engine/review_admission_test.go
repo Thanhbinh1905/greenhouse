@@ -132,9 +132,9 @@ func TestGitlinkReview(t *testing.T) {
 			}
 			x.Result.Findings[0].Start = 2
 			x.Result.Findings[0].End = 2
-			_, err = verdictFrom(agentAnswer{Text: mustJSON(t, map[string]any{"head": x.Result.Head, "verdict": x.Result.Verdict, "coverage": x.Result.Coverage, "findings": x.Result.Findings}), Provider: "fixture", Model: "model"}, &x)
-			if err == nil {
-				t.Fatal("gitlink finding outside line 1 accepted")
+			filtered, err := verdictFrom(agentAnswer{Text: mustJSON(t, map[string]any{"head": x.Result.Head, "verdict": x.Result.Verdict, "coverage": x.Result.Coverage, "findings": x.Result.Findings}), Provider: "fixture", Model: "model"}, &x)
+			if err != nil || len(filtered.Findings) != 0 || len(filtered.Diagnostics) != 1 || filtered.Verdict != "clean" {
+				t.Fatalf("gitlink finding outside line 1 was not filtered: %v %+v", err, filtered)
 			}
 		})
 	}

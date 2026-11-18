@@ -13,7 +13,7 @@ Host mode needs protocol version 2. See [compatibility](compatibility.md).
 | Author repair and conflict repair | Host | Refuses `repair` and `resolve-conflict` |
 | Candidate custody | Host | Creates no private worktree, candidate ref or lease; refuses `handback` |
 | Push, PR and CI | Host | Refuses `pipeline` |
-| Review cap and cap decisions | Host | Ignores the Greenhouse `limit`, `mode` and `preset`; refuses `decide` and `rerun-from-start`; never reports budget exhaustion |
+| Review cap and cap decisions | Host | Ignores the Greenhouse `limit`, `mode` and `preset`; refuses `decide` and `rerun-from-start`; never exhausts the host round count |
 | Saved configuration | User | Refuses `save`, `trust` and `migrate` from the host |
 
 Each responsibility has one owner. Greenhouse never pushes, opens a PR, writes the worktree, or creates a reviewer pane in host mode.
@@ -89,7 +89,7 @@ A backend pause, such as an exhausted quota, keeps the review's grant and gives 
 
 `Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
 
-Small files have full numbered content. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. Windows that still exceed either limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
+Small files are numbered before applying the review context window. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. Windows that still exceed either limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
 
 A gitlink has a synthetic `Files` entry: `1: Subproject commit <new pin>`. Findings on that path use line 1. Finding identities normalize this synthetic content using the same `code-v1` calculation as text. `Submodules` contains `Path`, `Old`, `New`, `Log`, `Diff`, and `Truncated`. Pins come from the review base and candidate trees. Logs and diffs each retain at most 128 KiB; `Truncated` and an omission marker identify shortened ranges. Added or removed gitlinks have no two-pin range.
 
@@ -104,6 +104,34 @@ The complete JSON bundle must fit within 2 MiB. Admission refusals retain `outco
 | `submodule_unavailable` | A submodule pin is unavailable locally. The error names the path and both pins. |
 
 These fields are additive in existing protocol versions. Retrying the same input cannot resolve these refusals.
+
+## Per-review budget and finalization
+
+Greenhouse enforces a wall-time budget for each reviewer attempt, including its finalization turn. The default is `3m`. Set `review_budget` in the private per-user `backends.json` to a positive Go duration at most `1h`:
+
+```json
+{"version": 2, "review_budget": "3m"}
+```
+
+The shorter of this budget and `executor_timeout` applies. Reaching `executor_timeout` reports `timeout`; exhausting the shorter review budget reports `review_budget`. The controller reserves the last 20% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
+
+A missing or invalid final answer also triggers this turn, using the time left in the same budget. Finalization requests low reasoning effort and carries only the verdict contract, head, and paths; the original evidence remains in the session. There is at most one finalization turn. Authentication, quota, process failures, and model mismatches do not trigger output recovery. If the backend provides no resumable session, the attempt remains inconclusive and its log explains why. Native credentials and settings use private copies with mode `0400`. Claude onboarding state uses a writable private copy. Claude also receives a private `HOME`, so its home-level `.claude.json` resolves to that copy. The private session contains no links to the originals. Session writes use a private directory removed after review. When Landlock is unavailable, these copies prevent writes through session paths from reaching the originals; they do not provide OS isolation against direct access to other paths.
+
+Review input includes `ReviewBudget` and `ChangedHunks`, mapping changed paths to inclusive candidate line ranges. `Diff` and numbered `Files` are the starting evidence. `Files` contains changed hunks plus up to 20 context lines on each side, with `[omitted]` between excerpts. The bounded windows described above may supply fewer context lines for large files. Pure deletions in surviving files anchor at the candidate hunk start, with a minimum of line 1. Whole-file deletions retain old-file ranges. Empty-diff repair reviews retain full files. The prompt permits reading dependencies to resolve a concrete question about a changed hunk, and tells the reviewer to stop when that evidence is sufficient.
+
+An out-of-range finding is dropped individually. Valid findings remain. When every finding is dropped and coverage is complete, the verdict becomes `clean`. Other identity, coverage, policy, and model validation still apply. `run.review.result.diagnostics` lists dropped findings; `run.review.diagnostic` and `host_result.diagnostic` expose the bounded, redacted explanation even for conclusive reviews.
+
+AXI `inspect` includes these execution fields:
+
+- `run.review.review_budget`: the duration captured when the attempt was admitted.
+- `run.review.finalization`: `true` when the controller ran the finalization turn; omitted otherwise.
+- `run.review.usage`: tokens and cost from exploration plus finalization.
+- `run.attempts[].tokens` and `run.attempts[].usage`: the same aggregate for each attempt, including full-pipeline reviews.
+- `run.review.reason`: `review_budget` when the attempt exhausts its deadline; the verdict remains inconclusive.
+
+The budget bounds wall time, not an exact token count. Tokens are the totals reported by the native backend; an interrupted request may not report usage. Cache accounting retains backend semantics. Unknown usage remains zero.
+
+Reviews saved before budgets were introduced remain loadable without rewriting their evidence. When `review_budget` is absent, durable validation also accepts the exact historical reviewer prompt arguments. Other arguments and evidence digests remain validated. A resumed attempt without a stored budget uses the default `3m`.
 
 ## Responses to earlier findings
 

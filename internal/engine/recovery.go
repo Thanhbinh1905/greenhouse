@@ -100,22 +100,38 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 				verdicts = append(verdicts, o)
 			}
 		}
-		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || (verdicts[0].State != "exited" && verdicts[0].State != "stopped") || verdicts[0].Record.InputDigest != x.InputDigest {
+		if x == nil || x.ID != rec.Execution || (len(verdicts) != 1 && len(verdicts) != 2) || verdicts[0].Record.InputDigest != x.InputDigest {
 			return false
 		}
-		o := verdicts[0]
-		var runErr error
-		if o.Exit != 0 {
-			runErr = fmt.Errorf("exit status %d", o.Exit)
-		}
-		var stopErr error
-		if o.Record.Stopped {
-			stopErr = context.Canceled
-			if o.Record.StopReason == "timeout" {
-				stopErr = fmt.Errorf("review executor limit %s exceeded: %w", executorTimeout(r.Configs[len(r.Configs)-1].Settings), context.DeadlineExceeded)
+		var done reviewOutcome
+		for i, o := range verdicts {
+			if o.State != "exited" && o.State != "stopped" {
+				return false
+			}
+			if i == 1 && o.Record.InputDigest != runner.BytesDigest(reviewFinalizationInput(x, done, true)) && o.Record.InputDigest != runner.BytesDigest(reviewFinalizationInput(x, done, false)) {
+				return false
+			}
+			var runErr, stopErr error
+			if o.Exit != 0 {
+				runErr = fmt.Errorf("exit status %d", o.Exit)
+			}
+			if o.Record.Stopped {
+				stopErr = context.Canceled
+				if o.Record.StopReason == "timeout" {
+					stopErr = fmt.Errorf("review executor limit %s exceeded: %w", executorTimeout(r.Configs[len(r.Configs)-1].Settings), context.DeadlineExceeded)
+				}
+			}
+			previous := done
+			done = reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
+			if i == 1 {
+				done.Finalization = true
+				done.Answer.Usage = addUsage(previous.Answer.Usage, done.Answer.Usage)
+				done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
+			}
+			if budget, err := time.ParseDuration(x.ReviewBudget); err == nil && budget < executorTimeout(r.Configs[len(r.Configs)-1].Settings) && errors.Is(stopErr, context.DeadlineExceeded) {
+				done.Status, done.Answer.Reason, done.Answer.Diagnostic = "inconclusive", "review_budget", "review wall-time budget exhausted"
 			}
 		}
-		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
 		check := reverifySnapshot(x)
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}

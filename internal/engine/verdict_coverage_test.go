@@ -44,3 +44,42 @@ func TestChangedHunkRanges(t *testing.T) {
 		t.Fatal(spans)
 	}
 }
+
+func TestDeletionRangesUseCandidateAnchors(t *testing.T) {
+	for _, c := range []struct {
+		name, candidate, hunk string
+		want                  [2]int
+	}{
+		{"middle", "b/sample", "@@ -21,60 +20,0 @@", [2]int{20, 20}},
+		{"beginning", "b/sample", "@@ -1,60 +0,0 @@", [2]int{1, 1}},
+		{"end", "b/sample", "@@ -141,60 +140,0 @@", [2]int{140, 140}},
+		{"whole file", "/dev/null", "@@ -1,60 +0,0 @@", [2]int{1, 60}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			got := changedRanges("--- a/sample\n+++ " + c.candidate + "\n" + c.hunk + "\n")
+			if len(got["sample"]) != 1 || got["sample"][0] != c.want {
+				t.Fatalf("deletion range = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+func TestDeletionContextUsesCandidateWindow(t *testing.T) {
+	var numbered strings.Builder
+	for i := 0; i < 140; i++ {
+		numbered.WriteString("candidate line\n")
+	}
+	ranges := changedRanges("--- a/sample\n+++ b/sample\n@@ -21,60 +20,0 @@\n")
+	got := hunkContext([]reviewFile{{Path: "sample", Lines: numbered.String()}}, ranges)
+	if n := strings.Count(got[0].Lines, "candidate line\n"); n != 40 {
+		t.Fatalf("deletion context contains %d candidate lines, want window 1..40", n)
+	}
+}
+
+func TestHunkContextPreservesNumberedWindows(t *testing.T) {
+	files := []reviewFile{{Path: "sample", Lines: "...\n2499: before\n2500: changed\n2501: after\n...\n"}}
+	got := hunkContext(files, map[string][][2]int{"sample": {{2500, 2500}}})
+	if !strings.Contains(got[0].Lines, "2500: changed\n") {
+		t.Fatalf("candidate window lost its changed line: %q", got[0].Lines)
+	}
+}

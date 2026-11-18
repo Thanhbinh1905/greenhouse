@@ -213,7 +213,11 @@ func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 	os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nchanged\nc"), 0600)
 	commit("candidate")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
-	installFake(t, home, "")
+	installFake(t, home, `v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[]}
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
+print(json.dumps({"type":"agent_settled","aborted":False}))
+sys.exit(0)
+`)
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Review files", "target": target}
 	b, _ := json.Marshal(q)
 	v = mutate(t, bin, repo, home, axi(t, bin, repo, home, string(b)), "resolve-rules", "rules", nil)
@@ -230,7 +234,7 @@ func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	want := []map[string]string{{"Path": "keep.txt", "Lines": "1: a\n2: changed\n3: c\n"}}
-	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "omission markers") || !strings.Contains(c.Input.Contract, "Submodules") {
+	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "[omitted]") || !strings.Contains(c.Input.Contract, "Submodules") {
 		t.Fatalf("delivered files = %v contract = %s", c.Input.Files, c.Input.Contract)
 	}
 }
