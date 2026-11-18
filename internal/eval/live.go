@@ -21,6 +21,7 @@ import (
 )
 
 type runOptions struct {
+	cleanup    func(string) error
 	Split      string
 	JudgeModel string
 	Corpus     string
@@ -368,7 +369,11 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
 
 	defer func() {
-		if err := daemonutil.StopDaemon(home); err != nil {
+		stop := o.cleanup
+		if stop == nil {
+			stop = daemonutil.StopDaemon
+		}
+		if err := stop(home); err != nil {
 			rec.Error = err.Error()
 			rec.Status = "eval-error"
 		}
@@ -606,7 +611,9 @@ func runLive(o runOptions) (*Report, error) {
 func summarizeRecords(records []CaseRecord) Summary {
 	var scores []CaseScore
 	for _, rec := range records {
-		scores = append(scores, rec.Score)
+		if rec.Status != "eval-error" {
+			scores = append(scores, rec.Score)
+		}
 	}
 	return Summarize(scores)
 }
