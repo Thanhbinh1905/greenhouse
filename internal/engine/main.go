@@ -1135,8 +1135,24 @@ func Daemon(h string) error {
 				case "commands":
 					o.Stage = runStageCommands(ctx, pc, step.Stage, candidate)
 				case "delivery":
+					started := time.Now()
+					event := FeedEvent{Run: o.Run, Stage: step.Stage, Execution: step.ID, Command: []string{"greenhouse", step.Stage}, Kind: "step-started"}
+					if step.Stage != "push" {
+						emit(event)
+					}
 					o.Stage, o.Head, o.URL = runDeliveryStage(ctx, pc, step.Stage, candidate)
 					o.Status, o.Log = o.Stage.Status, o.Stage.Reason
+					if step.Stage != "push" {
+						code := 0
+						event.Kind = "step-finished"
+						if o.Status != "passed" {
+							code = 1
+							event.Kind = "step-failed"
+						}
+						elapsed := time.Since(started).Milliseconds()
+						event.ExitCode, event.ElapsedMS = &code, &elapsed
+						emit(event)
+					}
 				case "review":
 					reviewed := executeReview(ctx, &review)
 					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot, o.Confinement = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot, reviewed.Confinement

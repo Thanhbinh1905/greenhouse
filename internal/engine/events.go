@@ -41,18 +41,17 @@ type waiter struct {
 // The feed is not persisted: a new stream after restart makes clients resync
 // from a snapshot.
 type feed struct {
-	recordStage  func(string, StageResult)
-	stream       string
-	seq          uint64
-	log          []FeedEvent
-	stageSeen    map[string]string
-	stageStarted map[string]time.Time
-	seen         map[string]string
-	waiters      []*waiter
+	recordStage func(string, StageResult)
+	stream      string
+	seq         uint64
+	log         []FeedEvent
+	stageSeen   map[string]string
+	seen        map[string]string
+	waiters     []*waiter
 }
 
 func newFeed(s *Store) *feed {
-	f := &feed{stream: opaque(), seen: map[string]string{}, stageSeen: map[string]string{}, stageStarted: map[string]time.Time{}}
+	f := &feed{stream: opaque(), seen: map[string]string{}, stageSeen: map[string]string{}}
 	for id, r := range s.Runs {
 		f.seen[id] = Digest(r)
 	}
@@ -82,26 +81,6 @@ func (f *feed) observe(s *Store) {
 				f.stageSeen[key] = digest
 				if f.recordStage != nil {
 					f.recordStage(r.ID, stage)
-				}
-				if stage.Name == "pr" || stage.Name == "ci" {
-					event := FeedEvent{Run: r.ID, Stage: stage.Name, Command: []string{"greenhouse", stage.Name}, Execution: key}
-					if stage.Status == "running" {
-						f.stageStarted[key] = time.Now()
-						event.Kind = "step-started"
-						f.append(event)
-					}
-					if started, ok := f.stageStarted[key]; ok && stage.Status != "running" {
-						code := 0
-						event.Kind = "step-finished"
-						if stage.Status != "passed" {
-							code = 1
-							event.Kind = "step-failed"
-						}
-						elapsed := time.Since(started).Milliseconds()
-						event.ExitCode, event.ElapsedMS = &code, &elapsed
-						f.append(event)
-						delete(f.stageStarted, key)
-					}
 				}
 			}
 		}
