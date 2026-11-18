@@ -10,8 +10,10 @@ import (
 )
 
 func decodeRequest(c net.Conn) (Request, error) {
-	c.SetReadDeadline(time.Now().Add(100 * time.Millisecond))
 	var q Request
+	if err := c.SetReadDeadline(time.Now().Add(100 * time.Millisecond)); err != nil {
+		return q, err
+	}
 	dec := json.NewDecoder(io.LimitReader(c, 65536))
 	dec.DisallowUnknownFields()
 	err := dec.Decode(&q)
@@ -20,9 +22,11 @@ func decodeRequest(c net.Conn) (Request, error) {
 
 func reply(c net.Conn, q Request, v Response) {
 	stamp(&v, q.Version)
-	c.SetWriteDeadline(time.Now().Add(time.Second))
-	json.NewEncoder(c).Encode(v)
-	c.Close()
+	defer func() { _ = c.Close() }()
+	if err := c.SetWriteDeadline(time.Now().Add(time.Second)); err != nil {
+		return
+	}
+	_ = json.NewEncoder(c).Encode(v)
 }
 
 func commitWhileServing(s *Store, connections <-chan net.Conn, pending chan<- net.Conn, save func() error) error {

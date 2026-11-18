@@ -41,10 +41,16 @@ func TestLargeLegacyHistoryDoesNotEnterHotState(t *testing.T) {
 		t.Fatal(err)
 	}
 	release := filepath.Join(filepath.Dir(home), "release-history-review")
-	t.Cleanup(func() { os.WriteFile(release, nil, 0600) })
+	t.Cleanup(func() {
+		if err := os.WriteFile(release, nil, 0600); err != nil {
+			t.Error(err)
+		}
+	})
 	installFake(t, home, "while not os.path.exists("+strconv.Quote(release)+"): time.sleep(0.02)")
 	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
-	v = mutate(t, bin, repo, home, v, "review", "large-history-review", nil)
+	if admitted := mutate(t, bin, repo, home, v, "review", "large-history-review", nil); admitted["outcome"] != "ok" {
+		t.Fatal(admitted)
+	}
 	for i := 0; i < 3; i++ {
 		start := time.Now()
 		got := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
@@ -261,7 +267,11 @@ func TestFailedStateCommitPreservesCommittedHistory(t *testing.T) {
 	if err := os.Chmod(home, 0500); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.Chmod(home, 0700) })
+	t.Cleanup(func() {
+		if err := os.Chmod(home, 0700); err != nil {
+			t.Error(err)
+		}
+	})
 	if err := persist(home, s); err == nil {
 		t.Fatal("state commit unexpectedly succeeded")
 	}

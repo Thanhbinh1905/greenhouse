@@ -1012,7 +1012,7 @@ func Daemon(h string) error {
 	pending := make(chan net.Conn, 64)
 	defer func() {
 		for len(pending) > 0 {
-			(<-pending).Close()
+			_ = (<-pending).Close()
 		}
 	}()
 	commit := func(next *Store) error {

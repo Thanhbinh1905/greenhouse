@@ -25,14 +25,21 @@ func TestReadsDuringBlockedCommit(t *testing.T) {
 	go func() {
 		finished <- commitWhileServing(s, connections, pending, func() error { close(started); <-release; return nil })
 	}()
-	t.Cleanup(func() { close(release); <-finished })
+	t.Cleanup(func() {
+		close(release)
+		if err := <-finished; err != nil {
+			t.Error(err)
+		}
+	})
 	<-started
 	for _, op := range []string{"inspect", "transcript", "watch", "models"} {
 		t.Run(op, func(t *testing.T) {
 			server, client := net.Pipe()
-			defer client.Close()
+			defer func() { _ = client.Close() }()
 			connections <- server
-			client.SetDeadline(time.Now().Add(time.Second))
+			if err := client.SetDeadline(time.Now().Add(time.Second)); err != nil {
+				t.Fatal(err)
+			}
 			if err := json.NewEncoder(client).Encode(Request{Version: 2, Op: op, Path: repo}); err != nil {
 				t.Fatal(err)
 			}
