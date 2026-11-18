@@ -502,7 +502,7 @@ func claimLease(r *Run) error {
 	if epoch == nil {
 		return nil
 	}
-	return withWriterLock(r.Submitted.Repository, func() error {
+	return withWriterLock(r.Submitted, func() error {
 		if r.Recovery.Kind == "candidate" && *epoch == 0 {
 			l, err := readLease(r.Submitted.Repository, c.Ref)
 			if err != nil {
@@ -522,7 +522,7 @@ func discardStep(r *Run) error {
 		return nil
 	}
 	x := &Repair{Worktree: c.Worktree, Ref: c.Ref, Base: c.Durable}
-	return withWriterLock(r.Submitted.Repository, func() error {
+	return withWriterLock(r.Submitted, func() error {
 		if epoch := leaseEpochOf(r); epoch != nil {
 			next, err := renewLease(r.Submitted.Repository, c.Ref, *epoch)
 			if err != nil {

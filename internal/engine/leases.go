@@ -163,23 +163,17 @@ func releaseDeadLeases(s *Store) {
 	}
 	for repository := range repositories {
 		paths, _ := filepath.Glob(filepath.Join(repository, "greenhouse-leases", "*.json"))
-		if len(paths) == 0 {
-			continue
-		}
-		withWriterLock(repository, func() error {
-			for _, path := range paths {
-				data, err := os.ReadFile(path)
-				var l RefLease
-				if err != nil || json.Unmarshal(data, &l) != nil || l.Owner != owner || leasePath(repository, l.Ref) != path {
-					continue
-				}
-				for _, r := range s.Runs {
-					if epoch, ok := leasesOf(r)[heldLease{l.Ref, r.ID}]; ok && epoch == l.Epoch && !leaseAlive(r, l.Ref) {
-						os.Remove(path)
-					}
+		for _, path := range paths {
+			data, err := os.ReadFile(path)
+			var l RefLease
+			if err != nil || json.Unmarshal(data, &l) != nil || l.Owner != owner || leasePath(repository, l.Ref) != path {
+				continue
+			}
+			for _, r := range s.Runs {
+				if epoch, ok := leasesOf(r)[heldLease{l.Ref, r.ID}]; ok && epoch == l.Epoch && !leaseAlive(r, l.Ref) {
+					withWriterLock(r.Submitted, func() error { return os.Remove(path) })
 				}
 			}
-			return nil
-		})
+		}
 	}
 }

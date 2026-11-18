@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -576,5 +577,110 @@ func verifyDeliveryEvidence(t *testing.T, home, bare string, run map[string]any)
 	root := filepath.Dir(home)
 	if got := countLines(t, filepath.Join(root, "fix-invocations")); got["test"]+got["lint"]+got["docs"] != 0 {
 		t.Fatalf("local commands dispatched fixer: %v", got)
+	}
+}
+
+func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
+	var bare string
+	var mu sync.Mutex
+	branches := map[int]string{}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		remoteHead := func(branch string) string {
+			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
+			if err != nil {
+				t.Errorf("read pushed head of %s: %v", branch, err)
+			}
+			return strings.TrimSpace(string(head))
+		}
+		switch {
+		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
+			w.Write([]byte(`[]`))
+		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
+			var request struct {
+				Head string `json:"head"`
+			}
+			json.NewDecoder(r.Body).Decode(&request)
+			branch := strings.TrimPrefix(request.Head, "acme:")
+			mu.Lock()
+			number := 20 + len(branches)
+			branches[number] = branch
+			mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"number": number, "html_url": fmt.Sprintf("https://example.invalid/acme/garden/pull/%d", number), "head": map[string]string{"sha": remoteHead(branch)}})
+		case strings.HasPrefix(r.URL.Path, "/repos/acme/garden/pulls/") && r.Method == http.MethodGet:
+			var number int
+			fmt.Sscanf(strings.TrimPrefix(r.URL.Path, "/repos/acme/garden/pulls/"), "%d", &number)
+			mu.Lock()
+			branch := branches[number]
+			mu.Unlock()
+			json.NewEncoder(w).Encode(map[string]any{"number": number, "head": map[string]string{"sha": remoteHead(branch)}})
+		case strings.HasSuffix(r.URL.Path, "/check-runs"):
+			parts := strings.Split(r.URL.Path, "/")
+			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": parts[len(parts)-2]}}})
+		default:
+			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	setForgeAPI(t, server.URL)
+	bin, repo, home, first := pipelineFixture(t, func(root string) map[string]any {
+		bare = filepath.Join(root, "remote.git")
+		if err := exec.Command("git", "init", "--bare", bare).Run(); err != nil {
+			t.Fatal(err)
+		}
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
+	})
+	root := filepath.Dir(home)
+	target := runOf(t, first)["target"].(string)
+	prepare := func(dir, name string) map[string]any {
+		v := axi(t, bin, dir, home, `{"version":1,"op":"attach"}`)
+		v = mutate(t, bin, dir, home, v, "apply", "full-"+name, map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
+		q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": "prepare-" + name, "intent": "Change the sample", "target": target}
+		b, _ := json.Marshal(q)
+		if v = axi(t, bin, dir, home, string(b)); v["outcome"] != "ok" {
+			t.Fatal(v)
+		}
+		return v
+	}
+	linked := filepath.Join(root, "linked")
+	git(t, repo, "worktree", "add", "-q", "-b", "feature", linked, "HEAD")
+	os.WriteFile(filepath.Join(linked, "sample.txt"), []byte("feature sample\n"), 0600)
+	git(t, linked, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qam", "feature candidate")
+	second := prepare(linked, "linked")
+	same := filepath.Join(root, "same-branch")
+	git(t, repo, "worktree", "add", "-q", "-f", same, "main")
+	sameBranch := prepare(same, "same")
+
+	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("2"), 0600)
+	if started := mutate(t, bin, repo, home, first, "pipeline", "start", nil); started["outcome"] != "ok" {
+		t.Fatal(started)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) && countLines(t, filepath.Join(root, "commands.log"))["test"] == 0 {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if started := mutate(t, bin, linked, home, second, "pipeline", "start-linked", nil); started["outcome"] != "ok" {
+		t.Fatalf("linked worktree on another branch refused while the first pipeline runs: %v", started)
+	}
+	refused := mutate(t, bin, same, home, sameBranch, "pipeline", "start-same", nil)
+	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "branch main") {
+		t.Fatalf("second run on the same branch was not refused with a clear reason: %v", refused)
+	}
+	if runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`))["status"] != "running" {
+		t.Fatal("first pipeline finished before the second started; runs did not overlap")
+	}
+	os.Remove(filepath.Join(root, "sleep-test"))
+
+	firstDone, secondDone := waitPipeline(t, bin, repo, home), waitPipeline(t, bin, linked, home)
+	for _, done := range []map[string]any{firstDone, secondDone} {
+		assertDeliveryReady(t, done)
+		verifyDeliveryEvidence(t, home, bare, runOf(t, done))
+	}
+	if stageOf(t, firstDone, "pr")["number"] == stageOf(t, secondDone, "pr")["number"] {
+		t.Fatalf("both pipelines reported one PR: %v", stageOf(t, firstDone, "pr"))
+	}
+	if got := countLines(t, filepath.Join(root, "commands.log")); got["test"] != 2 || got["lint"] != 2 {
+		t.Fatalf("each pipeline must run its gates once: %v", got)
 	}
 }
