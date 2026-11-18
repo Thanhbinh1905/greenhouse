@@ -127,7 +127,7 @@ func trustedPlanFor(s *Store, id repository.Identity) (CommandPlan, map[string]s
 			return plan, nil, err
 		}
 	}
-	if err := decodeConfig("pipeline.json", b, &plan); err != nil {
+	if err := decodeConfig(filepath.Base(path), b, &plan); err != nil {
 		return plan, nil, configFailure(err, "invalid trusted pipeline plan")
 	}
 	if !ValidText(plan.Name) || !ValidText(plan.Email) || plan.RepairLimit < 0 || plan.RepairLimit > 20 {
