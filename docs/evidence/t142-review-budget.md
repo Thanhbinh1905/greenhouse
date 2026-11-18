@@ -63,3 +63,13 @@ The harness automatically judged findings after review. Its report writer then f
 - `git diff --check`: passed.
 
 Earlier full-suite runs hit Go's default ten-minute timeout under concurrent machine load. The retries above completed without changing test behavior. After the suites finished, 37 task-owned fixture daemons remained, including leftovers from timed-out runs. They received SIGTERM. Evaluation daemons were excluded. This cleanup leak is tracked separately in #23.
+
+## Review follow-up
+
+Merged `origin/main` at `aab2718` before addressing the relayed findings from run `cfde1de7`.
+
+The private-session symlink finding was real. With Landlock disabled, both native backend CLI fixtures changed their original credential files through session symlinks. The test failed with `native credentials modified through private session: "modified"`. Native credentials and settings now use independent private copies with mode `0400`. Claude onboarding state already used a private writable copy. The test deliberately changes the copy's permissions and contents, then verifies that the original remains unchanged. Both backends complete their reviews. This prevents write-through access; degraded confinement still permits direct access to other filesystem paths.
+
+The shared-deadline finding is disputed. `runBoundedReview` already calls `runner.ProcessContext` before obtaining the deadline and deriving exploration's 80% share. Go's child contexts preserve the earlier parent deadline, so later `RunProcess` calls cannot restart the executor timeout. The added CLI regression uses `executor_timeout: 2s`, invalid exploration output, and a hung finalization turn. The original implementation passes with `reason: review_budget`. Removing that existing `ProcessContext` call in an isolated scratch control makes the test fail with `reason=crash finalization=true`. No deadline implementation change was needed.
+
+The targeted tests pass. A native Claude review returned clean in 10.3 seconds. A native Codex run also resumed its original thread with the copied credentials and returned clean, recording `finalization: true` and 32,618 tokens. Original corpus measurements remain unchanged because this follow-up changes session file isolation rather than review prompts or budgets.

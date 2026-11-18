@@ -76,10 +76,10 @@ func newReviewSession(x *Execution, dir string) (reviewSession, error) {
 		s.env = append(s.env, "PI_CODING_AGENT_SESSION_DIR="+s.state)
 	case BackendClaude, BackendCodex:
 		key, defaultDir := "CLAUDE_CONFIG_DIR", ".claude"
-		linked := map[string]bool{".credentials.json": true, "settings.json": true, "settings.local.json": true}
+		copied := map[string]bool{".credentials.json": true, "settings.json": true, "settings.local.json": true}
 		if s.backend == BackendCodex {
 			key, defaultDir = "CODEX_HOME", ".codex"
-			linked = map[string]bool{"auth.json": true, "config.toml": true, "models_cache.json": true}
+			copied = map[string]bool{"auth.json": true, "config.toml": true, "models_cache.json": true}
 		}
 		native := os.Getenv(key)
 		if native == "" {
@@ -95,10 +95,14 @@ func newReviewSession(x *Execution, dir string) (reviewSession, error) {
 		}
 		for _, entry := range entries {
 			name := entry.Name()
-			if !linked[name] {
+			if !copied[name] {
 				continue
 			}
-			if err := os.Symlink(filepath.Join(native, name), filepath.Join(s.state, name)); err != nil {
+			data, err := os.ReadFile(filepath.Join(native, name))
+			if err != nil {
+				return s, err
+			}
+			if err := os.WriteFile(filepath.Join(s.state, name), data, 0400); err != nil {
 				return s, err
 			}
 		}

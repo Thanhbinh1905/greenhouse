@@ -241,3 +241,62 @@ func TestPrivateClaudeSessionRetainsNativeConfiguration(t *testing.T) {
 		t.Fatalf("private session lost native onboarding state: %v", err)
 	}
 }
+
+func TestReviewExecutorTimeoutIsSharedWithFinalization(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `if '--no-tools' not in sys.argv:
+ time.sleep(0.6)
+ print(json.dumps({'type':'agent_settled','aborted':False}))
+ sys.exit(0)
+time.sleep(30)
+`)
+	configs := runOf(t, v)["configs"].([]any)
+	settings := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)
+	settings["executor_timeout"] = "2s"
+	v = mutate(t, bin, repo, home, v, "apply", "attempt-timeout", settings)
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "timeout-rules", nil)
+	mutate(t, bin, repo, home, v, "review", "shared-timeout", nil)
+	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	if review["finalization"] != true || review["reason"] != "review_budget" {
+		t.Fatalf("finalization did not share the effective deadline: status=%v reason=%v finalization=%v", review["status"], review["reason"], review["finalization"])
+	}
+}
+
+func TestPrivateNativeConfigurationCannotWriteThroughWithoutLandlock(t *testing.T) {
+	for _, c := range []struct{ backend, model, dir, file, key string }{
+		{"claude", "claude-haiku-5-5", ".claude", ".credentials.json", "CLAUDE_CONFIG_DIR"},
+		{"codex", "gpt-5.6-luna", ".codex", "auth.json", "CODEX_HOME"},
+	} {
+		t.Run(c.backend, func(t *testing.T) {
+			bin, repo, home, root, _ := onePassWith(t, c.backend, c.model)
+			native := filepath.Join(root, c.dir)
+			if err := os.MkdirAll(native, 0700); err != nil {
+				t.Fatal(err)
+			}
+			original := filepath.Join(native, c.file)
+			if err := os.WriteFile(original, []byte("original"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			script := filepath.Join(root, "fake-"+c.backend)
+			data, err := os.ReadFile(script)
+			if err != nil {
+				t.Fatal(err)
+			}
+			probe := "stdin=sys.stdin.read()\nprivate=os.path.join(os.environ['" + c.key + "'],'" + c.file + "')\nos.chmod(private,0o600)\nopen(private,'w').write('modified')\n"
+			if err := os.WriteFile(script, []byte(strings.Replace(string(data), "stdin=sys.stdin.read()", probe, 1)), 0700); err != nil {
+				t.Fatal(err)
+			}
+			stopDaemon(t, home)
+			v := axiWithoutLandlock(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+			mutate(t, bin, repo, home, v, "review", "private-config", nil)
+			review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+			if review["status"] != "clean-review" {
+				t.Fatalf("review did not complete: %v", review["status"])
+			}
+			data, err = os.ReadFile(original)
+			if err != nil || string(data) != "original" {
+				t.Fatalf("native credentials modified through private session: %q %v", data, err)
+			}
+		})
+	}
+}
