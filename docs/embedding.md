@@ -107,6 +107,8 @@ AXI `inspect` includes these execution fields:
 
 The budget bounds wall time, not an exact token count. Tokens are the totals reported by the native backend; an interrupted request may not report usage. Cache accounting retains backend semantics. Unknown usage remains zero.
 
+Reviews saved before budgets were introduced remain loadable without rewriting their evidence. When `review_budget` is absent, durable validation also accepts the exact historical reviewer prompt arguments. Other arguments and evidence digests remain validated. A resumed attempt without a stored budget uses the default `3m`.
+
 ## Responses to earlier findings
 
 A host `review` request accepts an optional `responses` array. Responses attach atomically to that review and its grant. There is no separate response operation or authorization. Omitting `responses`, or sending an empty array, starts a review without responses. Greenhouse does not carry responses into a later grant automatically. A paused review retains its responses on resume or rerun.

@@ -1528,5 +1528,14 @@ func reviewArgsMatch(x *Execution) bool {
 	if !x.Config.Native {
 		expected = legacyAgentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
 	}
+	if Digest(x.Args) == Digest(expected) {
+		return true
+	}
+	if x.ReviewBudget != "" {
+		return false
+	}
+	for i := range expected {
+		expected[i] = strings.ReplaceAll(expected[i], reviewerPrompt, preBudgetReviewerPrompt)
+	}
 	return Digest(x.Args) == Digest(expected)
 }

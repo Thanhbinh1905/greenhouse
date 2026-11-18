@@ -179,3 +179,56 @@ func TestRetainedUsageAndLimitEdits(t *testing.T) {
 		t.Fatal("missing cap provenance")
 	}
 }
+
+func TestMainReviewStateLoadsWithoutBudgetFields(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "main-29a6f29-review-state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var original Store
+	if err = json.Unmarshal(data, &original); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range original.Runs {
+		if r.Review == nil || r.Review.ReviewBudget != "" || r.Review.Status != "outstanding-findings" {
+			t.Fatal("fixture must contain a completed review written by main before review budgets")
+		}
+	}
+	home := t.TempDir()
+	if err = os.WriteFile(filepath.Join(home, "state.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := load(home)
+	if err != nil {
+		t.Fatalf("main review state rejected: %v", err)
+	}
+	for id, r := range loaded.Runs {
+		if !reflect.DeepEqual(r.Review, original.Runs[id].Review) {
+			t.Fatal("loading main review state changed its evidence")
+		}
+		r.Review.Args = append(r.Review.Args, "--unexpected-tool")
+	}
+	if err = persist(home, loaded); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = load(home); err == nil {
+		t.Fatal("modified historical review arguments accepted")
+	}
+}
+
+func TestBudgetedReviewRejectsHistoricalPromptArguments(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("testdata", "main-29a6f29-review-state.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var s Store
+	if err = json.Unmarshal(data, &s); err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range s.Runs {
+		r.Review.ReviewBudget = "3m"
+		if reviewArgsMatch(r.Review) {
+			t.Fatal("budgeted review accepted pre-budget prompt arguments")
+		}
+	}
+}
