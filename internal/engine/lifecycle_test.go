@@ -124,7 +124,11 @@ func TestLifecycleSettingsAndIdentity(t *testing.T) {
 	if e := json.Unmarshal(b, &store); e != nil {
 		t.Fatal(e)
 	}
-	if len(store.Runs) != 4 || store.Runs[initial["run_id"].(string)].Submitted.Head != runOf(t, initial)["candidate"] {
+	if len(store.Runs) != 2 {
+		t.Fatal("hot state retains superseded runs")
+	}
+	historical := axi(t, bin, repo, home, fmt.Sprintf(`{"version":1,"op":"inspect","run_id":%q}`, initial["run_id"]))
+	if historical["outcome"] != "ok" || runOf(t, historical)["submitted"].(map[string]any)["head"] != runOf(t, initial)["candidate"] {
 		t.Fatal("old evidence lost")
 	}
 }
