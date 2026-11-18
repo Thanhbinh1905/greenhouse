@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 func grantPlan(grants ...map[string]any) func(root string) map[string]any {
@@ -118,6 +120,10 @@ func TestInvalidGrantConfigurationIsRefused(t *testing.T) {
 	os.MkdirAll(home, 0700)
 	t.Setenv("GREENHOUSE_HOME", home)
 	writeExecutable(t, filepath.Join(root, "gate"), gateCommand)
+	repo := filepath.Join(root, "repo")
+	if err := os.MkdirAll(repo, 0700); err != nil {
+		t.Fatal(err)
+	}
 	for name, grant := range map[string]map[string]any{
 		"authority": {"authority": "execute", "stages": []string{"test"}, "paths": []string{"x"}, "reason": "r"},
 		"stage":     {"authority": "add-files", "stages": []string{"push"}, "paths": []string{"x"}, "reason": "r"},
@@ -125,7 +131,7 @@ func TestInvalidGrantConfigurationIsRefused(t *testing.T) {
 		"reason":    {"authority": "add-files", "stages": []string{"test"}, "paths": []string{"x"}},
 	} {
 		writePrivateJSON(t, filepath.Join(home, "pipeline.json"), grantPlan(grant)(root))
-		if _, _, err := trustedPlan(); err == nil || !strings.Contains(err.Error(), "grant") {
+		if _, _, err := trustedPlanFor(&Store{Trust: map[string]Trust{}}, repository.Identity{Worktree: repo}); err == nil || !strings.Contains(err.Error(), "grant") {
 			t.Fatalf("%s: invalid grant accepted: %v", name, err)
 		}
 	}

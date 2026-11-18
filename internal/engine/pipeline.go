@@ -61,6 +61,7 @@ type Step struct {
 type Pipeline struct {
 	Status         string            `json:"status"`
 	Plan           CommandPlan       `json:"plan"`
+	PlanSources    map[string]string `json:"plan_sources"`
 	CommandDigests map[string]string `json:"command_digests"`
 	PlanDigest     string            `json:"plan_digest"`
 	Worktree       string            `json:"worktree,omitempty"`
@@ -105,23 +106,30 @@ type stepOutcome struct {
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
 var gateStages = map[string]bool{"test": true, "lint": true, "docs": true, "ci": true}
 
-func trustedPlan() (CommandPlan, map[string]string, error) {
+func trustedPlanFor(s *Store, id repository.Identity) (CommandPlan, map[string]string, error) {
 	var plan CommandPlan
-	h, e := Home()
-	if e != nil {
-		return plan, nil, e
+	path, b, repoStatus := repositoryPipeline(s, id)
+	if repoStatus.PipelineStatus != "absent" {
+		if repoStatus.PipelineStatus != "trusted" {
+			return plan, nil, errors.New("repository pipeline plan is untrusted or changed; inspect and trust its current digest")
+		}
+	} else {
+		h, err := Home()
+		if err != nil {
+			return plan, nil, err
+		}
+		path = filepath.Join(h, "pipeline.json")
+		info, err := os.Lstat(path)
+		if err != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 65536 {
+			return plan, nil, errors.New("full preset requires a private per-user pipeline.json command plan or a trusted repository plan")
+		}
+		b, err = os.ReadFile(path)
+		if err != nil {
+			return plan, nil, err
+		}
 	}
-	p := filepath.Join(h, "pipeline.json")
-	info, e := os.Lstat(p)
-	if e != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0077 != 0 || info.Size() > 65536 {
-		return plan, nil, errors.New("full preset requires a private per-user pipeline.json command plan")
-	}
-	b, e := os.ReadFile(p)
-	if e != nil {
-		return plan, nil, e
-	}
-	if e = decodeConfig("pipeline.json", b, &plan); e != nil {
-		return plan, nil, configFailure(e, "invalid trusted pipeline.json")
+	if err := decodeConfig(filepath.Base(path), b, &plan); err != nil {
+		return plan, nil, configFailure(err, "invalid trusted pipeline plan")
 	}
 	if !ValidText(plan.Name) || !ValidText(plan.Email) || plan.RepairLimit < 0 || plan.RepairLimit > 20 {
 		return plan, nil, errors.New("invalid trusted pipeline.json")
@@ -143,7 +151,8 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 					return plan, nil, errors.New("invalid command argument")
 				}
 			}
-			if digests[args[0]], e = executableDigest(args[0]); e != nil {
+			var err error
+			if digests[args[0]], err = executableDigest(args[0]); err != nil {
 				return plan, nil, fmt.Errorf("command executable unavailable: %s", args[0])
 			}
 		}
@@ -183,20 +192,20 @@ func trustedPlan() (CommandPlan, map[string]string, error) {
 			return plan, nil, errors.New("only test, lint, docs and ci repairs may be authorized")
 		}
 	}
-	if e = validatePlanGrants(plan.Grants); e != nil {
-		return plan, nil, e
+	if err := validatePlanGrants(plan.Grants); err != nil {
+		return plan, nil, err
 	}
 	for _, name := range plan.DocsPaths {
 		if filepath.IsAbs(name) || filepath.Clean(name) != name || name == "." || strings.HasPrefix(name, "..") {
 			return plan, nil, errors.New("docs_paths must be clean repository-relative files")
 		}
 	}
-	gitPath, e := exec.LookPath("git")
-	if e != nil {
-		return plan, nil, e
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		return plan, nil, err
 	}
-	if digests[gitPath], e = executableDigest(gitPath); e != nil {
-		return plan, nil, e
+	if digests[gitPath], err = executableDigest(gitPath); err != nil {
+		return plan, nil, err
 	}
 	return plan, digests, nil
 }
@@ -212,8 +221,12 @@ func safeRemote(remote string) bool {
 	return true
 }
 
-func newPipeline(plan CommandPlan, digests map[string]string) *Pipeline {
-	p := &Pipeline{Status: "prepared", Plan: plan, CommandDigests: digests, PlanDigest: Digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan)}
+func newPipeline(plan CommandPlan, digests map[string]string, source string) *Pipeline {
+	sources := map[string]string{}
+	for _, field := range []string{"name", "remote", "github_owner", "github_repo", "pull_base", "pull_title", "required_checks", "email", "test", "lint", "docs", "docs_paths", "not_applicable", "repairs", "repair_limit", "yolo", "grants"} {
+		sources[field] = source
+	}
+	p := &Pipeline{Status: "prepared", Plan: plan, PlanSources: sources, CommandDigests: digests, PlanDigest: Digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan, source)}
 	for _, name := range pipelineStages {
 		p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending"})
 	}
@@ -374,6 +387,13 @@ func admitPipeline(s *Store, r *Run) error {
 	}
 	if r.Submitted.Branch == "" {
 		return errors.New("full pipeline requires a source branch")
+	}
+	currentPlan, currentDigests, err := trustedPlanFor(s, r.Submitted)
+	if err != nil {
+		return err
+	}
+	if Digest([]any{currentPlan, currentDigests}) != p.PlanDigest {
+		return errors.New("trusted pipeline plan or command changed since preparation; prepare again")
 	}
 	p.Status, p.Failed, p.Reason = "running", "", ""
 	r.Status, r.Stage = "running", "pipeline"

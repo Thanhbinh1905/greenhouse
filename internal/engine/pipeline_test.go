@@ -275,6 +275,81 @@ func stageOf(t *testing.T, v map[string]any, name string) map[string]any {
 	return nil
 }
 
+func TestRepositoryPipelinePlanRequiresTrustAndRunsPerRepository(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{"alpha", "beta"} {
+		t.Run(name, func(t *testing.T) {
+			bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
+				return map[string]any{"name": name, "email": "test@example.invalid", "test": [][]string{gateArgv(root, name)}, "lint": [][]string{gateArgv(root, name+"-lint")}, "not_applicable": map[string]string{"docs": "no documentation"}, "grants": []map[string]any{{"authority": "add-files", "stages": []string{"test"}, "paths": []string{"testdata/"}, "reason": "test fixtures"}}}
+			})
+			root := filepath.Dir(home)
+			target := runOf(t, v)["target"]
+			userPlan := filepath.Join(home, "pipeline.json")
+			repoPlan := filepath.Join(repo, ".greenhouse-pipeline.json")
+			userPlanBytes, err := os.ReadFile(userPlan)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(repoPlan, userPlanBytes, 0644); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "commands.log"), nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			status := repositoryOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`))
+			if status["pipeline_status"] != "ignored" {
+				t.Fatalf("untrusted plan status = %v", status)
+			}
+			v = mutate(t, bin, repo, home, v, "new", "new-before-trust", nil)
+			v = mutate(t, bin, repo, home, v, "apply", "full-plan", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
+			prepare := func(action string) map[string]any {
+				q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": action, "intent": "Change the sample", "target": target}
+				b, _ := json.Marshal(q)
+				return axi(t, bin, repo, home, string(b))
+			}
+			if got := prepare("prepare-untrusted-plan"); got["outcome"] != "refused" {
+				t.Fatalf("untrusted repository plan was admitted: %v", got)
+			}
+			trusted := act(t, bin, repo, home, v, "trust", "trust-repository-plan", map[string]any{"digest": status["pipeline_digest"]})
+			if trusted["outcome"] != "ok" {
+				t.Fatalf("trust repository plan: %v", trusted)
+			}
+			v = trusted
+			q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": "prepare-repo-plan", "intent": "Change the sample", "target": target}
+			b, _ := json.Marshal(q)
+			v = axi(t, bin, repo, home, string(b))
+			if v["outcome"] != "ok" {
+				t.Fatal(v)
+			}
+			plan := runOf(t, v)["pipeline"].(map[string]any)["plan"].(map[string]any)
+			if plan["name"] != name {
+				t.Fatalf("wrong repository plan: %v", plan)
+			}
+			pipeline := runOf(t, v)["pipeline"].(map[string]any)
+			if pipeline["plan_sources"].(map[string]any)["test"] != "trusted repository pipeline plan" || pipeline["grants"].([]any)[0].(map[string]any)["source"] != ".greenhouse-pipeline.json" {
+				t.Fatalf("repository sources missing: %v", pipeline)
+			}
+			mutate(t, bin, repo, home, v, "pipeline", "run-own-commands", nil)
+			done := waitPipeline(t, bin, repo, home)
+			if got := countLines(t, filepath.Join(root, "commands.log")); got[name] != 1 || got[name+"-lint"] != 1 {
+				t.Fatalf("repository-specific commands did not run: %v; pipeline: %v", got, runOf(t, done)["pipeline"])
+			}
+			changedPlan, _ := json.Marshal(map[string]any{"version": 2, "budget_unit": "rounds", "name": "changed-" + name, "email": "test@example.invalid", "test": [][]string{gateArgv(root, name)}, "lint": [][]string{gateArgv(root, name+"-lint")}, "not_applicable": map[string]string{"docs": "no documentation"}})
+			if err := os.WriteFile(repoPlan, changedPlan, 0644); err != nil {
+				t.Fatal(err)
+			}
+			v = mutate(t, bin, repo, home, done, "new", "new-after-plan-change", nil)
+			v = mutate(t, bin, repo, home, v, "apply", "full-after-plan-change", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
+			q = map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": v["gate_id"], "action_id": "prepare-changed-plan", "intent": "Change the sample", "target": runOf(t, v)["submitted"].(map[string]any)["head"]}
+			b, _ = json.Marshal(q)
+			if got := axi(t, bin, repo, home, string(b)); got["outcome"] != "refused" {
+				t.Fatalf("changed plan was admitted without trust: %v", got)
+			}
+
+		})
+	}
+}
+
 func TestFullPipelineCommandStagesDispatchNoAgent(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {

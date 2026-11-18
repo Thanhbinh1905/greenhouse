@@ -404,7 +404,7 @@ func switchBackend(r *Run, role string, to BackendChoice, actor, reason string) 
 	return nil
 }
 
-func prepareRun(r *Run, intent, requested string) error {
+func prepareRun(s *Store, r *Run, intent, requested string) error {
 	target, err := repository.CommittedTarget(r.Submitted.Worktree, requested)
 	if err != nil {
 		return err
@@ -424,11 +424,15 @@ func prepareRun(r *Run, intent, requested string) error {
 	}
 	r.Pipeline = nil
 	if settings.Preset == "full" {
-		plan, digests, err := trustedPlan()
+		plan, digests, err := trustedPlanFor(s, r.Submitted)
 		if err != nil {
 			return err
 		}
-		r.Pipeline = newPipeline(plan, digests)
+		source := "per-user"
+		if _, _, status := repositoryPipeline(s, r.Submitted); status.PipelineStatus == "trusted" {
+			source = sourceRepositoryPipeline
+		}
+		r.Pipeline = newPipeline(plan, digests, source)
 		inherit(r)
 	}
 	r.Reviewer = &cfg
@@ -479,7 +483,7 @@ func restartRun(s *Store, r *Run, source repository.Identity, actor string) *Run
 	settings := r.Configs[len(r.Configs)-1].Settings
 	next := &Run{Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}, Host: r.Host, HostGrants: r.HostGrants}
 	if r.Intent != "" && r.Target != "" {
-		if err := prepareRun(next, r.Intent, r.Target); err != nil {
+		if err := prepareRun(s, next, r.Intent, r.Target); err != nil {
 			next.Events = append(next.Events, Event{Kind: "prepare-needed", Actor: "daemon", Reason: err.Error()})
 		}
 	}

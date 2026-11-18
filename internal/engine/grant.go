@@ -59,10 +59,15 @@ func validatePlanGrants(grants []PlanGrant) error {
 	return nil
 }
 
-func planGrants(plan CommandPlan) []Grant {
+func planGrants(plan CommandPlan, source string) []Grant {
+	if source == sourceRepositoryPipeline {
+		source = pipelinePlanName
+	} else {
+		source = "pipeline.json"
+	}
 	var out []Grant
 	for _, g := range plan.Grants {
-		out = append(out, Grant{ID: opaque(), Authority: g.Authority, Stages: g.Stages, Paths: g.Paths, Source: "pipeline.json", Reason: g.Reason})
+		out = append(out, Grant{ID: opaque(), Authority: g.Authority, Stages: g.Stages, Paths: g.Paths, Source: source, Reason: g.Reason})
 	}
 	return out
 }
