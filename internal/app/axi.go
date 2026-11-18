@@ -97,13 +97,13 @@ func axiCommand(home, path string, args []string) (engine.Response, error) {
 		}
 	}
 	if op == "watch" && q.Stream == "" {
-		state, err := engine.Send(home, engine.Request{Version: q.Version, Op: "watch", Path: path, RunID: q.RunID}, true)
+		state, err := sendAXI(home, engine.Request{Version: q.Version, Op: "watch", Path: path, RunID: q.RunID})
 		if err != nil || state.Outcome != "ok" || q.WaitMS == 0 {
 			return state, err
 		}
 		q.Stream, q.After = state.Stream, state.Sequence
 	}
-	return engine.Send(home, q, true)
+	return sendAXI(home, q)
 }
 
 func compactResponse(v engine.Response) map[string]any {
@@ -124,4 +124,22 @@ func compactResponse(v engine.Response) map[string]any {
 		}
 	}
 	return result
+}
+
+func sendAXI(home string, q engine.Request) (engine.Response, error) {
+	budget := time.Second
+	if q.WaitMS > 0 {
+		budget = time.Duration(q.WaitMS) * time.Millisecond
+	}
+	deadline := time.Now().Add(budget)
+	for {
+		response, err := engine.Send(home, q, true)
+		if err != nil || q.Op != "watch" || response.Outcome != "refused" || response.Error != "storage commit in progress; retry the read request" || !time.Now().Before(deadline) {
+			return response, err
+		}
+		time.Sleep(min(20*time.Millisecond, time.Until(deadline)))
+		if q.WaitMS > 0 {
+			q.WaitMS = max(0, int(time.Until(deadline).Milliseconds()))
+		}
+	}
 }

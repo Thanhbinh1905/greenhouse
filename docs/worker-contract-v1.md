@@ -69,7 +69,9 @@ Every response contains the authoritative snapshot. Save its `stream` and
 `resync` means the daemon restarted or the bounded event history no longer
 contains the cursor. Accept that snapshot and resume with its cursor.
 A fresh `watch --wait 1m` obtains a cursor and waits once. An explicit cursor
-allows scripts to retain events between invocations.
+allows scripts to retain events between invocations. The CLI retries a watch
+refused during a storage commit within the remaining wait budget. Raw hosts
+retry that read refusal with the same cursor.
 
 `watch` and log follow accept `wait_ms` from 0 through 60000. Repeat long-polls
 with the returned cursor; an elapsed wait needs no delay or busy polling.
