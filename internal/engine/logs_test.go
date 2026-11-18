@@ -1,10 +1,15 @@
 package engine
 
 import (
+	"context"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestLogsPreserveCursorsAndRedactSplitSecrets(t *testing.T) {
@@ -36,5 +41,23 @@ func TestLogsPreserveCursorsAndRedactSplitSecrets(t *testing.T) {
 	info, err := os.Stat(filepath.Join(home, "logs", "run", "test.log"))
 	if err != nil || info.Mode().Perm() != 0600 {
 		t.Fatalf("private log: %v %v", info, err)
+	}
+}
+
+func TestStepCompletionClassifiesExecutorErrors(t *testing.T) {
+	t.Setenv("GREENHOUSE_HOME", filepath.Join(t.TempDir(), "state"))
+	for _, executionErr := range []error{nil, runner.ErrWriterTreeUnknown, context.Canceled, context.DeadlineExceeded} {
+		var events []FeedEvent
+		observer := processObserver("run", "test", func(event FeedEvent) { events = append(events, event) })
+		_, _, finish := observer([]string{"fixture"}, io.Discard, io.Discard)
+		finish(0, executionErr, time.Millisecond)
+		want := "step-finished"
+		if executionErr != nil {
+			want = "step-failed"
+		}
+		last := events[len(events)-1]
+		if last.Kind != want || last.ExitCode == nil || *last.ExitCode != 0 {
+			t.Fatalf("executor error %v: kind=%s exit=%v, want %s with exit=0", executionErr, last.Kind, last.ExitCode, want)
+		}
 	}
 }

@@ -171,13 +171,13 @@ func (f *feed) flush(s *Store, now time.Time) {
 	for _, w := range f.waiters {
 		if w.q.Op == "pipeline" {
 			v := handle(s, Request{Version: w.q.Version, Op: "inspect", Path: w.q.Path, RunID: w.q.RunID, Host: w.q.Host})
-			if v.Outcome == "ok" && v.Run != nil && v.Run.Status == "running" && now.Before(w.deadline) {
+			if v.Outcome == "ok" && executionActive(v.Run) && now.Before(w.deadline) {
 				kept = append(kept, w)
 				continue
 			}
 			v.Stream, v.Sequence = f.stream, f.seq
 			v.Wait = "settled"
-			if v.Run != nil && v.Run.Status == "running" {
+			if executionActive(v.Run) {
 				v.Wait = "elapsed"
 			}
 			stamp(&v, w.q.Version)
@@ -241,4 +241,8 @@ func (f *feed) close() {
 		w.conn.Close()
 	}
 	f.waiters = nil
+}
+
+func executionActive(r *Run) bool {
+	return r != nil && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing")
 }

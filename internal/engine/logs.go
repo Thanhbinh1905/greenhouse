@@ -170,7 +170,11 @@ func observeProcesses(ctx context.Context, run, step string, emit func(FeedEvent
 	ctx = context.WithValue(ctx, checkProgressKey{}, func(checks []forge.CheckState) {
 		emit(FeedEvent{Run: run, Stage: step, Kind: "checks", Checks: checks})
 	})
-	return runner.WithObserver(ctx, func(command []string, stdout, stderr io.Writer) (io.Writer, io.Writer, func(int, time.Duration)) {
+	return runner.WithObserver(ctx, processObserver(run, step, emit))
+}
+
+func processObserver(run, step string, emit func(FeedEvent)) runner.ProcessObserver {
+	return func(command []string, stdout, stderr io.Writer) (io.Writer, io.Writer, func(int, error, time.Duration)) {
 		safe := make([]string, len(command))
 		for i, arg := range command {
 			safe[i] = string(Redact([]byte(arg)))
@@ -187,18 +191,18 @@ func observeProcesses(ctx context.Context, run, step string, emit func(FeedEvent
 			stderr = io.Discard
 		}
 		lock := &sync.Mutex{}
-		return synchronizedWriter{lock, io.MultiWriter(stdout, out)}, synchronizedWriter{lock, io.MultiWriter(stderr, errOut)}, func(code int, duration time.Duration) {
+		return synchronizedWriter{lock, io.MultiWriter(stdout, out)}, synchronizedWriter{lock, io.MultiWriter(stderr, errOut)}, func(code int, executionErr error, duration time.Duration) {
 			out.flush()
 			errOut.flush()
 			elapsed := duration.Milliseconds()
 			kind := "step-finished"
-			if code != 0 {
+			if code != 0 || executionErr != nil {
 				kind = "step-failed"
 			}
 			appendLog(run, step, []byte(fmt.Sprintf("exit=%d elapsed_ms=%d\n", code, elapsed)))
 			emit(FeedEvent{Run: run, Stage: step, Kind: kind, Execution: id, Command: safe, ExitCode: &code, ElapsedMS: &elapsed})
 		}
-	})
+	}
 }
 
 func logStageResult(run string, stage StageResult) {

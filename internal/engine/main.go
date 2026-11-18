@@ -805,6 +805,9 @@ func handleRequest(s *Store, q Request) Response {
 			return fail(err.Error(), r)
 		}
 	} else if q.Op == "pipeline" {
+		if q.Intent != "" && !ValidText(q.Intent) {
+			return fail("invalid intent", r)
+		}
 		if q.Intent != "" && r.Pipeline == nil && ownReviews(r) == 0 {
 			candidate := *r
 			candidate.Configs = append([]Snapshot(nil), r.Configs...)
@@ -1460,7 +1463,7 @@ func Daemon(h string) error {
 				return e
 			}
 		}
-		if q.Op == "pipeline" && q.WaitMS > 0 && v.Outcome == "ok" && v.Run != nil && v.Run.Status == "running" {
+		if q.Op == "pipeline" && q.WaitMS > 0 && v.Outcome == "ok" && executionActive(v.Run) {
 			if len(events.waiters) >= waiterLimit {
 				v.Wait = "elapsed"
 			} else {

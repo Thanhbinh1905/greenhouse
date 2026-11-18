@@ -253,3 +253,40 @@ func TestWorkerStepEventsAndLogBounds(t *testing.T) {
 		t.Fatal("terminal stage logs missing")
 	}
 }
+
+func TestWorkerPipelineWaitsForCancellationCleanup(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, _ := pipelineFixture(t, localPlan)
+	os.WriteFile(filepath.Join(filepath.Dir(home), "sleep-test"), []byte("30"), 0600)
+	waited := make(chan map[string]any, 1)
+	go func() { waited <- workerCommand(t, bin, repo, home, "pipeline", "--wait", "30s") }()
+	state := workerCommand(t, bin, repo, home, "watch")
+	for deadline := time.Now().Add(30 * time.Second); runOf(t, state)["stage"] != "test" && time.Now().Before(deadline); {
+		state = workerCommand(t, bin, repo, home, "watch", "--stream", state["stream"].(string), "--after", fmt.Sprint(state["sequence"]), "--wait", "5s")
+	}
+	if runOf(t, state)["stage"] != "test" {
+		t.Fatal("pipeline did not start the test executor")
+	}
+	workerCommand(t, bin, repo, home, "cancel")
+	settled := <-waited
+	if settled["wait"] != "settled" || runOf(t, settled)["status"] != "cancelled" {
+		t.Fatalf("pipeline wait returned before cancellation cleanup: wait=%v status=%v", settled["wait"], runOf(t, settled)["status"])
+	}
+}
+
+func TestWorkerPipelineRejectsInvalidIntent(t *testing.T) {
+	t.Parallel()
+	bin, repo, home := fixture(t)
+	before := axi(t, bin, repo, home, `{"version":2,"op":"attach"}`)
+	for i, intent := range []string{" \t\n", strings.Repeat("x", 8193), "invalid\x00intent"} {
+		request, _ := json.Marshal(map[string]any{"version": 2, "op": "pipeline", "run_id": before["run_id"], "input_id": before["input_id"], "gate_id": before["gate_id"], "expected": before["token"], "action_id": fmt.Sprint("invalid-intent-", i), "intent": intent})
+		got := axi(t, bin, repo, home, string(request))
+		if got["outcome"] != "refused" || !strings.Contains(fmt.Sprint(got["error"]), "intent") {
+			t.Fatalf("invalid intent was not rejected by validation: outcome=%v error=%v", got["outcome"], got["error"])
+		}
+		after := workerCommand(t, bin, repo, home, "inspect")
+		if after["token"] != before["token"] || runOf(t, after)["intent"] != runOf(t, before)["intent"] {
+			t.Fatal("invalid intent mutated the run")
+		}
+	}
+}

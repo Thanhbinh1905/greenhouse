@@ -32,7 +32,8 @@ A successful request has `outcome: "ok"`; a rejected request has
 A refused protocol operation still exits zero; scripts must check `outcome`.
 
 `pipeline` waits until a decision, park, `locally-ready`, `ci-ready`, or another
-terminal outcome. `wait: "elapsed"` returns the running snapshot when its wait
+terminal outcome. Cancellation waits for executor cleanup to settle.
+`wait: "elapsed"` returns the running snapshot when its wait
 expires. Expiry does not cancel the run. `--wait` accepts a Go duration, up to
 24 hours. `--wait_ms` accepts the same bound in milliseconds. Without a wait,
 the operation returns after admission.
@@ -98,7 +99,8 @@ printf '%s\n' "$reply" | jq '{outcome, error, decision, delivery, status: .run.s
 redacted `command` argument array. Completion events include `exit_code` and
 `elapsed_ms`. PR and CI operations use `greenhouse pr` and `greenhouse ci`
 as command labels; their exit codes are logical success or failure (0 or 1).
-Process events carry the actual child exit code. A step failure can precede an
+Process events carry the actual child exit code. An executor error emits
+`step-failed` even when that exit code is zero. A step failure can precede an
 authorized repair or a transport retry; use the run snapshot for the outcome.
 
 ## Read and answer a gate

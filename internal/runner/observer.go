@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-type ProcessObserver func(command []string, stdout, stderr io.Writer) (io.Writer, io.Writer, func(int, time.Duration))
+type ProcessObserver func(command []string, stdout, stderr io.Writer) (io.Writer, io.Writer, func(int, error, time.Duration))
 type observerKey struct{}
 
 func WithObserver(ctx context.Context, observer ProcessObserver) context.Context {
