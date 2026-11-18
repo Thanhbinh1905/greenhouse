@@ -579,11 +579,13 @@ var hunkHeader = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,(
 func changedRanges(diff string) map[string][][2]int {
 	ranges := map[string][][2]int{}
 	path, old := "", ""
+	deleted := false
 	inHunk := false
 	for _, line := range strings.Split(diff, "\n") {
 		if strings.HasPrefix(line, "diff --git ") {
 			inHunk = false
 			path, old = "", ""
+			deleted = false
 			continue
 		}
 		if !inHunk && strings.HasPrefix(line, "--- ") {
@@ -592,7 +594,8 @@ func changedRanges(diff string) map[string][][2]int {
 		}
 		if !inHunk && strings.HasPrefix(line, "+++ ") {
 			path = diffPath(strings.TrimPrefix(line, "+++ "))
-			if path == "/dev/null" {
+			deleted = path == "/dev/null"
+			if deleted {
 				path = old
 			}
 			continue
@@ -608,10 +611,14 @@ func changedRanges(diff string) map[string][][2]int {
 			count, _ = strconv.Atoi(match[4])
 		}
 		if count == 0 {
-			start, _ = strconv.Atoi(match[1])
 			count = 1
-			if match[2] != "" {
-				count, _ = strconv.Atoi(match[2])
+			if deleted {
+				start, _ = strconv.Atoi(match[1])
+				if match[2] != "" {
+					count, _ = strconv.Atoi(match[2])
+				}
+			} else {
+				start = max(1, start)
 			}
 		}
 		ranges[path] = append(ranges[path], [2]int{start, start + count - 1})

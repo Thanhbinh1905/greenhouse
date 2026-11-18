@@ -97,3 +97,9 @@ Checks after merging `ed5d0d4`: `go vet ./...` passed. `GOMAXPROCS=4 go test ./.
 After merging `d73fb9f`, vet and the full normal suite passed (engine 326.501 s). The first full race run failed `TestExecutableSelectedRepair` after its SIGKILL restart: the repair evidence remained, but the run reverted to the earlier review status. Five isolated race repetitions passed. A suspected cause is inspect exposing completed in-memory state while `commitWhileServing` is still persisting it; the test immediately kills the daemon. This separate commit-visibility issue was reported to the Lead. The failing log remains in task scratch as `claude-home-final-race.log`.
 
 The full race retry passed (engine 346.010 s), with no code changes between the failed run and retry. Final checks after merging `d73fb9f`: vet, normal tests, race tests, and `git diff --check` passed.
+
+## Deletion hunk anchors
+
+Review round 4 found that zero-length candidate hunks reused old-file ranges. With Git `diff.context=0`, the CLI regression deletes old lines 21-80, then returns findings at candidate lines 20 and 60. Before the fix, Greenhouse dropped the deletion anchor at line 20 and kept the unrelated finding at line 60. The range regression reported `map[sample:[[21 80]]]`, and the excerpt contained 100 candidate lines instead of the expected 40.
+
+Pure deletions in surviving files now use the candidate `+start` anchor, with a minimum of line 1. Whole-file deletions keep the old range. The CLI regression keeps the line-20 finding, drops line 60 with a diagnostic, and captures the expected candidate excerpt ending at line 40. Range tests cover deletions at the beginning, middle, and end, plus whole-file deletion. The targeted CLI and range tests pass.

@@ -344,3 +344,73 @@ with open(onboarding,'w') as f: f.write('reviewer update')
 		t.Fatalf("reviewer modified original home onboarding: %q %v", data, err)
 	}
 }
+
+func TestDeletionReviewAnchorsFindingsAndContextToCandidate(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	git(t, repo, "config", "diff.context", "0")
+	var before, after strings.Builder
+	for i := 1; i <= 200; i++ {
+		fmt.Fprintf(&before, "line %d\n", i)
+		if i < 21 || i > 80 {
+			fmt.Fprintf(&after, "line %d\n", i)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(before.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "deletion base")
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(after.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "remove middle lines")
+	v = mutate(t, bin, repo, home, v, "new", "deletion-run", nil)
+	v = axi(t, bin, repo, home, prepareRequest(v, "deletion-head", target))
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "deletion-rules", nil)
+	installFake(t, home, `original_print=print
+def print(text):
+ event=json.loads(text)
+ if event.get('type')=='message_end':
+  verdict=json.loads(event['message']['content'][0]['text'])
+  anchor=dict(verdict['findings'][0]);anchor['start']=20;anchor['end']=20
+  unrelated=dict(anchor);unrelated['start']=60;unrelated['end']=60
+  verdict['findings']=[anchor,unrelated]
+  event['message']['content'][0]['text']=json.dumps(verdict)
+ original_print(json.dumps(event))
+`)
+	mutate(t, bin, repo, home, v, "review", "deletion-review", nil)
+	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	result := review["result"].(map[string]any)
+	findings := result["findings"].([]any)
+	if len(findings) != 1 || findings[0].(map[string]any)["start"] != float64(20) {
+		t.Fatalf("deletion must keep candidate anchor 20 and drop unrelated candidate line 60: %v", findings)
+	}
+	if !strings.Contains(review["diagnostic"].(string), "outside changed hunks") {
+		t.Fatal("missing dropped-finding diagnostic")
+	}
+	capture, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var data struct {
+		Input struct {
+			Files        []reviewFile
+			ChangedHunks map[string][][2]int
+		}
+	}
+	if err = json.Unmarshal(capture, &data); err != nil {
+		t.Fatal(err)
+	}
+	spans := data.Input.ChangedHunks["sample.txt"]
+	if len(spans) != 1 || spans[0] != [2]int{20, 20} {
+		t.Fatalf("wrong candidate deletion range: %v", spans)
+	}
+	if len(data.Input.Files) != 1 || !strings.Contains(data.Input.Files[0].Lines, "40: line 100\n") || strings.Contains(data.Input.Files[0].Lines, "41: line 101\n") {
+		t.Fatalf("deletion context must end at candidate line 40: %+v", data.Input.Files)
+	}
+}
