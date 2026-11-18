@@ -15,9 +15,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 type fixOptions struct {
+	cleanup  func(string) error
 	Corpus   string
 	Out      string
 	Model    string
@@ -142,8 +145,8 @@ func (a axiClient) settle(timeout time.Duration, field string, busy ...string) (
 	}
 }
 
-func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings map[string]any, work string, k FixCase, capture string) FixRecord {
-	rec := FixRecord{ID: k.ID, Selected: map[string]string{}, Tests: TestOutcomes{}}
+func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings map[string]any, work string, k FixCase, capture string) (rec FixRecord) {
+	rec = FixRecord{ID: k.ID, Selected: map[string]string{}, Tests: TestOutcomes{}}
 	fail := func(err error) FixRecord {
 		rec.Error = err.Error()
 		if rec.Status == "" {
@@ -186,7 +189,16 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 		return fail(err)
 	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
-	defer stopDaemon(home)
+	defer func() {
+		stop := o.cleanup
+		if stop == nil {
+			stop = daemonutil.StopDaemon
+		}
+		if err := stop(home); err != nil {
+			rec.Error = err.Error()
+			rec.Status = "eval-error"
+		}
+	}()
 	v, err := a.call(map[string]any{"op": "attach"})
 	if err != nil {
 		return fail(err)
@@ -390,7 +402,9 @@ func runFixLive(o fixOptions) (*FixReport, error) {
 		r.CostUSD += rec.Usage.CostUSD
 		r.LatencyMillis.Total += rec.LatencyMillis
 		r.LatencyMillis.Max = max(r.LatencyMillis.Max, rec.LatencyMillis)
-		scores = append(scores, rec.Score)
+		if rec.Status != "eval-error" {
+			scores = append(scores, rec.Score)
+		}
 	}
 	if len(records) > 0 {
 		r.LatencyMillis.Mean = r.LatencyMillis.Total / int64(len(records))

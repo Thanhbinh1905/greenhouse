@@ -15,11 +15,13 @@ import (
 	"sort"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 type runOptions struct {
+	cleanup    func(string) error
 	Split      string
 	JudgeModel string
 	Corpus     string
@@ -203,17 +205,6 @@ func (a axiClient) mutate(v map[string]any, op string, extra map[string]any) (ma
 	return r, nil
 }
 
-func stopDaemon(home string) {
-	b, err := os.ReadFile(filepath.Join(home, "pid"))
-	if err != nil {
-		return
-	}
-	var pid int
-	if json.Unmarshal(b, &pid) == nil && pid > 0 {
-		syscall.Kill(pid, syscall.SIGTERM)
-	}
-}
-
 type piEvents struct {
 	Answer, Provider, Model, Thinking string
 	Usage                             Usage
@@ -330,8 +321,8 @@ func modelFindings(answer string) json.RawMessage {
 	return v.Findings
 }
 
-func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) CaseRecord {
-	rec := CaseRecord{ID: k.ID}
+func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (rec CaseRecord) {
+	rec = CaseRecord{ID: k.ID}
 	fail := func(err error) CaseRecord {
 		rec.Error = err.Error()
 		rec.Status = "eval-error"
@@ -377,7 +368,16 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) Ca
 	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
 
-	defer stopDaemon(home)
+	defer func() {
+		stop := o.cleanup
+		if stop == nil {
+			stop = daemonutil.StopDaemon
+		}
+		if err := stop(home); err != nil {
+			rec.Error = err.Error()
+			rec.Status = "eval-error"
+		}
+	}()
 	v, err := a.call(map[string]any{"op": "attach"})
 	if err != nil {
 		return fail(err)
@@ -611,7 +611,9 @@ func runLive(o runOptions) (*Report, error) {
 func summarizeRecords(records []CaseRecord) Summary {
 	var scores []CaseScore
 	for _, rec := range records {
-		scores = append(scores, rec.Score)
+		if rec.Status != "eval-error" {
+			scores = append(scores, rec.Score)
+		}
 	}
 	return Summarize(scores)
 }
