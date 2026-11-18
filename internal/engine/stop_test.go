@@ -2,6 +2,7 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"net"
 	"os"
 	"os/exec"
@@ -27,7 +28,22 @@ func TestStopDaemon(t *testing.T) {
 	}
 	exited := make(chan error, 1)
 	go func() { exited <- daemon.Wait() }()
-	t.Cleanup(func() { daemon.Process.Kill() })
+	t.Cleanup(func() {
+		if daemon.ProcessState != nil {
+			return
+		}
+		if err := daemon.Process.Signal(syscall.SIGTERM); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			t.Errorf("stop test daemon: %v", err)
+		}
+		select {
+		case err := <-exited:
+			if err != nil {
+				t.Errorf("wait for test daemon: %v", err)
+			}
+		case <-time.After(5 * time.Second):
+			t.Errorf("test daemon %d did not exit", daemon.Process.Pid)
+		}
+	})
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := Send(home, Request{Version: 2, Op: "attach", Path: repo}, false); err == nil {
