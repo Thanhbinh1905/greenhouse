@@ -175,6 +175,7 @@ type Store struct {
 	DefaultsSource string             `json:"defaults_source"`
 	Runs           map[string]*Run    `json:"runs"`
 	Slots          map[string]string  `json:"slots"`
+	RunIndex       map[string]bool    `json:"run_index,omitempty"`
 	ReceiptIndex   map[string]string  `json:"receipt_index,omitempty"`
 	Receipts       map[string]Receipt `json:"receipts"`
 	Migrations     []Migration        `json:"migrations,omitempty"`

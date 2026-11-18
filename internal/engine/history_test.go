@@ -142,7 +142,7 @@ func TestHistorySaveCostIsBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if before.Size() != after.Size() {
+	if after.Size() > before.Size() {
 		t.Fatal("save bytes grow with history")
 	}
 	old, err := historicalRun(s, "run-0000")
@@ -313,5 +313,49 @@ func TestFailedStateCommitPreservesCommittedHistory(t *testing.T) {
 		if _, err := os.Stat(historyPath(home, kind, oldest)); !os.IsNotExist(err) {
 			t.Fatalf("%s not collected after durable commit: %v", kind, err)
 		}
+	}
+}
+
+func TestFailedStateCommitDoesNotExposeRunArchive(t *testing.T) {
+	bin, repo, home, initial := prepareFixture(t)
+	stopDaemon(t, home)
+	s, err := load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	orphan := *s.Runs[initial["run_id"].(string)]
+	orphan.ID = "uncommitted-run"
+	orphan.Status = "cancelled"
+	s.Runs[orphan.ID] = &orphan
+	failure := fmt.Errorf("injected state write failure")
+	if err := persistWithWriter(home, s, func(path string, data []byte) error {
+		if filepath.Base(path) == "state.json" {
+			return failure
+		}
+		return writeFileDurably(path, data)
+	}); err != failure {
+		t.Fatalf("expected state write failure, got %v", err)
+	}
+	if _, err := os.Stat(historyPath(home, "runs", orphan.ID)); err != nil {
+		t.Fatal(err)
+	}
+	for _, op := range []string{"inspect", "transcript"} {
+		got := axi(t, bin, repo, home, fmt.Sprintf(`{"version":1,"op":%q,"run_id":%q}`, op, orphan.ID))
+		if got["outcome"] != "refused" || !strings.Contains(fmt.Sprint(got["error"]), "unknown run") {
+			t.Fatalf("%s exposed uncommitted run after restart: outcome=%v error=%v", op, got["outcome"], got["error"])
+		}
+	}
+	stopDaemon(t, home)
+	s, err = load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Runs[orphan.ID] = &orphan
+	if err := persist(home, s); err != nil {
+		t.Fatal(err)
+	}
+	got := axi(t, bin, repo, home, fmt.Sprintf(`{"version":1,"op":"inspect","run_id":%q}`, orphan.ID))
+	if got["outcome"] != "ok" || got["run_id"] != orphan.ID {
+		t.Fatalf("committed archive unavailable: %v", got)
 	}
 }

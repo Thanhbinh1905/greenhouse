@@ -70,6 +70,9 @@ func historyGarbage(home, kind string) ([]string, error) {
 }
 
 func compactHistory(home string, s *Store, write func(string, []byte) error) ([]string, error) {
+	if s.RunIndex == nil {
+		s.RunIndex = map[string]bool{}
+	}
 	if s.ReceiptIndex == nil {
 		s.ReceiptIndex = map[string]string{}
 	}
@@ -90,6 +93,7 @@ func compactHistory(home string, s *Store, write func(string, []byte) error) ([]
 		if err := archiveWithWriter(home, "runs", id, r, write); err != nil {
 			return nil, err
 		}
+		s.RunIndex[id] = true
 		delete(s.Runs, id)
 	}
 	ids = ids[:0]
@@ -116,6 +120,18 @@ func compactHistory(home string, s *Store, write func(string, []byte) error) ([]
 	for _, path := range garbage {
 		pruned[path] = true
 	}
+	for id := range s.RunIndex {
+		path := historyPath(home, "runs", id)
+		if pruned[path] {
+			delete(s.RunIndex, id)
+			continue
+		}
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			delete(s.RunIndex, id)
+		} else if err != nil {
+			return nil, err
+		}
+	}
 	for id := range s.ReceiptIndex {
 		path := historyPath(home, "receipts", id)
 		if pruned[path] {
@@ -135,7 +151,7 @@ func historicalRun(s *Store, id string) (*Run, error) {
 	if r := s.Runs[id]; r != nil {
 		return r, nil
 	}
-	if s.home == "" {
+	if !s.RunIndex[id] || s.home == "" {
 		return nil, nil
 	}
 	data, err := os.ReadFile(historyPath(s.home, "runs", id))

@@ -33,6 +33,7 @@ func commitWhileServing(s *Store, connections <-chan net.Conn, pending chan<- ne
 	snapshot := *s
 	snapshot.Runs = maps.Clone(s.Runs)
 	snapshot.Receipts = maps.Clone(s.Receipts)
+	snapshot.RunIndex = maps.Clone(s.RunIndex)
 	snapshot.ReceiptIndex = maps.Clone(s.ReceiptIndex)
 	done := make(chan error, 1)
 	go func() { done <- save() }()
