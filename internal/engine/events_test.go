@@ -16,8 +16,22 @@ import (
 
 func watch(t *testing.T, bin, repo, home string, stream any, after any, waitMS int) map[string]any {
 	t.Helper()
-	b, _ := json.Marshal(map[string]any{"version": 2, "op": "watch", "stream": stream, "after": after, "wait_ms": waitMS})
-	return axi(t, bin, repo, home, string(b))
+	budget := time.Duration(waitMS) * time.Millisecond
+	if budget == 0 {
+		budget = time.Second
+	}
+	deadline := time.Now().Add(budget)
+	for {
+		b, _ := json.Marshal(map[string]any{"version": 2, "op": "watch", "stream": stream, "after": after, "wait_ms": waitMS})
+		v := axi(t, bin, repo, home, string(b))
+		if v["outcome"] != "refused" || v["error"] != "storage commit in progress; retry the read request" || !time.Now().Before(deadline) {
+			return v
+		}
+		time.Sleep(min(20*time.Millisecond, time.Until(deadline)))
+		if waitMS > 0 {
+			waitMS = max(0, int(time.Until(deadline).Milliseconds()))
+		}
+	}
 }
 
 func TestEventSubscriptionRecoversThroughSnapshots(t *testing.T) {
