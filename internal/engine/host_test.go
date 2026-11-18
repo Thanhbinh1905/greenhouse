@@ -151,3 +151,58 @@ func TestHostRecoveredCodexError(t *testing.T) {
 		t.Fatalf("recovered clean verdict discarded: %v", result)
 	}
 }
+
+func TestCrossHostReplacementSafety(t *testing.T) {
+	owner := &Host{Name: "posse", ID: "task-a"}
+	requester := &Host{Name: "posse", ID: "task-b"}
+	for _, c := range []struct {
+		name      string
+		configure func(*Run)
+	}{
+		{"running", func(r *Run) { r.Status = "running" }},
+		{"cancelling", func(r *Run) { r.Status = "cancelling" }},
+		{"writing", func(r *Run) { r.Status = "writing" }},
+		{"recovery-required", func(r *Run) { r.Status = "recovery-required" }},
+		{"unknown-outcome", func(r *Run) { r.Status = "unknown-outcome" }},
+		{"recovery", func(r *Run) { r.Recovery = &Recovery{} }},
+		{"scheduled-resume", func(r *Run) { r.Status = "paused"; r.Pause = &BackendPause{AutoResumeAt: "2026-11-17T12:00:00Z"} }},
+		{"running-review", func(r *Run) { r.Review = &Execution{Status: "running"} }},
+		{"unknown-review", func(r *Run) { r.Review = &Execution{Status: "unknown-outcome"} }},
+		{"repair-custody", func(r *Run) { r.Repair = &Repair{Handback: "awaiting-handback", Writer: "stopped"} }},
+		{"unknown-writer", func(r *Run) { r.Repair = &Repair{Handback: "released", Writer: "unknown"} }},
+		{"pipeline-custody", func(r *Run) {
+			r.Candidate = "candidate"
+			r.Pipeline = &Pipeline{Worktree: "private", Handback: "awaiting-handback"}
+		}},
+		{"pipeline-executor", func(r *Run) { r.Pipeline = &Pipeline{Active: &Step{ID: "executor"}} }},
+		{"pipeline-writer", func(r *Run) { r.Pipeline = &Pipeline{Repairs: []Repair{{Writer: "unknown"}}} }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r := &Run{Host: owner, Status: "outstanding-findings"}
+			c.configure(r)
+			before := Digest(r)
+			for _, op := range []string{"attach", "new"} {
+				want := "run is owned by host posse task-a; this client may only attach and inspect"
+				if got := hostRefusal(r, Request{Op: op, Host: requester}); got != want {
+					t.Fatalf("%s refusal = %q, want %q", op, got, want)
+				}
+			}
+			if Digest(r) != before {
+				t.Fatal("refusal changed the old run")
+			}
+		})
+	}
+	for _, status := range []string{"unconfigured", "outstanding-findings", "clean-review", "inconclusive", "cancelled", "paused", "stale"} {
+		r := &Run{Host: owner, Status: status}
+		for _, op := range []string{"attach", "new"} {
+			if got := hostRefusal(r, Request{Op: op, Host: requester}); got != "" {
+				t.Errorf("settled %s %s refused: %s", status, op, got)
+			}
+		}
+		for _, q := range []Request{{Op: "new"}, {Op: "review", Host: requester}, {Op: "new", Host: &Host{Name: "", ID: "invalid"}}} {
+			if got := hostRefusal(r, q); got == "" {
+				t.Errorf("settled %s admitted unauthorized request: %+v", status, q)
+			}
+		}
+	}
+}

@@ -727,6 +727,7 @@ func handleRequest(s *Store, q Request) Response {
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
 	paused := r
+	crossHostNew := q.Op == "new" && q.Host != nil && r.Host != nil && !sameHost(r.Host, q.Host)
 	if q.Op == "cancel" {
 		if r.Status != "cancelling" {
 			return fail("no live execution", r)
@@ -902,7 +903,10 @@ func handleRequest(s *Store, q Request) Response {
 		r.Token = opaque()
 	} else {
 		prior := r.ID
-		findings := append([]Finding(nil), r.Findings...)
+		var findings []Finding
+		if !crossHostNew {
+			findings = append(findings, r.Findings...)
+		}
 		next := &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		if q.Host != nil {
 			hostSuccessor(r, next, q.Host)
@@ -911,7 +915,9 @@ func handleRequest(s *Store, q Request) Response {
 		s.Runs[r.ID] = r
 		s.Slots[slot] = r.ID
 	}
-	cancelAutoResume(paused, actor)
+	if !crossHostNew {
+		cancelAutoResume(paused, actor)
+	}
 	v := view(s, r)
 	b, _ := json.Marshal(v)
 	var frozen Response
