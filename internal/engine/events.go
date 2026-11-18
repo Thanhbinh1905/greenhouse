@@ -145,6 +145,7 @@ func (f *feed) subscribe(s *Store, c net.Conn, q Request) (Response, bool) {
 		if len(f.waiters) >= waiterLimit {
 			return refuse(errors.New("too many waiting subscribers; retry later"))
 		}
+		q.RunID = v.RunID
 		c.SetDeadline(time.Time{})
 		f.waiters = append(f.waiters, &waiter{conn: c, q: q, repository: id.Repository, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
 		return Response{}, true
