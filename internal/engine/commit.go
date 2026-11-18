@@ -46,6 +46,8 @@ func commitWhileServing(s *Store, connections <-chan net.Conn, pending chan<- ne
 				reply(c, q, Response{Outcome: "refused", Error: "invalid request: " + err.Error()})
 			} else if q.Op == "inspect" || q.Op == "transcript" {
 				reply(c, q, handle(&snapshot, q))
+			} else if q.Op == "watch" || q.Op == "models" {
+				reply(c, q, Response{Outcome: "refused", Error: "storage commit in progress; retry the read request"})
 			} else if len(pending) == cap(pending) {
 				reply(c, q, Response{Outcome: "refused", Error: "storage commit queue is full; retry the same request and action_id"})
 			} else {

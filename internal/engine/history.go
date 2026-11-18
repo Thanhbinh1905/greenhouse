@@ -16,6 +16,10 @@ func historyPath(home, kind, id string) string {
 }
 
 func archive(home, kind, id string, value any) error {
+	return archiveWithWriter(home, kind, id, value, writeFileDurably)
+}
+
+func archiveWithWriter(home, kind, id string, value any, write func(string, []byte) error) error {
 	path := historyPath(home, kind, id)
 	if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
 		return err
@@ -24,24 +28,24 @@ func archive(home, kind, id string, value any) error {
 	if err != nil {
 		return err
 	}
-	return writeFileDurably(path, data)
+	return write(path, data)
 }
 
-func trimHistory(home, kind string) error {
+func historyGarbage(home, kind string) ([]string, error) {
 	dir := filepath.Join(home, "history", kind)
 	entries, err := os.ReadDir(dir)
 	if os.IsNotExist(err) {
-		return nil
+		return nil, nil
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	files := make([]os.FileInfo, 0, len(entries))
 	var size int64
 	for _, entry := range entries {
 		info, err := entry.Info()
 		if err != nil {
-			return err
+			return nil, err
 		}
 		if info.IsDir() {
 			continue
@@ -55,18 +59,17 @@ func trimHistory(home, kind string) error {
 		}
 		return files[i].ModTime().Before(files[j].ModTime())
 	})
+	var garbage []string
 	for len(files) > historyLimit || size > historyBytes {
 		oldest := files[0]
-		if err := os.Remove(filepath.Join(dir, oldest.Name())); err != nil {
-			return err
-		}
+		garbage = append(garbage, filepath.Join(dir, oldest.Name()))
 		size -= oldest.Size()
 		files = files[1:]
 	}
-	return nil
+	return garbage, nil
 }
 
-func compactHistory(home string, s *Store) error {
+func compactHistory(home string, s *Store, write func(string, []byte) error) ([]string, error) {
 	if s.ReceiptIndex == nil {
 		s.ReceiptIndex = map[string]string{}
 	}
@@ -74,7 +77,6 @@ func compactHistory(home string, s *Store) error {
 	for _, id := range s.Slots {
 		slots[id] = true
 	}
-	wroteRuns, wroteReceipts := false, false
 	ids := make([]string, 0, len(s.Runs))
 	for id := range s.Runs {
 		ids = append(ids, id)
@@ -85,11 +87,10 @@ func compactHistory(home string, s *Store) error {
 		if r == nil || slots[id] || !hostReplaceable(r) || hasDurableLease(home, r) {
 			continue
 		}
-		if err := archive(home, "runs", id, r); err != nil {
-			return err
+		if err := archiveWithWriter(home, "runs", id, r, write); err != nil {
+			return nil, err
 		}
 		delete(s.Runs, id)
-		wroteRuns = true
 	}
 	ids = ids[:0]
 	for id := range s.Receipts {
@@ -97,31 +98,37 @@ func compactHistory(home string, s *Store) error {
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		if err := archive(home, "receipts", id, s.Receipts[id]); err != nil {
-			return err
+		if err := archiveWithWriter(home, "receipts", id, s.Receipts[id], write); err != nil {
+			return nil, err
 		}
 		s.ReceiptIndex[id] = s.Receipts[id].Digest
 		delete(s.Receipts, id)
-		wroteReceipts = true
 	}
-	if wroteRuns {
-		if err := trimHistory(home, "runs"); err != nil {
-			return err
+	var garbage []string
+	for _, kind := range []string{"runs", "receipts"} {
+		paths, err := historyGarbage(home, kind)
+		if err != nil {
+			return nil, err
+		}
+		garbage = append(garbage, paths...)
+	}
+	pruned := map[string]bool{}
+	for _, path := range garbage {
+		pruned[path] = true
+	}
+	for id := range s.ReceiptIndex {
+		path := historyPath(home, "receipts", id)
+		if pruned[path] {
+			delete(s.ReceiptIndex, id)
+			continue
+		}
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			delete(s.ReceiptIndex, id)
+		} else if err != nil {
+			return nil, err
 		}
 	}
-	if wroteReceipts {
-		if err := trimHistory(home, "receipts"); err != nil {
-			return err
-		}
-		for id := range s.ReceiptIndex {
-			if _, err := os.Stat(historyPath(home, "receipts", id)); os.IsNotExist(err) {
-				delete(s.ReceiptIndex, id)
-			} else if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return garbage, nil
 }
 
 func historicalRun(s *Store, id string) (*Run, error) {

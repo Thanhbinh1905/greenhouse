@@ -99,7 +99,7 @@ Replaying the identical request with the same `action_id` returns its recorded r
 
 Receipts and settled runs outside current worktree slots are archived separately from `state.json`. Each archive retains at most 128 records and 64 MiB, pruning the oldest archived records first. Replay is guaranteed only while the receipt is retained. Inspecting a missing historical run reports that its data may have been pruned. Slot owners, active executions, recovery, candidate custody, and repository trust remain in the hot state.
 
-Inspect remains available during a durable write. Mutations wait for the write to finish before execution. Large legacy stores migrate before the daemon accepts requests; startup allows up to 60 seconds.
+Inspect and transcript remain available during a durable write. Watch and model catalog requests receive a retry refusal during a write. Archive pruning starts only after the replacement state is durably committed. Mutations wait for the write to finish before execution. Large legacy stores migrate before the daemon accepts requests; startup allows up to 60 seconds.
 
 Complete request:
 

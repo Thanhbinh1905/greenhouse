@@ -244,14 +244,27 @@ func Home() (string, error) {
 	return h, nil
 }
 func persist(h string, s *Store) error {
-	if err := compactHistory(h, s); err != nil {
+	return persistWithWriter(h, s, writeFileDurably)
+}
+
+func persistWithWriter(h string, s *Store, write func(string, []byte) error) error {
+	garbage, err := compactHistory(h, s, write)
+	if err != nil {
 		return err
 	}
 	b, err := json.Marshal(s)
 	if err != nil {
 		return err
 	}
-	return writeFileDurably(filepath.Join(h, "state.json"), b)
+	if err := write(filepath.Join(h, "state.json"), b); err != nil {
+		return err
+	}
+	for _, path := range garbage {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
 }
 
 func load(h string) (*Store, error) {
@@ -1343,7 +1356,7 @@ func Daemon(h string) error {
 			}
 		} else if e != nil {
 			v = Response{Version: 1, Outcome: "refused", Error: "invalid request: " + e.Error()}
-		} else if q.Op == "inspect" || q.Op == "transcript" {
+		} else if q.Op == "inspect" || q.Op == "transcript" || q.Op == "models" {
 			v = handle(s, q)
 		} else {
 			b, _ := json.Marshal(s)

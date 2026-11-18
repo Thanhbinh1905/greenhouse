@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-func TestInspectDuringBlockedCommit(t *testing.T) {
+func TestReadsDuringBlockedCommit(t *testing.T) {
 	_, repo, home := fixture(t)
 	s, err := load(home)
 	if err != nil {
@@ -27,18 +27,25 @@ func TestInspectDuringBlockedCommit(t *testing.T) {
 	}()
 	t.Cleanup(func() { close(release); <-finished })
 	<-started
-	server, client := net.Pipe()
-	defer client.Close()
-	connections <- server
-	client.SetDeadline(time.Now().Add(time.Second))
-	if err := json.NewEncoder(client).Encode(Request{Version: 2, Op: "inspect", Path: repo}); err != nil {
-		t.Fatal(err)
-	}
-	var got Response
-	if err := json.NewDecoder(client).Decode(&got); err != nil {
-		t.Fatalf("inspect blocked on durable write: %v", err)
-	}
-	if got.Outcome != "ok" || got.RunID != v.RunID {
-		t.Fatal(got)
+	for _, op := range []string{"inspect", "transcript", "watch", "models"} {
+		t.Run(op, func(t *testing.T) {
+			server, client := net.Pipe()
+			defer client.Close()
+			connections <- server
+			client.SetDeadline(time.Now().Add(time.Second))
+			if err := json.NewEncoder(client).Encode(Request{Version: 2, Op: op, Path: repo}); err != nil {
+				t.Fatal(err)
+			}
+			var got Response
+			if err := json.NewDecoder(client).Decode(&got); err != nil {
+				t.Fatalf("%s blocked on durable write: %v", op, err)
+			}
+			if op == "inspect" && (got.Outcome != "ok" || got.RunID != v.RunID) {
+				t.Fatal(got)
+			}
+			if got.Outcome == "" {
+				t.Fatal("read returned no outcome")
+			}
+		})
 	}
 }
