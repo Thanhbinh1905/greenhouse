@@ -245,3 +245,51 @@ func TestExecutorTimeoutNullRejectedThroughCLI(t *testing.T) {
 		t.Fatalf("CLI accepted null timeout: %s (%v)", data, err)
 	}
 }
+
+func TestRestartAdoptsTimedOutReview(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `print('{"type":"message_end","message":{"role":"assistant","model":"model","usage":{"input":100,"output":20,"totalTokens":120}}}', flush=True)
+`+partialQuotaThenSleep)
+	configs := runOf(t, v)["configs"].([]any)
+	settings := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)
+	settings["executor_timeout"] = "1s"
+	v = mutate(t, bin, repo, home, v, "apply", "timeout-settings", settings)
+	v = mutate(t, bin, repo, home, v, "resolve-rules", "timeout-rules", nil)
+	v = mutate(t, bin, repo, home, v, "review", "start-timeout", nil)
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	statePath := filepath.Join(home, "state.json")
+	stateBeforeReviewCompletion, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitReview(t, bin, repo, home)
+	stopDaemonAndWait(t, home)
+	wantTokens := 0
+	for _, record := range runner.ObserveExecutors(runOf(t, v)["review"].(map[string]any)["id"].(string), func() (string, error) { return home, nil }) {
+		wantTokens += agentTokenUsage(BackendPi, record.Stdout, record.Stderr).Tokens
+	}
+	if wantTokens == 0 {
+		t.Fatal("timed-out reviewer recorded no usage")
+	}
+	if err := os.WriteFile(statePath, stateBeforeReviewCompletion, 0600); err != nil {
+		t.Fatal(err)
+	}
+	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	run := runOf(t, v)
+	data, err := json.Marshal(run)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recovered Run
+	if err := json.Unmarshal(data, &recovered); err != nil {
+		t.Fatal(err)
+	}
+	recovered.Host = &Host{Name: "fixture", ID: "restart"}
+	host := hostResult(&recovered, true)
+	x := recovered.Review
+	if x.Status != "cancelled" || x.Reason != "timeout" || !strings.Contains(x.Diagnostic, "1s") || host.Reason != "timeout" || host.Usage.Tokens != wantTokens || len(recovered.Attempts) != 1 || recovered.Attempts[0].Reason != "timeout" || recovered.Attempts[0].Usage.Tokens != wantTokens {
+		t.Fatalf("restart lost timeout: run=%s review=%s reason=%q diagnostic=%q host reason=%q attempts=%+v recovery=%+v", recovered.Status, x.Status, x.Reason, x.Diagnostic, host.Reason, recovered.Attempts, recovered.Recovery)
+	}
+}
