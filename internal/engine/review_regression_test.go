@@ -1,7 +1,7 @@
 package engine
 
 import (
-	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -56,15 +56,8 @@ func TestNewRunAfterSourceMovement(t *testing.T) {
 	if !reflect.DeepEqual(next, replay) {
 		t.Fatal("new replay changed result")
 	}
-	b, err := os.ReadFile(filepath.Join(home, "state.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var state map[string]any
-	if err = json.Unmarshal(b, &state); err != nil {
-		t.Fatal(err)
-	}
-	if !reflect.DeepEqual(state["runs"].(map[string]any)[initial["run_id"].(string)], old) {
+	historical := axi(t, bin, repo, home, fmt.Sprintf(`{"version":1,"op":"inspect","run_id":%q}`, initial["run_id"]))
+	if historical["outcome"] != "ok" || !reflect.DeepEqual(runOf(t, historical), old) {
 		t.Fatal("prior evidence changed on New")
 	}
 	git(t, repo, "checkout", "-b", "other")
