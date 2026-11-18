@@ -20,6 +20,7 @@ import (
 )
 
 type fixOptions struct {
+	cleanup  func(string) error
 	Corpus   string
 	Out      string
 	Model    string
@@ -189,7 +190,11 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 	}
 	a := axiClient{bin: bin, repo: repo, env: []string{"GREENHOUSE_HOME=" + home, shimEnv + "=" + cfgPath, "PATH=" + native + ":" + os.Getenv("PATH")}}
 	defer func() {
-		if err := daemonutil.StopDaemon(home); err != nil {
+		stop := o.cleanup
+		if stop == nil {
+			stop = daemonutil.StopDaemon
+		}
+		if err := stop(home); err != nil {
 			rec.Error = err.Error()
 			rec.Status = "eval-error"
 		}
@@ -397,7 +402,9 @@ func runFixLive(o fixOptions) (*FixReport, error) {
 		r.CostUSD += rec.Usage.CostUSD
 		r.LatencyMillis.Total += rec.LatencyMillis
 		r.LatencyMillis.Max = max(r.LatencyMillis.Max, rec.LatencyMillis)
-		scores = append(scores, rec.Score)
+		if rec.Status != "eval-error" {
+			scores = append(scores, rec.Score)
+		}
 	}
 	if len(records) > 0 {
 		r.LatencyMillis.Mean = r.LatencyMillis.Total / int64(len(records))
