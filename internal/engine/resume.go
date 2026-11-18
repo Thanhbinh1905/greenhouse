@@ -320,7 +320,7 @@ func resumePipeline(s *Store, r *Run, p *BackendPause) error {
 		return admitPipeline(s, r)
 	}
 	if custodyHeld(s, r) {
-		return errors.New("repository candidate custody is already held")
+		return custodyError(r)
 	}
 	if len(pipe.Repairs) == 0 || pipe.Repairs[len(pipe.Repairs)-1].ID != p.Execution {
 		return errors.New("paused repair is not the latest repair")
