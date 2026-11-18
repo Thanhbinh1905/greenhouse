@@ -767,7 +767,6 @@ func completeStep(r *Run, o stepOutcome) error {
 			return errors.New("review identity mismatch")
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
-		retainReviewMetadata(x, reviewOutcome{Status: o.Status, Log: o.Log, Answer: o.Answer})
 		recordReviewEvidence(x, o.Snapshot, o.Confinement)
 		retainReviewMetadata(x, reviewOutcome{Status: o.Status, Answer: o.Answer, Finalization: o.Finalization})
 		x.Thinking = o.Answer.Thinking
