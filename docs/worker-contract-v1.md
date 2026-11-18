@@ -78,7 +78,8 @@ Events have `sequence`, `run_id`, `stage`, `status`, and `token`.
 `kind: "decision"` announces an open decision. `kind: "park"` announces a
 paused run or a stop requiring attention. Read `run.pause`, `run.recovery`,
 `decision`, and `blocked` to distinguish these cases. `run-changed` covers
-other state transitions.
+other state transitions. CI observations emit `kind: "checks"` with a `checks`
+array in the same format as `delivery.checks`.
 
 A shell script can follow the current run with `jq`:
 
