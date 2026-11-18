@@ -225,7 +225,7 @@ func newPipeline(plan CommandPlan, digests map[string]string, source string) *Pi
 	for _, field := range []string{"name", "remote", "github_owner", "github_repo", "pull_base", "pull_title", "required_checks", "email", "test", "lint", "docs", "docs_paths", "not_applicable", "repairs", "repair_limit", "yolo", "grants"} {
 		sources[field] = source
 	}
-	p := &Pipeline{Status: "prepared", Plan: plan, PlanSources: sources, CommandDigests: digests, PlanDigest: Digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan)}
+	p := &Pipeline{Status: "prepared", Plan: plan, PlanSources: sources, CommandDigests: digests, PlanDigest: Digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan, source)}
 	for _, name := range pipelineStages {
 		p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending"})
 	}
