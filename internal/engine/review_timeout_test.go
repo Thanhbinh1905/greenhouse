@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -87,5 +88,30 @@ func TestAdoptStoppedPipelineReview(t *testing.T) {
 				t.Fatalf("timeout lost configured limit: %s", r.Review.Diagnostic)
 			}
 		})
+	}
+}
+
+func TestAdoptFinalizedTimeoutValidatesInputAndUsage(t *testing.T) {
+	for _, valid := range []bool{true, false} {
+		x := &Execution{ID: "review", Input: []byte(`{"Head":"candidate","Paths":["sample"]}`), InputDigest: "bound-input", Config: ReviewerConfig{Backend: "pi"}}
+		r := &Run{Status: "recovery-required", Configs: []Snapshot{{Settings: Settings{ExecutorTimeout: "1s"}}}, Review: x, Pipeline: &Pipeline{Stages: []StageResult{{Name: "review"}}}, Recovery: &Recovery{Kind: "review", Stage: "review", Execution: "review"}}
+		finalInput := runner.BytesDigest(reviewFinalizationInput(x, reviewOutcome{}, true))
+		if !valid {
+			finalInput = "unrelated-input"
+		}
+		var observed []runner.ObservedExecutor
+		for i, digest := range []string{x.InputDigest, finalInput} {
+			observed = append(observed, runner.ObservedExecutor{
+				ExecutorEvidence: runner.ExecutorEvidence{ID: fmt.Sprintf("review.%d", i), State: "stopped", Exit: -1},
+				Record:           runner.ExecutorRecord{InputDigest: digest, Stopped: true, StopReason: "timeout", Reaped: true},
+				Stdout:           []byte(`{"type":"message_end","message":{"role":"assistant","usage":{"totalTokens":120}}}`),
+			})
+		}
+		if adopted := adoptRecorded(r, observed); adopted != valid {
+			t.Fatalf("adopted=%t for valid input=%t", adopted, valid)
+		}
+		if valid && (!x.Finalization || x.Reason != "timeout" || x.Usage.Tokens != 240 || len(r.Attempts) != 1 || r.Attempts[0].Usage.Tokens != 240) {
+			t.Fatalf("finalized timeout lost evidence: finalization=%t reason=%s usage=%+v attempts=%+v", x.Finalization, x.Reason, x.Usage, r.Attempts)
+		}
 	}
 }

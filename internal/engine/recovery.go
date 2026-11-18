@@ -142,7 +142,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 			finishReview(r, done)
 		} else {
 			r.Pipeline.Active = &Step{ID: x.ID, Stage: rec.Stage, Kind: "review"}
-			if completeStep(r, stepOutcome{Run: r.ID, Step: x.ID, Status: done.Status, Log: done.Log, Result: done.Result, Failure: done.Failure, Answer: done.Answer}) != nil {
+			if completeStep(r, stepOutcome{Run: r.ID, Step: x.ID, Finalization: done.Finalization, Status: done.Status, Log: done.Log, Result: done.Result, Failure: done.Failure, Answer: done.Answer}) != nil {
 				return false
 			}
 		}

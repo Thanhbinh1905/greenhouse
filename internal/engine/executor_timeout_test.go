@@ -266,6 +266,13 @@ func TestRestartAdoptsTimedOutReview(t *testing.T) {
 	}
 	waitReview(t, bin, repo, home)
 	stopDaemonAndWait(t, home)
+	wantTokens := 0
+	for _, record := range runner.ObserveExecutors(runOf(t, v)["review"].(map[string]any)["id"].(string), func() (string, error) { return home, nil }) {
+		wantTokens += agentTokenUsage(BackendPi, record.Stdout, record.Stderr).Tokens
+	}
+	if wantTokens == 0 {
+		t.Fatal("timed-out reviewer recorded no usage")
+	}
 	if err := os.WriteFile(statePath, stateBeforeReviewCompletion, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -282,7 +289,7 @@ func TestRestartAdoptsTimedOutReview(t *testing.T) {
 	recovered.Host = &Host{Name: "fixture", ID: "restart"}
 	host := hostResult(&recovered, true)
 	x := recovered.Review
-	if x.Status != "cancelled" || x.Reason != "timeout" || !strings.Contains(x.Diagnostic, "1s") || host.Reason != "timeout" || host.Usage.Tokens != 240 || len(recovered.Attempts) != 1 || recovered.Attempts[0].Reason != "timeout" || recovered.Attempts[0].Usage.Tokens != 240 {
+	if x.Status != "cancelled" || x.Reason != "timeout" || !strings.Contains(x.Diagnostic, "1s") || host.Reason != "timeout" || host.Usage.Tokens != wantTokens || len(recovered.Attempts) != 1 || recovered.Attempts[0].Reason != "timeout" || recovered.Attempts[0].Usage.Tokens != wantTokens {
 		t.Fatalf("restart lost timeout: run=%s review=%s reason=%q diagnostic=%q host reason=%q attempts=%+v recovery=%+v", recovered.Status, x.Status, x.Reason, x.Diagnostic, host.Reason, recovered.Attempts, recovered.Recovery)
 	}
 }
