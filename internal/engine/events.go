@@ -50,6 +50,11 @@ func newFeed(s *Store) *feed {
 }
 
 func (f *feed) observe(s *Store) {
+	for id := range f.seen {
+		if s.Runs[id] == nil {
+			delete(f.seen, id)
+		}
+	}
 	ids := make([]string, 0, len(s.Runs))
 	for id := range s.Runs {
 		ids = append(ids, id)
