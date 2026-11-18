@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -99,15 +100,37 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 				verdicts = append(verdicts, o)
 			}
 		}
-		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || verdicts[0].State != "exited" || verdicts[0].Record.InputDigest != x.InputDigest {
+		if x == nil || x.ID != rec.Execution || (len(verdicts) != 1 && len(verdicts) != 2) || verdicts[0].Record.InputDigest != x.InputDigest {
 			return false
 		}
-		o := verdicts[0]
-		var runErr error
-		if o.Exit != 0 {
-			runErr = fmt.Errorf("exit status %d", o.Exit)
+		var done reviewOutcome
+		for i, o := range verdicts {
+			if o.State != "exited" && o.State != "stopped" {
+				return false
+			}
+			if i == 1 && o.Record.InputDigest != runner.BytesDigest(reviewFinalizationInput(x, done, true)) && o.Record.InputDigest != runner.BytesDigest(reviewFinalizationInput(x, done, false)) {
+				return false
+			}
+			var runErr, stopErr error
+			if o.Exit != 0 {
+				runErr = fmt.Errorf("exit status %d", o.Exit)
+			}
+			if o.Record.Stopped {
+				stopErr = context.Canceled
+				if o.Record.StopReason == "timeout" {
+					stopErr = fmt.Errorf("review executor limit %s exceeded: %w", executorTimeout(r.Configs[len(r.Configs)-1].Settings), context.DeadlineExceeded)
+				}
+			}
+			previous := done
+			done = reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
+			if i == 1 {
+				done.Finalization = true
+				done.Answer = finalReviewAnswer(previous.Answer, done.Answer)
+			}
+			if budget, err := time.ParseDuration(x.ReviewBudget); err == nil && budget < executorTimeout(r.Configs[len(r.Configs)-1].Settings) && errors.Is(stopErr, context.DeadlineExceeded) {
+				done.Status, done.Answer.Reason, done.Answer.Diagnostic = "inconclusive", "review_budget", "review wall-time budget exhausted"
+			}
 		}
-		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, false)
 		check := reverifySnapshot(x)
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}
@@ -118,7 +141,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 			finishReview(r, done)
 		} else {
 			r.Pipeline.Active = &Step{ID: x.ID, Stage: rec.Stage, Kind: "review"}
-			if completeStep(r, stepOutcome{Run: r.ID, Step: x.ID, Status: done.Status, Log: done.Log, Result: done.Result, Failure: done.Failure, Answer: done.Answer}) != nil {
+			if completeStep(r, stepOutcome{Run: r.ID, Step: x.ID, Finalization: done.Finalization, Status: done.Status, Log: done.Log, Result: done.Result, Failure: done.Failure, Answer: done.Answer}) != nil {
 				return false
 			}
 		}

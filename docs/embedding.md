@@ -81,7 +81,31 @@ For new reviews, the ID is the lowercase SHA-256 hex digest of the JSON array `[
 
 Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports input, output, cached-input, and total tokens, plus cost in USD. Unknown values stay zero; totals retain each backend's accounting.
 
+A review that exceeds the configured executor limit (`executor_timeout`, default `45m`) keeps `status: "cancelled"` and reports `reason: "timeout"`. Its diagnostic names the executor limit. An explicit cancellation reports `reason: "cancelled"`. Standalone and full-pipeline reviews retain the reason in `run.review.reason`, `host_result.reason`, and `run.attempts[].reason`, together with reported model and usage metadata.
+
+After restart, complete executor records preserve the stop reason and captured usage. Legacy stopped records without a stop reason report `cancelled`.
+
 A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
+
+## Review input and admission refusals
+
+`Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
+
+Small files are numbered before applying the review context window. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. Windows that still exceed either limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
+
+A gitlink has a synthetic `Files` entry: `1: Subproject commit <new pin>`. Findings on that path use line 1. Finding identities normalize this synthetic content using the same `code-v1` calculation as text. `Submodules` contains `Path`, `Old`, `New`, `Log`, `Diff`, and `Truncated`. Pins come from the review base and candidate trees. Logs and diffs each retain at most 128 KiB; `Truncated` and an omission marker identify shortened ranges. Added or removed gitlinks have no two-pin range.
+
+For two-pin ranges, Greenhouse resolves submodule objects locally through the initialized worktree, its `.git` file, or the common Git directory's `modules/<name>` repository. The name comes from the candidate `.gitmodules`. Added or removed gitlinks need no local submodule objects. Admission never fetches or initializes a submodule.
+
+The complete JSON bundle must fit within 2 MiB. Admission refusals retain `outcome: "refused"` and `error`, and add `error_code` and `retryable: false`:
+
+| `error_code` | Meaning |
+|---|---|
+| `review_input_too_large` | The bundle, candidate blob, or numbered hunk windows exceed a limit. The bundle error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The bundle check also reports `submodules` bytes when present. |
+| `unsupported_binary_diff` | A binary patch cannot be reviewed. The error names the path. |
+| `submodule_unavailable` | A submodule pin is unavailable locally. The error names the path and both pins. |
+
+These fields are additive in existing protocol versions. Retrying the same input cannot resolve these refusals.
 
 ## Per-review budget and finalization
 
@@ -91,11 +115,11 @@ Greenhouse enforces a wall-time budget for each reviewer attempt, including its 
 {"version": 2, "review_budget": "3m"}
 ```
 
-The shorter of this budget and `executor_timeout` applies. The controller reserves the last 20% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
+The shorter of this budget and `executor_timeout` applies. Reaching `executor_timeout` reports `timeout`; exhausting the shorter review budget reports `review_budget`. The controller reserves the last 20% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
 
 A missing or invalid final answer also triggers this turn, using the time left in the same budget. Finalization requests low reasoning effort and carries only the verdict contract, head, and paths; the original evidence remains in the session. There is at most one finalization turn. Authentication, quota, process failures, and model mismatches do not trigger output recovery. If the backend provides no resumable session, the attempt remains inconclusive and its log explains why. Native credentials and settings use private copies with mode `0400`. Claude onboarding state uses a writable private copy. Claude also receives a private `HOME`, so its home-level `.claude.json` resolves to that copy. The private session contains no links to the originals. Session writes use a private directory removed after review. When Landlock is unavailable, these copies prevent writes through session paths from reaching the originals; they do not provide OS isolation against direct access to other paths.
 
-Review input includes `ReviewBudget` and `ChangedHunks`, mapping changed paths to inclusive candidate line ranges. `Diff` and numbered `Files` are the starting evidence. `Files` contains changed hunks plus 20 context lines on each side, with `[omitted]` between excerpts. Pure deletions in surviving files anchor at the candidate hunk start, with a minimum of line 1. Whole-file deletions retain old-file ranges. Empty-diff repair reviews retain full files. The prompt permits reading dependencies to resolve a concrete question about a changed hunk, and tells the reviewer to stop when that evidence is sufficient.
+Review input includes `ReviewBudget` and `ChangedHunks`, mapping changed paths to inclusive candidate line ranges. `Diff` and numbered `Files` are the starting evidence. `Files` contains changed hunks plus up to 20 context lines on each side, with `[omitted]` between excerpts. The bounded windows described above may supply fewer context lines for large files. Pure deletions in surviving files anchor at the candidate hunk start, with a minimum of line 1. Whole-file deletions retain old-file ranges. Empty-diff repair reviews retain full files. The prompt permits reading dependencies to resolve a concrete question about a changed hunk, and tells the reviewer to stop when that evidence is sufficient.
 
 An out-of-range finding is dropped individually. Valid findings remain. When every finding is dropped and coverage is complete, the verdict becomes `clean`. Other identity, coverage, policy, and model validation still apply. `run.review.result.diagnostics` lists dropped findings; `run.review.diagnostic` and `host_result.diagnostic` expose the bounded, redacted explanation even for conclusive reviews.
 

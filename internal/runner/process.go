@@ -58,12 +58,15 @@ func WithProcessTimeout(ctx context.Context, timeout time.Duration) context.Cont
 	return context.WithValue(ctx, processTimeoutKey{}, timeout)
 }
 
-func ProcessContext(ctx context.Context) (context.Context, context.CancelFunc) {
-	timeout, ok := ctx.Value(processTimeoutKey{}).(time.Duration)
-	if !ok {
-		timeout = DefaultTimeout
+func ProcessTimeout(ctx context.Context) time.Duration {
+	if timeout, ok := ctx.Value(processTimeoutKey{}).(time.Duration); ok {
+		return timeout
 	}
-	return context.WithTimeout(ctx, timeout)
+	return DefaultTimeout
+}
+
+func ProcessContext(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, ProcessTimeout(ctx))
 }
 
 func RunProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (resultCode int, resultErr error) {
@@ -88,7 +91,11 @@ func RunProcess(ctx context.Context, dir, exe string, args []string, input []byt
 		if cmd.Process == nil {
 			return os.ErrProcessDone
 		}
-		return cmd.Process.Signal(syscall.SIGTERM)
+		signal := syscall.SIGTERM
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			signal = executorTimeoutSignal
+		}
+		return cmd.Process.Signal(signal)
 	}
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(input)

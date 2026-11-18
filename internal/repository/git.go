@@ -1,16 +1,45 @@
 package repository
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
-
-	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func Read(path string, args ...string) ([]byte, error) {
+	b, err := ReadBounded(path, 1024*1024, args...)
+	if err != nil {
+		return nil, err
+	}
+	return b, nil
+}
+
+var ErrReadLimit = errors.New("committed input exceeds read limit")
+
+type cappedOutput struct {
+	data     bytes.Buffer
+	limit    int
+	exceeded bool
+}
+
+func (b *cappedOutput) Write(p []byte) (int, error) {
+	n := len(p)
+	if n > b.limit-b.data.Len() {
+		b.exceeded = true
+		p = p[:b.limit-b.data.Len()]
+	}
+	b.data.Write(p)
+	if b.exceeded {
+		return len(p), ErrReadLimit
+	}
+	return n, nil
+}
+
+func ReadBounded(path string, limit int, args ...string) ([]byte, error) {
 	c := exec.Command("git", append([]string{"-C", path}, args...)...)
 	for _, v := range os.Environ() {
 		if !strings.HasPrefix(v, "GIT_") {
@@ -18,13 +47,27 @@ func Read(path string, args ...string) ([]byte, error) {
 		}
 	}
 	c.Env = append(c.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
-	b := runner.NewBuffer(1024 * 1024)
-	c.Stdout = b
-	err := c.Run()
-	if b.Exceeded() {
-		return nil, errors.New("committed input exceeds 1 MiB")
+	b := &cappedOutput{limit: limit}
+	stdout, err := c.StdoutPipe()
+	if err != nil {
+		return nil, err
 	}
-	return b.Bytes(), err
+	if err = c.Start(); err != nil {
+		return nil, err
+	}
+	_, readErr := io.Copy(b, stdout)
+	if readErr != nil {
+		_ = stdout.Close()
+		_ = c.Process.Kill()
+	}
+	err = c.Wait()
+	if readErr != nil && !b.exceeded {
+		return b.data.Bytes(), readErr
+	}
+	if b.exceeded {
+		return b.data.Bytes(), ErrReadLimit
+	}
+	return b.data.Bytes(), err
 }
 func CommittedTarget(path, target string) (string, error) {
 	if target == "" || strings.HasPrefix(target, "-") || strings.ContainsAny(target, "\x00\r\n") {
