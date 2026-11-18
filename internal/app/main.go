@@ -20,6 +20,11 @@ func Main() {
                           terminal, or TERM is unset or dumb.
   greenhouse axi          Read one JSON request from stdin; write one JSON
                           response to stdout. Invoke once per request.
+  greenhouse axi inspect|watch|pipeline|decide|cancel|transcript|logs [flags]
+                          Non-interactive protocol commands. Output is compact JSON.
+                          pipeline --intent <text> --wait 8m
+                          logs --step <stage> [--full|--offset N --follow --wait 1m]
+                          watch --stream <id> --after N --wait 1m
   greenhouse daemon       Run the local state daemon.
   greenhouse stop         Stop the daemon; refuse while work is running.
   greenhouse [-h|--help]   Show this help (also: greenhouse axi --help).
@@ -53,6 +58,12 @@ Complete host requests and response fields: docs/embedding.md
 				} else {
 					fmt.Fprintln(os.Stdout, v.Explanation)
 				}
+			}
+		case len(os.Args) > 2 && os.Args[1] == "axi":
+			var v engine.Response
+			v, e = axiCommand(h, path, os.Args[2:])
+			if e == nil {
+				e = json.NewEncoder(os.Stdout).Encode(compactResponse(v))
 			}
 		case len(os.Args) == 2 && os.Args[1] == "axi":
 			var q engine.Request

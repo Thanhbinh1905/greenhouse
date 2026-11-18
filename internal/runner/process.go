@@ -66,7 +66,13 @@ func ProcessContext(ctx context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(ctx, timeout)
 }
 
-func RunProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (int, error) {
+func RunProcess(ctx context.Context, dir, exe string, args []string, input []byte, env []string, stdout, stderr io.Writer) (resultCode int, resultErr error) {
+	if observer, ok := ctx.Value(observerKey{}).(ProcessObserver); ok {
+		var finish func(int, time.Duration)
+		stdout, stderr, finish = observer(append([]string{exe}, args...), stdout, stderr)
+		started := time.Now()
+		defer func() { finish(resultCode, time.Since(started)) }()
+	}
 	ctx, cancel := ProcessContext(ctx)
 	defer cancel()
 	self, err := os.Executable()

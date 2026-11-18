@@ -12,10 +12,11 @@ const transcriptLimit = 4 << 20
 const transcriptOmitted = "\n[transcript limit reached; later output omitted]\n"
 
 type TranscriptView struct {
-	Path    string `json:"path"`
-	Bytes   int    `json:"bytes"`
-	Limit   int    `json:"limit"`
-	Content string `json:"content"`
+	Steps   []*LogsView `json:"steps,omitempty"`
+	Path    string      `json:"path"`
+	Bytes   int         `json:"bytes"`
+	Limit   int         `json:"limit"`
+	Content string      `json:"content"`
 }
 
 var secretPatterns = []*regexp.Regexp{
@@ -92,6 +93,15 @@ func readTranscript(run string) (*TranscriptView, error) {
 	b, err := os.ReadFile(filepath.Join(h, view.Path))
 	if err != nil && !os.IsNotExist(err) {
 		return nil, err
+	}
+	for _, step := range []string{"review", "repair", "sync", "test", "docs", "lint", "push", "pr", "ci"} {
+		log, readErr := readLogs(run, Request{Step: step})
+		if readErr != nil {
+			return nil, readErr
+		}
+		if log.Bytes > 0 {
+			view.Steps = append(view.Steps, log)
+		}
 	}
 	view.Bytes, view.Content = len(b), string(b)
 	return view, nil
