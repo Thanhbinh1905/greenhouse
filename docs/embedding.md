@@ -93,7 +93,7 @@ Small files are numbered before applying the review context window. Larger files
 
 A gitlink has a synthetic `Files` entry: `1: Subproject commit <new pin>`. Findings on that path use line 1. Finding identities normalize this synthetic content using the same `code-v1` calculation as text. `Submodules` contains `Path`, `Old`, `New`, `Log`, `Diff`, and `Truncated`. Pins come from the review base and candidate trees. Logs and diffs each retain at most 128 KiB; `Truncated` and an omission marker identify shortened ranges. Added or removed gitlinks have no two-pin range.
 
-Greenhouse resolves submodule objects locally through the initialized worktree, its `.git` file, or the common Git directory's `modules/<name>` repository. The name comes from the candidate `.gitmodules`. Admission never fetches or initializes a submodule.
+For two-pin ranges, Greenhouse resolves submodule objects locally through the initialized worktree, its `.git` file, or the common Git directory's `modules/<name>` repository. The name comes from the candidate `.gitmodules`. Added or removed gitlinks need no local submodule objects. Admission never fetches or initializes a submodule.
 
 The complete JSON bundle must fit within 2 MiB. Admission refusals retain `outcome: "refused"` and `error`, and add `error_code` and `retryable: false`:
 

@@ -126,6 +126,10 @@ func reviewSubmodules(worktree, base, candidate string, names []string) ([]revie
 			oldPin = ""
 		}
 		m := reviewSubmodule{Path: path, Old: oldPin, New: newPin}
+		if oldMode != "160000" || mode != "160000" {
+			modules = append(modules, m)
+			continue
+		}
 		found := ""
 		for _, location := range submoduleLocations(worktree, candidate, path) {
 			good := true
@@ -145,10 +149,6 @@ func reviewSubmodules(worktree, base, candidate string, names []string) ([]revie
 		}
 		if found == "" {
 			return nil, &reviewRefusal{"submodule_unavailable", fmt.Sprintf("submodule unavailable: path=%s old=%s new=%s; both pins must be local", path, oldPin, newPin)}
-		}
-		if oldMode != "160000" || mode != "160000" {
-			modules = append(modules, m)
-			continue
 		}
 		stats, err := repository.Read(found, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--numstat", "-z", oldPin, newPin, "--")
 		if err != nil {

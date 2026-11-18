@@ -275,3 +275,78 @@ func TestReviewInputUnevenFilesFitAggregate(t *testing.T) {
 		t.Fatal("full content lost despite available budget")
 	}
 }
+
+func TestReviewAddedAndRemovedGitlinksWithoutLocalObjects(t *testing.T) {
+	for _, mode := range []string{"removed", "added"} {
+		t.Run(mode, func(t *testing.T) {
+			bin, repo, home := fixture(t)
+			sub := filepath.Join(filepath.Dir(home), "local-sub")
+			if err := os.Mkdir(sub, 0700); err != nil {
+				t.Fatal(err)
+			}
+			git(t, sub, "init", "-b", "main")
+			if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte("implementation\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			pin := commitReviewFixture(t, sub, "submodule implementation")
+			target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+			git(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", "--name", "library", sub, "deps/lib")
+			head := commitReviewFixture(t, repo, "add submodule")
+			if mode == "removed" {
+				target = head
+				git(t, repo, "rm", "-f", "deps/lib")
+				git(t, repo, "rm", "-f", ".gitmodules")
+				commitReviewFixture(t, repo, "remove submodule and mapping")
+			} else {
+				git(t, repo, "submodule", "deinit", "-f", "--", "deps/lib")
+			}
+			if err := os.RemoveAll(filepath.Join(repo, ".git", "modules", "library")); err != nil {
+				t.Fatal(err)
+			}
+			v := prepareReviewAdmission(t, bin, repo, home, target)
+			installFake(t, home, `v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[]}
+print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
+print(json.dumps({"type":"agent_settled","aborted":False}))
+sys.exit(0)
+`)
+			v = mutate(t, bin, repo, home, v, "review", "one-sided-gitlink", nil)
+			if v["outcome"] != "ok" {
+				t.Fatalf("%s gitlink review refused: code=%v error=%v", mode, v["error_code"], v["error"])
+			}
+			review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+			if review["status"] != "clean-review" {
+				t.Fatalf("%s review did not complete: %v", mode, review)
+			}
+			data, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var capture struct {
+				Input struct {
+					Paths      []string
+					Files      []reviewFile
+					Submodules []reviewSubmodule
+				}
+			}
+			if err := json.Unmarshal(data, &capture); err != nil {
+				t.Fatal(err)
+			}
+			want := reviewSubmodule{Path: "deps/lib", New: pin}
+			if mode == "removed" {
+				want.Old, want.New = pin, ""
+			}
+			if len(capture.Input.Submodules) != 1 || capture.Input.Submodules[0] != want {
+				t.Fatalf("%s gitlink metadata: got %+v, want %+v", mode, capture.Input.Submodules, want)
+			}
+			if strings.Join(capture.Input.Paths, ",") != ".gitmodules,deps/lib" {
+				t.Fatalf("%s gitlink lost coverage: %v", mode, capture.Input.Paths)
+			}
+			if mode == "removed" && len(capture.Input.Files) != 0 {
+				t.Fatalf("deleted paths retained candidate content: %+v", capture.Input.Files)
+			}
+			if mode == "added" && (len(capture.Input.Files) != 2 || capture.Input.Files[1] != (reviewFile{Path: "deps/lib", Lines: "1: Subproject commit " + pin + "\n"})) {
+				t.Fatalf("added gitlink lost candidate content: %+v", capture.Input.Files)
+			}
+		})
+	}
+}
