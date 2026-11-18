@@ -57,8 +57,8 @@ func ReadBounded(path string, limit int, args ...string) ([]byte, error) {
 	}
 	_, readErr := io.Copy(b, stdout)
 	if readErr != nil {
-		stdout.Close()
-		c.Process.Kill()
+		_ = stdout.Close()
+		_ = c.Process.Kill()
 	}
 	err = c.Wait()
 	if readErr != nil && !b.exceeded {
