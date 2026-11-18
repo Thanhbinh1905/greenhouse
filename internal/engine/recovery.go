@@ -125,8 +125,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 			done = reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
 			if i == 1 {
 				done.Finalization = true
-				done.Answer.Usage = addUsage(previous.Answer.Usage, done.Answer.Usage)
-				done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
+				done.Answer = finalReviewAnswer(previous.Answer, done.Answer)
 			}
 			if budget, err := time.ParseDuration(x.ReviewBudget); err == nil && budget < executorTimeout(r.Configs[len(r.Configs)-1].Settings) && errors.Is(stopErr, context.DeadlineExceeded) {
 				done.Status, done.Answer.Reason, done.Answer.Diagnostic = "inconclusive", "review_budget", "review wall-time budget exhausted"

@@ -107,10 +107,11 @@ func TestAdoptFinalizedTimeoutValidatesInputAndUsage(t *testing.T) {
 				Stdout:           []byte(`{"type":"message_end","message":{"role":"assistant","usage":{"totalTokens":120}}}`),
 			})
 		}
+		observed[0].Stdout = []byte(`{"type":"message_end","message":{"role":"assistant","model":"reported","usage":{"totalTokens":120}}}`)
 		if adopted := adoptRecorded(r, observed); adopted != valid {
 			t.Fatalf("adopted=%t for valid input=%t", adopted, valid)
 		}
-		if valid && (!x.Finalization || x.Reason != "timeout" || x.Usage.Tokens != 240 || len(r.Attempts) != 1 || r.Attempts[0].Usage.Tokens != 240) {
+		if valid && (!x.Finalization || x.ReportedModel != "reported" || x.Reason != "timeout" || x.Usage.Tokens != 240 || len(r.Attempts) != 1 || r.Attempts[0].Usage.Tokens != 240) {
 			t.Fatalf("finalized timeout lost evidence: finalization=%t reason=%s usage=%+v attempts=%+v", x.Finalization, x.Reason, x.Usage, r.Attempts)
 		}
 	}

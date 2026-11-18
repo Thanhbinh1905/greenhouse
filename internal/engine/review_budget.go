@@ -201,6 +201,18 @@ func addUsage(a, b TokenUsage) TokenUsage {
 	return TokenUsage{InputTokens: a.InputTokens + b.InputTokens, OutputTokens: a.OutputTokens + b.OutputTokens, CachedInputTokens: a.CachedInputTokens + b.CachedInputTokens, Tokens: a.Tokens + b.Tokens, CostUSD: a.CostUSD + b.CostUSD}
 }
 
+func finalReviewAnswer(first, final agentAnswer) agentAnswer {
+	if final.Model == "" {
+		final.Model = first.Model
+	}
+	if final.Provider == "" {
+		final.Provider = first.Provider
+	}
+	final.Usage = addUsage(first.Usage, final.Usage)
+	final.Tokens, final.CostUSD = final.Usage.Tokens, final.Usage.CostUSD
+	return final
+}
+
 func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (reviewOutcome, runner.Confinement) {
 	s, err := newReviewSession(x, dir)
 	if err != nil {
@@ -251,8 +263,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		if ok {
 			data := reviewFinalizationInput(x, first, nearLimit)
 			final, _ := run(ctx, args, data)
-			final.Answer.Usage = addUsage(first.Answer.Usage, final.Answer.Usage)
-			final.Answer.Tokens, final.Answer.CostUSD = final.Answer.Usage.Tokens, final.Answer.Usage.CostUSD
+			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
 			if ctx.Err() != nil && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
