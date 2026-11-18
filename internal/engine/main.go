@@ -107,6 +107,10 @@ type Run struct {
 	ReviewBaseReason string `json:"review_base_reason,omitempty"`
 }
 type Request struct {
+	Step     string    `json:"step,omitempty"`
+	Offset   *int64    `json:"offset,omitempty"`
+	Full     bool      `json:"full,omitempty"`
+	Follow   bool      `json:"follow,omitempty"`
 	Version  int       `json:"version"`
 	Op       string    `json:"op"`
 	Path     string    `json:"path"`
@@ -133,6 +137,8 @@ type Request struct {
 	Responses []ResolutionResponse `json:"responses,omitempty"`
 }
 type Response struct {
+	Delivery    *DeliveryView     `json:"delivery,omitempty"`
+	Logs        *LogsView         `json:"logs,omitempty"`
 	Models      []string          `json:"models,omitempty"`
 	RuleScope   string            `json:"rule_scope,omitempty"`
 	Rules       []RuleEvidence    `json:"rules,omitempty"`
@@ -409,6 +415,7 @@ func view(s *Store, r *Run) Response {
 		v.Token = r.Token
 		v.Gate = currentGate(r)
 		id, e := repository.Resolve(r.Submitted.Worktree)
+		v.Delivery = deliveryView(r, id, e)
 		safe := e == nil && id.Repository == r.Submitted.Repository && id.Worktree == r.Submitted.Worktree && r.Status != "running" && r.Status != "cancelling" && r.Status != "writing" && r.Status != "recovery-required"
 		held := custodyHeld(s, r)
 		if held {
@@ -589,6 +596,9 @@ func handleRequest(s *Store, q Request) Response {
 	if e := checkVersion(q); e != nil {
 		return fail(e.Error(), nil)
 	}
+	if q.Op == "pipeline" && (q.WaitMS < 0 || q.WaitMS > 86400000) {
+		return fail("pipeline wait_ms must be between 0 and 86400000", nil)
+	}
 	id, e := repository.Resolve(q.Path)
 	if e != nil {
 		return fail(e.Error(), nil)
@@ -628,7 +638,7 @@ func handleRequest(s *Store, q Request) Response {
 		}
 		return v
 	}
-	if q.Op == "transcript" {
+	if q.Op == "logs" || q.Op == "transcript" {
 		target := r
 		if q.RunID != "" {
 			var err error
@@ -639,6 +649,18 @@ func handleRequest(s *Store, q Request) Response {
 		}
 		if target == nil || target.Submitted.Repository != id.Repository {
 			return fail("unknown run for this repository; historical data may have been pruned", r)
+		}
+		if q.Op == "logs" {
+			if q.WaitMS < 0 || q.WaitMS > maxWaitMillis {
+				return fail("wait_ms must be between 0 and 60000", r)
+			}
+			logs, err := readLogs(target.ID, q)
+			if err != nil {
+				return fail(err.Error(), r)
+			}
+			v := view(s, target)
+			v.Logs = logs
+			return v
 		}
 		transcript, err := readTranscript(target.ID)
 		if err != nil {
@@ -789,6 +811,32 @@ func handleRequest(s *Store, q Request) Response {
 			return fail(err.Error(), r)
 		}
 	} else if q.Op == "pipeline" {
+		if q.Intent != "" && !ValidText(q.Intent) {
+			return fail("invalid intent", r)
+		}
+		if q.Target != "" && r.Target != "" {
+			target, err := repository.CommittedTarget(r.Submitted.Worktree, q.Target)
+			if err != nil {
+				return fail(err.Error(), r)
+			}
+			if target != r.Target {
+				return fail("target is immutable after preparation", r)
+			}
+		}
+		if q.Intent != "" && r.Pipeline == nil && ownReviews(r) == 0 {
+			candidate := *r
+			candidate.Configs = append([]Snapshot(nil), r.Configs...)
+			settings := candidate.Configs[len(candidate.Configs)-1].Settings
+			settings.Preset = "full"
+			candidate.Configs = append(candidate.Configs, Snapshot{ID: opaque(), Settings: settings, Source: "pipeline intent"})
+			if err := prepareRun(&candidate, q.Intent, q.Target); err != nil {
+				return fail(err.Error(), r)
+			}
+			candidate.RuleSnapshots = append(candidate.RuleSnapshots, resolveRules(&candidate))
+			*r = candidate
+		} else if q.Intent != "" && q.Intent != r.Intent {
+			return fail("intent is immutable after preparation", r)
+		}
 		if err := admitPipeline(s, r); err != nil {
 			return fail(err.Error(), r)
 		}
@@ -1036,6 +1084,13 @@ func Daemon(h string) error {
 			cancel()
 		}
 	}()
+	processEvents := make(chan FeedEvent)
+	emit := func(event FeedEvent) {
+		select {
+		case processEvents <- event:
+		case <-stopped:
+		}
+	}
 	events := newFeed(s)
 	defer events.close()
 	checkpoint := func(runID, id string) func(*Repair) bool {
@@ -1086,6 +1141,11 @@ func Daemon(h string) error {
 			o := stepOutcome{Run: r.ID, Step: step.ID}
 			ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 			ctx = runner.WithExecutor(ctx, step.ID, Home)
+			logStep := step.Stage
+			if step.Kind == "repair" || step.Kind == "conflict" {
+				logStep = "repair"
+			}
+			ctx = observeProcesses(ctx, r.ID, logStep, emit)
 			pc, target, candidate, source := *p, r.Target, r.Candidate, r.Submitted
 			var review Execution
 			if r.Review != nil {
@@ -1103,8 +1163,24 @@ func Daemon(h string) error {
 				case "commands":
 					o.Stage = runStageCommands(ctx, pc, step.Stage, candidate)
 				case "delivery":
+					started := time.Now()
+					event := FeedEvent{Run: o.Run, Stage: step.Stage, Execution: step.ID, Command: []string{"greenhouse", step.Stage}, Kind: "step-started"}
+					if step.Stage != "push" {
+						emit(event)
+					}
 					o.Stage, o.Head, o.URL = runDeliveryStage(ctx, pc, step.Stage, candidate)
 					o.Status, o.Log = o.Stage.Status, o.Stage.Reason
+					if step.Stage != "push" {
+						code := 0
+						event.Kind = "step-finished"
+						if o.Status != "passed" {
+							code = 1
+							event.Kind = "step-failed"
+						}
+						elapsed := time.Since(started).Milliseconds()
+						event.ExitCode, event.ElapsedMS = &code, &elapsed
+						emit(event)
+					}
 				case "review":
 					reviewed := executeReview(ctx, &review)
 					o.Finalization = reviewed.Finalization
@@ -1157,6 +1233,7 @@ func Daemon(h string) error {
 				active[r.ID] = cancel
 				ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 				ctx = runner.WithExecutor(ctx, x.ID, Home)
+				ctx = observeProcesses(ctx, r.ID, "repair", emit)
 				go func(runID string, repair Repair, source repository.Identity, ctx context.Context, cancel context.CancelFunc) {
 					defer cancel()
 					executeRepair(ctx, &repair, source, func(value *Repair) bool {
@@ -1186,6 +1263,7 @@ func Daemon(h string) error {
 			ctx, cancel := context.WithCancel(context.Background())
 			active[r.ID] = cancel
 			ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
+			ctx = observeProcesses(ctx, r.ID, "review", emit)
 			runID, x := r.ID, *r.Review
 			go func() {
 				reviewed := executeReview(ctx, &x)
@@ -1207,6 +1285,7 @@ func Daemon(h string) error {
 	defer orphanProbe.Stop()
 	subscribers := time.NewTimer(time.Hour)
 	defer subscribers.Stop()
+	events.recordStage = logStageResult
 	for {
 		events.observe(s)
 		events.flush(s, time.Now())
@@ -1218,6 +1297,16 @@ func Daemon(h string) error {
 		}
 		var c net.Conn
 		select {
+		case event := <-processEvents:
+			if len(event.Checks) > 0 {
+				if r := s.Runs[event.Run]; r != nil && r.Pipeline != nil {
+					if stage := r.Pipeline.stage("ci"); stage != nil {
+						stage.Checks = event.Checks
+					}
+				}
+			}
+			events.append(event)
+			continue
 		case c = <-pending:
 		case <-subscribers.C:
 			continue
@@ -1352,7 +1441,7 @@ func Daemon(h string) error {
 			}
 			continue
 		}
-		if e == nil && q.Op == "watch" {
+		if e == nil && (q.Op == "watch" || q.Op == "logs") {
 			var parked bool
 			if v, parked = events.subscribe(s, c, q); parked {
 				continue
@@ -1407,6 +1496,16 @@ func Daemon(h string) error {
 			}
 			if e = launch(); e != nil {
 				return e
+			}
+		}
+		if q.Op == "pipeline" && q.WaitMS > 0 && v.Outcome == "ok" && executionActive(v.Run) {
+			if len(events.waiters) >= waiterLimit {
+				v.Wait = "elapsed"
+			} else {
+				q.RunID = v.RunID
+				c.SetDeadline(time.Time{})
+				events.waiters = append(events.waiters, &waiter{conn: c, q: q, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
+				continue
 			}
 		}
 		stamp(&v, q.Version)

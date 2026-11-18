@@ -40,17 +40,18 @@ type CommandPlan struct {
 	Grants         []PlanGrant       `json:"grants,omitempty"`
 }
 type StageResult struct {
-	Name      string        `json:"name"`
-	URL       string        `json:"url,omitempty"`
-	Head      string        `json:"head,omitempty"`
-	Number    int           `json:"number,omitempty"`
-	Status    string        `json:"status"`
-	Inputs    string        `json:"inputs,omitempty"`
-	Candidate string        `json:"candidate,omitempty"`
-	Reason    string        `json:"reason,omitempty"`
-	Commands  []CheckResult `json:"commands,omitempty"`
-	Runs      int           `json:"runs"`
-	Repairs   int           `json:"repairs"`
+	Checks    []forge.CheckState `json:"checks,omitempty"`
+	Name      string             `json:"name"`
+	URL       string             `json:"url,omitempty"`
+	Head      string             `json:"head,omitempty"`
+	Number    int                `json:"number,omitempty"`
+	Status    string             `json:"status"`
+	Inputs    string             `json:"inputs,omitempty"`
+	Candidate string             `json:"candidate,omitempty"`
+	Reason    string             `json:"reason,omitempty"`
+	Commands  []CheckResult      `json:"commands,omitempty"`
+	Runs      int                `json:"runs"`
+	Repairs   int                `json:"repairs"`
 }
 type Step struct {
 	ID    string `json:"id"`
@@ -741,6 +742,7 @@ func completeStep(r *Run, o stepOutcome) error {
 	case "delivery":
 		st.Status, st.Reason, st.Head, st.URL, st.Number = o.Status, o.Log, o.Head, o.URL, o.Stage.Number
 		st.Commands = append(st.Commands, o.Stage.Commands...)
+		st.Checks = o.Stage.Checks
 		if o.Status == "unknown-outcome" {
 			holdRecovery(r, "delivery", st.Name, step.ID, o.Log)
 			return nil
@@ -868,7 +870,9 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 		return res, nil
 	}
 	out := &tailBuffer{limit: 16384}
-	code, err := runner.RunProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), out, out)
+	safeOut := &logWriter{output: out}
+	code, err := runner.RunProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), safeOut, safeOut)
+	safeOut.flush()
 	res.Exit = code
 	res.Output = out.String()
 	res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", code, out.total, out.truncated())
@@ -976,7 +980,7 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 		}
 		out.Status, out.URL, out.Number, out.Reason = "passed", pr.URL, pr.Number, "pull request created or reconciled for exact candidate"
 	case "ci":
-		forge, err := forge.Configured()
+		client, err := forge.Configured()
 		if err != nil {
 			out.Status, out.Reason = "failed", err.Error()
 			return out, candidate, ""
@@ -986,10 +990,20 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 			out.Status, out.Reason = "needs-decision", "persisted pull request identity is missing or stale"
 			return out, candidate, ""
 		}
+		ctx = forge.WithCheckObserver(ctx, func(checks []forge.CheckState) {
+			out.Checks = checks
+			if progress, ok := ctx.Value(checkProgressKey{}).(func([]forge.CheckState)); ok {
+				progress(checks)
+			}
+			b, _ := json.Marshal(checks)
+			if log, ok := ctx.Value(stageLogKey{}).(func([]byte)); ok {
+				log(append(b, '\n'))
+			}
+		})
 		deadline := time.NewTimer(10 * time.Minute)
 		defer deadline.Stop()
 		for {
-			passed, reason, err := forge.Checks(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, candidate, pr.Number, p.Plan.RequiredChecks)
+			passed, reason, err := client.Checks(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, candidate, pr.Number, p.Plan.RequiredChecks)
 			if err != nil {
 				out.Status, out.Reason = "failed", "check inspection failed: "+err.Error()
 				return out, candidate, ""
