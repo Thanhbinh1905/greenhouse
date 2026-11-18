@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -139,3 +140,19 @@ func (w cancelOnOutput) Write(p []byte) (int, error) {
 	w.cancel()
 	return n, err
 }
+func TestProcessObserverReceivesZeroExitError(t *testing.T) {
+	outputErr := errors.New("output unavailable")
+	var observedErr error
+	observedCode := -1
+	ctx := runner.WithObserver(context.Background(), func(_ []string, stdout, stderr io.Writer) (io.Writer, io.Writer, func(int, error, time.Duration)) {
+		return stdout, stderr, func(code int, err error, _ time.Duration) { observedCode, observedErr = code, err }
+	})
+	code, err := runner.RunProcess(ctx, t.TempDir(), "/bin/sh", []string{"-c", "printf output"}, nil, os.Environ(), failingOutput{outputErr}, io.Discard)
+	if code != 0 || !errors.Is(err, outputErr) || observedCode != code || !errors.Is(observedErr, outputErr) {
+		t.Fatalf("completion: result=(%d, %v) observed=(%d, %v)", code, err, observedCode, observedErr)
+	}
+}
+
+type failingOutput struct{ err error }
+
+func (w failingOutput) Write([]byte) (int, error) { return 0, w.err }

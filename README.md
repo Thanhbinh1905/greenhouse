@@ -70,6 +70,8 @@ printf '%s\n' '{"version":2,"op":"attach"}' | /path/to/greenhouse axi
 
 The daemon accepts protocol versions 1 and 2, answers in the requested version, and reports its range in `protocol`. Version 2 adds `watch` and host mode. See the [compatibility policy](docs/compatibility.md).
 
+For a full run without a terminal, see the [Worker contract v1](docs/worker-contract-v1.md). It covers AXI subcommands, progress, output, decisions, and delivery verification.
+
 For host integration, see the [embedding contract](docs/embedding.md) for complete requests, prepare fields, and the grant-based review flow.
 
 Git identity commands discard inherited `GIT_*` variables so the daemon cannot reuse the first client's repository selection for later clients. The invoking path determines identity, including linked worktrees.

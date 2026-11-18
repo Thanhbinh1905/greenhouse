@@ -153,6 +153,26 @@ func (g GitHubForge) Checks(ctx context.Context, owner, repo, head string, pullN
 	if err := g.request(ctx, http.MethodGet, path, nil, &result); err != nil {
 		return false, "", err
 	}
+	if observe, ok := ctx.Value(checkObserverKey{}).(func([]CheckState)); ok {
+		states := make([]CheckState, 0, len(required))
+		for _, name := range required {
+			state := CheckState{Name: name, Status: "missing", Head: head}
+			matches := 0
+			for _, check := range result.CheckRuns {
+				if check.Name == name {
+					matches++
+					state.Status, state.Conclusion, state.Head = check.Status, check.Conclusion, check.HeadSHA
+				}
+			}
+			if matches > 1 {
+				state.Status = "duplicate"
+			} else if matches == 1 && state.Head != head {
+				state.Status = "stale"
+			}
+			states = append(states, state)
+		}
+		observe(states)
+	}
 	if pullNumber <= 0 || len(required) == 0 {
 		return false, "trusted PR identity and required check names are missing", nil
 	}

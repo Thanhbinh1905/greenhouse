@@ -168,8 +168,11 @@ func recordedCommands(p *Pipeline, stage string, observed []runner.ObservedExecu
 		}
 		o := observed[i]
 		tail := &tailBuffer{limit: 16384}
-		tail.Write(o.Stdout)
-		tail.Write(o.Stderr)
+		safeOut := &logWriter{output: tail}
+		safeOut.Write(o.Stdout)
+		safeOut.flush()
+		safeOut.Write(o.Stderr)
+		safeOut.flush()
 		tail.total = int(o.Record.Stdout + o.Record.Stderr)
 		res := CheckResult{Args: args, ExecutableDigest: p.CommandDigests[args[0]], Exit: o.Exit, Output: tail.String(), Status: "passed"}
 		res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", o.Exit, tail.total, tail.truncated())
