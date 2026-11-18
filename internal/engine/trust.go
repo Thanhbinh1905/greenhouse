@@ -14,13 +14,15 @@ import (
 )
 
 const overrideName = ".greenhouse.json"
+const pipelinePlanName = ".greenhouse-pipeline.json"
 const overrideVersion = 1
 
 const (
-	sourceBuiltIn    = "built-in default"
-	sourcePerUser    = "per-user"
-	sourceRepository = "trusted repository override"
-	sourceRunLocal   = "run-local"
+	sourceBuiltIn            = "built-in default"
+	sourcePerUser            = "per-user"
+	sourceRepository         = "trusted repository override"
+	sourceRepositoryPipeline = "trusted repository pipeline plan"
+	sourceRunLocal           = "run-local"
 )
 
 var settingFields = []string{"mode", "preset", "limit", "rules", "reviewer_backend", "reviewer_model", "fixer_backend", "fixer_model", "executor_timeout", "auto_resume"}
@@ -28,20 +30,26 @@ var settingFields = []string{"mode", "preset", "limit", "rules", "reviewer_backe
 var authorityKeys = map[string]bool{"executable": true, "checks": true, "test": true, "lint": true, "docs": true, "commands": true, "grants": true, "repairs": true, "repair_limit": true, "remote": true, "required_checks": true, "yolo": true, "providers": true, "provider": true, "fallback": true, "claude": true, "codex": true, "name": true, "email": true}
 
 type Trust struct {
-	Repository string `json:"repository"`
-	Path       string `json:"path"`
-	Digest     string `json:"digest"`
-	Actor      string `json:"actor"`
-	Reason     string `json:"reason"`
-	Action     string `json:"action_id"`
+	Repository     string `json:"repository"`
+	PipelinePath   string `json:"pipeline_path,omitempty"`
+	PipelineDigest string `json:"pipeline_digest,omitempty"`
+	Path           string `json:"path"`
+	Digest         string `json:"digest"`
+	Actor          string `json:"actor"`
+	Reason         string `json:"reason"`
+	Action         string `json:"action_id"`
 }
 
 type RepositoryStatus struct {
-	Path    string `json:"path"`
-	Status  string `json:"status"`
-	Reason  string `json:"reason,omitempty"`
-	Digest  string `json:"digest"`
-	Trusted *Trust `json:"trusted,omitempty"`
+	Path           string `json:"path"`
+	Status         string `json:"status"`
+	Reason         string `json:"reason,omitempty"`
+	Digest         string `json:"digest"`
+	Trusted        *Trust `json:"trusted,omitempty"`
+	PipelinePath   string `json:"pipeline_path"`
+	PipelineDigest string `json:"pipeline_digest"`
+	PipelineStatus string `json:"pipeline_status"`
+	PipelineReason string `json:"pipeline_reason,omitempty"`
 }
 
 func settingValues(s Settings) map[string]string {
@@ -121,11 +129,50 @@ func overrideDigest(b []byte) string {
 	return runner.BytesDigest(b)
 }
 
+func pipelineTrustKey(id repository.Identity) string {
+	return id.Repository + "\x00pipeline:" + id.Worktree
+}
+
+func repositoryPipeline(s *Store, id repository.Identity) (string, []byte, RepositoryStatus) {
+	path := filepath.Join(id.Worktree, pipelinePlanName)
+	info, err := os.Lstat(path)
+	status := RepositoryStatus{PipelinePath: path, PipelineDigest: "absent", PipelineStatus: "absent"}
+	if os.IsNotExist(err) {
+		return path, nil, status
+	}
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 65536 {
+		status.PipelineStatus, status.PipelineReason = "ignored", "repository pipeline plan must be a regular file of at most 64 KiB"
+		return path, nil, status
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		status.PipelineStatus, status.PipelineReason = "ignored", err.Error()
+		return path, nil, status
+	}
+	status.PipelineStatus, status.PipelineDigest = "present", runner.BytesDigest(b)
+	if trust, ok := s.Trust[pipelineTrustKey(id)]; ok && trust.PipelinePath == path {
+		status.Trusted = &trust
+		if trust.PipelineDigest != status.PipelineDigest {
+			status.PipelineStatus, status.PipelineReason = "ignored", "repository pipeline plan changed since it was trusted; trust it again"
+		} else {
+			status.PipelineStatus = "trusted"
+		}
+	} else {
+		status.PipelineStatus, status.PipelineReason = "ignored", "repository pipeline plan is not trusted"
+	}
+	return path, b, status
+}
+
 func repositoryDefaults(s *Store, id repository.Identity) (Settings, map[string]string, RepositoryStatus) {
 	settings, sources := s.Defaults, userSources(s)
 	path, b, err := readOverride(id.Worktree)
 	status := RepositoryStatus{Path: path, Digest: overrideDigest(b)}
-	if trust, ok := s.Trust[id.Repository]; ok {
+	_, _, pipelineStatus := repositoryPipeline(s, id)
+	status.PipelinePath = pipelineStatus.PipelinePath
+	status.PipelineDigest = pipelineStatus.PipelineDigest
+	status.PipelineStatus = pipelineStatus.PipelineStatus
+	status.PipelineReason = pipelineStatus.PipelineReason
+	if trust, ok := s.Trust[id.Repository]; ok && trust.Path == path {
 		status.Trusted = &trust
 	}
 	switch {
@@ -265,7 +312,10 @@ func saveRepositoryOverride(s *Store, id repository.Identity, settings Settings,
 	if err := replaceFile(status.Path, content, 0644); err != nil {
 		return err
 	}
-	s.Trust[id.Repository] = Trust{Repository: id.Repository, Path: status.Path, Digest: runner.BytesDigest(content), Actor: actor, Reason: "saved: " + reason, Action: action}
+	trust := s.Trust[id.Repository]
+	trust.Repository, trust.Path, trust.Digest = id.Repository, status.Path, runner.BytesDigest(content)
+	trust.Actor, trust.Reason, trust.Action = actor, "saved: "+reason, action
+	s.Trust[id.Repository] = trust
 	return nil
 }
 
@@ -319,6 +369,16 @@ func OverrideLine(o *RepositoryStatus) string {
 		return "Repository override: " + overrideName + " applied to new runs"
 	}
 	return "Repository override: " + overrideName + " IGNORED: " + o.Reason
+}
+
+func PipelinePlanLine(o *RepositoryStatus) string {
+	switch o.PipelineStatus {
+	case "absent":
+		return "Repository pipeline plan: none (no " + pipelinePlanName + ")"
+	case "trusted":
+		return "Repository pipeline plan: " + pipelinePlanName + " trusted for new full runs"
+	}
+	return "Repository pipeline plan: " + pipelinePlanName + " IGNORED: " + o.PipelineReason
 }
 
 func sourceClean(worktree, trusted string) error {

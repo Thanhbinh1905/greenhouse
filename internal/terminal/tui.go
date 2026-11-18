@@ -590,6 +590,9 @@ func (m *tuiModel) start(a tuiAction) tea.Cmd {
 		switch a.Op {
 		case "trust":
 			q.Digest, q.Reason = m.v.Repository.Digest, "terminal trust"
+			if m.v.Repository.Status != "ignored" && m.v.Repository.PipelineStatus == "ignored" && m.v.Repository.PipelineDigest != "absent" {
+				q.Digest = m.v.Repository.PipelineDigest
+			}
 		case "migrate":
 			q.Reason = "terminal migrate"
 		}

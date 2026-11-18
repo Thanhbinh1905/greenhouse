@@ -37,7 +37,7 @@ var tuiActions = map[string]tuiAction{
 	"rerun-from-start":   {ID: "rerun-from-start", Op: "rerun-from-start", Label: "Rerun from start", Hint: "Keep this run and start a linked run with the same settings, intent and target.", Confirm: "rerun"},
 	"new":                {ID: "new", Op: "new", Label: "Start a new run", Hint: "Retain this run's evidence and start a new run for the current head.", Confirm: "new"},
 	"migrate":            {ID: "migrate", Op: "migrate", Label: "Migrate configuration", Hint: "Upgrade older configuration files. Each keeps a backup.", Confirm: "migrate"},
-	"trust":              {ID: "trust", Op: "trust", Label: "Trust repository override", Hint: "Apply this repository's .greenhouse.json to new runs. The current run does not change.", Confirm: "trust"},
+	"trust":              {ID: "trust", Op: "trust", Label: "Trust repository configuration", Hint: "Trust the inspected repository settings or pipeline plan for new runs.", Confirm: "trust"},
 	"settings":           {ID: "settings", Label: "Settings", Hint: "Draft mode, preset, budget, agents, models and rules; Apply or Save explicitly."},
 	"details":            {ID: "details", Label: "Details", Hint: "Run IDs, digests, sources, rules, criteria and the full controller state."},
 	"logs":               {ID: "logs", Label: "Transcript log", Hint: "The last lines of the redacted reviewer and fixer transcript."},
@@ -181,11 +181,9 @@ func menuItems(v engine.Response, fresh bool) []tuiAction {
 	return items
 }
 
-// trustable reports an override file the repository status shows as present
-// but not applied; the controller still checks its digest.
 func trustable(v engine.Response) bool {
 	o := v.Repository
-	return o != nil && o.Status == "ignored" && o.Digest != "absent" && o.Digest != ""
+	return o != nil && (o.Status == "ignored" && o.Digest != "absent" && o.Digest != "" || o.PipelineStatus == "ignored" && o.PipelineDigest != "absent" && o.PipelineDigest != "")
 }
 
 type tuiStep struct {
@@ -395,6 +393,9 @@ func stateNotes(v engine.Response, agents []string, fresh bool) []string {
 	}
 	if trustable(v) {
 		notes = append(notes, engine.OverrideLine(v.Repository)+".")
+	}
+	if v.Repository != nil {
+		notes = append(notes, engine.PipelinePlanLine(v.Repository)+".")
 	}
 	return notes
 }

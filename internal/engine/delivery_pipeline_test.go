@@ -502,7 +502,7 @@ func TestInterruptedDeliveryStagesReconcileFromDurableState(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			home := t.TempDir()
 			settings := Settings{Mode: "auto", Preset: "full", Limit: 4, Rules: []string{"unslop"}}
-			run := &Run{ID: "run", Input: "input", Token: "token", Candidate: "candidate", Status: "running", Configs: []Snapshot{{ID: "config", Settings: settings}}, Pipeline: newPipeline(CommandPlan{}, map[string]string{})}
+			run := &Run{ID: "run", Input: "input", Token: "token", Candidate: "candidate", Status: "running", Configs: []Snapshot{{ID: "config", Settings: settings}}, Pipeline: newPipeline(CommandPlan{}, map[string]string{}, "per-user")}
 			run.Pipeline.Status = "running"
 			run.Pipeline.Active = &Step{ID: "step", Stage: name, Kind: "delivery"}
 			st := run.Pipeline.stage(name)
