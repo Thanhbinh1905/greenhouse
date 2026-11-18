@@ -92,8 +92,8 @@ func TestOnePassReviewThroughClaudeAndCodex(t *testing.T) {
 			args := strs(calls[0]["args"])
 			joined := strings.Join(args, " ")
 			for _, required := range map[string][]string{
-				"claude": {"-p", "--output-format stream-json", "--json-schema", "--model " + c.model, "--tools Read,Grep,Glob", "--no-session-persistence", "--safe-mode", "--strict-mcp-config", "--setting-sources", "--permission-mode dontAsk"},
-				"codex":  {"exec", "--json", "--ephemeral", "--ignore-rules", "--sandbox read-only", "-m " + c.model, "--output-schema ../schema.json", "--disable shell_tool", "--disable hooks", "project_doc_max_bytes=0"},
+				"claude": {"-p", "--output-format stream-json", "--json-schema", "--model " + c.model, "--tools Read,Grep,Glob", "--session-id", "--safe-mode", "--strict-mcp-config", "--setting-sources", "--permission-mode dontAsk"},
+				"codex":  {"exec", "--json", "--ignore-rules", "--sandbox read-only", "-m " + c.model, "--output-schema ../schema.json", "--disable shell_tool", "--disable hooks", "project_doc_max_bytes=0"},
 			}[c.backend] {
 				if !strings.Contains(joined, required) {
 					t.Errorf("%s argv lacks %q: %v", c.backend, required, args)
@@ -121,5 +121,40 @@ func TestReviewRefusesMismatchedReportedModel(t *testing.T) {
 	review := runOf(t, v)["review"].(map[string]any)
 	if review["status"] != "inconclusive" || !strings.Contains(review["log"].(string), "model") {
 		t.Fatalf("mismatched model must be inconclusive: %v", review)
+	}
+}
+
+func TestNativeBackendRecoversInvalidVerdict(t *testing.T) {
+	for _, c := range []struct{ backend, model string }{{"claude", "claude-haiku-5-5"}, {"codex", "gpt-5.6-luna"}} {
+		t.Run(c.backend, func(t *testing.T) {
+			bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
+			if err := os.WriteFile(filepath.Join(root, "bad-once-"+c.backend), nil, 0600); err != nil {
+				t.Fatal(err)
+			}
+			mutate(t, bin, repo, home, v, "review", "recover-native", nil)
+			run := runOf(t, waitReview(t, bin, repo, home))
+			review := run["review"].(map[string]any)
+			if review["status"] != "clean-review" || review["finalization"] != true {
+				t.Fatalf("native recovery: status=%v reason=%v diagnostic=%v", review["status"], review["reason"], review["diagnostic"])
+			}
+			calls := agentCalls(t, root, c.backend)
+			if len(calls) != 2 {
+				t.Fatalf("want one recovery turn: %v", calls)
+			}
+			first, last := strs(calls[0]["args"]), strs(calls[1]["args"])
+			if c.backend == "claude" {
+				id := ""
+				for i, a := range first {
+					if a == "--session-id" {
+						id = first[i+1]
+					}
+				}
+				if id == "" || !strings.Contains(strings.Join(last, " "), "--resume "+id) {
+					t.Fatalf("changed session: %v %v", first, last)
+				}
+			} else if !strings.Contains(strings.Join(last, " "), "exec resume") {
+				t.Fatalf("no resume: %v", last)
+			}
+		})
 	}
 }

@@ -166,7 +166,7 @@ func TestExecutorTimeoutRepositoryOverride(t *testing.T) {
 	}
 }
 
-func TestConfiguredReviewDeadlineExceedsTenMinutes(t *testing.T) {
+func TestReviewBudgetCapsLongExecutorDeadline(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `with open('/proc/'+str(os.getppid())+'/cmdline','rb') as f: args=f.read().split(b'\x00')
 with open(root+'/executor-deadline','w') as f: f.write(args[3].decode())`)
@@ -193,8 +193,9 @@ with open(root+'/executor-deadline','w') as f: f.write(args[3].decode())`)
 		t.Fatal(err)
 	}
 	remaining := time.Unix(deadline, 0).Sub(started)
-	if remaining < time.Hour || remaining > time.Hour+time.Minute {
-		t.Fatalf("configured hour did not reach review supervisor: %s", remaining)
+	want := defaultReviewBudget*4/5 + 30*time.Second
+	if remaining < want-time.Second || remaining > want+5*time.Second {
+		t.Fatalf("review budget did not cap the hour executor timeout: got %s, want about %s", remaining, want)
 	}
 	t.Logf("review supervisor deadline is %s after launch", remaining)
 }

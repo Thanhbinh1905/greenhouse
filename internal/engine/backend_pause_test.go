@@ -156,7 +156,7 @@ func TestFailedAndPausedAttemptsKeepReportedUsage(t *testing.T) {
 	v = waitStatus(t, bin, repo, home, "inconclusive")
 	attempts := runOf(t, v)["attempts"].([]any)
 	last := attempts[len(attempts)-1].(map[string]any)
-	if last["outcome"] != "inconclusive" || last["cost_usd"].(float64) != 6.0519999999999997e-05 || last["tokens"].(float64) != 55 {
+	if last["outcome"] != "inconclusive" || last["cost_usd"].(float64) != 2*6.0519999999999997e-05 || last["tokens"].(float64) != 110 {
 		t.Fatalf("an inconclusive attempt must keep its reported usage: %v", last)
 	}
 }

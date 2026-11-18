@@ -87,19 +87,20 @@ type Pipeline struct {
 	Grants         []Grant           `json:"grants,omitempty"`
 }
 type stepOutcome struct {
-	Run, Step   string
-	URL         string
-	Stage       StageResult
-	Head        string
-	Status      string
-	Log         string
-	Result      *Verdict
-	Repair      *Repair
-	Conflict    []string
-	Failure     *BackendFailure
-	Answer      agentAnswer
-	Snapshot    string
-	Confinement *runner.Confinement
+	Finalization bool
+	Run, Step    string
+	URL          string
+	Stage        StageResult
+	Head         string
+	Status       string
+	Log          string
+	Result       *Verdict
+	Repair       *Repair
+	Conflict     []string
+	Failure      *BackendFailure
+	Answer       agentAnswer
+	Snapshot     string
+	Confinement  *runner.Confinement
 }
 
 var pipelineStages = []string{"intent", "sync", "review", "test", "docs", "lint", "push", "pr", "ci"}
@@ -787,6 +788,7 @@ func completeStep(r *Run, o stepOutcome) error {
 		}
 		x.Status, x.Log, x.Result = o.Status, o.Log, o.Result
 		recordReviewEvidence(x, o.Snapshot, o.Confinement)
+		retainReviewMetadata(x, reviewOutcome{Status: o.Status, Answer: o.Answer, Finalization: o.Finalization})
 		x.Thinking = o.Answer.Thinking
 		recordAttempt(r, Attempt{Execution: x.ID, Stage: st.Name, Kind: "review", Role: "reviewer", Backend: x.Config.Backend, Model: x.Config.Model, Outcome: o.Status, Reason: failureReason(o.Failure), Message: failureMessage(o.Failure), CostUSD: o.Answer.CostUSD, Tokens: o.Answer.Tokens, Thinking: o.Answer.Thinking})
 		if o.Failure != nil && !cancelling {

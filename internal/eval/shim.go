@@ -68,12 +68,15 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	if cfg.Review != nil && slices.Contains(args, "read,grep,find,ls") {
 		return seededReview(cfg.Review, args, input, stdout)
 	}
+	finalization := slices.Contains(args, "--no-tools") || slices.Contains(args, "--resume") || slices.Contains(args, "resume")
 	argv, _ := json.Marshal(args)
-	if err := os.WriteFile(filepath.Join(cfg.Capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
-		return 2, err
-	}
-	if err := os.WriteFile(filepath.Join(cfg.Capture, "input.json"), input, 0o600); err != nil {
-		return 2, err
+	if !finalization {
+		if err := os.WriteFile(filepath.Join(cfg.Capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
+			return 2, err
+		}
+		if err := os.WriteFile(filepath.Join(cfg.Capture, "input.json"), input, 0o600); err != nil {
+			return 2, err
+		}
 	}
 	var env []string
 	for _, v := range os.Environ() {
@@ -82,12 +85,12 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		}
 		env = append(env, v)
 	}
-	events, err := os.OpenFile(filepath.Join(cfg.Capture, "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	events, err := os.OpenFile(filepath.Join(cfg.Capture, "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 2, err
 	}
 	defer events.Close()
-	diag, err := os.OpenFile(filepath.Join(cfg.Capture, "stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	diag, err := os.OpenFile(filepath.Join(cfg.Capture, "stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 2, err
 	}
@@ -98,7 +101,18 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	cmd.Stdout = io.MultiWriter(stdout, events)
 	cmd.Stderr = io.MultiWriter(stderr, diag)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
+	var prior shimTiming
+	if b, err := os.ReadFile(filepath.Join(cfg.Capture, "timing.json")); err == nil {
+		json.Unmarshal(b, &prior)
+	}
 	timing := shimTiming{Start: time.Now()}
+	if !prior.Start.IsZero() {
+		timing.Start = prior.Start
+	}
+	started, _ := json.Marshal(timing)
+	if err := os.WriteFile(filepath.Join(cfg.Capture, "timing.json"), append(started, '\n'), 0600); err != nil {
+		return 2, err
+	}
 	err = cmd.Run()
 	timing.End = time.Now()
 	timing.Millis = timing.End.Sub(timing.Start).Milliseconds()

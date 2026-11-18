@@ -1047,6 +1047,7 @@ func Daemon(h string) error {
 		}
 	}()
 	type completion struct {
+		finalization                bool
 		run, execution, status, log string
 		result                      *Verdict
 		repair                      *Repair
@@ -1188,6 +1189,7 @@ func Daemon(h string) error {
 					}
 				case "review":
 					reviewed := executeReview(ctx, &review)
+					o.Finalization = reviewed.Finalization
 					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot, o.Confinement = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot, reviewed.Confinement
 				case "repair":
 					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
@@ -1273,7 +1275,7 @@ func Daemon(h string) error {
 				reviewed := executeReview(ctx, &x)
 				cancel()
 				select {
-				case completed <- completion{run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement}:
+				case completed <- completion{finalization: reviewed.Finalization, run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement}:
 				case <-stopped:
 				}
 			}()
@@ -1409,7 +1411,7 @@ func Daemon(h string) error {
 			}
 			delete(active, r.ID)
 			recordReviewEvidence(r.Review, done.snapshot, done.confinement)
-			finishReview(r, reviewOutcome{Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer})
+			finishReview(r, reviewOutcome{Finalization: done.finalization, Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer})
 			if err := commit(s); err != nil {
 				return err
 			}
@@ -1630,6 +1632,15 @@ func reviewArgsMatch(x *Execution) bool {
 	expected := agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
 	if !x.Config.Native {
 		expected = legacyAgentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	}
+	if Digest(x.Args) == Digest(expected) {
+		return true
+	}
+	if x.ReviewBudget != "" {
+		return false
+	}
+	for i := range expected {
+		expected[i] = strings.ReplaceAll(expected[i], reviewerPrompt, preBudgetReviewerPrompt)
 	}
 	return Digest(x.Args) == Digest(expected)
 }

@@ -21,7 +21,7 @@ func TestFreshInstalledAgentReview(t *testing.T) {
 import json,os,sys
 assert os.sched_getaffinity(0) == os.sched_getaffinity(os.getppid())
 assert '--no-extensions' in sys.argv and '--no-mcp' in sys.argv
-assert '--no-context-files' in sys.argv and '--no-session' in sys.argv
+assert '--no-context-files' in sys.argv and '--session' in sys.argv
 assert '--model' not in sys.argv
 assert os.environ.get('PI_CODING_AGENT_DIR')
 with open(os.path.join(os.environ['PI_CODING_AGENT_DIR'],'auth.json')) as f: assert f.read() == 'fixture native login'
