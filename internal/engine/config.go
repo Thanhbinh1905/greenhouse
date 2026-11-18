@@ -87,6 +87,7 @@ func decodeConfig(name string, b []byte, out any) error {
 			return err
 		}
 		delete(fields, "budget_unit")
+		delete(fields, "pull_title")
 	}
 	rest, _ := json.Marshal(fields)
 	d := json.NewDecoder(bytes.NewReader(rest))

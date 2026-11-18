@@ -433,6 +433,7 @@ func prepareRun(s *Store, r *Run, intent, requested string) error {
 			source = sourceRepositoryPipeline
 		}
 		r.Pipeline = newPipeline(plan, digests, source)
+		r.Pipeline.Intent = intent
 		inherit(r)
 	}
 	r.Reviewer = &cfg

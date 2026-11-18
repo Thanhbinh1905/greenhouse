@@ -122,6 +122,7 @@ type Request struct {
 	Settings *Settings `json:"settings,omitempty"`
 	Intent   string    `json:"intent,omitempty"`
 	Target   string    `json:"target,omitempty"`
+	Title    string    `json:"title,omitempty"`
 	Reason   string    `json:"reason"`
 	Selected []string  `json:"selected,omitempty"`
 	Choice   string    `json:"choice,omitempty"`
@@ -822,6 +823,9 @@ func handleRequest(s *Store, q Request) Response {
 		if q.Intent != "" && !ValidText(q.Intent) {
 			return fail("invalid intent", r)
 		}
+		if q.Title != "" && !validPullTitle(q.Title) {
+			return fail("invalid PR title", r)
+		}
 		if q.Target != "" && r.Target != "" {
 			target, err := repository.CommittedTarget(r.Submitted.Worktree, q.Target)
 			if err != nil {
@@ -845,8 +849,23 @@ func handleRequest(s *Store, q Request) Response {
 		} else if q.Intent != "" && q.Intent != r.Intent {
 			return fail("intent is immutable after preparation", r)
 		}
+		if r.Pipeline == nil {
+			return fail("prepare under the full preset first", r)
+		}
+		if r.Pipeline.Intent == "" {
+			r.Pipeline.Intent = r.Intent
+		}
+		if q.Title != "" && r.Pipeline.PullTitle != "" && r.Pipeline.PullTitle != q.Title {
+			return fail("PR title is immutable after pipeline start", r)
+		}
 		if err := admitPipeline(s, r); err != nil {
 			return refusalResponse(view(s, r), err)
+		}
+		if r.Pipeline.PullTitle == "" {
+			r.Pipeline.PullTitle = q.Title
+			if r.Pipeline.PullTitle == "" {
+				r.Pipeline.PullTitle = conventionalPullTitle(r.Pipeline.Intent)
+			}
 		}
 		r.Token = opaque()
 	} else if q.Op == "resolve-conflict" {
@@ -1158,6 +1177,9 @@ func Daemon(h string) error {
 			var review Execution
 			if r.Review != nil {
 				review = *r.Review
+				if step.Kind == "delivery" && step.Stage == "pr" && review.Result != nil {
+					pc.addReview(&review)
+				}
 			}
 			var repair Repair
 			if len(p.Repairs) > 0 {

@@ -31,6 +31,7 @@ func axiCommand(home, path string, args []string) (engine.Response, error) {
 	flags.StringVar(&q.Action, "action_id", "", "idempotency identity")
 	flags.StringVar(&q.Intent, "intent", "", "run intent")
 	flags.StringVar(&q.Target, "target", "", "target commit or branch")
+	flags.StringVar(&q.Title, "title", "", "conventional-commit PR title")
 	flags.StringVar(&q.Reason, "reason", "", "decision reason")
 	flags.StringVar(&q.Choice, "choice", "", "decision choice")
 	flags.StringVar(&q.Step, "step", "", "output stage")

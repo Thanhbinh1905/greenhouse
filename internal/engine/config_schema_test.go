@@ -139,6 +139,21 @@ func TestLegacyConfigurationMigratesExplicitlyWithBackup(t *testing.T) {
 	}
 }
 
+func TestVersionTwoPipelineConfigAcceptsLegacyPullTitle(t *testing.T) {
+	data := []byte(`{"version":2,"budget_unit":"rounds","name":"Test","email":"test@example.invalid","pull_title":"feat: legacy title","repair_limit":1}`)
+	for _, name := range []string{"pipeline.json", pipelinePlanName} {
+		t.Run(name, func(t *testing.T) {
+			var plan CommandPlan
+			if err := decodeConfig(name, data, &plan); err != nil {
+				t.Fatalf("legacy %s should remain readable: %v", name, err)
+			}
+			if plan.Name != "Test" {
+				t.Fatalf("decoded plan: %+v", plan)
+			}
+		})
+	}
+}
+
 func TestNewerConfigurationVersionRefusesClearly(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, target, _ := legacyConfigFixture(t)

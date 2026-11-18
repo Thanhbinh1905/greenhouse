@@ -16,8 +16,15 @@ import (
 	"time"
 )
 
+func startPipelineWithTitle(t *testing.T, bin, repo, home string, v map[string]any, action, title string) map[string]any {
+	t.Helper()
+	request := map[string]any{"version": 1, "op": "pipeline", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": v["gate_id"], "action_id": action, "reason": "test adjustment", "title": title}
+	b, _ := json.Marshal(request)
+	return axi(t, bin, repo, home, string(b))
+}
+
 func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
-	var bare, prBranch string
+	var bare, prBranch, prTitle, prBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -25,9 +32,12 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 			w.Write([]byte(`[]`))
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			var request struct {
-				Head string `json:"head"`
+				Head  string `json:"head"`
+				Title string `json:"title"`
+				Body  string `json:"body"`
 			}
 			json.NewDecoder(r.Body).Decode(&request)
+			prTitle, prBody = request.Title, request.Body
 			prBranch = strings.TrimPrefix(request.Head, "acme:")
 			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+prBranch).Output()
 			if err != nil {
@@ -60,13 +70,16 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 		}
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
 	})
-	started := mutate(t, bin, repo, home, attached, "pipeline", "start", nil)
+	started := startPipelineWithTitle(t, bin, repo, home, attached, "start", "feat(pipeline): publish reviewed candidate")
 	if started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
 	done := waitPipeline(t, bin, repo, home)
 	assertDeliveryReady(t, done)
 	run := runOf(t, done)
+	if prTitle != "feat(pipeline): publish reviewed candidate" || !strings.Contains(prBody, "## Summary") || !strings.Contains(prBody, "## Review evidence") || !strings.Contains(prBody, "No findings reported.") || !strings.Contains(prBody, "test: passed") || !strings.Contains(prBody, "lint: passed") || !strings.Contains(prBody, "Validated head: `"+run["candidate"].(string)+"`") {
+		t.Fatalf("PR text omitted supplied title or delivery evidence: title=%q body=%q", prTitle, prBody)
+	}
 	if stageOf(t, done, "pr")["url"] != "https://example.invalid/acme/garden/pull/12" || stageOf(t, done, "pr")["number"] != float64(12) || stageOf(t, done, "ci")["head"] != run["candidate"] {
 		t.Fatalf("PR identity or head evidence missing: %v", run["pipeline"])
 	}
@@ -76,10 +89,46 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 	verifyDeliveryEvidence(t, home, bare, run)
 }
 
+func TestPipelineWithoutFullPresetRefusesWithoutCrashingDaemon(t *testing.T) {
+	bin, repo, home, prepared := prepareFixture(t)
+	refused := mutate(t, bin, repo, home, prepared, "pipeline", "needs-full-preset", nil)
+	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "prepare under the full preset first") {
+		t.Fatalf("pipeline without full preset should be refused: %v", refused)
+	}
+	if inspected := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`); inspected["outcome"] != "ok" {
+		t.Fatalf("daemon did not survive rejected pipeline request: %v", inspected)
+	}
+}
+
+func TestPipelineStartPersistsDerivedTitleAndRejectsChanges(t *testing.T) {
+	_, repo, home, prepared := pipelineFixture(t, func(root string) map[string]any {
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
+	})
+	stopDaemon(t, home)
+	t.Setenv("GREENHOUSE_HOME", home)
+	s, err := load(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := s.Runs[prepared["run_id"].(string)]
+	request := Request{Version: 1, Op: "pipeline", Path: repo, RunID: r.ID, Expected: r.Token, Input: r.Input, Gate: currentGate(r), Action: "start", Reason: "test adjustment"}
+	if got := handleRequest(s, request); got.Outcome != "ok" {
+		t.Fatal(got)
+	}
+	if r.Pipeline.PullTitle != "feat: Change the sample" {
+		t.Fatalf("derived title was not persisted at pipeline start: %q", r.Pipeline.PullTitle)
+	}
+	r.Status, r.Pipeline.Status = "needs-decision", "needs-decision"
+	request.Expected, request.Input, request.Gate, request.Action, request.Title = r.Token, r.Input, currentGate(r), "change-title", "fix: use another title"
+	if got := handleRequest(s, request); got.Outcome != "refused" || !strings.Contains(got.Error, "title is immutable") || r.Pipeline.PullTitle != "feat: Change the sample" {
+		t.Fatalf("pipeline retry changed its title: %+v title=%q", got, r.Pipeline.PullTitle)
+	}
+}
+
 func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 	var bare, hookStarted, hookRelease, hookFinished, hookLog string
 	var mu sync.Mutex
-	exists, prHead := false, ""
+	exists, prHead, prTitle, prBody := false, "", "", ""
 	var creates, updates atomic.Int32
 	var logMu sync.Mutex
 	var requestLog []string
@@ -92,13 +141,13 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
 			mu.Lock()
-			found, head := exists, prHead
+			found, head, title, body := exists, prHead, prTitle, prBody
 			mu.Unlock()
 			if !found {
 				w.Write([]byte(`[]`))
 				return
 			}
-			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": "Greenhouse: Test", "body": "Validated candidate: `" + head + "`. Greenhouse will not merge this pull request.", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": head}}})
+			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": title, "body": body, "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": head}}})
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			creates.Add(1)
 			var request struct {
@@ -118,7 +167,7 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 				return
 			}
 			mu.Lock()
-			exists, prHead = true, strings.TrimSpace(string(head))
+			exists, prHead, prTitle, prBody = true, strings.TrimSpace(string(head)), request.Title, request.Body
 			mu.Unlock()
 			close(postStarted)
 			<-releasePost
@@ -126,7 +175,13 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 			close(postFinished)
 		case r.URL.Path == "/repos/acme/garden/pulls/12" && r.Method == http.MethodPatch:
 			updates.Add(1)
+			var request struct {
+				Title string `json:"title"`
+				Body  string `json:"body"`
+			}
+			json.NewDecoder(r.Body).Decode(&request)
 			mu.Lock()
+			prTitle, prBody = request.Title, request.Body
 			head := prHead
 			mu.Unlock()
 			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": head}})
@@ -226,6 +281,12 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 	assertDeliveryReady(t, state)
 	if creates.Load() != 1 || updates.Load() != 0 {
 		t.Fatalf("PR effects duplicated or not reconciled: creates=%d updates=%d", creates.Load(), updates.Load())
+	}
+	mu.Lock()
+	gotTitle, gotBody := prTitle, prBody
+	mu.Unlock()
+	if gotTitle != "feat: Change the sample" || !strings.Contains(gotBody, "Validated head: `"+runOf(t, state)["candidate"].(string)+"`") || !strings.Contains(gotBody, "No findings reported.") {
+		t.Fatalf("reconciled PR text is incomplete: title=%q body=%q", gotTitle, gotBody)
 	}
 	pushes, err := os.ReadFile(hookLog)
 	if err != nil || strings.Count(string(pushes), "push\n") != 1 {

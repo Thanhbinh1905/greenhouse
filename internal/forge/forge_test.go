@@ -62,6 +62,28 @@ func TestGitHubForgeReusesExistingPullRequest(t *testing.T) {
 	}
 }
 
+func TestGitHubForgeUpdatesTextWhenCandidateHeadMoves(t *testing.T) {
+	var patched map[string]string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/garden/pulls":
+			json.NewEncoder(w).Encode([]map[string]any{{"number": 7, "html_url": "https://example.invalid/acme/garden/pull/7", "title": "feat: old", "body": "Validated head: `head-a`", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": "head-a"}}})
+		case r.Method == http.MethodPatch && r.URL.Path == "/repos/acme/garden/pulls/7":
+			json.NewDecoder(r.Body).Decode(&patched)
+			w.Write([]byte(`{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-b"}}`))
+		default:
+			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	defer server.Close()
+	pr, err := (GitHubForge{BaseURL: server.URL, Client: server.Client()}).EnsurePullRequest(context.Background(), "acme", "garden", "topic", "main", "head-b", "feat: new", "Validated head: `head-b`")
+	if err != nil || pr.Head != "head-b" || patched["title"] != "feat: new" || patched["body"] != "Validated head: `head-b`" {
+		t.Fatalf("moved candidate PR text was not updated: pr=%+v patched=%v err=%v", pr, patched, err)
+	}
+}
+
 func TestGitHubForgeReconcilesAlreadyExactPullRequestWithoutMutation(t *testing.T) {
 	var mutations int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

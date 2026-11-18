@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"syscall"
@@ -26,7 +27,6 @@ type CommandPlan struct {
 	GitHubOwner    string            `json:"github_owner"`
 	GitHubRepo     string            `json:"github_repo"`
 	PullBase       string            `json:"pull_base"`
-	PullTitle      string            `json:"pull_title"`
 	RequiredChecks []string          `json:"required_checks,omitempty"`
 	Email          string            `json:"email"`
 	Test           [][]string        `json:"test,omitempty"`
@@ -60,7 +60,9 @@ type Step struct {
 }
 type Pipeline struct {
 	Status         string            `json:"status"`
+	Intent         string            `json:"intent,omitempty"`
 	Plan           CommandPlan       `json:"plan"`
+	PullTitle      string            `json:"pull_title,omitempty"`
 	PlanSources    map[string]string `json:"plan_sources"`
 	CommandDigests map[string]string `json:"command_digests"`
 	PlanDigest     string            `json:"plan_digest"`
@@ -210,6 +212,74 @@ func trustedPlanFor(s *Store, id repository.Identity) (CommandPlan, map[string]s
 	return plan, digests, nil
 }
 
+var pullTitlePattern = regexp.MustCompile(`^[a-z][a-z0-9-]*(\([a-zA-Z0-9._/-]+\))?!?: \S.*$`)
+
+func validPullTitle(title string) bool {
+	return ValidText(title) && len(title) <= 200 && strings.TrimSpace(title) == title && !strings.ContainsAny(title, "\r\n") && pullTitlePattern.MatchString(title)
+}
+
+func conventionalPullTitle(intent string) string {
+	intent = strings.Join(strings.Fields(intent), " ")
+	if intent == "" {
+		return "chore: validated candidate"
+	}
+	if validPullTitle(intent) {
+		return intent
+	}
+	return "feat: " + intent
+}
+
+func pullRequestBody(p *Pipeline, head string) string {
+	var body strings.Builder
+	fmt.Fprintf(&body, "## Summary\n\n%s\n\n## Review evidence\n", strings.Join(strings.Fields(p.Intent), " "))
+	findings := map[string]Finding{}
+	for _, review := range p.Reviews {
+		if review.Result != nil {
+			for _, finding := range review.Result.Findings {
+				findings[finding.ID] = finding
+			}
+		}
+	}
+	if len(findings) == 0 {
+		body.WriteString("- No findings reported.\n")
+	} else {
+		ids := make([]string, 0, len(findings))
+		for id := range findings {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		for _, id := range ids {
+			finding := findings[id]
+			fmt.Fprintf(&body, "- %s %s: %s\n", finding.Priority, finding.ID, finding.Explanation)
+		}
+	}
+	for _, resolution := range p.Resolutions {
+		fmt.Fprintf(&body, "- Finding %s: %s\n", resolution.Finding, resolution.Kind)
+	}
+	for _, repair := range p.Repairs {
+		if len(repair.Selected) == 0 {
+			continue
+		}
+		ids := make([]string, 0, len(repair.Selected))
+		for _, finding := range repair.Selected {
+			ids = append(ids, finding.ID)
+		}
+		fmt.Fprintf(&body, "- Resolved by repair: %s\n", strings.Join(ids, ", "))
+	}
+	body.WriteString("\n## Checks\n")
+	for _, stage := range p.Stages {
+		if stage.Name == "test" || stage.Name == "docs" || stage.Name == "lint" || stage.Name == "ci" {
+			fmt.Fprintf(&body, "- %s: %s", stage.Name, stage.Status)
+			if stage.Reason != "" {
+				fmt.Fprintf(&body, " (%s)", stage.Reason)
+			}
+			body.WriteByte('\n')
+		}
+	}
+	fmt.Fprintf(&body, "\nValidated head: `%s`. Greenhouse will not merge this pull request.\n", head)
+	return body.String()
+}
+
 func safeRemote(remote string) bool {
 	if remote == "" || strings.ContainsAny(remote, "\x00\n\r") || strings.HasPrefix(remote, "-") || !strings.ContainsAny(remote, "/:") {
 		return false
@@ -223,7 +293,7 @@ func safeRemote(remote string) bool {
 
 func newPipeline(plan CommandPlan, digests map[string]string, source string) *Pipeline {
 	sources := map[string]string{}
-	for _, field := range []string{"name", "remote", "github_owner", "github_repo", "pull_base", "pull_title", "required_checks", "email", "test", "lint", "docs", "docs_paths", "not_applicable", "repairs", "repair_limit", "yolo", "grants"} {
+	for _, field := range []string{"name", "remote", "github_owner", "github_repo", "pull_base", "required_checks", "email", "test", "lint", "docs", "docs_paths", "not_applicable", "repairs", "repair_limit", "yolo", "grants"} {
 		sources[field] = source
 	}
 	p := &Pipeline{Status: "prepared", Plan: plan, PlanSources: sources, CommandDigests: digests, PlanDigest: Digest([]any{plan, digests}), RepairLimit: plan.RepairLimit, Grants: planGrants(plan, source)}
@@ -231,6 +301,18 @@ func newPipeline(plan CommandPlan, digests map[string]string, source string) *Pi
 		p.Stages = append(p.Stages, StageResult{Name: name, Status: "pending"})
 	}
 	return p
+}
+
+func (p *Pipeline) addReview(review *Execution) {
+	if review == nil {
+		return
+	}
+	for _, existing := range p.Reviews {
+		if existing.ID == review.ID {
+			return
+		}
+	}
+	p.Reviews = append(p.Reviews, *review)
 }
 
 func (p *Pipeline) stage(name string) *StageResult {
@@ -519,9 +601,7 @@ func advancePipeline(s *Store, r *Run) *Step {
 				park(r, st, "failed", "review admission refused: "+err.Error())
 				return nil
 			}
-			if r.Review != nil {
-				p.Reviews = append(p.Reviews, *r.Review)
-			}
+			p.addReview(r.Review)
 			r.Review = x
 			if final {
 				g.Review = 1
@@ -985,11 +1065,11 @@ func runDeliveryStage(ctx context.Context, p Pipeline, stage, candidate string) 
 			return out, candidate, ""
 		}
 		branch := strings.TrimPrefix(p.Ref, "refs/heads/")
-		title := p.Plan.PullTitle
+		title := p.PullTitle
 		if title == "" {
-			title = "Greenhouse: " + strings.TrimSpace(strings.ReplaceAll(p.Plan.Name, "\n", " "))
+			title = conventionalPullTitle(p.Intent)
 		}
-		pr, err := forge.EnsurePullRequest(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, branch, p.Plan.PullBase, candidate, title, "Validated candidate: `"+candidate+"`. Greenhouse will not merge this pull request.")
+		pr, err := forge.EnsurePullRequest(ctx, p.Plan.GitHubOwner, p.Plan.GitHubRepo, branch, p.Plan.PullBase, candidate, title, pullRequestBody(&p, candidate))
 		if err != nil {
 			out.Status, out.Reason = "failed", "pull request reconciliation failed: "+err.Error()
 			return out, candidate, ""
