@@ -695,7 +695,19 @@ func TestExecutableSelectedRepair(t *testing.T) {
 	if err := os.Remove(filepath.Join(candidate, "external-change")); err != nil {
 		t.Fatal(err)
 	}
-	handed := repairRequest(t, bin, repo, home, changed, "handback", "handback-safe", nil)
+	lock, err := os.OpenFile(filepath.Join(repo, ".git", "greenhouse-writers", Digest([]string{"branch main"})+".lock"), os.O_CREATE|os.O_RDWR, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	locked := repairRequest(t, bin, repo, home, changed, "handback", "handback-branch-locked", nil)
+	lock.Close()
+	if locked["outcome"] != "refused" || !strings.Contains(locked["error"].(string), "another writer owns branch main") {
+		t.Fatalf("handback ignored the branch writer lock: %v", locked)
+	}
+	handed := repairRequest(t, bin, repo, home, locked, "handback", "handback-safe", nil)
 	if handed["outcome"] != "ok" || strings.TrimSpace(git(t, repo, "rev-parse", "HEAD")) != repair["head"] {
 		t.Fatalf("safe handback failed: %v", handed)
 	}

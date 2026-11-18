@@ -12,7 +12,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
@@ -722,15 +721,11 @@ func handback(r *Run, trusted string) error {
 	if x.Status != "fixed-not-independently-rereviewed" || x.Writer != "stopped" || x.Head == "" || x.Parent != r.Submitted.Head {
 		return errors.New("candidate is not eligible for handback")
 	}
-	lock, e := os.OpenFile(filepath.Join(r.Submitted.Repository, "greenhouse-writer.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	unlock, e := lockWriter(r.Submitted)
 	if e != nil {
 		return e
 	}
-	defer lock.Close()
-	if e = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
-		return errors.New("another linked-worktree writer owns the repository")
-	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer unlock()
 	if e := gitHazards(r.Submitted.Worktree); e != nil {
 		return e
 	}
