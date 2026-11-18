@@ -183,7 +183,7 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 		}
 	}
 	c := runOf(t, v)["review"].(map[string]any)["confinement"].(map[string]any)
-	if c["status"] != "degraded" || c["role"] != "reviewer" || c["mechanism"] != "landlock" || len(c["writable"].([]any)) != 1 || !strings.Contains(jsonText(c["writable"]), jsonText(probe)) || strings.Contains(jsonText(c["writable"]), jsonText(repo)) || !strings.Contains(c["network"].(string), "unrestricted outbound TCP") {
+	if c["status"] != "degraded" || c["role"] != "reviewer" || c["mechanism"] != "landlock" || len(c["writable"].([]any)) != 3 || !strings.Contains(jsonText(c["writable"]), jsonText(probe)) || strings.Contains(jsonText(c["writable"]), jsonText(repo)) || !strings.Contains(c["network"].(string), "unrestricted outbound TCP") {
 		t.Fatalf("reviewer confinement record = %v", c)
 	}
 

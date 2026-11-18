@@ -63,6 +63,8 @@ if '--model' in args or '-m' in args: model=args[args.index('--model' if '--mode
 if os.path.exists(root+'/report-model-'+backend):
     model=open(root+'/report-model-'+backend).read()
 text=verdict()
+if os.path.exists(root+'/bad-once-'+backend) and 'resume' not in args and '--resume' not in args:
+    text='not JSON'
 if os.path.exists(root+'/bad-verdict-'+backend):
     text='{"verdict":"not a contract answer"}'
 if backend=='claude':
@@ -70,7 +72,7 @@ if backend=='claude':
         event=json.loads(line)
         if event.get('type')=='system' and event.get('subtype')=='init':
             event['model']=open(root+'/init-model-claude').read() if os.path.exists(root+'/init-model-claude') else model
-            event['tools']=args[args.index('--tools')+1].split(',')+(['StructuredOutput'] if '--json-schema' in args else [])
+            event['tools']=list(filter(None,args[args.index('--tools')+1].split(',')))+(['StructuredOutput'] if '--json-schema' in args else [])
             if os.path.exists(root+'/extra-tool-claude'):
                 event['tools'].append(open(root+'/extra-tool-claude').read())
         if event.get('type')=='result':
@@ -79,7 +81,8 @@ if backend=='claude':
             if os.path.exists(root+'/extra-model-claude'):
                 event['modelUsage'][open(root+'/extra-model-claude').read()]=list(event['modelUsage'].values())[0]
             if '--json-schema' in args:
-                event['structured_output']=json.loads(text)
+                try: event['structured_output']=json.loads(text)
+                except ValueError: event.pop('structured_output',None)
             else:
                 event.pop('structured_output',None)
         if event.get('type')=='assistant':

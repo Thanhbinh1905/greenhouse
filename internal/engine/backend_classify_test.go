@@ -223,3 +223,10 @@ func TestClassificationUsesLatestCodexFailure(t *testing.T) {
 		t.Fatalf("superseded error controls classification: %+v", failure)
 	}
 }
+
+func TestPiAttemptUsageIncludesCachedInput(t *testing.T) {
+	got := agentTokenUsage(BackendPi, []byte(`{"type":"message_end","message":{"role":"assistant","usage":{"input":10,"output":5,"cacheRead":20,"totalTokens":35}}}`), nil)
+	if got.CachedInputTokens != 20 || got.Tokens != 35 {
+		t.Fatalf("Pi cache accounting: %+v", got)
+	}
+}

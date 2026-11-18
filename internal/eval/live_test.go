@@ -2,6 +2,7 @@ package eval
 
 import (
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -112,5 +113,51 @@ func TestCompactEventsDropsStreamingDeltas(t *testing.T) {
 	in := "{\"type\":\"message_start\"}\n{\"type\":\"message_update\",\"x\":1}\n{\"type\":\"message_end\"}\nnot json\n"
 	if got := string(compactEvents([]byte(in))); got != "{\"type\":\"message_start\"}\n{\"type\":\"message_end\"}\nnot json\n" {
 		t.Fatalf("compacted = %q", got)
+	}
+}
+
+func TestShimRetainsBothReviewTurns(t *testing.T) {
+	dir := t.TempDir()
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte("#!/bin/sh\ncat >/dev/null\nprintf '{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"usage\":{\"input\":7,\"output\":2}}}\\n'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cfg := shimConfig{Pi: pi, Capture: dir}
+	for i, input := range []string{"initial input", "finalization input"} {
+		var args []string
+		if i == 1 {
+			args = []string{"--no-tools"}
+		}
+		if code, err := shim(cfg, args, strings.NewReader(input), io.Discard, io.Discard); err != nil || code != 0 {
+			t.Fatalf("shim: %d %v", code, err)
+		}
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "events.jsonl"))
+	if got := parseEvents(data).Usage; got.Input != 14 || got.Output != 4 {
+		t.Fatalf("lost first turn usage: %+v", got)
+	}
+	input, _ := os.ReadFile(filepath.Join(dir, "input.json"))
+	if string(input) != "initial input" {
+		t.Fatalf("lost admitted input: %q", input)
+	}
+}
+
+func TestShimCountsTimeBeforeInterruptedTurn(t *testing.T) {
+	dir := t.TempDir()
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte("#!/bin/sh\ncat >/dev/null\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	prior := shimTiming{Start: time.Now().Add(-time.Second)}
+	data, _ := json.Marshal(prior)
+	os.WriteFile(filepath.Join(dir, "timing.json"), data, 0600)
+	if _, err := shim(shimConfig{Pi: pi, Capture: dir}, []string{"--no-tools"}, strings.NewReader("final"), io.Discard, io.Discard); err != nil {
+		t.Fatal(err)
+	}
+	data, _ = os.ReadFile(filepath.Join(dir, "timing.json"))
+	var timing shimTiming
+	json.Unmarshal(data, &timing)
+	if timing.Millis < 1000 {
+		t.Fatalf("lost interrupted exploration time: %+v", timing)
 	}
 }
