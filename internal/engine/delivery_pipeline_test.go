@@ -89,6 +89,17 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 	verifyDeliveryEvidence(t, home, bare, run)
 }
 
+func TestPipelineWithoutFullPresetRefusesWithoutCrashingDaemon(t *testing.T) {
+	bin, repo, home, prepared := prepareFixture(t)
+	refused := mutate(t, bin, repo, home, prepared, "pipeline", "needs-full-preset", nil)
+	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "prepare under the full preset first") {
+		t.Fatalf("pipeline without full preset should be refused: %v", refused)
+	}
+	if inspected := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`); inspected["outcome"] != "ok" {
+		t.Fatalf("daemon did not survive rejected pipeline request: %v", inspected)
+	}
+}
+
 func TestPipelineStartPersistsDerivedTitleAndRejectsChanges(t *testing.T) {
 	_, repo, home, prepared := pipelineFixture(t, func(root string) map[string]any {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}

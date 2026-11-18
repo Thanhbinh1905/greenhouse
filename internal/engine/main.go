@@ -841,6 +841,9 @@ func handleRequest(s *Store, q Request) Response {
 		} else if q.Intent != "" && q.Intent != r.Intent {
 			return fail("intent is immutable after preparation", r)
 		}
+		if r.Pipeline == nil {
+			return fail("prepare under the full preset first", r)
+		}
 		if r.Pipeline.Intent == "" {
 			r.Pipeline.Intent = r.Intent
 		}
