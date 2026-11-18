@@ -19,8 +19,9 @@ greenhouse axi pipeline --intent 'Describe the intended change' --target main --
 
 The command attaches the current worktree when no run exists. `pipeline` with an
 intent prepares a new full run and resolves its rules. Omit `--target` to use the
-repository's default target resolution. The intent becomes immutable after
-preparation. An existing prepared run continues with:
+repository's default target resolution. The intent and resolved target commit
+become immutable after preparation. A supplied target must resolve to that same
+commit. An existing prepared run continues with:
 
 ```sh
 greenhouse axi pipeline --wait 8m

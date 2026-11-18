@@ -127,11 +127,7 @@ func compactResponse(v engine.Response) map[string]any {
 }
 
 func sendAXI(home string, q engine.Request) (engine.Response, error) {
-	budget := time.Second
-	if q.WaitMS > 0 {
-		budget = time.Duration(q.WaitMS) * time.Millisecond
-	}
-	deadline := time.Now().Add(budget)
+	deadline := time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)
 	for {
 		response, err := engine.Send(home, q, true)
 		if err != nil || q.Op != "watch" || response.Outcome != "refused" || response.Error != "storage commit in progress; retry the read request" || !time.Now().Before(deadline) {

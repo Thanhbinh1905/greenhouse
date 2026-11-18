@@ -814,6 +814,15 @@ func handleRequest(s *Store, q Request) Response {
 		if q.Intent != "" && !ValidText(q.Intent) {
 			return fail("invalid intent", r)
 		}
+		if q.Target != "" && r.Target != "" {
+			target, err := repository.CommittedTarget(r.Submitted.Worktree, q.Target)
+			if err != nil {
+				return fail(err.Error(), r)
+			}
+			if target != r.Target {
+				return fail("target is immutable after preparation", r)
+			}
+		}
 		if q.Intent != "" && r.Pipeline == nil && ownReviews(r) == 0 {
 			candidate := *r
 			candidate.Configs = append([]Snapshot(nil), r.Configs...)

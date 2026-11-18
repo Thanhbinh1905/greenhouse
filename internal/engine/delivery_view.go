@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"net/url"
+
 	"github.com/Thanhbinh1905/greenhouse/internal/forge"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
@@ -34,6 +36,10 @@ func deliveryView(r *Run, source repository.Identity, sourceErr error) *Delivery
 		}
 	}
 	if sourceErr != nil || source != r.Submitted || v.PushedHead != r.Candidate || pr == nil || pr.Head != r.Candidate || ci == nil || ci.Head != r.Candidate || ci.Status != "passed" {
+		return v
+	}
+	prURL, err := url.Parse(pr.URL)
+	if pr.Status != "passed" || pr.Number <= 0 || err != nil || prURL.Host == "" || prURL.Scheme != "https" && prURL.Scheme != "http" {
 		return v
 	}
 	if len(p.Plan.RequiredChecks) == 0 || len(ci.Checks) != len(p.Plan.RequiredChecks) {

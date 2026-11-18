@@ -203,6 +203,37 @@ func TestWorkerDeliveryContract(t *testing.T) {
 	if workerCommand(t, bin, repo, home, "inspect")["delivery"].(map[string]any)["current"] != true {
 		t.Fatal("complete required-check evidence must remain current after restart")
 	}
+	stopDaemonAndWait(t, home)
+	pr := run.Pipeline.stage("pr")
+	originalNumber, originalURL := pr.Number, pr.URL
+	for _, identity := range []struct {
+		name   string
+		number int
+		url    string
+	}{
+		{"missing-number", 0, originalURL},
+		{"negative-number", -1, originalURL},
+		{"missing-url", originalNumber, ""},
+		{"blank-url", originalNumber, " "},
+		{"malformed-url", originalNumber, ":invalid"},
+		{"relative-url", originalNumber, "/pull/12"},
+	} {
+		pr.Number, pr.URL = identity.number, identity.url
+		if err := persist(home, persisted); err != nil {
+			t.Fatal(err)
+		}
+		if workerCommand(t, bin, repo, home, "inspect")["delivery"].(map[string]any)["current"] != false {
+			t.Fatalf("delivery.current accepted %s PR identity", identity.name)
+		}
+		stopDaemonAndWait(t, home)
+	}
+	pr.Number, pr.URL = originalNumber, originalURL
+	if err := persist(home, persisted); err != nil {
+		t.Fatal(err)
+	}
+	if workerCommand(t, bin, repo, home, "inspect")["delivery"].(map[string]any)["current"] != true {
+		t.Fatal("complete PR identity must remain current after restart")
+	}
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "advance source")
 	if workerCommand(t, bin, repo, home, "inspect")["delivery"].(map[string]any)["current"] != false {
 		t.Fatal("source movement must invalidate delivery evidence")
@@ -357,5 +388,24 @@ func TestWorkerPipelineRedactsSnapshotOutput(t *testing.T) {
 	output := stageOf(t, state, "test")["commands"].([]any)[0].(map[string]any)["output"].(string)
 	if !strings.Contains(output, "[REDACTED]") {
 		t.Fatalf("missing redaction: %s", output)
+	}
+}
+
+func TestWorkerPipelineRejectsConflictingTarget(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, before := pipelineFixture(t, localPlan)
+	request, _ := json.Marshal(map[string]any{"version": 2, "op": "pipeline", "run_id": before["run_id"], "input_id": before["input_id"], "gate_id": before["gate_id"], "expected": before["token"], "action_id": "conflicting-target", "intent": runOf(t, before)["intent"], "target": "HEAD"})
+	got := axi(t, bin, repo, home, string(request))
+	if got["outcome"] != "refused" || !strings.Contains(fmt.Sprint(got["error"]), "target") {
+		t.Fatalf("conflicting target was ignored: outcome=%v error=%v", got["outcome"], got["error"])
+	}
+	after := workerCommand(t, bin, repo, home, "inspect")
+	if after["token"] != before["token"] || runOf(t, after)["target"] != runOf(t, before)["target"] {
+		t.Fatal("conflicting target mutated the prepared run")
+	}
+	git(t, repo, "branch", "same-target", runOf(t, before)["target"].(string))
+	state := workerCommand(t, bin, repo, home, "pipeline", "--intent", runOf(t, before)["intent"].(string), "--target", "same-target", "--wait", "30s")
+	if runOf(t, state)["target"] != runOf(t, before)["target"] {
+		t.Fatal("equivalent target changed the prepared target")
 	}
 }

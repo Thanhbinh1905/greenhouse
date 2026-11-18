@@ -11,6 +11,14 @@ import (
 )
 
 func TestWatchRetriesReadDuringCommit(t *testing.T) {
+	for _, wait := range []string{"1s", "0s"} {
+		t.Run(wait, func(t *testing.T) {
+			testWatchReadDuringCommit(t, wait)
+		})
+	}
+}
+
+func testWatchReadDuringCommit(t *testing.T, wait string) {
 	home := t.TempDir()
 	listener, err := net.Listen("unix", filepath.Join(home, "socket"))
 	if err != nil {
@@ -36,7 +44,13 @@ func TestWatchRetriesReadDuringCommit(t *testing.T) {
 			conn.Close()
 		}
 	}()
-	response, err := axiCommand(home, t.TempDir(), []string{"watch", "--stream", "stream", "--after", "7", "--wait", "1s"})
+	response, err := axiCommand(home, t.TempDir(), []string{"watch", "--stream", "stream", "--after", "7", "--wait", wait})
+	if wait == "0s" {
+		if err != nil || response.Outcome != "refused" || len(requests) != 1 {
+			t.Fatalf("no-wait watch retried a busy read: response=%+v requests=%d error=%v", response, len(requests), err)
+		}
+		return
+	}
 	if err != nil || response.Outcome != "ok" {
 		t.Fatalf("watch did not retry busy read: %+v %v", response, err)
 	}
