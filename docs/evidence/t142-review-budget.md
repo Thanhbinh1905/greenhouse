@@ -85,3 +85,9 @@ The regression fixture `internal/engine/testdata/main-29a6f29-review-state.json`
 Records without `review_budget` now accept the exact historical prompt argument shape as well as the current shape. Budgeted reviews still require the current arguments. Loading preserves stored evidence. Tests reject an added tool argument and reject historical arguments on a budgeted review. The generated-state regression and existing legacy-state regression pass. A rebuilt binary loaded the private shared-state snapshot through AXI with `outcome: ok`; that private daemon was stopped afterward. The private snapshot and AXI output remain outside the repository.
 
 Compatibility checks: `go vet ./...` passed. `GOMAXPROCS=4 go test ./... -timeout 20m` passed (engine 373.456 s), and `GOMAXPROCS=4 go test -race ./... -timeout 20m` passed (engine 411.500 s). `golangci-lint run --new-from-rev=e5ee01e ./...` reported zero issues.
+
+## Claude home isolation
+
+Review round 3 found that redirecting `CLAUDE_CONFIG_DIR` left `HOME` pointing at the original home. The new CLI regression disables Landlock, gives the original home and private config distinct onboarding contents, then reads and writes `HOME/.claude.json` from the reviewer. Before the fix it failed with `reviewer read original home onboarding instead of private copy: "original onboarding"`.
+
+Claude now receives `HOME` pointing at the private session directory, alongside `CLAUDE_CONFIG_DIR`. The regression reads the staged private content and updates that copy while leaving the original unchanged. Existing config-write probes still target the original paths explicitly. Targeted session and recovery tests pass. Native Claude completed a review in 13.1 seconds using the private home. Origin/main remained at `29a6f29`, already merged.

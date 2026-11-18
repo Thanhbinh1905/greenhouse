@@ -13,7 +13,7 @@ try:
 except OSError:
     pass
 if os.path.exists(root+'/probe-'+backend):
-    home=os.environ['HOME']
+    home=root
     probe={}
     for name,path in [('credentials',home+'/.claude/.credentials.json'),('state',home+'/.claude.json'),('settings',home+'/.claude/settings.json'),('hooks',home+'/.claude/hooks/probe'),('codex-config',home+'/.codex/config.toml')]:
         try:

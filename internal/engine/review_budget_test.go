@@ -300,3 +300,47 @@ func TestPrivateNativeConfigurationCannotWriteThroughWithoutLandlock(t *testing.
 		})
 	}
 }
+
+func TestClaudePrivateHomeDoesNotReadOrModifyOriginalOnboarding(t *testing.T) {
+	bin, repo, home, root, _ := onePassWith(t, "claude", "claude-haiku-5-5")
+	native := filepath.Join(root, ".claude")
+	if err := os.MkdirAll(native, 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CLAUDE_CONFIG_DIR", native)
+	if err := os.WriteFile(filepath.Join(native, ".claude.json"), []byte("private onboarding"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	original := filepath.Join(root, ".claude.json")
+	if err := os.WriteFile(original, []byte("original onboarding"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	script := filepath.Join(root, "fake-claude")
+	data, err := os.ReadFile(script)
+	if err != nil {
+		t.Fatal(err)
+	}
+	probe := `stdin=sys.stdin.read()
+onboarding=os.path.join(os.environ['HOME'],'.claude.json')
+with open(root+'/onboarding-read','w') as f: f.write(open(onboarding).read())
+with open(onboarding,'w') as f: f.write('reviewer update')
+`
+	if err = os.WriteFile(script, []byte(strings.Replace(string(data), "stdin=sys.stdin.read()", probe, 1)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	stopDaemon(t, home)
+	v := axiWithoutLandlock(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	mutate(t, bin, repo, home, v, "review", "private-home", nil)
+	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	if review["status"] != "clean-review" {
+		t.Fatalf("review did not complete: %v", review["status"])
+	}
+	read, err := os.ReadFile(filepath.Join(root, "onboarding-read"))
+	if err != nil || string(read) != "private onboarding" {
+		t.Fatalf("reviewer read original home onboarding instead of private copy: %q %v", read, err)
+	}
+	data, err = os.ReadFile(original)
+	if err != nil || string(data) != "original onboarding" {
+		t.Fatalf("reviewer modified original home onboarding: %q %v", data, err)
+	}
+}

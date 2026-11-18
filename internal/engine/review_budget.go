@@ -129,6 +129,13 @@ func newReviewSession(x *Execution, dir string) (reviewSession, error) {
 			} else if !os.IsNotExist(err) {
 				return s, err
 			}
+			env := []string{}
+			for _, v := range s.env {
+				if !strings.HasPrefix(v, "HOME=") {
+					env = append(env, v)
+				}
+			}
+			s.env = append(env, "HOME="+s.state)
 			id := opaque()
 			s.id = id[:8] + "-" + id[8:12] + "-4" + id[13:16] + "-a" + id[17:20] + "-" + id[20:]
 			s.args = append(removeArgs(s.args, "--no-session-persistence"), "--session-id", s.id)
