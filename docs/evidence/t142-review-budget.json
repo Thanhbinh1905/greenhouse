@@ -2556,11 +2556,11 @@
           "usage": {},
           "input_digest": null,
           "event_usage": {
-            "input": 1392851,
-            "output": 38660,
-            "cache_read": 5307136,
+            "input": 1553077,
+            "output": 44967,
+            "cache_read": 5993856,
             "cache_write": 0,
-            "total": 6738647
+            "total": 7591900
           }
         },
         "public-clean-werkzeug-e550ef8": {
@@ -3468,11 +3468,11 @@
         }
       },
       "total_usage": {
-        "input": 5310053,
-        "output": 585323,
-        "cache_read": 8942336,
+        "input": 5470279,
+        "output": 591630,
+        "cache_read": 9629056,
         "cache_write": 0,
-        "total": 14837712
+        "total": 15690965
       },
       "statuses": {
         "outstanding-findings": 99,

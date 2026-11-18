@@ -39,19 +39,19 @@ Both runs used all 166 cases from corpus revision 5. Commands used `-label t142-
 
 | Metric | Before | After |
 | --- | ---: | ---: |
-| Input tokens | 5,310,053 | 1,711,228 |
-| Output tokens | 585,323 | 253,724 |
-| Cache-read tokens | 8,942,336 | 1,110,400 |
-| Total reported tokens | 14,837,712 | 3,075,352 |
+| Input tokens | 5,470,279 | 1,711,228 |
+| Output tokens | 591,630 | 253,724 |
+| Cache-read tokens | 9,629,056 | 1,110,400 |
+| Total reported tokens | 15,690,965 | 3,075,352 |
 | Conclusive reviews | 155 | 163 |
 | Inconclusive reviews | 7 | 0 |
 | Admission failures | 3 | 3 |
 | Harness settle timeouts | 1 | 0 |
 | Finalization turns | 0 | 15 |
 
-Reported tokens fell 79.3%. All 15 after-run finalization turns produced verdicts. A conclusive verdict can still miss defects or report false positives. These counts do not establish review accuracy.
+Reported tokens fell 80.4%. All 15 after-run finalization turns produced verdicts. A conclusive verdict can still miss defects or report false positives. These counts do not establish review accuracy.
 
-Both runs rejected `local-large-authority-decisions`, `local-large-independent-reviews`, and `local-large-pipeline-gates` before review because their inputs exceeded the admission bound. The baseline `public-clean-werkzeug-d441b0c` exceeded the harness's 12-minute settle limit. Its captured usage remains in the total even though the controller never recorded a completed attempt.
+Both runs rejected `local-large-authority-decisions`, `local-large-independent-reviews`, and `local-large-pipeline-gates` before review because their inputs exceeded the admission bound. The baseline `public-clean-werkzeug-d441b0c` exceeded the harness's 12-minute settle limit. The baseline harness left that reviewer running after its timeout and exit. A final process scan found the supervisor and stopped its tree with SIGTERM. Its final captured usage, including work after the harness timeout, remains in the total even though the controller never recorded a completed attempt. This cleanup leak inflates the baseline cost; the comparison includes the cost actually reported before cleanup.
 
 The harness automatically judged findings after review. Its report writer then failed with `json: error calling MarshalJSON for type json.RawMessage: unexpected end of JSON input`. An earlier intermediate run failed the same way. A likely cause is an empty raw JSON field in an admission-error record. This is a harness issue, separate from reviewer output. Per-case final statuses and usage were preserved directly from controller state before harness cleanup; event usage supplies cache accounting and the timed-out baseline's usage. The accompanying [metrics JSON](t142-review-budget.json) records both. Judge tokens are excluded. Raw timing remains incomplete for the timed-out baseline, so no whole-corpus latency claim is made.
 
