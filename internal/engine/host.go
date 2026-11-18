@@ -75,7 +75,9 @@ func hostRefusal(r *Run, q Request) string {
 		return "invalid host identity: name and id are required text"
 	}
 	if r != nil && r.Host != nil && !sameHost(r.Host, q.Host) {
-		return "run is owned by host " + HostLabel(r.Host) + "; this client may only attach and inspect"
+		if q.Host == nil || q.Op != "attach" && q.Op != "new" || !hostReplaceable(r) {
+			return "run is owned by host " + HostLabel(r.Host) + "; this client may only attach and inspect"
+		}
 	}
 	if q.Host != nil && r != nil && r.Host == nil && q.Op != "new" {
 		return "a standalone run owns this worktree; the host may replace it only with new"
@@ -87,6 +89,36 @@ func hostRefusal(r *Run, q Request) string {
 		return "host mode: the host owns cap decisions; only a paused review can be rerun"
 	}
 	return ""
+}
+
+func hostReplaceable(r *Run) bool {
+	switch r.Status {
+	case "running", "cancelling", "writing", "recovery-required", "unknown-outcome":
+		return false
+	}
+	if r.Pause != nil && r.Pause.AutoResumeAt != "" {
+		return false
+	}
+	if r.Recovery != nil || repairHeld(r.Repair) || pipelineCustody(r) {
+		return false
+	}
+	if r.Review != nil && (r.Review.Status == "running" || r.Review.Status == "unknown-outcome") {
+		return false
+	}
+	if r.Repair != nil && r.Repair.Writer == "unknown" {
+		return false
+	}
+	if p := r.Pipeline; p != nil {
+		if p.Active != nil {
+			return false
+		}
+		for _, x := range p.Repairs {
+			if x.Writer == "unknown" {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error {

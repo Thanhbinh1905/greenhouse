@@ -30,7 +30,9 @@ Every host request carries `host`:
 
 - `attach` with `host` creates a host run for the worktree, or attaches to the run of the same host (same `name` and `id`).
 - A worktree with a standalone run refuses a host `attach`. The host takes the worktree over only with an explicit `new` carrying `host`.
-- A run owned by one host refuses mutations from any other client, including the terminal and AXI requests without `host` or with a different host. Those clients may still `attach`, `inspect` and `watch`; their `actions` list only `attach` and `inspect`, and `blocked` names the owning host.
+- A different host may `attach` to a settled run, then explicitly replace it with `new`. Settled means no running or cancelling execution, scheduled resume, writer activity, candidate custody, recovery requirement, or unknown writer or executor outcome. While any of these remain, both requests retain the ownership refusal.
+- Cross-host `attach` only observes the old run. `new` creates a run owned by the requesting host with no inherited usage, findings, grants, or lineage. The old run remains available through `inspect` and is unchanged.
+- Other mutations of a host run remain restricted to its owner. The terminal and AXI clients without `host` may only observe it. Observer responses list only `attach` and `inspect` in `actions`, and `blocked` names the owning host.
 
 ## Review rounds
 
@@ -179,7 +181,7 @@ Response fields:
 }
 ```
 
-After the host commits an author repair, `new` captures the changed head. It also allows explicit takeover of a standalone run. Copy the current envelope fields from `attach` or `inspect`:
+After the host commits an author repair, `new` captures the changed head. It also allows explicit takeover of a standalone run or another host's settled run. Copy the current envelope fields from `attach` or `inspect`:
 
 ```json
 {
@@ -197,7 +199,7 @@ After the host commits an author repair, `new` captures the changed head. It als
 }
 ```
 
-The response has a new `run_id`, `input_id`, and `token`; `run.predecessor` identifies the previous run. The host repeats the remaining operations for the successor with new action IDs.
+The response has a new `run_id`, `input_id`, and `token`; `run.predecessor` identifies the previous run only when both runs belong to the same host. The host repeats the remaining operations for the successor with new action IDs.
 
 ### Apply settings
 
@@ -410,7 +412,9 @@ Then the host repeats the review round with a new grant.
 
 ## Verification
 
-`TestEmbeddedHostOwnsDelivery` drives a fake host through the daemon, AXI and terminal with an isolated HOME, real Git and a fake reviewer. It proves two grants buy exactly two reviewer invocations and no fixer, a Greenhouse `limit` of 1 does not stop the host's second round, the successor keeps usage, and no candidate ref, private worktree, lease or remote ref appears. `TestHostOwnershipBoundaries` covers standalone takeover and a second host, and `TestHostReviewResumesUnderItsGrant` covers a paused review that resumes under its grant.
+`TestEmbeddedHostOwnsDelivery` drives a fake host through the daemon, AXI and terminal with an isolated HOME, real Git and a fake reviewer. It proves two grants buy exactly two reviewer invocations and no fixer, a Greenhouse `limit` of 1 does not stop the host's second round, the successor keeps usage, and no candidate ref, private worktree, lease or remote ref appears.
+
+`TestHostReusesSettledWorktree` proves host A can finish a review and host B can attach, create an independent run, and review the same worktree without changing host A's run. `TestCrossHostReplacementSafety` covers refusal during active execution, custody, and unknown outcomes. `TestHostOwnershipBoundaries` covers standalone takeover and a second host, and `TestHostReviewResumesUnderItsGrant` covers a paused review that resumes under its grant.
 
 `TestHostFindingIdentityAcrossRounds` exercises two host review rounds through the daemon with real Git and a fake reviewer. It checks that shifted code and reworded explanations preserve the ID, while edited code changes it.
 

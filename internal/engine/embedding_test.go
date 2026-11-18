@@ -184,8 +184,8 @@ func TestHostOwnershipBoundaries(t *testing.T) {
 	}
 	other := map[string]any{"version": 2, "op": "attach", "host": map[string]any{"name": "other-host", "id": "task-9"}}
 	b, _ = json.Marshal(other)
-	if refused := axi(t, bin, repo, home, string(b)); refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "owned by host fake-host task-7") {
-		t.Fatalf("a second host must not share the run: %v", refused)
+	if observed := axi(t, bin, repo, home, string(b)); observed["outcome"] != "ok" || runOf(t, observed)["host"].(map[string]any)["id"] != "task-7" || strings.Join(stringsOf(observed["actions"]), ",") != "attach,inspect" {
+		t.Fatalf("a second host may only observe the settled run before new: %v", observed)
 	}
 	if invalid := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"","id":"x"}}`); invalid["outcome"] != "refused" {
 		t.Fatalf("an empty host name must refuse: %v", invalid)
@@ -440,5 +440,87 @@ func TestHostReviewMovedTarget(t *testing.T) {
 	result := v["host_result"].(map[string]any)
 	if result["target"] != target || result["review_base"] != base || result["verdict"] != "findings" {
 		t.Fatalf("host result must report target and effective review base: %v", result)
+	}
+}
+
+func TestHostReusesSettledWorktree(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	installFake(t, home, `deadline=time.time()+15
+while not os.path.exists(root+'/release-review') and time.time()<deadline:
+ time.sleep(0.01)`)
+	otherHost := map[string]any{"name": "fake-host", "id": "task-8"}
+	v := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`)
+	v = hostPrepare(t, bin, repo, home, v, target, "-first-host")
+	v = hostCall(t, bin, repo, home, v, "review", "first-host-review", map[string]any{"grant": "round-1"})
+	if v["outcome"] != "ok" {
+		t.Fatalf("first host review: %v", v)
+	}
+	active := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-8"}}`)
+	wantRefusal := "run is owned by host fake-host task-7; this client may only attach and inspect"
+	if active["outcome"] != "refused" || active["error"] != wantRefusal {
+		t.Fatalf("second host attached during active review: outcome=%v error=%v", active["outcome"], active["error"])
+	}
+	if refused := hostCall(t, bin, repo, home, active, "new", "active-second-host-new", map[string]any{"host": otherHost}); refused["outcome"] != "refused" || refused["error"] != wantRefusal {
+		t.Fatalf("second host replaced active review: outcome=%v error=%v", refused["outcome"], refused["error"])
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "release-review"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	v = hostSettle(t, bin, repo, home)
+	oldRun, _ := json.Marshal(runOf(t, v))
+	if v["host_result"].(map[string]any)["status"] != "outstanding-findings" {
+		t.Fatalf("first host review did not settle with findings: %v", v)
+	}
+	attached := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-8"}}`)
+	if attached["outcome"] != "ok" || attached["run_id"] != v["run_id"] || strings.Join(stringsOf(attached["actions"]), ",") != "attach,inspect" {
+		t.Fatalf("second host attach: outcome=%v error=%v actions=%v", attached["outcome"], attached["error"], attached["actions"])
+	}
+	if refused := hostCall(t, bin, repo, home, attached, "review", "other-host-direct-review", map[string]any{"host": otherHost, "grant": "round-2"}); refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "owned by host") {
+		t.Fatalf("second host may not review the old run: %v", refused)
+	}
+	next := hostCall(t, bin, repo, home, attached, "new", "second-host-new", map[string]any{"host": otherHost})
+	r := runOf(t, next)
+	if next["outcome"] != "ok" || next["run_id"] == v["run_id"] || r["host"].(map[string]any)["id"] != "task-8" {
+		t.Fatalf("second host must own a fresh run: %v", next)
+	}
+	for _, key := range []string{"predecessor", "inherited", "findings", "host_findings", "host_grants", "host_responses"} {
+		if r[key] != nil {
+			t.Fatalf("second host inherited %s: %v", key, r[key])
+		}
+	}
+	if r["review_used"] != float64(0) || r["repair_used"] != float64(0) {
+		t.Fatalf("second host inherited usage: %v", r)
+	}
+	request, _ := json.Marshal(map[string]any{"version": 2, "op": "inspect", "run_id": v["run_id"]})
+	inspected := axi(t, bin, repo, home, string(request))
+	preserved, _ := json.Marshal(runOf(t, inspected))
+	if string(oldRun) != string(preserved) {
+		t.Fatalf("old run changed after takeover:\nbefore %s\nafter %s", oldRun, preserved)
+	}
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 1, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	for _, step := range []struct {
+		op    string
+		extra map[string]any
+	}{{"apply", map[string]any{"settings": settings}}, {"prepare", map[string]any{"intent": "Review reused worktree", "target": target}}, {"resolve-rules", nil}, {"review", map[string]any{"grant": "round-1"}}} {
+		extra := map[string]any{"host": otherHost}
+		for k, value := range step.extra {
+			extra[k] = value
+		}
+		next = hostCall(t, bin, repo, home, next, step.op, "second-host-"+step.op, extra)
+		if next["outcome"] != "ok" {
+			t.Fatalf("second host %s: %v", step.op, next)
+		}
+	}
+	waitReview(t, bin, repo, home)
+	final := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-8"}}`)
+	result := final["host_result"].(map[string]any)
+	if result["status"] != "outstanding-findings" || result["host"].(map[string]any)["id"] != "task-8" || result["grant"] != "round-1" || runOf(t, final)["review_used"] != float64(1) {
+		t.Fatalf("second host review did not settle independently: %v", final)
 	}
 }
