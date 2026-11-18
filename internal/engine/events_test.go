@@ -59,9 +59,18 @@ func TestEventSubscriptionRecoversThroughSnapshots(t *testing.T) {
 	after = notified["sequence"]
 
 	during := watch(t, bin, repo, home, stream, after, 300)
-	if during["wait"] != "elapsed" || runOf(t, during)["status"] != "running" {
-		t.Fatalf("elapsed wait during a review: %v", during)
+	if during["wait"] != "elapsed" && during["wait"] != "events" || runOf(t, during)["status"] != "running" {
+		t.Fatalf("wait during a review: %v", during)
 	}
+	if during["wait"] == "events" {
+		for _, value := range during["events"].([]any) {
+			event := value.(map[string]any)
+			if event["kind"] != "step-started" || event["command"] == nil {
+				t.Fatalf("unexpected event during running review: %v", event)
+			}
+		}
+	}
+	after = during["sequence"]
 	settled := map[string]any{}
 	for deadline := time.Now().Add(20 * time.Second); time.Now().Before(deadline); {
 		settled = watch(t, bin, repo, home, stream, after, 5000)
