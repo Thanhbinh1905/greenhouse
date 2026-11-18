@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -200,6 +201,18 @@ func addUsage(a, b TokenUsage) TokenUsage {
 	return TokenUsage{InputTokens: a.InputTokens + b.InputTokens, OutputTokens: a.OutputTokens + b.OutputTokens, CachedInputTokens: a.CachedInputTokens + b.CachedInputTokens, Tokens: a.Tokens + b.Tokens, CostUSD: a.CostUSD + b.CostUSD}
 }
 
+func finalReviewAnswer(first, final agentAnswer) agentAnswer {
+	if final.Model == "" {
+		final.Model = first.Model
+	}
+	if final.Provider == "" {
+		final.Provider = first.Provider
+	}
+	final.Usage = addUsage(first.Usage, final.Usage)
+	final.Tokens, final.CostUSD = final.Usage.Tokens, final.Usage.CostUSD
+	return final
+}
+
 func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (reviewOutcome, runner.Confinement) {
 	s, err := newReviewSession(x, dir)
 	if err != nil {
@@ -233,7 +246,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		defer stopTurn()
 		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stallWatch(out, x.Config.Backend, stopTurn), stderr)
 		appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes())
-		result := reviewFrom(x, code, out, stderr, err, turn.Err() != nil)
+		result := reviewFrom(x, code, out, stderr, err, executorStop(turn))
 		if errors.Is(err, runner.ErrWriterTreeUnknown) {
 			result.Answer.Reason = "writer_tree_unknown"
 		}
@@ -248,20 +261,12 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 	if ctx.Err() == nil && first.Answer.Reason != "writer_tree_unknown" && (nearLimit || first.Answer.Reason == "invalid_output") {
 		args, ok := s.finalArgs(stdout)
 		if ok {
-			var original map[string]any
-			json.Unmarshal(x.Input, &original)
-			input := map[string]any{"Head": original["Head"], "Paths": original["Paths"], "Contract": original["Contract"]}
-			input["Controller"] = "Return your verdict now. Stop exploring. No further tools or investigation. Use the evidence already gathered in this session and the supplied changed hunks. Return only the required JSON object."
-			if !nearLimit {
-				input["PreviousAnswerError"] = safeMessage(first.Answer.Diagnostic)
-			}
-			data, _ := json.Marshal(input)
+			data := reviewFinalizationInput(x, first, nearLimit)
 			final, _ := run(ctx, args, data)
-			final.Answer.Usage = addUsage(first.Answer.Usage, final.Answer.Usage)
-			final.Answer.Tokens, final.Answer.CostUSD = final.Answer.Usage.Tokens, final.Answer.Usage.CostUSD
+			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
-			if ctx.Err() != nil && parent.Err() == nil {
+			if ctx.Err() != nil && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
 				final.Status = "inconclusive"
 				final.Answer.Reason = "review_budget"
 				final.Answer.Diagnostic = "review wall-time budget exhausted"
@@ -270,12 +275,24 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		}
 		first.Log += "; finalization unavailable: backend did not report a resumable session"
 	}
-	if (ctx.Err() != nil || nearLimit) && parent.Err() == nil {
+	if (ctx.Err() != nil || nearLimit) && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
 		first.Status = "inconclusive"
 		first.Answer.Reason = "review_budget"
 		first.Answer.Diagnostic = "review wall-time budget exhausted"
 	}
 	return first, confinement
+}
+
+func reviewFinalizationInput(x *Execution, first reviewOutcome, nearLimit bool) []byte {
+	var original map[string]any
+	json.Unmarshal(x.Input, &original)
+	input := map[string]any{"Head": original["Head"], "Paths": original["Paths"], "Contract": original["Contract"]}
+	input["Controller"] = "Return your verdict now. Stop exploring. No further tools or investigation. Use the evidence already gathered in this session and the supplied changed hunks. Return only the required JSON object."
+	if !nearLimit {
+		input["PreviousAnswerError"] = safeMessage(first.Answer.Diagnostic)
+	}
+	data, _ := json.Marshal(input)
+	return data
 }
 
 func hunkContext(files []reviewFile, ranges map[string][][2]int) []reviewFile {
@@ -292,9 +309,15 @@ func hunkContext(files []reviewFile, ranges map[string][][2]int) []reviewFile {
 			if line == "" {
 				continue
 			}
+			number := n + 1
+			if prefix, _, ok := strings.Cut(line, ": "); ok {
+				if parsed, err := strconv.Atoi(prefix); err == nil {
+					number = parsed
+				}
+			}
 			keep := false
 			for _, span := range spans {
-				if n+1 >= span[0]-contextLines && n+1 <= span[1]+contextLines {
+				if number >= span[0]-contextLines && number <= span[1]+contextLines {
 					keep = true
 					break
 				}

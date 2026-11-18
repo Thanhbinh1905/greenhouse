@@ -75,3 +75,11 @@ func TestDeletionContextUsesCandidateWindow(t *testing.T) {
 		t.Fatalf("deletion context contains %d candidate lines, want window 1..40", n)
 	}
 }
+
+func TestHunkContextPreservesNumberedWindows(t *testing.T) {
+	files := []reviewFile{{Path: "sample", Lines: "...\n2499: before\n2500: changed\n2501: after\n...\n"}}
+	got := hunkContext(files, map[string][][2]int{"sample": {{2500, 2500}}})
+	if !strings.Contains(got[0].Lines, "2500: changed\n") {
+		t.Fatalf("candidate window lost its changed line: %q", got[0].Lines)
+	}
+}

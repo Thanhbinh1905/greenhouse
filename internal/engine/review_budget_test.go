@@ -257,7 +257,7 @@ time.sleep(30)
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "timeout-rules", nil)
 	mutate(t, bin, repo, home, v, "review", "shared-timeout", nil)
 	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
-	if review["finalization"] != true || review["reason"] != "review_budget" {
+	if review["finalization"] != true || review["reason"] != "timeout" {
 		t.Fatalf("finalization did not share the effective deadline: status=%v reason=%v finalization=%v", review["status"], review["reason"], review["finalization"])
 	}
 }
@@ -412,5 +412,60 @@ def print(text):
 	}
 	if len(data.Input.Files) != 1 || !strings.Contains(data.Input.Files[0].Lines, "40: line 100\n") || strings.Contains(data.Input.Files[0].Lines, "41: line 101\n") {
 		t.Fatalf("deletion context must end at candidate line 40: %+v", data.Input.Files)
+	}
+}
+
+func TestFinalizationKeepsExplorationModel(t *testing.T) {
+	for _, mode := range []string{"timeout", "no-model"} {
+		t.Run(mode, func(t *testing.T) {
+			bin, repo, home, v := prepareFixture(t)
+			installFake(t, home, `if '--no-tools' in sys.argv:
+ if '`+mode+`' == 'timeout': time.sleep(30)
+ sys.exit(0)
+print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':'not JSON'}]}}))
+print(json.dumps({'type':'agent_settled','aborted':False}))
+sys.exit(0)
+`)
+			configs := runOf(t, v)["configs"].([]any)
+			settings := configs[len(configs)-1].(map[string]any)["settings"].(map[string]any)
+			settings["executor_timeout"] = "4s"
+			v = mutate(t, bin, repo, home, v, "apply", "metadata-timeout", settings)
+			v = mutate(t, bin, repo, home, v, "resolve-rules", "metadata-rules", nil)
+			mutate(t, bin, repo, home, v, "review", "metadata-review", nil)
+			data, err := json.Marshal(runOf(t, waitReview(t, bin, repo, home)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var run Run
+			if err := json.Unmarshal(data, &run); err != nil {
+				t.Fatal(err)
+			}
+			run.Host = &Host{Name: "fixture", ID: "metadata"}
+			run.Review.Config.Model = ""
+			host := hostResult(&run, true)
+			if !run.Review.Finalization || run.Review.ReportedModel != "model" || host.Model != "model" {
+				t.Fatalf("finalization lost exploration model: finalization=%t review model=%q host model=%q reason=%q", run.Review.Finalization, run.Review.ReportedModel, host.Model, run.Review.Reason)
+			}
+			if mode == "timeout" && run.Review.Reason != "timeout" {
+				t.Fatalf("finalization did not time out: %s", run.Review.Reason)
+			}
+		})
+	}
+}
+
+func TestFinalReviewAnswerMetadata(t *testing.T) {
+	first := agentAnswer{Provider: "exploration-provider", Model: "exploration-model", Usage: TokenUsage{Tokens: 12}}
+	for _, final := range []agentAnswer{{}, {Provider: "final-provider", Model: "final-model"}, {Provider: "final-provider"}, {Model: "final-model"}} {
+		got := finalReviewAnswer(first, final)
+		wantProvider, wantModel := final.Provider, final.Model
+		if wantProvider == "" {
+			wantProvider = first.Provider
+		}
+		if wantModel == "" {
+			wantModel = first.Model
+		}
+		if got.Provider != wantProvider || got.Model != wantModel || got.Tokens != 12 {
+			t.Fatalf("metadata merge: got %+v, want provider=%s model=%s tokens=12", got, wantProvider, wantModel)
+		}
 	}
 }

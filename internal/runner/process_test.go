@@ -61,7 +61,7 @@ func TestConfiguredProcessTimeoutStopsExecutor(t *testing.T) {
 		t.Fatalf("expected deadline exceeded, got %v (%s)", err, stderr.String())
 	}
 	observed := runner.ObserveExecutors("timeout", resolveHome)
-	if len(observed) != 1 || observed[0].State != "stopped" || !observed[0].Record.Reaped {
+	if len(observed) != 1 || observed[0].State != "stopped" || !observed[0].Record.Reaped || observed[0].Record.StopReason != "timeout" {
 		t.Fatalf("timed-out executor tree was not stopped and reaped: %+v", observed)
 	}
 }
@@ -113,6 +113,33 @@ func TestProcessDeadlineHonorsEarlierParent(t *testing.T) {
 	}
 }
 
+func TestRecordedCancellationKeepsOutput(t *testing.T) {
+	home := t.TempDir()
+	resolveHome := func() (string, error) { return home, nil }
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ctx = runner.WithExecutor(ctx, "cancel", resolveHome)
+	out, stderr := runner.NewBuffer(1024), runner.NewBuffer(1024)
+	_, err := runner.RunProcess(ctx, home, "/bin/sh", []string{"-c", "printf partial; sleep 30"}, nil, os.Environ(), cancelOnOutput{cancel: cancel, output: out}, stderr)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	observed := runner.ObserveExecutors("cancel", resolveHome)
+	if len(observed) != 1 || observed[0].State != "stopped" || observed[0].Record.StopReason != "cancelled" || string(observed[0].Stdout) != "partial" {
+		t.Fatalf("cancelled executor lost reason or output: %+v", observed)
+	}
+}
+
+type cancelOnOutput struct {
+	cancel context.CancelFunc
+	output *runner.Buffer
+}
+
+func (w cancelOnOutput) Write(p []byte) (int, error) {
+	n, err := w.output.Write(p)
+	w.cancel()
+	return n, err
+}
 func TestProcessObserverReceivesZeroExitError(t *testing.T) {
 	outputErr := errors.New("output unavailable")
 	var observedErr error
