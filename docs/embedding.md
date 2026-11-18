@@ -117,7 +117,11 @@ A host may respond to a subset of the findings. A successor created with `new` b
 
 Greenhouse refuses unknown finding IDs, duplicate IDs, other response values, invalid reasons, and any non-empty `authority` value. Deferral remains a standalone decision operation. Responses require protocol 2 and the owning host's `review` request. Standalone clients, other hosts, and other operations cannot submit responses. Validation failure consumes no grant and leaves the run token unchanged.
 
-Replaying the identical request with the same `action_id` returns its recorded receipt, including after the review settles. Reusing that action ID with different input is refused. Each new round still needs an unused grant and current run, input, gate, and token values.
+Replaying the identical request with the same `action_id` returns its recorded receipt, including after the review settles. Reusing a retained action ID with different input is refused. Each new round still needs an unused grant and current run, input, gate, and token values.
+
+Receipts and settled runs outside current worktree slots are archived separately from `state.json`. Each archive retains at most 128 records and 64 MiB, pruning the oldest archived records first. Archived runs and receipts are readable only when listed in the committed state manifest. Replay is guaranteed only while the receipt is retained. Inspecting a missing historical run reports that its data may have been pruned. Slot owners, active executions, recovery, candidate custody, and repository trust remain in the hot state.
+
+Inspect and transcript remain available during a durable write. Watch and model catalog requests receive a retry refusal during a write. Archive pruning starts only after the replacement state is durably committed. Mutations wait for the write to finish before execution. Large legacy stores migrate before the daemon accepts requests; startup allows up to 60 seconds.
 
 Complete request:
 

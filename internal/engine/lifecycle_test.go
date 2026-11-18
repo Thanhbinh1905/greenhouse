@@ -9,9 +9,9 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall"
 	"testing"
-	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 func runOf(t *testing.T, v map[string]any) map[string]any {
@@ -124,33 +124,20 @@ func TestLifecycleSettingsAndIdentity(t *testing.T) {
 	if e := json.Unmarshal(b, &store); e != nil {
 		t.Fatal(e)
 	}
-	if len(store.Runs) != 4 || store.Runs[initial["run_id"].(string)].Submitted.Head != runOf(t, initial)["candidate"] {
+	if len(store.Runs) != 2 {
+		t.Fatal("hot state retains superseded runs")
+	}
+	historical := axi(t, bin, repo, home, fmt.Sprintf(`{"version":1,"op":"inspect","run_id":%q}`, initial["run_id"]))
+	if historical["outcome"] != "ok" || runOf(t, historical)["submitted"].(map[string]any)["head"] != runOf(t, initial)["candidate"] {
 		t.Fatal("old evidence lost")
 	}
 }
 
 func stopDaemon(t *testing.T, home string) {
 	t.Helper()
-	b, e := os.ReadFile(filepath.Join(home, "pid"))
-	if e != nil {
-		t.Fatal(e)
+	if err := daemonutil.StopDaemon(home); err != nil {
+		t.Fatal(err)
 	}
-	var pid int
-	json.Unmarshal(b, &pid)
-	if e = syscall.Kill(pid, syscall.SIGTERM); e != nil {
-		t.Fatal(e)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		c, e := net.DialTimeout("unix", filepath.Join(home, "socket"), 50*time.Millisecond)
-		if e != nil {
-			waitDaemonExit(t, home)
-			return
-		}
-		c.Close()
-		time.Sleep(10 * time.Millisecond)
-	}
-	t.Fatal("daemon did not stop")
 }
 func TestRestartAndUnknownWriter(t *testing.T) {
 	t.Parallel()

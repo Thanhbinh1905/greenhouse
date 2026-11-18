@@ -727,7 +727,7 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 		t.Fatal("restart dropped the recovery hazard")
 	}
 	linked := filepath.Join(filepath.Dir(repo), "linked")
-	git(t, repo, "worktree", "add", "-q", "-b", "linked", linked, "HEAD")
+	git(t, repo, "worktree", "add", "-q", "-f", linked, "main")
 	other := axi(t, bin, linked, home, `{"version":1,"op":"attach"}`)
 	other = mutate(t, bin, linked, home, other, "apply", "linked-full", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
 	q := map[string]any{"version": 1, "op": "prepare", "run_id": other["run_id"], "input_id": other["input_id"], "expected": other["token"], "gate_id": other["gate_id"], "action_id": "prepare-linked", "intent": "Change the sample", "target": run["target"]}
