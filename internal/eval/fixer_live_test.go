@@ -71,3 +71,29 @@ func TestRunFixLiveDrivesGreenhouseRepairWithoutNetwork(t *testing.T) {
 		}
 	}
 }
+
+func TestRunFixLiveExcludesScoreAfterCleanupFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the greenhouse executable")
+	}
+	dir := t.TempDir()
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte(fakeFixerPi), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
+	r, err := runFixLive(fixOptions{Corpus: filepath.Join("testdata", "fixer"), Out: filepath.Join(dir, "out"), Model: "fake/m1", Pi: pi, Cases: []string{"fix-offbyone-window"}, Parallel: 1, Settle: 2 * time.Minute, cleanup: failDaemonCleanup})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := r.Cases[0]
+	if rec.Status != "eval-error" || rec.Error != "forced daemon cleanup failure" || !rec.InputVerified || rec.RepairHead == "" {
+		t.Fatalf("completed repair with failed cleanup = %+v", rec)
+	}
+	if !rec.Score.Fixed {
+		t.Fatalf("fixture must complete a successful repair before cleanup: %+v", rec.Score)
+	}
+	if r.Summary.Cases != 0 || r.Summary.Fixed != 0 || r.Summary.AcceptPassed != 0 || r.Summary.ResponsesCorrect != 0 || r.Summary.BarMet {
+		t.Fatalf("summary credits failed cleanup: %+v", r.Summary)
+	}
+}
