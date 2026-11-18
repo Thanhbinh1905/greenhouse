@@ -13,6 +13,24 @@ import (
 	"time"
 )
 
+func TestConventionalPullTitle(t *testing.T) {
+	for _, c := range []struct{ intent, want string }{
+		{"", "chore: validated candidate"},
+		{"Add a sample feature", "feat: Add a sample feature"},
+		{"fix(api): reject expired tokens", "fix(api): reject expired tokens"},
+		{"Add\nmultiple lines", "feat: Add multiple lines"},
+	} {
+		if got := conventionalPullTitle(c.intent); got != c.want || !validPullTitle(got) {
+			t.Errorf("conventionalPullTitle(%q) = %q, want %q", c.intent, got, c.want)
+		}
+	}
+	for _, title := range []string{"Bad title", "feat:", "feat: " + strings.Repeat("x", 201), "feat: two\nlines"} {
+		if validPullTitle(title) {
+			t.Errorf("validPullTitle(%q) = true", title)
+		}
+	}
+}
+
 const fullReviewer = `#!/usr/bin/python3
 import json,sys,os
 if sys.argv[1:] == ['--list-models']:

@@ -429,6 +429,7 @@ func prepareRun(r *Run, intent, requested string) error {
 			return err
 		}
 		r.Pipeline = newPipeline(plan, digests)
+		r.Pipeline.Intent = intent
 		inherit(r)
 	}
 	r.Reviewer = &cfg
