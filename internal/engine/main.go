@@ -169,11 +169,13 @@ type Receipt struct {
 	Result Response `json:"result"`
 }
 type Store struct {
+	home           string
 	Version        int                `json:"version"`
 	Defaults       Settings           `json:"defaults"`
 	DefaultsSource string             `json:"defaults_source"`
 	Runs           map[string]*Run    `json:"runs"`
 	Slots          map[string]string  `json:"slots"`
+	ReceiptIndex   map[string]string  `json:"receipt_index,omitempty"`
 	Receipts       map[string]Receipt `json:"receipts"`
 	Migrations     []Migration        `json:"migrations,omitempty"`
 	Trust          map[string]Trust   `json:"trust"`
@@ -242,37 +244,18 @@ func Home() (string, error) {
 	return h, nil
 }
 func persist(h string, s *Store) error {
-	b, e := json.MarshalIndent(s, "", "  ")
-	if e != nil {
-		return e
+	if err := compactHistory(h, s); err != nil {
+		return err
 	}
-	f, e := os.CreateTemp(h, "state-")
-	if e != nil {
-		return e
+	b, err := json.Marshal(s)
+	if err != nil {
+		return err
 	}
-	defer os.Remove(f.Name())
-	if _, e = f.Write(b); e == nil {
-		e = f.Sync()
-	}
-	ce := f.Close()
-	if e != nil {
-		return e
-	}
-	if ce != nil {
-		return ce
-	}
-	if e = os.Rename(f.Name(), filepath.Join(h, "state.json")); e != nil {
-		return e
-	}
-	d, e := os.Open(h)
-	if e != nil {
-		return e
-	}
-	defer d.Close()
-	return d.Sync()
+	return writeFileDurably(filepath.Join(h, "state.json"), b)
 }
+
 func load(h string) (*Store, error) {
-	s := &Store{Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: defaultAgent(), FixerBackend: defaultAgent(), ExecutorTimeout: "45m"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
+	s := &Store{home: h, Version: 1, Defaults: Settings{Mode: "auto", Preset: "one-pass", Limit: 4, Rules: []string{"unslop", "no-comments"}, ReviewerBackend: defaultAgent(), FixerBackend: defaultAgent(), ExecutorTimeout: "45m"}, DefaultsSource: "built-in default", Runs: map[string]*Run{}, Slots: map[string]string{}, Receipts: map[string]Receipt{}, Trust: map[string]Trust{}}
 	b, e := os.ReadFile(filepath.Join(h, "state.json"))
 	if os.IsNotExist(e) {
 		return s, nil
@@ -618,9 +601,12 @@ func handleRequest(s *Store, q Request) Response {
 	slot := Digest([]string{id.Repository, id.Worktree})
 	r := s.Runs[s.Slots[slot]]
 	if q.Op == "inspect" && q.RunID != "" {
-		other := s.Runs[q.RunID]
+		other, err := historicalRun(s, q.RunID)
+		if err != nil {
+			return fail("historical run unavailable: "+err.Error(), r)
+		}
 		if other == nil || other.Submitted.Repository != id.Repository {
-			return fail("unknown run for this repository", r)
+			return fail("unknown run for this repository; historical data may have been pruned", r)
 		}
 		v := view(s, other)
 		if other != r {
@@ -631,10 +617,14 @@ func handleRequest(s *Store, q Request) Response {
 	if q.Op == "transcript" {
 		target := r
 		if q.RunID != "" {
-			target = s.Runs[q.RunID]
+			var err error
+			target, err = historicalRun(s, q.RunID)
+			if err != nil {
+				return fail("historical run unavailable: "+err.Error(), r)
+			}
 		}
 		if target == nil || target.Submitted.Repository != id.Repository {
-			return fail("unknown run for this repository", r)
+			return fail("unknown run for this repository; historical data may have been pruned", r)
 		}
 		transcript, err := readTranscript(target.ID)
 		if err != nil {
@@ -667,7 +657,9 @@ func handleRequest(s *Store, q Request) Response {
 		return fail(refusal, r)
 	}
 	d := Digest(q)
-	if receipt, ok := s.Receipts[q.Action]; ok {
+	if receipt, ok, err := historicalReceipt(s, q.Action); err != nil {
+		return fail("action receipt unavailable: "+err.Error(), r)
+	} else if ok {
 		if receipt.Digest != d {
 			return fail("action_id reused with different input", r)
 		}
@@ -1004,6 +996,15 @@ func Daemon(h string) error {
 	repairCompleted := make(chan completion)
 	repairProgresses := make(chan repairProgress)
 	connections := make(chan net.Conn)
+	pending := make(chan net.Conn, 64)
+	defer func() {
+		for len(pending) > 0 {
+			(<-pending).Close()
+		}
+	}()
+	commit := func(next *Store) error {
+		return commitWhileServing(s, connections, pending, func() error { return persist(h, next) })
+	}
 	stopped := make(chan struct{})
 	defer close(stopped)
 	active := map[string]context.CancelFunc{}
@@ -1012,7 +1013,7 @@ func Daemon(h string) error {
 	reconcileHandbacks(s)
 	reconcileRecoveries(s)
 	releaseDeadLeases(s)
-	if err := persist(h, s); err != nil {
+	if err := commit(s); err != nil {
 		return err
 	}
 	defer func() {
@@ -1059,7 +1060,7 @@ func Daemon(h string) error {
 					step = nil
 				}
 			}
-			if err := persist(h, s); err != nil {
+			if err := commit(s); err != nil {
 				return err
 			}
 			if step == nil {
@@ -1133,7 +1134,7 @@ func Daemon(h string) error {
 			if r.Status == "writing" && r.Repair != nil && r.Repair.Status == "admitted" {
 				x := *r.Repair
 				r.Repair.Status = "running"
-				if err := persist(h, s); err != nil {
+				if err := commit(s); err != nil {
 					return err
 				}
 				ctx, cancel := context.WithCancel(context.Background())
@@ -1198,18 +1199,19 @@ func Daemon(h string) error {
 		}
 		var c net.Conn
 		select {
+		case c = <-pending:
 		case <-subscribers.C:
 			continue
 		case <-probe:
 			if reconcileRecoveries(s) {
-				if err := persist(h, s); err != nil {
+				if err := commit(s); err != nil {
 					return err
 				}
 			}
 			continue
 		case <-wake.C:
 			if fireAutoResumes(s, time.Now()) {
-				if err := persist(h, s); err != nil {
+				if err := commit(s); err != nil {
 					return err
 				}
 				if err := launch(); err != nil {
@@ -1220,7 +1222,7 @@ func Daemon(h string) error {
 		case progress := <-pipelineProgress:
 			ok := acceptPipelineProgress(s.Runs[progress.run], progress.id, progress.value)
 			if ok {
-				if err := persist(h, s); err != nil {
+				if err := commit(s); err != nil {
 					progress.ack <- false
 					return err
 				}
@@ -1236,7 +1238,7 @@ func Daemon(h string) error {
 			if err := completeStep(r, o); err != nil {
 				return err
 			}
-			if err := persist(h, s); err != nil {
+			if err := commit(s); err != nil {
 				return err
 			}
 			if err := schedule(); err != nil {
@@ -1247,7 +1249,7 @@ func Daemon(h string) error {
 			r := s.Runs[progress.run]
 			ok := acceptRepairProgress(r, progress.id, progress.value)
 			if ok {
-				if err := persist(h, s); err != nil {
+				if err := commit(s); err != nil {
 					progress.ack <- false
 					return err
 				}
@@ -1285,7 +1287,7 @@ func Daemon(h string) error {
 					pauseRun(r, "selected-repair", "repair", "fixer", fixerAgent(x.Config), x.ID, x.Failure, time.Now())
 				}
 				r.Token = opaque()
-				if err := persist(h, s); err != nil {
+				if err := commit(s); err != nil {
 					return err
 				}
 				continue
@@ -1296,7 +1298,7 @@ func Daemon(h string) error {
 			delete(active, r.ID)
 			recordReviewEvidence(r.Review, done.snapshot, done.confinement)
 			finishReview(r, reviewOutcome{Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer})
-			if err := persist(h, s); err != nil {
+			if err := commit(s); err != nil {
 				return err
 			}
 			continue
@@ -1338,12 +1340,15 @@ func Daemon(h string) error {
 			}
 		} else if e != nil {
 			v = Response{Version: 1, Outcome: "refused", Error: "invalid request: " + e.Error()}
+		} else if q.Op == "inspect" || q.Op == "transcript" {
+			v = handle(s, q)
 		} else {
 			b, _ := json.Marshal(s)
 			var next Store
 			json.Unmarshal(b, &next)
+			next.home = h
 			v = handle(&next, q)
-			if e = persist(h, &next); e != nil {
+			if e = commit(&next); e != nil {
 				v = Response{Version: 1, Outcome: "error", Error: "storage commit failed: " + e.Error()}
 				c.SetWriteDeadline(time.Now().Add(5 * time.Second))
 				json.NewEncoder(c).Encode(v)
@@ -1371,12 +1376,14 @@ func Daemon(h string) error {
 			}
 			if q.Version >= 2 && !v.replayed {
 				v.Stream, v.Sequence = events.stream, committed
-				if receipt, ok := s.Receipts[q.Action]; ok && receipt.Digest == Digest(q) {
+				if receipt, ok, err := historicalReceipt(s, q.Action); err != nil {
+					return err
+				} else if ok && receipt.Digest == Digest(q) {
 					receipt.Result.Stream, receipt.Result.Sequence = v.Stream, v.Sequence
 					s.Receipts[q.Action] = receipt
 				}
 			}
-			if e = persist(h, s); e != nil {
+			if e = commit(s); e != nil {
 				return e
 			}
 			if e = launch(); e != nil {
@@ -1409,7 +1416,7 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 			return v, x
 		}
 		go cmd.Wait()
-		deadline := time.Now().Add(5 * time.Second)
+		deadline := time.Now().Add(60 * time.Second)
 		for time.Now().Before(deadline) {
 			c, e = net.DialTimeout("unix", socket, 100*time.Millisecond)
 			if e == nil {
