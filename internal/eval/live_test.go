@@ -2,12 +2,15 @@ package eval
 
 import (
 	"encoding/json"
+	"errors"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
 func TestMain(m *testing.M) {
@@ -159,5 +162,39 @@ func TestShimCountsTimeBeforeInterruptedTurn(t *testing.T) {
 	json.Unmarshal(data, &timing)
 	if timing.Millis < 1000 {
 		t.Fatalf("lost interrupted exploration time: %+v", timing)
+	}
+}
+
+func failDaemonCleanup(home string) error {
+	if err := daemonutil.StopDaemon(home); err != nil {
+		return err
+	}
+	return errors.New("forced daemon cleanup failure")
+}
+
+func TestRunLiveExcludesScoreAfterCleanupFailure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the greenhouse executable")
+	}
+	dir := t.TempDir()
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte(fakePi), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
+	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: filepath.Join(dir, "out"), Model: "fake/m1", Pi: pi, JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 1, Settle: time.Minute, cleanup: failDaemonCleanup})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rec := range r.Cases {
+		if rec.Status != "eval-error" || rec.Error != "forced daemon cleanup failure" || !rec.InputVerified {
+			t.Fatalf("completed review with failed cleanup = %+v", rec)
+		}
+	}
+	if r.Cases[0].Score.Detected != 1 || len(r.Cases[1].Findings) != 0 {
+		t.Fatalf("fixture must complete successful reviews before cleanup: %+v", r.Cases)
+	}
+	if r.Summary.Cases != 0 || r.Summary.HighDetected != 0 || r.Summary.BarMet {
+		t.Fatalf("summary credits failed cleanup: %+v", r.Summary)
 	}
 }
