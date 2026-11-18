@@ -1182,6 +1182,9 @@ func Daemon(h string) error {
 		}
 		return schedule()
 	}
+	if err := launch(); err != nil {
+		return err
+	}
 	wake := time.NewTimer(time.Hour)
 	defer wake.Stop()
 	orphanProbe := time.NewTicker(250 * time.Millisecond)

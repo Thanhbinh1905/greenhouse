@@ -82,7 +82,7 @@ func compactHistory(home string, s *Store) error {
 	sort.Strings(ids)
 	for _, id := range ids {
 		r := s.Runs[id]
-		if r == nil || slots[id] || !hostReplaceable(r) {
+		if r == nil || slots[id] || !hostReplaceable(r) || hasDurableLease(home, r) {
 			continue
 		}
 		if err := archive(home, "runs", id, r); err != nil {
@@ -168,4 +168,14 @@ func historicalReceipt(s *Store, id string) (Receipt, bool, error) {
 		return Receipt{}, false, fmt.Errorf("action receipt digest mismatch")
 	}
 	return receipt, err == nil, err
+}
+
+func hasDurableLease(home string, r *Run) bool {
+	for held, epoch := range leasesOf(r) {
+		lease, err := readLease(r.Submitted.Repository, held.ref)
+		if err != nil || lease != nil && lease.Home == home && lease.Epoch == epoch {
+			return true
+		}
+	}
+	return false
 }
