@@ -57,3 +57,35 @@ func TestTimeoutPipelineMetadata(t *testing.T) {
 		t.Fatalf("metadata lost: review=%+v attempts=%+v", r.Review, r.Attempts)
 	}
 }
+
+func TestAdoptStoppedPipelineReview(t *testing.T) {
+	for _, stopReason := range []string{"timeout", "cancelled", ""} {
+		t.Run("stop_reason="+stopReason, func(t *testing.T) {
+			r := &Run{
+				Status:   "recovery-required",
+				Configs:  []Snapshot{{Settings: Settings{ExecutorTimeout: "7m"}}},
+				Host:     &Host{Name: "fixture", ID: "restart"},
+				Review:   &Execution{ID: "review", InputDigest: "bound-input", Config: ReviewerConfig{Backend: "pi"}},
+				Pipeline: &Pipeline{Stages: []StageResult{{Name: "review"}}},
+				Recovery: &Recovery{Kind: "review", Stage: "review", Execution: "review"},
+			}
+			observed := []runner.ObservedExecutor{{
+				ExecutorEvidence: runner.ExecutorEvidence{ID: "review.0", State: "stopped", Exit: -1},
+				Record:           runner.ExecutorRecord{InputDigest: "bound-input", Stopped: true, StopReason: stopReason, Reaped: true},
+			}}
+			if !adoptRecorded(r, observed) {
+				t.Fatal("reaped stopped review was not adopted")
+			}
+			want := stopReason
+			if want == "" {
+				want = "cancelled"
+			}
+			if r.Review.Status != "cancelled" || r.Review.Reason != want || hostResult(r, true).Reason != want || len(r.Attempts) != 1 || r.Attempts[0].Reason != want || r.Recovery != nil {
+				t.Fatalf("adoption lost stop reason: review=%s reason=%q attempts=%+v recovery=%+v", r.Review.Status, r.Review.Reason, r.Attempts, r.Recovery)
+			}
+			if want == "timeout" && !strings.Contains(r.Review.Diagnostic, "7m0s") {
+				t.Fatalf("timeout lost configured limit: %s", r.Review.Diagnostic)
+			}
+		})
+	}
+}

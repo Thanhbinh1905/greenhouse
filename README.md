@@ -205,7 +205,7 @@ Greenhouse classifies a failed backend run from the CLI's exit code and output:
 | `auth` | "Not logged in" or status 401/403 | 401 Unauthorized | "No API key found" or `401:`/`403:` |
 | `unavailable` | status 5xx or a connection failure | 5xx, connection failure, or three "waiting for network" retries | `5xx:` or "Connection error." |
 
-A review that reaches the 10-minute executor limit reports `status: "cancelled"`, `reason: "timeout"`, and a diagnostic naming the limit. An explicit cancellation reports `reason: "cancelled"`. The reason is retained in `review.reason`, `host_result.reason`, and `attempts[].reason`, including full-pipeline reviews.
+A review that reaches the configured `executor_timeout` limit (45 minutes by default) reports `status: "cancelled"`, `reason: "timeout"`, and a diagnostic naming the limit. An explicit cancellation reports `reason: "cancelled"`. The reason is retained in `review.reason`, `host_result.reason`, and `attempts[].reason`, including full-pipeline reviews.
 
 Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repair. The recorded outputs are in `testdata/backends/`.
 

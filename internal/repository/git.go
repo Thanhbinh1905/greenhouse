@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"strings"
@@ -32,6 +33,9 @@ func (b *cappedOutput) Write(p []byte) (int, error) {
 		p = p[:b.limit-b.data.Len()]
 	}
 	b.data.Write(p)
+	if b.exceeded {
+		return len(p), ErrReadLimit
+	}
 	return n, nil
 }
 
@@ -44,8 +48,22 @@ func ReadBounded(path string, limit int, args ...string) ([]byte, error) {
 	}
 	c.Env = append(c.Env, "GIT_OPTIONAL_LOCKS=0", "GIT_NO_REPLACE_OBJECTS=1")
 	b := &cappedOutput{limit: limit}
-	c.Stdout = b
-	err := c.Run()
+	stdout, err := c.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
+	if err = c.Start(); err != nil {
+		return nil, err
+	}
+	_, readErr := io.Copy(b, stdout)
+	if readErr != nil {
+		stdout.Close()
+		c.Process.Kill()
+	}
+	err = c.Wait()
+	if readErr != nil && !b.exceeded {
+		return b.data.Bytes(), readErr
+	}
 	if b.exceeded {
 		return b.data.Bytes(), ErrReadLimit
 	}

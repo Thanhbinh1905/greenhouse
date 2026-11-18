@@ -85,7 +85,11 @@ func RunProcess(ctx context.Context, dir, exe string, args []string, input []byt
 		if cmd.Process == nil {
 			return os.ErrProcessDone
 		}
-		return cmd.Process.Signal(syscall.SIGTERM)
+		signal := syscall.SIGTERM
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			signal = executorTimeoutSignal
+		}
+		return cmd.Process.Signal(signal)
 	}
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(input)

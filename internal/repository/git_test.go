@@ -29,3 +29,17 @@ func TestReadBoundedRetainsPrefix(t *testing.T) {
 		t.Fatalf("exact limit: bytes=%d error=%v", len(b), err)
 	}
 }
+
+func TestReadBoundedStopsProducer(t *testing.T) {
+	repo := t.TempDir()
+	git(t, repo, "init", "-b", "main")
+	marker := filepath.Join(repo, "drained")
+	producer := `!exec python3 -c 'import sys; sys.stdout.buffer.write(b"x" * (8 * 1024 * 1024)); sys.stdout.flush(); open("drained", "w").close()'`
+	data, err := ReadBounded(repo, 1024, "-c", "alias.produce="+producer, "produce")
+	if !errors.Is(err, ErrReadLimit) || string(data) != strings.Repeat("x", 1024) {
+		t.Fatalf("bounded producer: bytes=%d error=%v", len(data), err)
+	}
+	if _, err := os.Stat(marker); !os.IsNotExist(err) {
+		t.Fatalf("oversized git output was drained to completion: marker error=%v", err)
+	}
+}

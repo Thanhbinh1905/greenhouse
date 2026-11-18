@@ -27,16 +27,18 @@ type ExecutorRecord struct {
 	InputDigest string `json:"input_digest"`
 	Exit        int    `json:"exit"`
 	Stopped     bool   `json:"stopped"`
+	StopReason  string `json:"stop_reason,omitempty"`
 	Reaped      bool   `json:"reaped"`
 	Stdout      int64  `json:"stdout_bytes"`
 	Stderr      int64  `json:"stderr_bytes"`
 }
 
 const (
-	StdoutLimit        = 4 * 1024 * 1024
-	StderrLimit        = 65536
-	DefaultTimeout     = 45 * time.Minute
-	exitDetachedOutput = 253
+	StdoutLimit           = 4 * 1024 * 1024
+	StderrLimit           = 65536
+	DefaultTimeout        = 45 * time.Minute
+	exitDetachedOutput    = 253
+	executorTimeoutSignal = syscall.SIGUSR1
 )
 
 var ErrDetachedOutput = errors.New("a descendant kept the output open after the executor exited")
@@ -133,7 +135,7 @@ func runChild(args []string) int {
 		return 254
 	}
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
+	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT, executorTimeoutSignal)
 	defer signal.Stop(signals)
 	broken := make(chan os.Signal, 1)
 	signal.Notify(broken, syscall.SIGPIPE)
@@ -185,12 +187,16 @@ func runChild(args []string) int {
 	defer deadline.Stop()
 	var childErr error
 	stopped := false
+	stopReason := ""
 	select {
 	case childErr = <-done:
-	case <-signals:
-		stopped = true
+	case sig := <-signals:
+		stopped, stopReason = true, "cancelled"
+		if sig == executorTimeoutSignal {
+			stopReason = "timeout"
+		}
 	case <-deadline.C:
-		stopped = true
+		stopped, stopReason = true, "timeout"
 	}
 	if stopped {
 		syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
@@ -211,7 +217,7 @@ func runChild(args []string) int {
 	if record != "-" {
 		out.file.Sync()
 		errOut.file.Sync()
-		data, _ := json.Marshal(ExecutorRecord{InputDigest: BytesDigest(input), Exit: code, Stopped: stopped, Reaped: reaped, Stdout: out.total, Stderr: errOut.total})
+		data, _ := json.Marshal(ExecutorRecord{InputDigest: BytesDigest(input), Exit: code, Stopped: stopped, StopReason: stopReason, Reaped: reaped, Stdout: out.total, Stderr: errOut.total})
 		if writeFileDurably(record+".json", data) != nil {
 			return 254
 		}
@@ -277,6 +283,8 @@ func ObserveExecutors(base string, resolveHome func() (string, error)) []Observe
 			o.Detail = "the runner could not verify that its process tree was reaped"
 		case o.Record.Stopped:
 			o.State, o.Detail = "stopped", "the runner stopped the child before it finished"
+			o.Stdout, _ = readBounded(path+".out", StdoutLimit+1)
+			o.Stderr, _ = readBounded(path+".err", StderrLimit+1)
 		default:
 			o.State = "exited"
 			o.Stdout, _ = readBounded(path+".out", StdoutLimit+1)

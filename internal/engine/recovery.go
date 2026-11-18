@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -99,7 +100,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 				verdicts = append(verdicts, o)
 			}
 		}
-		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || verdicts[0].State != "exited" || verdicts[0].Record.InputDigest != x.InputDigest {
+		if x == nil || x.ID != rec.Execution || len(verdicts) != 1 || (verdicts[0].State != "exited" && verdicts[0].State != "stopped") || verdicts[0].Record.InputDigest != x.InputDigest {
 			return false
 		}
 		o := verdicts[0]
@@ -107,7 +108,14 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 		if o.Exit != 0 {
 			runErr = fmt.Errorf("exit status %d", o.Exit)
 		}
-		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, nil)
+		var stopErr error
+		if o.Record.Stopped {
+			stopErr = context.Canceled
+			if o.Record.StopReason == "timeout" {
+				stopErr = fmt.Errorf("review executor limit %s exceeded: %w", executorTimeout(r.Configs[len(r.Configs)-1].Settings), context.DeadlineExceeded)
+			}
+		}
+		done := reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
 		check := reverifySnapshot(x)
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}
