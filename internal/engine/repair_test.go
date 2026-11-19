@@ -243,11 +243,9 @@ func waitForProcessPID(t *testing.T, path string) int {
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		if b, err := os.ReadFile(path); err == nil {
-			pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
-			if err != nil {
-				t.Fatal(err)
+			if pid, err := strconv.Atoi(strings.TrimSpace(string(b))); err == nil {
+				return pid
 			}
-			return pid
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -292,12 +290,12 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 	if _, err = os.Stat(started); err != nil {
 		t.Fatal("fixer did not start")
 	}
+	pid := waitForProcessPID(t, childPID)
 	current := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	cancelResponse := repairRequest(t, bin, repo, home, current, "cancel", "cancel-fixer", nil)
 	if cancelResponse["outcome"] != "ok" {
 		t.Fatal(cancelResponse)
 	}
-	pid := waitForProcessPID(t, childPID)
 	done := waitRepair(t, bin, repo, home)
 	repair := runOf(t, done)["repair"].(map[string]any)
 	waitProcessExit(t, pid)
@@ -356,12 +354,12 @@ time.sleep(30)
 	if _, err = os.Stat(checkStarted); err != nil {
 		t.Fatal("check did not start")
 	}
+	pid := waitForProcessPID(t, checkChildPID)
 	current := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	cancelResponse := repairRequest(t, bin, repo, home, current, "cancel", "cancel-check", nil)
 	if cancelResponse["outcome"] != "ok" {
 		t.Fatal(cancelResponse)
 	}
-	pid := waitForProcessPID(t, checkChildPID)
 	done := waitRepair(t, bin, repo, home)
 	repair := runOf(t, done)["repair"].(map[string]any)
 	checks := repair["checks"].([]any)
