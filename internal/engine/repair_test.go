@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -235,6 +236,23 @@ func TestKilledWriterRunnerParksRepairCustody(t *testing.T) {
 	}
 }
 
+func waitForProcessPID(t *testing.T, path string) int {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		if b, err := os.ReadFile(path); err == nil {
+			pid, err := strconv.Atoi(strings.TrimSpace(string(b)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return pid
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatalf("process PID was not written to %s", path)
+	return 0
+}
+
 func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := repairFixture(t)
@@ -249,7 +267,8 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 	}
 	cfg.Executable = filepath.Join(filepath.Dir(home), "slow-fixer.py")
 	started := filepath.Join(filepath.Dir(home), "fixer-started")
-	program := "import pathlib,subprocess,sys,time; subprocess.Popen([sys.executable,'-c',\"import pathlib,time; time.sleep(4); pathlib.Path('sample.txt').write_text('late fixer write')\"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); pathlib.Path('" + started + "').write_text('started'); time.sleep(30)"
+	childPID := filepath.Join(filepath.Dir(home), "fixer-child-pid")
+	program := "import pathlib,subprocess,sys,time; subprocess.Popen([sys.executable,'-c',\"import os,pathlib,time; pathlib.Path('" + childPID + "').write_text(str(os.getpid())); time.sleep(4); pathlib.Path('sample.txt').write_text('late fixer write'); time.sleep(30)\"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True); pathlib.Path('" + started + "').write_text('started'); time.sleep(30)"
 	if err = os.WriteFile(cfg.Executable, []byte("#!/usr/bin/python3\n"+fixturePiCatalog+program+"\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -276,9 +295,10 @@ func TestLiveFixerCancellationStopsDescendants(t *testing.T) {
 	if cancelResponse["outcome"] != "ok" {
 		t.Fatal(cancelResponse)
 	}
+	pid := waitForProcessPID(t, childPID)
 	done := waitRepair(t, bin, repo, home)
 	repair := runOf(t, done)["repair"].(map[string]any)
-	time.Sleep(4300 * time.Millisecond)
+	waitProcessExit(t, pid)
 	content, err := os.ReadFile(filepath.Join(repair["worktree"].(string), "sample.txt"))
 	if err != nil {
 		t.Fatal(err)
@@ -305,9 +325,10 @@ func TestLiveCheckCancellationStopsDescendants(t *testing.T) {
 	}
 	checkScript := filepath.Join(filepath.Dir(home), "slow-check.py")
 	checkStarted := filepath.Join(filepath.Dir(home), "check-started")
+	checkChildPID := filepath.Join(filepath.Dir(home), "check-child-pid")
 	checkProgram := `#!/usr/bin/python3
 import pathlib,subprocess,sys,time
-subprocess.Popen([sys.executable, "-c", "import pathlib,time; time.sleep(4); pathlib.Path('sample.txt').write_text('late check write')"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+subprocess.Popen([sys.executable, "-c", "import os,pathlib,time; pathlib.Path('` + checkChildPID + `').write_text(str(os.getpid())); time.sleep(4); pathlib.Path('sample.txt').write_text('late check write'); time.sleep(30)"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 pathlib.Path("` + checkStarted + `").write_text("started")
 time.sleep(30)
 `
@@ -338,10 +359,11 @@ time.sleep(30)
 	if cancelResponse["outcome"] != "ok" {
 		t.Fatal(cancelResponse)
 	}
+	pid := waitForProcessPID(t, checkChildPID)
 	done := waitRepair(t, bin, repo, home)
 	repair := runOf(t, done)["repair"].(map[string]any)
 	checks := repair["checks"].([]any)
-	time.Sleep(4300 * time.Millisecond)
+	waitProcessExit(t, pid)
 	content, err := os.ReadFile(filepath.Join(repair["worktree"].(string), "sample.txt"))
 	if err != nil {
 		t.Fatal(err)

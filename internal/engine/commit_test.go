@@ -13,6 +13,15 @@ func TestReadsDuringBlockedCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var committed Store
+	if err := json.Unmarshal(b, &committed); err != nil {
+		t.Fatal(err)
+	}
+	committed.home = s.home
 	v := handle(s, Request{Version: 2, Op: "attach", Path: repo})
 	if v.Outcome != "ok" {
 		t.Fatal(v)
@@ -23,7 +32,7 @@ func TestReadsDuringBlockedCommit(t *testing.T) {
 	finished := make(chan error, 1)
 	pending := make(chan net.Conn, 64)
 	go func() {
-		finished <- commitWhileServing(s, connections, pending, func() error { close(started); <-release; return nil })
+		finished <- commitWhileServing(func() (*Store, error) { return &committed, nil }, connections, pending, func() error { close(started); <-release; return nil })
 	}()
 	t.Cleanup(func() {
 		close(release)
@@ -47,7 +56,7 @@ func TestReadsDuringBlockedCommit(t *testing.T) {
 			if err := json.NewDecoder(client).Decode(&got); err != nil {
 				t.Fatalf("%s blocked on durable write: %v", op, err)
 			}
-			if op == "inspect" && (got.Outcome != "ok" || got.RunID != v.RunID) {
+			if op == "inspect" && (got.Outcome != "ok" || got.RunID != "") {
 				t.Fatal(got)
 			}
 			if got.Outcome == "" {
