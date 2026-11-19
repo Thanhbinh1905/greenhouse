@@ -48,7 +48,7 @@ func TestExecutableFindingInSpacePath(t *testing.T) {
 	}
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "resolve", nil)
 	mutate(t, bin, repo, home, v, "review", "review", nil)
-	v = waitReview(t, bin, repo, home)
+	v = waitReviewWithFindings(t, bin, repo, home)
 	if runOf(t, v)["status"] != "outstanding-findings" {
 		review := runOf(t, v)["review"].(map[string]any)
 		t.Fatalf("valid space-path finding rejected: %v", review["log"])

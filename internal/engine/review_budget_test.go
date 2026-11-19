@@ -393,7 +393,7 @@ def print(text):
  original_print(json.dumps(event))
 `)
 	mutate(t, bin, repo, home, v, "review", "deletion-review", nil)
-	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	review := runOf(t, waitReviewWithFindings(t, bin, repo, home))["review"].(map[string]any)
 	result := review["result"].(map[string]any)
 	findings := result["findings"].([]any)
 	if len(findings) != 1 || findings[0].(map[string]any)["start"] != float64(20) {

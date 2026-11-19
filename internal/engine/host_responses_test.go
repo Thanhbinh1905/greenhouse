@@ -48,7 +48,7 @@ sys.exit(0)
 	if v["outcome"] != "ok" {
 		t.Fatalf("first round: %v", v)
 	}
-	v = hostSettle(t, bin, repo, home)
+	v = hostSettleWithFindings(t, bin, repo, home)
 	findings := v["host_result"].(map[string]any)["findings"].([]any)
 	if len(findings) != 2 {
 		t.Fatalf("findings: %v", findings)

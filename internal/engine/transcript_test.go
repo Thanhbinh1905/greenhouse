@@ -24,7 +24,7 @@ func TestTranscriptLogIsRedactedBoundedAndViewable(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `sys.stderr.write('auth '+os.environ.get('GREENHOUSE_TEST_PROVIDER_KEY','missing')+' Bearer abcdefghijklmnopqrstuvwxyz0123\n')`)
 	mutate(t, bin, repo, home, v, "review", "review", nil)
-	reviewed := waitReview(t, bin, repo, home)
+	reviewed := waitReviewWithFindings(t, bin, repo, home)
 	if _, present := reviewed["transcript"]; present {
 		t.Fatal("normal inspection carries transcript content")
 	}
