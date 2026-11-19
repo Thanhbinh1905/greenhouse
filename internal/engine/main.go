@@ -1066,7 +1066,7 @@ func Daemon(h string) (retErr error) {
 		}
 	}()
 	pid, _ := json.Marshal(os.Getpid())
-	if e = os.WriteFile(filepath.Join(h, "pid"), pid, 0600); e != nil {
+	if e = writeFileDurably(filepath.Join(h, "pid"), pid); e != nil {
 		return e
 	}
 	defer func() { _ = os.Remove(filepath.Join(h, "pid")) }() // Best-effort cleanup of daemon pid file.

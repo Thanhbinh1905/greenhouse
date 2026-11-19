@@ -38,7 +38,11 @@ func TestStopDaemonWaitsForPidAfterLockAcquisition(t *testing.T) {
 		t.Fatalf("cleanup returned before locked daemon wrote pid: %v", err)
 	default:
 	}
-	if err := os.WriteFile(filepath.Join(home, "pid"), []byte("999999999"), 0600); err != nil {
+	tempPID := filepath.Join(home, "pid.tmp")
+	if err := os.WriteFile(tempPID, []byte("999999999"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tempPID, filepath.Join(home, "pid")); err != nil {
 		t.Fatal(err)
 	}
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); err != nil {
