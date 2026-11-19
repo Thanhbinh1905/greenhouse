@@ -9,7 +9,7 @@ prints one compact JSON response and never prompts.
 
 Run these commands inside a committed Git worktree. Configure the native reviewer,
 fixer, and trusted pipeline commands first, as described in
-[the README](../README.md). A full delivery needs a remote,
+[full pipeline](pipeline.md) and [repair](repair.md). A full delivery needs a remote,
 GitHub owner and repository, PR base, and required check names in `pipeline.json`.
 Greenhouse uses a private candidate branch and never merges the PR.
 

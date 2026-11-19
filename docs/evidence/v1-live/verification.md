@@ -22,4 +22,4 @@ The [first race-suite failure](race-first-failure.log) records the auto-resume r
 
 Live product checks are recorded in [the run report](README.md): full delivery through exact-head Actions, unchanged usage on reattachment, and one-pass repair with dirty-source refusal followed by safe handback. [The isolated HOME GitHub check](fresh-github.log) also confirms authenticated setup without copying credential files.
 
-The retained repository is private. PRs #1 and #2 remain unmerged. The Greenhouse Task branch has only local commits. Manual human acceptance and the remaining SPEC.md work are listed in [the implementation plan](../../implementation-plan.md#unsupported-spec-behavior-in-this-slice).
+The retained repository is private. PRs #1 and #2 remain unmerged. The Greenhouse Task branch has only local commits. Manual human acceptance and the remaining SPEC.md work are listed in [the implementation plan](../../implementation-plan.md#v1-status).

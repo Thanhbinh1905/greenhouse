@@ -8,7 +8,7 @@ Areas A, B, E, F, and D1: one Linux Go executable, per-user Unix daemon, singlet
 
 Runs remain at intent/unconfigured. Target is an empty unconfigured identity, not an inferred default branch. Submitted head and branch remain immutable; candidate initially equals submitted head. Rule selection is distinct from loading. Source mismatch blocks old-run advancement. Explicit New can capture a moved source only without a writer or unknown-outcome hazard. Synthetic interrupted-writer tests park unknown outcomes; no executor is claimed.
 
-The implementation uses a single serialized daemon and atomic whole-store replacement rather than a database or generic workflow engine. Limits and compatibility assumptions are in README.md. No dependency on an orchestrator is required.
+The implementation uses a single serialized daemon and atomic whole-store replacement rather than a database or generic workflow engine. Limits and compatibility assumptions are in [state and daemon](state.md). No dependency on an orchestrator is required.
 
 Later tasks complete these areas: t7 adds finding views, execution summaries and cancellation, t66 explicit recovery, t67 configuration migration and repository trust, and t69 live event subscriptions and the embedding contract. Settings cannot start work.
 
@@ -46,7 +46,7 @@ Area D and standalone E: the trusted command plan can configure a Git remote and
 
 Settings and AXI carry independent exact provider-qualified reviewer and fixer model selections. Pi is the default backend; the default reviewer is `openai/gpt-5.6-luna`, based on the measured comparison in `docs/evidence/review-eval/README.md`. Model selections do not grant executable authority. Greenhouse discovers Pi models through AXI, supports trusted per-user provider endpoints in `providers.json`, reads API keys only from named environment variables, and preflights provider model access before dispatch. Pi receives only a temporary provider file that references the environment variable. A product-path smoke against the recommended default model passed through the configured proxy.
 
-Task t40 adds Claude Code and Codex as reviewer and fixer backends beside Pi, classifies backend quota, login and availability failures, parks the affected stage without spending budget, and adds resume, rerun, rerun from start, automatic resume, fallback and agent switching to the terminal and AXI. See README.md and `docs/evidence/backend-smoke.md`.
+Task t40 adds Claude Code and Codex as reviewer and fixer backends beside Pi, classifies backend quota, login and availability failures, parks the affected stage without spending budget, and adds resume, rerun, rerun from start, automatic resume, fallback and agent switching to the terminal and AXI. See [agents](agents.md#backend-pause-resume-and-rerun) and `docs/evidence/backend-smoke.md`.
 
 ## Live standalone validation (t59)
 
@@ -60,7 +60,7 @@ Explicit recovery (t66), repository trust (t67) and event subscriptions (t69) fo
 
 ## Restart reconciliation and explicit recovery (t66)
 
-Areas A, E and F: every runner-started executor holds a durable lease and leaves an exit record with its input digest and bounded output after reaping its tree. Restart adopts interrupted reviews and command stages whose records prove the result and parks everything else as unknown, without retry or PID signalling. `recover` (terminal `e`) inspects the evidence, adopts a candidate that matches the durable record, discards the step and reruns its stage, or links a new run. Answers are token-bound, audited and replayable, and never refund budget. Candidate refs carry lease files with an owner and epoch in the repository; another state home or a stale store copy cannot write them, and the daemon releases only dead leases of its own state home. See [recovery after interruption](../README.md#recovery-after-interruption) and the [PTY captures](evidence/recovery/).
+Areas A, E and F: every runner-started executor holds a durable lease and leaves an exit record with its input digest and bounded output after reaping its tree. Restart adopts interrupted reviews and command stages whose records prove the result and parks everything else as unknown, without retry or PID signalling. `recover` (terminal `e`) inspects the evidence, adopts a candidate that matches the durable record, discards the step and reruns its stage, or links a new run. Answers are token-bound, audited and replayable, and never refund budget. Candidate refs carry lease files with an owner and epoch in the repository; another state home or a stale store copy cannot write them, and the daemon releases only dead leases of its own state home. See [recovery after interruption](recovery.md) and the [PTY captures](evidence/recovery/).
 
 ## Versioned configuration, repository trust, fixer grants and transcripts (t67)
 
