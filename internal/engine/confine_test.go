@@ -178,7 +178,7 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 	if started := mutate(t, bin, repo, home, v, "review", "review", nil); started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
-	v = waitReview(t, bin, repo, home)
+	v = waitReviewWithFindings(t, bin, repo, home)
 	review := readProbe(t, filepath.Join(probe, "review.json"))
 	want := map[string]string{"home": "denied", "repo": "denied", "snapshot": "denied", "blocked": "allowed", "provider": "allowed"}
 	for k, w := range want {

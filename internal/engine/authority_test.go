@@ -576,7 +576,7 @@ func TestOnePassReviewUpdatesRetainedFindingData(t *testing.T) {
 	prepared := axi(t, bin, repo, home, string(q))
 	prepared = mutate(t, bin, repo, home, prepared, "resolve-rules", "rules-next", nil)
 	mutate(t, bin, repo, home, prepared, "review", "second-review", nil)
-	done := waitReview(t, bin, repo, home)
+	done := waitReviewWithFindings(t, bin, repo, home)
 	findings := runOf(t, done)["findings"].([]any)
 	if len(findings) != 1 {
 		t.Fatalf("retained finding count %d, want 1", len(findings))
