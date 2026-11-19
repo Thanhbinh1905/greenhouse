@@ -27,6 +27,46 @@ func git(t *testing.T, dir string, args ...string) string {
 }
 
 var daemonCleanupHomes sync.Map
+var fixtureBuildOnce sync.Once
+var fixtureBuildDir string
+var fixtureBuildBin string
+var fixtureBuildErr error
+
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if fixtureBuildDir != "" {
+		if err := os.RemoveAll(fixtureBuildDir); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
+
+func sharedFixtureBinary(t *testing.T) string {
+	t.Helper()
+	fixtureBuildOnce.Do(func() {
+		fixtureBuildDir, fixtureBuildErr = os.MkdirTemp("", "gh-bin-")
+		if fixtureBuildErr != nil {
+			return
+		}
+		_, source, _, ok := runtime.Caller(0)
+		if !ok {
+			fixtureBuildErr = fmt.Errorf("cannot locate fixture source")
+			return
+		}
+		command := filepath.Join(filepath.Dir(source), "..", "..", "cmd", "greenhouse")
+		fixtureBuildBin = filepath.Join(fixtureBuildDir, "greenhouse")
+		c := exec.Command("go", "build", "-race", "-o", fixtureBuildBin, command)
+		if b, err := c.CombinedOutput(); err != nil {
+			fixtureBuildErr = fmt.Errorf("build: %s %w", b, err)
+		}
+	})
+	if fixtureBuildErr != nil {
+		t.Fatal(fixtureBuildErr)
+	}
+	return fixtureBuildBin
+}
 
 func registerDaemonCleanup(t *testing.T, home string) {
 	t.Helper()
@@ -47,16 +87,7 @@ func fixture(t *testing.T) (string, string, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	bin := filepath.Join(root, "greenhouse")
-	_, source, _, ok := runtime.Caller(0)
-	if !ok {
-		t.Fatal("cannot locate fixture source")
-	}
-	command := filepath.Join(filepath.Dir(source), "..", "..", "cmd", "greenhouse")
-	c := exec.Command("go", "build", "-race", "-o", bin, command)
-	if b, e := c.CombinedOutput(); e != nil {
-		t.Fatalf("build: %s %v", b, e)
-	}
+	bin := sharedFixtureBinary(t)
 	repo := filepath.Join(root, "repo")
 	if err := os.Mkdir(repo, 0700); err != nil {
 		t.Fatal(err)

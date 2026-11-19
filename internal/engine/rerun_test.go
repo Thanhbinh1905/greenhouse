@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
@@ -111,7 +112,7 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 	if err := os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport json,os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nb=json.load(sys.stdin)\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half '+mode+'\\n' if mode else 'repaired\\n')\nif mode=='untracked': open('notes.txt','w').write('unique-untracked-content-7f3a\\n')\nif mode=='symlink': os.symlink('unique-symlink-target-9e1f','link.txt')\nif mode=='fifo': open('.gitignore','w').write('ignored-pipe\\n'); os.mkfifo('pipe.txt'); os.mkfifo('ignored-pipe')\nif mode=='ignored-directory': open('.gitignore','w').write('ignored-dir/\\n'); os.mkdir('ignored-dir'); os.mkfifo('ignored-dir/pipe'); os.chmod('ignored-dir',0); os.mkdir('blocked-dir'); os.mkdir('blocked-dir/nested'); os.mkdir('blocked-dir/nested/deep'); os.mkfifo('blocked-dir/nested/deep/pipe'); os.chmod('blocked-dir/nested/deep',0); os.chmod('blocked-dir/nested',0); os.chmod('blocked-dir',0); os.mkdir('readonly-dir'); os.mkfifo('readonly-dir/pipe'); os.chmod('readonly-dir',0o500); open('unreadable.txt','w').write('hidden contents\\n'); os.chmod('unreadable.txt',0); os.mkfifo('pipe.txt')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nif mode: sys.exit(1)\n"+respondFixed)
+	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport json,os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nb=json.load(sys.stdin)\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half '+mode+'\\n' if mode else 'repaired\\n')\nif mode=='cancel': open(root+'/fixer-ready','w').write('ready')\nif mode=='untracked': open('notes.txt','w').write('unique-untracked-content-7f3a\\n')\nif mode=='symlink': os.symlink('unique-symlink-target-9e1f','link.txt')\nif mode=='fifo': open('.gitignore','w').write('ignored-pipe\\n'); os.mkfifo('pipe.txt'); os.mkfifo('ignored-pipe')\nif mode=='ignored-directory': open('.gitignore','w').write('ignored-dir/\\n'); os.mkdir('ignored-dir'); os.mkfifo('ignored-dir/pipe'); os.chmod('ignored-dir',0); os.mkdir('blocked-dir'); os.mkdir('blocked-dir/nested'); os.mkdir('blocked-dir/nested/deep'); os.mkfifo('blocked-dir/nested/deep/pipe'); os.chmod('blocked-dir/nested/deep',0); os.chmod('blocked-dir/nested',0); os.chmod('blocked-dir',0); os.mkdir('readonly-dir'); os.mkfifo('readonly-dir/pipe'); os.chmod('readonly-dir',0o500); open('unreadable.txt','w').write('hidden contents\\n'); os.chmod('unreadable.txt',0); os.mkfifo('pipe.txt')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nif mode: sys.exit(1)\n"+respondFixed)
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
 	if err := os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600); err != nil {
 		t.Fatal(err)
@@ -126,6 +127,16 @@ func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, st
 	if stop == "cancel" {
 		for i := 0; i < 400 && (runOf(t, v)["repair"] == nil || runOf(t, v)["repair"].(map[string]any)["status"] != "fixing"); i++ {
 			v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		}
+		deadline := time.Now().Add(30 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(filepath.Join(root, "fixer-ready")); err == nil {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		if _, err := os.Stat(filepath.Join(root, "fixer-ready")); err != nil {
+			t.Fatal("fixer did not write its partial candidate before cancellation")
 		}
 		mutate(t, bin, repo, home, v, "cancel", "abort-repair", nil)
 		return bin, repo, home, root, waitStatus(t, bin, repo, home, "cancelled")

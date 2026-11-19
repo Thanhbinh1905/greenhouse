@@ -254,27 +254,37 @@ func Home() (string, error) {
 	return h, nil
 }
 func persist(h string, s *Store) error {
-	return persistWithWriter(h, s, writeFileDurably)
+	_, err := persistSnapshot(h, s)
+	return err
+}
+
+func persistSnapshot(h string, s *Store) ([]byte, error) {
+	return persistSnapshotWithWriter(h, s, writeFileDurably)
 }
 
 func persistWithWriter(h string, s *Store, write func(string, []byte) error) error {
+	_, err := persistSnapshotWithWriter(h, s, write)
+	return err
+}
+
+func persistSnapshotWithWriter(h string, s *Store, write func(string, []byte) error) ([]byte, error) {
 	garbage, err := compactHistory(h, s, write)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	b, err := json.Marshal(s)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := write(filepath.Join(h, "state.json"), b); err != nil {
-		return err
+		return nil, err
 	}
 	for _, path := range garbage {
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-			return err
+			return nil, err
 		}
 	}
-	return nil
+	return b, nil
 }
 
 func load(h string) (*Store, error) {
@@ -1035,7 +1045,8 @@ func Daemon(h string) (retErr error) {
 	if e != nil {
 		return e
 	}
-	if e = persist(h, s); e != nil {
+	committed, e := persistSnapshot(h, s)
+	if e != nil {
 		return e
 	}
 	socket := filepath.Join(h, "socket")
@@ -1097,7 +1108,24 @@ func Daemon(h string) (retErr error) {
 		}
 	}()
 	commit := func(next *Store) error {
-		return commitWhileServing(s, connections, pending, func() error { return persist(h, next) })
+		var nextCommitted []byte
+		err := commitWhileServing(func() (*Store, error) {
+			var snapshot Store
+			if err := json.Unmarshal(committed, &snapshot); err != nil {
+				return nil, err
+			}
+			snapshot.home = h
+			return &snapshot, nil
+		}, connections, pending, func() error {
+			var err error
+			nextCommitted, err = persistSnapshot(h, next)
+			return err
+		})
+		if err != nil {
+			return err
+		}
+		committed = nextCommitted
+		return nil
 	}
 	stopped := make(chan struct{})
 	defer close(stopped)
