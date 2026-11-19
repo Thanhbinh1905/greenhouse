@@ -4,13 +4,13 @@ When the daemon dies during work, restart adopts the results that durable record
 
 ## Executor records
 
-Every reviewer, fixer, check, stage command and pipeline Git command runs through the runner. Each one gets an executor record under `GREENHOUSE_HOME/executors/`:
+Every reviewer, fixer, check, stage command, and the pipeline's sync and push Git commands, run through the runner. Each one gets an executor record under `GREENHOUSE_HOME/executors/`. Controller Git writes (candidate creation, the conflict-fix commit, handback and recovery refs) do not go through the runner and are reconciled from refs.
 
 | File | Contents |
 | --- | --- |
 | `<id>.lease` | Held with `flock`. The runner passes the descriptor to the child. |
 | `<id>.out`, `<id>.err` | Bounded output. |
-| `<id>.json` | The exit code and input digest, written only after the runner reaped the whole process tree. |
+| `<id>.json` | The exit code, input digest, stop reason and output byte counts, and `reaped`: whether the runner verified that it reaped the whole process tree. Written after the reap attempt; a record with `reaped: false` shows as `unverified`. |
 
 When the daemon dies, its executors keep running until they finish or reach the configured [`executor_timeout`](axi.md#executor-timeout) deadline (default `45m`), plus the 30-second supervisor cleanup allowance. Nothing signals them by PID.
 

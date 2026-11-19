@@ -14,7 +14,7 @@ Use a Git worktree with a committed change and an existing `main` target. Start 
   gh auth setup-git
   ```
 
-  Both authentication commands should succeed. Install and sign in to Pi, Claude Code or Codex with that CLI's own instructions. Greenhouse uses the agent's login, provider routing and default model, and needs no `reviewer.json` or `providers.json`; see [Install](../../../README.md#install).
+  Both authentication commands should succeed. Install and sign in to Pi, Claude Code or Codex with that CLI's own instructions. Greenhouse uses the agent's login, provider routing and default model, and needs no `reviewer.json` or `providers.json`; see [Try it](../../../README.md#try-it).
 
 - [ ] Open the committed change in the line client:
 
@@ -24,7 +24,7 @@ Use a Git worktree with a committed change and an existing `main` target. Start 
   TERM=dumb greenhouse
   ```
 
-  Copy the full target SHA before opening Greenhouse. `TERM=dumb` selects the line client, which the steps below use; for the interactive screen, follow [Run your first review](../../../README.md#run-your-first-review) instead. Expect `Greenhouse | independent review`, `Mode: auto | one-pass | limit 4`, and `Budget: review 0 + repair 0 = 0 of 4`. Rule entries should show `configured`.
+  Copy the full target SHA before opening Greenhouse. `TERM=dumb` selects the line client, which the steps below use; for the interactive screen, follow [Run a review](../../terminal.md#run-a-review) instead. Expect `Greenhouse | independent review`, `Mode: auto | one-pass | limit 4`, and `Budget: review 0 + repair 0 = 0 of 4`. Rule entries should show `configured`.
 
 - [ ] Type `p` and press Enter. Press Enter at `Reviewer agent` to keep the current agent, enter the intended behavior at `Intent:`, then paste the target SHA at `Review committed changes against Git target`. Type `l` and press Enter. Expect both selected rules to show `resolved`, with their digests. Type `c` to inspect the criteria and committed diff.
 

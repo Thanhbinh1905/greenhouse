@@ -2,11 +2,13 @@
 
 Per-user configuration files live in `GREENHOUSE_HOME`. A repository can add `.greenhouse.json` and `.greenhouse-pipeline.json`, which apply only after you trust them.
 
+A review needs no configuration file, copied key or executable path. Selected repair needs trusted checks in `fixer.json`. The full pipeline also needs a trusted command plan and forge authorization. These files approve commands, not providers.
+
 | File | Location | Purpose |
 | --- | --- | --- |
 | `fixer.json` | `GREENHOUSE_HOME`, mode 0600 | Fixer identity and trusted checks; see [repair](repair.md#configure-the-fixer). |
 | `pipeline.json` | `GREENHOUSE_HOME`, mode 0600 | The full pipeline command plan; see [full pipeline](pipeline.md#command-plan). |
-| `backends.json` | `GREENHOUSE_HOME` | Backend `fallback` choices and extra `writable` directories; see [agents](agents.md). |
+| `backends.json` | `GREENHOUSE_HOME`, mode 0600 | Backend `fallback` choices, extra `writable` directories, `review_budget` and the `auto_resume` retry policy; see [agents](agents.md). |
 | `.greenhouse.json` | repository | Repository override of settings. |
 | `.greenhouse-pipeline.json` | repository | Repository command plan. |
 
@@ -25,12 +27,12 @@ Retained review inputs keep their original configuration and arguments. Resuming
 `migrate` (line client `u`) upgrades every older file in one action. For each file it:
 
 1. checks that the new file decodes to exactly the old values
-2. saves the original bytes as `<file>.v1-<digest>.bak` with mode 0600
+2. saves the original bytes as `<file>.v1-<digest>.bak` with mode 0600, where `<digest>` is the first 12 hex characters of the SHA-256
 3. replaces the file atomically
 
 Each migration is recorded in `migrations` with the file, versions, backup, before and after digests, actor, reason and action ID.
 
-If any file is newer or invalid, nothing changes.
+If any file is newer or invalid, nothing changes. Files are then backed up and replaced one at a time, so a write error partway through leaves the earlier files migrated.
 
 `pipeline.json` declares `"budget_unit": "rounds"`. Migration adds it, because version 1 counted rounds. Greenhouse never converts a budget unit and refuses any other unit.
 
@@ -57,8 +59,9 @@ An override can only narrow or select among per-user choices:
 - `mode`, `preset` and `limit` cannot exceed the per-user values. The order is `ask` below `auto` below `yolo`, and `one-pass` below `full`.
 - `auto_resume` cannot turn on a per-user `off`.
 - `rules` must be built-in or already selected in the per-user defaults.
-- A backend must be configured in per-user files.
-- A key that would set an executable, command, grant, remote or YOLO actor makes the whole file ignored.
+- Selecting `claude` or `codex` needs a `claude` or `codex` entry in the per-user `backends.json`. `pi` is always allowed.
+- `executor_timeout` is not narrowed: an override may set any valid duration.
+- Any key other than a settings field makes the whole file ignored. This includes executable, check, command, grant, remote, provider, fallback and YOLO keys.
 
 ### Responses
 

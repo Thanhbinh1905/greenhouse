@@ -2,6 +2,8 @@
 
 Greenhouse runs reviewers and fixers through the native Pi, Claude Code or Codex CLI. The native CLI owns authentication, model discovery and provider routing.
 
+Install and sign in to the agent with that CLI's own instructions. Greenhouse uses the agent's login, provider routing and default model. When authentication is missing, Greenhouse reports the native login action. It never runs a login or changes credential files.
+
 ## Discovery and Prepare
 
 Greenhouse discovers `pi`, `claude` and `codex` on PATH and ignores relative PATH entries. Prepare binds the selected executable. Model and agent choices stay ordinary Greenhouse preferences.
@@ -16,9 +18,11 @@ Each review and repair starts a fresh session without the author's conversation.
 
 | Backend | Session setup |
 | --- | --- |
-| Pi | Ephemeral JSON mode. Extensions, MCP, skills, context files, prompt templates, themes and project approval are disabled. The native `PI_CODING_AGENT_DIR` stays available for login and routing; inherited session variables are removed. |
-| Claude | Safe mode, explicit read tools for review, strict MCP configuration and no session persistence. Native user settings keep authentication and routing. An unexpected tool refuses the result. |
-| Codex | Native user configuration stays. Hooks, plugins, shell tools, web search and author context are disabled, and the session is ephemeral. Greenhouse asks `codex mcp list --json` for server names and disables each server explicitly; an unreadable server list refuses preparation. Review uses the read-only sandbox; repair uses workspace-write. |
+| Pi | JSON mode. Extensions, MCP, skills, context files, prompt templates, themes and project approval are disabled. The native `PI_CODING_AGENT_DIR` stays available for login and routing; inherited session variables are removed. |
+| Claude | Safe mode, explicit read tools for review and strict MCP configuration. Native user settings keep authentication and routing. An unexpected tool refuses the result. |
+| Codex | Native user configuration stays. Hooks, plugins, shell tools, web search and author context are disabled. Greenhouse asks `codex mcp list --json` for server names and disables each server explicitly; an unreadable server list refuses preparation. Review uses the read-only sandbox; repair uses workspace-write. |
+
+Fixers run without session persistence. A review keeps its session in a private per-review directory, which is deleted afterwards, so Greenhouse can resume the session once for a finalization turn. Claude and Codex reviews get a private config directory that holds copies of the native credentials and settings.
 
 The controller verifies the snapshot after review and checks the repair scope before committing. Child processes have bounded lifetimes. Cancellation keeps the existing writer custody rules. Raw output is kept only in the redacted [transcript log](state.md#transcript-logs).
 
@@ -28,51 +32,60 @@ Each review admission records `run.review.snapshot`:
 
 - the candidate commit and its Git tree ID
 - the number of entries and bytes
-- `digest`: the SHA-256 of `git ls-tree -r -l --full-tree` for that commit
+- `digest`: the SHA-256 of `git ls-tree -r -z -l --full-tree` for that commit
 
 The digest is part of the review input, so the input digest binds it. The snapshot holds at most 100,000 entries and 512 MiB.
 
 Before launch, Greenhouse writes every blob of that listing from the object store into a private directory, without Git attributes or filters. It makes the files and directories read-only, and the reviewer runs there.
 
-After the reviewer exits, Greenhouse compares every file, mode and symlink with the listing. A missing, extra or changed path makes the review `inconclusive`, and `snapshot.check` records `modified: <path>`. Otherwise `snapshot.check` is `unchanged`.
+After the reviewer exits, Greenhouse compares every file, mode and symlink with the listing. A missing, extra or changed path makes the review `inconclusive`, and `snapshot.check` records `modified: <detail>`, for example `modified: unexpected path <path>`. Otherwise `snapshot.check` is `unchanged`.
 
-When a restart adopts an interrupted review, Greenhouse lists the candidate tree from the object store again and compares it with the bound digest. It then checks the reviewer's copy if that copy survived. The check reads `verified after restart: ...` or `failed: ...`, and a failed check makes the review `inconclusive`. It reads `unverified` only when the candidate tree is no longer available.
+When a restart adopts an interrupted review, Greenhouse lists the candidate tree from the object store again and compares it with the bound digest. It then checks the reviewer's copy if that copy survived. The check reads `verified after restart: ...` or `failed: ...`, and a failed check makes the review `inconclusive`. It reads `unverified` when the candidate tree is no longer available or the review has no bound snapshot.
 
 ## OS confinement
 
 On Linux, reviewers and fixers run under Landlock. Greenhouse probes the kernel's Landlock ABI and records the policy in `run.review.confinement` or in the repair's `confinement`. It applies the policy in the agent process before exec.
 
+Landlock confines file system writes. It does not restrict outbound TCP, because native agents own provider routing. Every confinement record therefore has `status` `degraded`, and `reason` names what stays open.
+
 - The whole file system stays readable and executable.
-- Pi may create and remove authentication lock directories. Native credential files stay read-only.
-- Claude Code and Codex get no write access to their real config directories or credentials. Greenhouse records these roles as `degraded`, because the CLIs may need writable session state. Config, hooks, skills, plugins, MCP settings and credentials stay read-only.
-- No reviewer can write the snapshot, the repository or any other path.
+- A reviewer can write only its private session and temporary directories (its `TMPDIR`), `/dev/null`, and any configured `writable` directories. It cannot write the snapshot or the repository.
 - A fixer may also write its private candidate worktree and a private scratch directory, which becomes its `TMPDIR`. The repository's Git metadata stays read-only.
-- From ABI 4 on, listening sockets are refused. Outbound TCP is unrestricted, because native agents own provider routing. Greenhouse records this as degraded network confinement; the file system write restrictions still apply.
-- `backends.json` can add writable directories per role, for example for a wrapper that keeps its own logs: `"writable": {"reviewer": ["/abs/dir"], "fixer": ["/abs/dir"]}`. Paths must be absolute and cannot be `/`.
+- Pi may create and remove directories inside its native agent directory (`PI_CODING_AGENT_DIR`, or `~/.pi/agent`), which it uses for authentication locks. Native credential files stay read-only.
+- Claude Code and Codex get no write access to their real config directories or credentials. Config, hooks, skills, plugins, MCP settings and credentials stay read-only. Their records also note that the CLIs may need writable session state.
+- From ABI 4 on, listening sockets are refused. A Landlock ABI below 4 confines writes but not the network.
+- `backends.json` can add writable directories per role, for example for a wrapper that keeps its own logs: `"writable": {"reviewer": ["/abs/dir"], "fixer": ["/abs/dir"]}`. Paths must be absolute and clean, cannot be `/`, and are limited to 16 per role. A path that does not exist or is not a directory is dropped. `backends.json` must be private (mode 0600) and at most 64 KiB; otherwise Greenhouse ignores it.
 
 The record lists the mechanism, the ABI, the writable directories (`writable`), the authentication lock directories and the network policy.
 
-When Landlock is unavailable, the record's `status` is `degraded`, the network is `unrestricted` and `reason` says why. The agent then runs without OS confinement. A Landlock ABI below 4 confines writes but not the network, and is also `degraded`.
+When Landlock is unavailable, the network is `unrestricted`, `reason` says why, and the agent runs without OS confinement.
 
-The terminal prints each record as `Confinement: reviewer landlock enforced (ABI 6)` or `Confinement: reviewer DEGRADED: <reason>`, followed by the writable paths and the network rule.
+The terminal prints each record as `Confinement: reviewer DEGRADED: <reason>`, followed by the writable paths and the network rule.
 
 If the policy cannot be applied, the agent does not start. The review becomes `inconclusive`, or the repair `fixer-failed`.
 
 ## Backend pause, resume and rerun
 
-Greenhouse classifies a failed backend run from the CLI's exit code and output:
+Greenhouse classifies a failed backend run from the CLI's exit code and output. Text matches are case-insensitive substrings. The main patterns are:
 
 | Reason | Claude | Codex | Pi |
 |---|---|---|---|
-| `quota` | `api_error: usage_limit_reached` or status 429; the reset comes from the `rate_limit_event` `resetsAt` | "You've hit your usage limit", "Quota exceeded" or a final 429; the reset comes from "try again at ..." | `429:` error message |
-| `auth` | "Not logged in" or status 401/403 | 401 Unauthorized | "No API key found" or `401:`/`403:` |
-| `unavailable` | status 5xx or a connection failure | 5xx, connection failure, or three "waiting for network" retries | `5xx:` or "Connection error." |
+| `quota` | `api_error: usage_limit_reached`, status 429, "hit your" or "rate limit"; the reset comes from the `rate_limit_event` `resetsAt` | "usage limit", "quota", "429" or "rate limit"; the reset comes from "try again at ..." | `429:` error message |
+| `auth` | status 401 or 403, "not logged in", "/login" or "authentication" | "401", "403", "unauthorized", "not logged in" or "codex login" | "No API key found" on stderr with a non-zero exit, or `401:`/`403:` |
+| `unavailable` | status 5xx, a connection failure or "overloaded" | 5xx, "connection failed", "service unavailable", or "waiting for network" as the final error | `5xx:` or "Connection error." |
 
-Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repair. The recorded outputs are in [`testdata/backends/`](../testdata/backends/).
+Greenhouse stops a Codex run after three "waiting for network" lines. The review or repair then ends cancelled or failed, not paused.
+
+Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repair. Its `reason` may still name a cause, such as `model_mismatch`, `crash` or `missing_binary`. The recorded outputs are in [`testdata/backends/`](../testdata/backends/).
 
 ### Timeouts and cancellation
 
-A review that reaches the configured [`executor_timeout`](axi.md#executor-timeout) (45 minutes by default) reports `status: "cancelled"`, `reason: "timeout"` and a diagnostic that names the limit. An explicit cancellation reports `reason: "cancelled"`. The reason is kept in `review.reason`, `host_result.reason` and `attempts[].reason`, including for full-pipeline reviews.
+Two limits apply to a review:
+
+- `review_budget` in `backends.json` limits each reviewer attempt; the default is 3 minutes. A review that reaches it ends `inconclusive` with `reason: "review_budget"`. See the [embedding contract](embedding.md) for details.
+- [`executor_timeout`](axi.md#executor-timeout) (45 minutes by default) limits the executor. A review that reaches it reports `status: "cancelled"`, `reason: "timeout"` and a diagnostic that names the limit.
+
+An explicit cancellation reports `reason: "cancelled"`. The reason is kept in `review.reason`, `host_result.reason` and `attempts[].reason`, including for full-pipeline reviews.
 
 ### Pauses
 
@@ -108,7 +121,7 @@ A rerun of a stopped one-pass repair first checks:
 - the budget
 - the trusted fixer
 - that its writer stopped
-- that its private candidate is still at the base commit
+- that its private candidate is still on its branch and descends from the base commit
 
 It then saves the candidate's edits the same way as a paused repair and resets the candidate. The stopped repair, with `partial`, `partial_digest` and `partial_bytes`, stays in `run.prior_repairs`.
 
@@ -128,7 +141,7 @@ When the switch is on:
 
 1. A configured fallback for the paused role is preferred over waiting. On a quota pause, Greenhouse switches the role to the next entry of `fallback` in `backends.json` and resumes at once. The switch is recorded with the `auto` actor, or the YOLO actor.
 2. Otherwise, a quota pause with a known reset resumes 5 seconds after the reset, with the same backend and model.
-3. A quota or unavailable pause without a reset retries with exponential backoff from `base_seconds` up to `max_seconds`, at most `max_attempts` times. The defaults are 60, 3600 and 3. After that the stage stays paused.
+3. A quota or unavailable pause without a reset retries with exponential backoff from `base_seconds` up to `max_seconds`. The defaults are 60 and 3600. After `max_attempts` automatic resumes in the run (default 3), the stage stays paused. Every automatic resume counts, including fallback and reset-timed ones, until a manual rerun or pipeline progress resets the count. Set these values under `auto_resume` in `backends.json`.
 4. An auth pause always waits for the User.
 
 The daemon stores the schedule in the run (`run.pause.auto_resume_at`) and reschedules it after a restart. It records the resume as an `auto` event.

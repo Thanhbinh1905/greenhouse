@@ -5,85 +5,73 @@
 
 # Greenhouse
 
-Greenhouse runs an independent code review of your branch with Pi, Claude Code or Codex. It can repair the findings you select, run your checks, and deliver the result as a GitHub PR whose required checks pass. It never merges.
+Asking your coding agent to review its own work is a bit like proofreading your own essay: it already knows what it meant, so it reads past the mistakes. Greenhouse gets your branch a second opinion. It starts a fresh agent that has never seen your conversation, hands it what you asked for and the committed diff, and lets it read the code. You get findings you can act on, and if you like, a fix for the ones you pick.
 
-Each agent runs in a fresh session under OS confinement. A local daemon keeps every run, so you can detach, reattach and recover after a crash.
+It runs on the Pi, Claude Code or Codex login you already have, so there are no keys to copy.
 
-A passing review is not a passing test, lint or delivery.
+Here is what a review looks like in the terminal (from our [recorded UI check](docs/evidence/tui/walkthrough-findings-repair-80.txt), with a test reviewer):
 
-## Install
+```text
+Greenhouse · feature @ 9764a62                           one-pass · auto · live
+──────────────────────────────────────────────────────────────────────────────
+ Findings · 2 outstanding findings · 0 selected
 
-You need:
+ ▸ [ ] P1 sample.txt:1 open · Sample text is wrong for the stated intent
+   [ ] P2 sample.txt:1 open · Sample text gives no context for readers
+ ─────────────────────────────────────────────────────────────────────────────
+P1 correctness · sample.txt:1
+Sample text is wrong for the stated intent
+Action: Rewrite the line to say repaired
+Reported for head 9764a62
 
-- Linux and Git.
-- Pi, Claude Code or Codex, installed and signed in with that CLI's own instructions. Greenhouse uses the agent's login, provider routing and default model.
-- Go 1.24.2 or later, to build.
+↑↓ move  ⏎ details  space select  r repair selected  esc back  q quit
+```
 
-Build the executable:
+## Try it
+
+You need Linux, Git and Go 1.24.2 or later, plus one of Pi, Claude Code or Codex installed and signed in.
 
 ```sh
 go build -o greenhouse ./cmd/greenhouse
+cd /path/to/your/feature-branch
+/path/to/greenhouse
 ```
 
-Running Greenhouse needs neither Go, Posse nor Herdr.
+Commit your changes first, since Greenhouse reviews what is committed. Press Enter on **Run review** and watch it go.
 
-## Run your first review
+You don't have to explain the change again. Greenhouse finds your recent session with the agent in this worktree and uses your own words as the intent. If it can't find one, or finds several, it simply asks. The [terminal guide](docs/terminal.md) covers the keys and the details.
 
-1. Commit your changes on a feature branch. Greenhouse reviews committed changes only and excludes dirty files.
-2. Run Greenhouse inside that worktree:
+## What happens next
 
-   ```sh
-   cd /path/to/a/git/worktree
-   /path/to/greenhouse
-   ```
+Once the findings are in, you decide what to do with them. Tell Greenhouse which checks to trust in a small [`fixer.json`](docs/repair.md#configure-the-fixer), then select the findings worth fixing and press `r`. A fixer works on them in a private worktree, your own checks run against the result, and only when they pass can you hand the commit back to your branch. The fixer is held to the findings you selected.
 
-   The screen shows the branch, the agent it will use, the suggested Git target and one highlighted action, **Run review**.
-3. Press Enter. Run collects the intent, saves it with the target, loads the selected rules and starts one independent review.
-4. Read the findings. Press `f` to open them.
+If you want the whole trip, the [full pipeline](docs/pipeline.md) goes further: review, repair, tests, docs, lint, push, a PR, and a wait for your required CI checks. It stops at a green PR and leaves the merge to you.
 
-Run reads the intent from your own agent history: Claude Code, Codex and Pi sessions that started in this worktree and mention the changed files.
+Work doesn't stop when you close the terminal. A small local daemon keeps your runs, so you can press `q`, go do something else, and run `greenhouse` again to pick up where you left off. If Greenhouse is interrupted mid-repair, it shows you what it found and lets you choose how to [recover](docs/recovery.md).
 
-- Run keeps your requests word for word, redacts secrets and drops tool output. It labels the intent with the agent, session and time.
-- The intent is never a summary and never comes from the diff.
-- When no session matches, Run asks what the change should do. When several sessions match equally, it asks which one.
-- When the requests exceed the 8192-byte intent limit, Run asks for a shorter intent. It never cuts them.
+## Where to go from here
 
-To set the intent yourself, Tab to the Intent row and type it before Run. Tab to Agent or Target to change them. Changing the agent changes the reviewer only.
-
-Each step of Run is a separate controller action. A refused or failed step stops Run and says why. Run never retries it.
-
-Opening, resizing, navigating and detaching run nothing and use no budget. Press `q` to detach; the work keeps running in the daemon. Run `greenhouse` again to reattach.
-
-The first review needs no `reviewer.json`, `providers.json` or `backends.json`, no copied key and no executable path. When the agent is not signed in, Greenhouse names the agent's own login action. Greenhouse never runs a login or changes credential files.
-
-## Ways to use Greenhouse
-
-| Use | Summary | Guide |
-| --- | --- | --- |
-| Terminal UI | The interactive screen and the line client for pipes and `TERM=dumb`. | [Terminal](docs/terminal.md) |
-| JSON interface | `greenhouse axi` takes one JSON request on stdin and answers with one JSON envelope. | [JSON interface](docs/axi.md) |
-| Selected repair | A fixer repairs the findings you select, trusted checks run, and handback fast-forwards your branch. | [Repair and handback](docs/repair.md) |
-| Full pipeline | Review, repair, test, docs, lint, push, PR and CI, ending at `ci-ready`. | [Full pipeline](docs/pipeline.md) |
-| Without a terminal | AXI subcommands drive a full run for a scripted worker. | [Worker contract v1](docs/worker-contract-v1.md) |
-| Host mode | A host such as Posse embeds Greenhouse as its reviewer. | [Embedding contract](docs/embedding.md) |
-
-Selected repair needs trusted checks in `fixer.json`. The full pipeline also needs a trusted command plan in `pipeline.json` and GitHub authorization. These files approve commands, not providers.
-
-## Documentation
-
-| Topic | Document |
+| If you want to... | Read |
 | --- | --- |
-| Keys, screens, line client and Settings | [docs/terminal.md](docs/terminal.md) |
-| AXI requests, mutations, replay, events and host mode | [docs/axi.md](docs/axi.md) |
-| One-pass repair, `fixer.json`, handback and resolution responses | [docs/repair.md](docs/repair.md) |
-| Agent backends, review snapshot, OS confinement, pause, resume and rerun | [docs/agents.md](docs/agents.md) |
-| Full pipeline stages, modes, decisions and authority grants | [docs/pipeline.md](docs/pipeline.md) |
-| Recovery after interruption, candidate custody and leases | [docs/recovery.md](docs/recovery.md) |
-| Configuration versions, migration, repository overrides and trust | [docs/configuration.md](docs/configuration.md) |
-| State directory, daemon, transcript logs and storage limits | [docs/state.md](docs/state.md) |
-| Rule selection, validation, provenance and fixture delivery limits | [docs/rules.md](docs/rules.md) |
-| Protocol and configuration compatibility | [docs/compatibility.md](docs/compatibility.md) |
-| Verification commands and model evaluations | [docs/development.md](docs/development.md) |
-| v1 status and known limits | [docs/implementation-plan.md](docs/implementation-plan.md) |
+| Learn the keys, or use it from a pipe or `TERM=dumb` | [Terminal](docs/terminal.md) |
+| Repair findings and hand the fix back | [Repair and handback](docs/repair.md) |
+| Run review through to a green PR | [Full pipeline](docs/pipeline.md) |
+| Script it with JSON (`greenhouse axi`) | [JSON interface](docs/axi.md) |
+| Drive a full run from another program | [Worker contract v1](docs/worker-contract-v1.md) |
+| Embed it as the reviewer in a tool like Posse | [Embedding contract](docs/embedding.md) |
+| Switch agents, or deal with quotas and pauses | [Agents](docs/agents.md) |
+| Set up config files or trust a repository's settings | [Configuration](docs/configuration.md) |
+| Understand what happens after a crash | [Recovery](docs/recovery.md) |
+| Find where runs and logs are stored | [State and daemon](docs/state.md) |
+| Write or select review rules | [Rule contract](docs/rules.md) |
+| Hack on Greenhouse itself | [Development](docs/development.md) |
 
-The interactive screen uses [Bubble Tea, Bubbles and Lip Gloss](THIRD_PARTY_NOTICES.md).
+There is also a [compatibility policy](docs/compatibility.md) and a page on [v1 status and known limits](docs/implementation-plan.md).
+
+## Good to know
+
+On Linux, agents run inside a Landlock sandbox that keeps them from writing to your repository or anywhere outside the directories Greenhouse gives them. It doesn't block outbound network access, since agents need to reach their providers, so Greenhouse records the confinement as `degraded`. If the kernel has no Landlock at all, the agent runs unconfined and the run's record says so. The [confinement notes](docs/agents.md#os-confinement) have the details.
+
+A clean review is one useful signal, not a replacement for your tests, lint or CI.
+
+The interactive screen is built with [Bubble Tea, Bubbles and Lip Gloss](THIRD_PARTY_NOTICES.md).

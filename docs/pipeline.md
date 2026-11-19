@@ -66,7 +66,7 @@ Actionable findings go to a repair or a decision, as the [mode](#modes-and-decis
 
 ### Command stages
 
-Each test, docs or lint result records the argv, the executable digest, the exit code and the last 16 KiB of output. A command that edits the candidate fails the stage.
+Each test, docs or lint result records the argv, the executable digest, the exit code and the last 16 KiB of output. A command that edits the candidate stops the stage for a decision (`needs-decision`); it is never repaired automatically.
 
 The docs stage also needs the current review to report documentation as `documented` or `not-needed`. A passing doc build alone does not pass it.
 
@@ -74,10 +74,10 @@ The docs stage also needs the current review to report documentation as `documen
 
 - After an interrupted push, the controller checks the remote ref before it retries. An unexpected remote head blocks delivery.
 - The PR adapter updates an existing PR instead of creating a duplicate. The PR number and URL persist for CI reconciliation.
-- `GREENHOUSE_GITHUB_API` can point to a local fixture; production defaults to GitHub's API. Authentication uses `GH_TOKEN` when it is set.
+- `GREENHOUSE_GITHUB_API` can point to a local fixture; production defaults to GitHub's API. Authentication uses `GH_TOKEN` when it is set and `GREENHOUSE_GITHUB_API` is not.
 - CI requires each named check exactly once, completed successfully for the exact candidate SHA. During polling, the adapter verifies that the persisted PR number still points to that SHA.
 - Unlisted green checks do not establish readiness. Missing, duplicate, pending, failed, stale and unknown checks block CI readiness.
-- Transport failures retry at most three times with persisted exponential backoff. Exhaustion parks the run without dispatching a fixer.
+- Transport failures get at most three attempts (two retries) with persisted exponential backoff. Exhaustion parks the run without dispatching a fixer.
 
 ### Unconfigured and not-applicable stages
 
@@ -99,17 +99,26 @@ When the mode allows it, a failing test, lint, docs or CI stage listed in `repai
 
 ## What reruns when inputs change
 
-Every stage's evidence binds its declared inputs: the candidate and the plan digest, and for review also the preset, the reviewer configuration and the selected rules with their content digests.
+Every stage's evidence binds its declared inputs:
+
+| Stage | Inputs |
+| --- | --- |
+| intent | intent, target, plan digest |
+| sync | candidate, target, plan digest |
+| review | candidate, target, intent, preset, reviewer configuration, selected rules with their content digests, and pending resolution responses |
+| docs | candidate, plan digest, and the current review's input digest |
+| ci | candidate, plan digest, PR number and head |
+| other stages | candidate, plan digest |
 
 | Change | Reruns |
 | --- | --- |
 | New candidate | Review and every gate |
-| Rule change | Review only |
+| Rule change | Review and docs |
 | Mode or limit change | Nothing |
 
 ## Ready states and handback
 
-The run ends `ci-ready` only after the exact candidate passes all configured local gates and the trusted GitHub checks. A local-only plan ends at `locally-ready`, and only when it marks push, PR and CI not applicable explicitly.
+The run ends `ci-ready` only after the exact candidate passes all configured local gates, push, PR and the trusted GitHub checks. A plan with a remote may mark `ci` not applicable; such a run ends `ci-ready` after push and PR without checking CI. A local-only plan ends at `locally-ready`, and only when it marks push, PR and CI not applicable explicitly.
 
 The terminal and AXI show the PR URL and head.
 
@@ -139,13 +148,17 @@ AXI returns everything in `run.pipeline`:
 - each stage's status, inputs, candidate, runs, repairs and command results
 - repair records and superseded reviews
 
-The terminal shows the same stages with distinct markers: `[pass]`, `[pass after repair, rereviewed]`, `[REPAIRED, NOT REVIEWED]`, `[FAIL]`, `[n/a]`, `[UNCONFIGURED]`, `[DECISION]`, `[ACCEPTED RISK]` and `[unsupported]`.
+The terminal shows the same stages with distinct markers: `[pass]`, `[pass after repair, rereviewed]`, `[REPAIRED, NOT REVIEWED]`, `[FAIL]`, `[n/a]`, `[UNCONFIGURED]`, `[DECISION]`, `[ACCEPTED RISK]`, `[unsupported]`, `[UNKNOWN]`, `[running]`, `[ ]`, `[stale]`, `[cancelled]` and `[PAUSED]`.
 
-A ready run also shows its outcome, and AXI returns the same value in `run.pipeline.outcome`:
+A ready run also shows its outcome. AXI returns the matching key in `run.pipeline.outcome`:
 
-- `CLEAN PASS`
-- `REPAIRED PASS (rereviewed after repair)`
-- `ACCEPTED RISK (review risk accepted, not a clean pass)`
+| `outcome` | Terminal |
+| --- | --- |
+| `clean-pass` | `CLEAN PASS` |
+| `repaired-pass` | `REPAIRED PASS (rereviewed after repair)` |
+| `accepted-risk` | `ACCEPTED RISK (review risk accepted, not a clean pass)` |
+
+The outcome is `accepted-risk` when the review stage was accepted with `accept-head`, or when a deferred finding resolution stands.
 
 ## Modes and decisions
 
@@ -167,7 +180,7 @@ A later review that reports the finding again reopens it. The finding takes the 
 
 ### The review cap
 
-The combined cap counts review rounds and finding-repair rounds. `budget` in every response shows `review`, `repair`, their `total` and `limit`. Gate repairs count separately, as `gate_retries` against `repair_limit`.
+The combined cap counts review rounds and finding-repair rounds. `budget` in every response shows `review`, `repair`, their `total` and `limit`. Gate repairs count separately, as `gate_retries` against `gate_limit` (the plan's `repair_limit`). `budget` also carries `final_fix_repair` and `final_fix_review`.
 
 A finding repair starts only when the cap leaves room for the repair and its rereview. Otherwise, or when another review is needed at the cap, the run opens a `cap` decision with these options:
 
@@ -175,7 +188,7 @@ A finding repair starts only when the cap leaves room for the repair and its rer
 | --- | --- |
 | `accept-head` | Accepts the review risk for the exact candidate and review inputs. The review stage shows `[ACCEPTED RISK]`. All other configured stages, including delivery checks, still run and can fail. A new candidate or a rule change voids the acceptance. |
 | `final-fix` | Grants one repair and one independent final review outside the cap, recorded in `run.pipeline.final_fix`. Without a repairable finding, it runs the final review directly. It is offered once per run, survives restart, and is never an acceptance. |
-| `increase-cap` | Needs a `limit` above the current one. The `cap-increase` event records the old and new limits, the actor, the reason, and the review and repair usage at that moment. Usage never resets, and Apply refuses a limit below it. |
+| `increase-cap` | Needs a `limit` above the current one and at most 1000. The `cap-increase` event records the old and new limits, the actor, the reason, and the review and repair usage at that moment. Usage never resets, and Apply refuses a limit below it. |
 | `rethink` | Marks the run `rethought` and creates a linked successor run (`predecessor` and `successor`) with the same settings and every finding. The old run keeps its reviews, repairs, decisions and candidate ref; `inspect` with its `run_id` shows them. The successor needs a new Prepare. |
 | `discard` | Marks the run `discarded` and keeps every record, the candidate branch and its worktree. It deletes nothing and releases the run's custody, so New run becomes possible. |
 
@@ -183,6 +196,7 @@ A finding repair starts only when the cap leaves room for the repair and its rer
 
 A repair that needs authority beyond the approved intent parks a user-only `authority` decision in every mode. The controller detects:
 
+- an added file (`add-files`)
 - a deleted file (`destructive`)
 - a changed file mode (`permissions`)
 - a change outside the authorized paths (`scope`)
@@ -211,7 +225,7 @@ The request carries the usual run, input, token and action fields; `gate_id` set
 {"version":1,"op":"decide","run_id":"...","input_id":"...","gate_id":"decision id","expected":"token","action_id":"unique","choice":"final-fix","reason":"one last repair"}
 ```
 
-Each answer records the choice, the actor (`terminal`, `axi`, `auto` or `yolo:<actor>`), the reason as typed and the action ID. Greenhouse generates no quote.
+Each answer records the choice, the actor (`terminal`, `axi` or `yolo:<actor>`), the reason as typed and the action ID. Greenhouse generates no quote.
 
 - Replaying an action returns its receipt.
 - An answered or superseded decision changes the gate, so a stale answer is refused.

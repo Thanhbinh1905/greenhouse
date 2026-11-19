@@ -25,9 +25,9 @@ Admission consumes repair budget durably. A replay returns the admission receipt
 ## What a repair does
 
 1. The controller creates a managed private worktree and branch.
-2. The fixer edits the candidate. Pi gets only the read, edit and write tools, with extensions, MCP, skills, project context and sessions disabled. The fixer runs under [OS confinement](agents.md#os-confinement).
+2. The fixer edits the candidate. Pi gets only the read, edit, write, grep, find and ls tools, with extensions, MCP, skills, project context and sessions disabled. The fixer runs under [OS confinement](agents.md#os-confinement) when Landlock is available.
 3. The fixer answers each selected finding with a [resolution response](#resolution-responses).
-4. The controller runs the configured checks directly, not through an agent. It records exit codes and bounded output summaries.
+4. The controller runs the configured checks directly, not through an agent. It records each check's exit code and output byte counts; the raw output is withheld.
 5. The controller verifies the candidate scope and creates a local commit of the authorized paths only.
 
 Greenhouse refuses, rather than bypasses, these cases:
@@ -71,13 +71,15 @@ A finding repair must end with one response per selected finding, as the fixer's
 | --- | --- |
 | `fixed` | The fixer edited the candidate to resolve the finding. |
 | `disputed` | The finding is not a real defect; `reason` says why. The fixer leaves its lines unchanged. |
-| `deferred` | Postponed under an answered decision. `authority` must name one of the `Authorities` in the fixer input: decisions answered by the terminal, AXI or a YOLO actor, never by `auto`. |
+| `deferred` | Postponed under an answered decision. `authority` must name one of the `Authorities` in the fixer input: decisions answered by the terminal, AXI or a YOLO actor, never by `auto`. Only full-pipeline repairs have `Authorities`, so a one-pass repair refuses every deferral. |
 
 The repair is refused as `fixer-failed`, and nothing is committed, when any of these occur:
 
 - a missing, duplicate or unknown response
-- a deferral without a listed authority
+- a response without a reason
+- a deferral without a listed authority, or an authority on a response that is not a deferral
 - edits without any `fixed` response
+- a `fixed` response whose finding's file was not edited
 
 When every response is a dispute or deferral and nothing changed, the repair ends `responded-no-change` without a commit.
 

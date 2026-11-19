@@ -2,6 +2,27 @@
 
 Run `greenhouse` with no arguments inside a committed Git worktree. On a terminal it opens the interactive screen. When stdin or stdout is not a terminal, or `TERM` is unset or `dumb`, it opens the line client.
 
+## Run a review
+
+From a feature branch with committed changes, run `greenhouse`. The screen shows the branch, the agent it will use, the suggested Git target and one highlighted action, **Run review**. Press Enter.
+
+Run collects the intent, saves it with the target, loads the selected rules and starts one independent review. Each step is a separate controller action. A refused or failed step stops Run and says why; Run never retries it.
+
+Dirty files are excluded from review.
+
+Opening, resizing, navigating and detaching only attach and follow events. Nothing runs and no budget is used.
+
+### Where the intent comes from
+
+Run reads the intent from your own agent history: Claude Code, Codex and Pi sessions that started inside this worktree and mention the changed files.
+
+- Run keeps your requests from that session word for word, redacts secrets, drops tool output, and labels the result with the agent, session and time.
+- The intent is never a summary and never comes from the diff.
+- When no session matches, Run asks what the change should do. When several sessions match equally, it asks which one.
+- When the requests exceed the 8192-byte intent limit, Run asks for a shorter intent. It never cuts them.
+
+To skip collection, Tab to the Intent row and type the intent before Run. Tab to Agent or Target to change them. Changing the agent changes the reviewer only and keeps the fixer settings.
+
 ## Interactive screen
 
 Keys act at once, without Enter.
@@ -16,8 +37,9 @@ Keys act at once, without Enter.
 | `f` | Findings: Enter shows the full finding, Space selects it for repair, `r` asks to repair the selection. |
 | `d` | Answer the open decision. |
 | `i` | Details: run ID, tokens, full commits, digests, sources, rules and criteria (`c`), and the transcript log (`o`). |
-| `x` | Cancel running work. Press `x` again to confirm. |
+| `x` | Cancel running work. Press `x` again to confirm. During Run, `x` stops Run at once. |
 | `r` | Recheck installed agents and reconnect. |
+| `o` | The transcript log. |
 | `?` | Help: keys, and every action with whether it is available now. |
 | `q`, Ctrl-C | Detach. Work keeps running in the daemon; run `greenhouse` again to reattach. |
 

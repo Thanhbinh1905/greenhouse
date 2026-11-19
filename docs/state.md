@@ -1,6 +1,6 @@
 # State and daemon
 
-One daemon per state directory keeps every run. Clients attach to it, and the daemon keeps working after they detach.
+One daemon per state directory keeps your runs. Clients attach to it, and the daemon keeps working after they detach.
 
 ## State directory
 
@@ -12,15 +12,17 @@ The Unix socket path must fit the platform's Unix-socket path limit. Use a short
 
 One daemon holds an advisory `flock` before it reads recovery state or binds the socket. It never unlinks a live listener.
 
-Requests execute serially. Each request commits the entire version-1 store before responding:
+Mutations execute serially. Each mutation commits the entire version-1 store before responding:
 
 1. Write and sync a temporary file in the same directory.
 2. Rename it over the store.
 3. Sync the directory.
 
-Action receipts and run changes share that commit.
+Action receipts and run changes share that commit. Archived runs and receipts are written as separate files under `history/` before the store.
 
-Startup parks persisted `running` or `writing` states as `recovery-required` and reconciles them as described in [recovery](recovery.md). It never reruns them. Invalid run records and unknown store versions refuse startup.
+Read requests do not commit. During a commit, `inspect` and `transcript` may answer from the last committed state.
+
+Startup parks persisted `running`, `cancelling` or `writing` runs as `recovery-required` and reconciles them as described in [recovery](recovery.md). It never reruns an agent or a check. The exception is an interrupted push, PR or CI step: startup resets it to pending and resumes it without an agent, because the step checks the remote state first. Invalid run records and unknown store versions refuse startup.
 
 Rule snapshots are an additive version-1 extension: old stores need no rewrite or counter migration. New snapshots validate source, exact bytes, digest, parsed criteria and configuration identity on load.
 
@@ -38,7 +40,8 @@ Protocol and configuration versions follow the [compatibility policy](compatibil
 - Disk corruption has no automatic repair.
 - A directory-sync failure can leave an uncertain commit. Inspect after restart instead of inventing another mutation.
 - Back up the state directory while the daemon is stopped.
-- Storage grows with retained runs, events, receipts, snapshots and executor records. Compaction is not implemented.
+- The store keeps the active run of each worktree. On each save, finished runs and all action receipts move to `history/runs/` and `history/receipts/`. Each kind keeps at most 128 files or 64 MiB; the oldest files beyond that are deleted. A request for a pruned run fails with `historical data may have been pruned`.
+- Storage also grows with events, snapshots and executor records, which are not compacted.
 
 ## Execution and cancellation
 
@@ -47,7 +50,7 @@ The daemon commits review or repair admission and budget consumption before it s
 - Review cancellation stops its current child.
 - Repair and check cancellation asks the Linux subreaper to terminate and reap descendants.
 - A killed runner or unverified cleanup leaves an unknown outcome.
-- Restart never signals stored PIDs or retries.
+- Restart never signals stored PIDs, and never retries an agent or a check.
 
 ## What Greenhouse changes in Git
 
@@ -71,12 +74,17 @@ Normal use never needs a transcript: findings, verdicts and bounded summaries ar
 
 For diagnosis, each reviewer and fixer invocation appends its raw stdout and stderr to `transcripts/<run-id>.log` in the state directory, with mode 0600.
 
-Before writing, Greenhouse replaces these values with `[REDACTED]`:
+Before writing, Greenhouse redacts:
 
-- environment variables whose names contain `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `AUTH`, `CREDENTIAL`, `COOKIE` or `SESSION`
+- values of 8 or more characters from environment variables whose names contain `KEY`, `TOKEN`, `SECRET`, `PASSWORD`, `PASSWD`, `AUTH`, `CREDENTIAL`, `COOKIE` or `SESSION`, replaced with `[REDACTED:<NAME>]`
 - bearer tokens
+- `key=value` and `token: value` style secrets
 - common API-key shapes
 
 A run's log stops at 4 MiB with an omission marker.
 
-AXI `transcript` returns the whole log of the current run, or of `run_id`. In the terminal, `o` shows its last 40 lines.
+AXI `transcript` returns the whole log of the current run, or of `run_id`, and the last 16 KiB of each stage log in `steps`. In the terminal, `o` shows the last 40 lines of the transcript and of each stage log.
+
+## Stage logs
+
+Each stage's redacted output goes to `logs/<run-id>/<step>.log` in the state directory, with mode 0600 and at most 4 MiB per step. The steps are `review`, `repair`, `sync`, `test`, `docs`, `lint`, `push`, `pr` and `ci`. AXI `logs` reads a whole step log; see [read output through Greenhouse](worker-contract-v1.md#read-output-through-greenhouse).

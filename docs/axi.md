@@ -28,10 +28,12 @@ Git identity commands discard inherited `GIT_*` variables. The daemon therefore 
 
 | Kind | Operations |
 | --- | --- |
-| Reads | `attach`, `inspect`, `watch`, `models`, `transcript` |
+| Reads | `attach`, `inspect`, `watch`, `models`, `transcript`, `logs` |
 | Mutations | `apply`, `save`, `trust`, `migrate`, `new`, `resolve-rules`, `prepare`, `review`, `repair`, `pipeline`, `resolve-conflict`, `decide`, `handback`, `cancel`, `resume`, `rerun`, `rerun-from-start`, `cancel-auto-resume`, `recover` |
 
 `models` queries the trusted Pi executable's catalog. `transcript` returns a [transcript log](state.md#transcript-logs).
+
+`logs` reads the redacted output of one stage, such as `test`. It takes `step`, and optionally `full`, `offset`, `follow` and `wait_ms`. A follow request waits for new output while the step is active. See [read output through Greenhouse](worker-contract-v1.md#read-output-through-greenhouse) for the steps, limits and response fields.
 
 ## Mutations
 
@@ -62,10 +64,10 @@ Copy `run_id`, `input_id`, `gate_id` and `token` from a response into the mutati
 }
 ```
 
-Every mutation uses the same run, input, gate, token and action fields.
+Every mutation except `trust` and `migrate` uses the same run, input, gate, token and action fields. `trust` and `migrate` need `action_id` and a `reason`; `trust` also needs the `digest` it trusts.
 
 - `resolve-rules`, `review` and `cancel` need no settings and no reason.
-- `apply` and `save` need a complete settings object and a reason.
+- `apply` and `save` need a reason and a settings object with `mode`, `preset`, `limit` and `rules`. Omitted backend, model and `executor_timeout` fields keep their current values.
 - `save` takes `"target":"user"` (the default) or `"target":"repository"`.
 - `new` retains previous evidence and uses saved defaults.
 
@@ -85,7 +87,7 @@ An unknown executor or writer outcome blocks replacement until an explicit [reco
 
 ### Replay
 
-Replay an identical mutation with the same action ID to get its recorded result, even after a reconnect or restart.
+Replay an identical mutation with the same action ID to get its recorded result, even after a reconnect or restart. This works while the receipt is retained; see [storage limits](state.md#assumptions-and-limits). After pruning, inspect the current run before retrying.
 
 - Reusing an action ID with different input is refused.
 - A new action ID needs the current token.
@@ -102,7 +104,7 @@ An outcome of `ok` means the lifecycle request succeeded. It never means a valid
 | `mode` | `auto` | `ask`, `auto`, `yolo`; see [modes and decisions](pipeline.md#modes-and-decisions) |
 | `preset` | `one-pass` | `one-pass`, `full` |
 | `limit` | 4 | 1 through 1000, the combined review and repair limit |
-| `rules` | `unslop`, `no-comments` | rule names; see [the rule contract](rules.md) |
+| `rules` | `unslop`, `no-comments` | at most 32 rule names; see [the rule contract](rules.md) |
 | `reviewer_backend`, `fixer_backend` | the first installed of `pi`, `claude`, `codex`; `pi` when none is installed | `pi`, `claude`, `codex` |
 | `reviewer_model`, `fixer_model` | native default | a model ID; Pi uses provider-qualified IDs |
 | `executor_timeout` | `45m` | a positive Go duration |
@@ -132,15 +134,15 @@ Each answer carries the current snapshot of the worktree's run, as `inspect` ret
 
 | `wait` | Meaning |
 | --- | --- |
-| `events` | `events` lists each change after `after`, with its `sequence`, `run_id`, `stage`, `status` and `token`. |
+| `events` | `events` lists each change after `after`, with its `sequence`, `kind`, `run_id`, `stage`, `status` and `token`. Step events also carry `execution`, `command`, `exit_code`, `elapsed_ms` and `checks`. |
 | `elapsed` | Nothing changed within `wait_ms` (0 to 60000; 0 answers at once). The outcome is `ok`. An elapsed wait cancels nothing and is not a failure; a review keeps running. |
 | `resync` | The client's position is unusable. The client sent no `stream` or another one (for example after a daemon restart), a sequence ahead of the daemon, or one older than the retained 1,024 events. Treat the snapshot as authoritative and continue from its `stream` and `sequence`. |
 
-Every other version-2 response also carries `stream` and `sequence`: the last event the daemon committed before it handled the request. A replay returns the values recorded with its receipt.
+Every version-2 `attach` and mutation response also carries `stream` and `sequence`: the last event the daemon committed before it handled the request. A replay returns the values recorded with its receipt.
 
 An event with a higher sequence is newer than that response, so a client can drop a watch answer that arrives late. Pass `stream` and `sequence` from each answer into the next request. A client that loses its connection reconnects with the same values and receives either the missed events or a resync.
 
-Watching never creates a run or authorizes a gate. At most 64 watches can wait at once.
+Watching never creates a run or authorizes a gate. At most 64 `watch`, `logs` follow and `pipeline` waits can be pending at once.
 
 ## Host mode
 
@@ -150,4 +152,4 @@ A host such as Posse can embed Greenhouse as its reviewer. Requests with `host` 
 - Each `review` needs a host `grant`.
 - `host_result` reports the exact-head verdict and findings.
 
-Other clients can only observe a host run. See the [embedding contract](embedding.md).
+Other clients can only observe a host run. Another host can replace it with `attach` or `new` once the run is idle: not running, awaiting recovery, scheduled for automatic resume, or holding a candidate. See the [embedding contract](embedding.md).

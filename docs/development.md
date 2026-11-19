@@ -36,7 +36,10 @@ After a dependency change, regenerate the notices with `python3 tools/notices.py
 - selected repair, check results, dirty-handback refusal and safe handback
 - full-pipeline repair to CI readiness, a failed gate with diagnostics and a repaired-unreviewed stage
 - grouped ask and cap decisions answered with `d`, final-fix and accepted risk
+- resolution responses, the review snapshot and confinement
 - AXI parity
+
+Pass `responses` as a third argument to run only the resolution-response flow; add `before` after it to record an older binary's behavior.
 
 `events_check.py` opens the terminal in 56-, 80- and 100-column PTYs. It starts a review over AXI without a keypress and requires the terminal to redraw through `running` to the findings. It then follows a host-owned run and requires its terminal mutation to refuse. Pass `before` as a third argument to record an older binary's behavior instead.
 
@@ -66,10 +69,12 @@ After a dependency change, regenerate the notices with `python3 tools/notices.py
 
 ### Corpus
 
-The corpus in [`internal/eval/testdata/corpus`](../internal/eval/testdata/corpus) holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, and clean changes.
+The corpus in [`internal/eval/testdata/corpus`](../internal/eval/testdata/corpus) holds small Git changes with known findings: planted correctness bugs, `unslop` and `no-comments` violations, out-of-scope noise, clean changes, and judgment cases.
 
 - Each `case.json` records the change intent, the selected rules, and every expected finding by file, candidate line range, origin, rule, severity and acceptable priorities.
-- Each expected finding has an `id`.
+- Each expected finding has an `id` and a `defect` description.
+- Each case has a `split` (`tune` or `holdout`), a `stratum` and `source` metadata. `run`, `judge` and `rescore` take `-split tune|holdout|all` (default `all`).
+- A judgment case lists `allowed` ranges. A finding in an allowed range earns no credit and is not a false positive.
 - `noise` lists lines that must not be flagged.
 - `corpus.json` lists the cases and a revision number. Reports also record a digest of every corpus byte.
 
@@ -95,14 +100,15 @@ Each case directory holds:
 
 - `input.json`: the exact stdin bytes
 - `argv.json`
-- `events.jsonl`: Pi's events without streaming deltas
+- `events.jsonl`: the backend's events without streaming deltas
+- `stderr.log`
 - `timing.json`
 
 ### Metrics
 
 - A finding is eligible for an expected finding when file, origin and rule are equal, the line ranges overlap, and the finding spans at most 15 lines. Eligibility earns no credit by itself.
 - `adjudications.json` holds one record per eligible finding: the finding index and digest, the expected defect ID, a verdict (`detects`, `different-defect` or `duplicate`), and a one-sentence rationale that quotes the finding. `run` produces it with a separate judge call per finding (`-judge-model`, default `-model`). `go run ./cmd/eval judge -model provider/id run-dir` produces it for saved runs. The judge model and prompt are recorded. An eligible finding without a record earns no credit.
-- Recall is detected over expected findings. High-severity recall counts only planted `high` findings. Precision is matching findings over all findings.
+- Recall is detected over expected findings. High-severity recall counts only planted `high` findings. Precision is matching findings over all findings except those in allowed ranges.
 - Priority accuracy counts detections whose priority is in the expected list.
 - A false positive detects and duplicates nothing. A `different-defect` record makes it a wrong-defect false positive. A blocking result is a P0 or P1 false positive. An inconclusive review on a clean case also blocks.
 - The bar is a high-severity recall of at least 80% and no blocking result on a clean case.
