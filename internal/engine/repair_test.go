@@ -37,7 +37,7 @@ func repairFixture(t *testing.T) (string, string, string, map[string]any) {
 		t.Fatal(err)
 	}
 	mutate(t, bin, repo, home, v, "review", "review", nil)
-	v = waitReview(t, bin, repo, home)
+	v = waitReviewWithFindings(t, bin, repo, home)
 	p := filepath.Join(filepath.Dir(home), "fake-fixer")
 	script := `#!/usr/bin/python3
 import json,sys,os
@@ -58,7 +58,19 @@ with open('sample.txt','w') as f: f.write('repaired\n')
 }
 func selectedID(t *testing.T, v map[string]any) []string {
 	t.Helper()
-	return []string{runOf(t, v)["findings"].([]any)[0].(map[string]any)["id"].(string)}
+	findings, ok := runOf(t, v)["findings"].([]any)
+	if !ok || len(findings) == 0 {
+		t.Fatalf("repair requires recorded review findings: %v", v)
+	}
+	finding, ok := findings[0].(map[string]any)
+	if !ok {
+		t.Fatalf("review finding has invalid shape: %v", findings[0])
+	}
+	id, ok := finding["id"].(string)
+	if !ok || id == "" {
+		t.Fatalf("review finding has no ID: %v", finding)
+	}
+	return []string{id}
 }
 func killRepairDaemon(t *testing.T, home string) {
 	t.Helper()
