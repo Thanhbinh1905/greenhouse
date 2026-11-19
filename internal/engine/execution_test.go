@@ -104,6 +104,42 @@ func waitReview(t *testing.T, bin, repo, home string) map[string]any {
 	t.Fatal("review did not settle")
 	return nil
 }
+
+func reviewSettledWithFindings(run map[string]any) bool {
+	status := run["status"]
+	findings, ok := run["findings"].([]any)
+	return ok && len(findings) > 0 && status != "running" && status != "cancelling"
+}
+
+func TestReviewSettledWithFindings(t *testing.T) {
+	for name, run := range map[string]map[string]any{
+		"running without findings": {"status": "running"},
+		"settled without findings": {"status": "clean-review", "findings": []any{}},
+		"settled with findings":    {"status": "outstanding-findings", "findings": []any{map[string]any{"id": "finding-id"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			want := name == "settled with findings"
+			if got := reviewSettledWithFindings(run); got != want {
+				t.Fatalf("reviewSettledWithFindings(%v) = %t, want %t", run, got, want)
+			}
+		})
+	}
+}
+
+func waitReviewWithFindings(t *testing.T, bin, repo, home string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		if reviewSettledWithFindings(runOf(t, v)) {
+			return v
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("review did not settle with findings")
+	return nil
+}
+
 func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
