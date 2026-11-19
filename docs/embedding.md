@@ -85,7 +85,7 @@ A review that exceeds the configured executor limit (`executor_timeout`, default
 
 After restart, complete executor records preserve the stop reason and captured usage. Legacy stopped records without a stop reason report `cancelled`.
 
-A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](../README.md#recovery-after-interruption) as in standalone mode.
+A backend pause, such as an exhausted quota, keeps the review's grant and gives no verdict. `resume` or `rerun` continues that review under the same grant, so the host spends no second grant. Interrupted reviews use [recovery](recovery.md) as in standalone mode.
 
 ## Review input and admission refusals
 

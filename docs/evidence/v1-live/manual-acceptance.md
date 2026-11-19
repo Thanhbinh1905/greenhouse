@@ -14,7 +14,7 @@ Use a Git worktree with a committed change and an existing `main` target. Start 
   gh auth setup-git
   ```
 
-  Both authentication commands should succeed. Create the private `reviewer.json` using the exact Python block in [First review](../../../README.md#first-review). Configure `providers.json` there if your Pi model uses a custom endpoint.
+  Both authentication commands should succeed. Create the private `reviewer.json` using the exact Python block in [First review](../../../README.md#run-your-first-review). Configure `providers.json` there if your Pi model uses a custom endpoint.
 
 - [ ] Load your existing Pi key and open the committed change:
 

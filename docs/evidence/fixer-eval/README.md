@@ -1,6 +1,6 @@
 # Fixer evaluation runs
 
-Each directory is one live run of `go run ./cmd/eval fix-run` over the whole fixer corpus. See [the README](../../../README.md#fixer-evaluation) for the command and metric definitions.
+Each directory is one live run of `go run ./cmd/eval fix-run` over the whole fixer corpus. See [fixer evaluation](../../development.md#fixer-evaluation) for the command and metric definitions.
 
 ## Configuration
 

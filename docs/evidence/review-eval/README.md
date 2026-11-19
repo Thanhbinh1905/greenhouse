@@ -1,6 +1,6 @@
 # Review evaluation runs
 
-Each directory is one live run of `go run ./cmd/eval run` over the whole corpus. See [the README](../../../README.md#review-evaluation) for the command and metric definitions.
+Each directory is one live run of `go run ./cmd/eval run` over the whole corpus. See [review evaluation](../../development.md#review-evaluation) for the command and metric definitions.
 
 ## Configuration
 
