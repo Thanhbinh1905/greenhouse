@@ -53,7 +53,7 @@ print(json.dumps({'type':'message_end'`, 1))
 				if started := hostCall(t, bin, repo, home, v, "review", "review"+suffix, map[string]any{"grant": "round" + suffix}); started["outcome"] != "ok" {
 					t.Fatal(started)
 				}
-				v = hostSettle(t, bin, repo, home)
+				v = hostSettleWithFindings(t, bin, repo, home)
 				result := v["host_result"].(map[string]any)
 				findings, _ := result["findings"].([]any)
 				if result["verdict"] != "findings" || result["current"] != true || len(findings) != 1 {

@@ -31,6 +31,22 @@ func hostSettle(t *testing.T, bin, repo, home string) map[string]any {
 	return axi(t, bin, repo, home, string(b))
 }
 
+func hostSettleWithFindings(t *testing.T, bin, repo, home string) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(30 * time.Second)
+	for time.Now().Before(deadline) {
+		v := hostSettle(t, bin, repo, home)
+		result, _ := v["host_result"].(map[string]any)
+		findings, _ := result["findings"].([]any)
+		if len(findings) > 0 {
+			return v
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("host review did not settle with findings")
+	return nil
+}
+
 func hostPrepare(t *testing.T, bin, repo, home string, v map[string]any, target, suffix string) map[string]any {
 	t.Helper()
 	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 1, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
@@ -86,7 +102,7 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	if replay := hostCall(t, bin, repo, home, v, "review", "review-1", map[string]any{"grant": "round-1"}); replay["token"] != first["token"] {
 		t.Fatalf("replay must return the receipt: %v", replay)
 	}
-	v = hostSettle(t, bin, repo, home)
+	v = hostSettleWithFindings(t, bin, repo, home)
 	head := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	result, _ := v["host_result"].(map[string]any)
 	findings, _ := result["findings"].([]any)
