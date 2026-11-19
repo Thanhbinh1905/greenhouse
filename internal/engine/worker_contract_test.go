@@ -104,7 +104,8 @@ func TestWorkerDeliveryContract(t *testing.T) {
 		case r.Method == http.MethodPost:
 			var request struct{ Head string }
 			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-				t.Fatal(err)
+				t.Errorf("decode request: %v", err)
+				return
 			}
 			b, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+strings.TrimPrefix(request.Head, "acme:")).Output()
 			if err != nil {

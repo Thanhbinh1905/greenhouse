@@ -534,7 +534,7 @@ func tomlString(s string) string {
 	return string(b)
 }
 
-func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
+func agentArgs(config ReviewerConfig, role, schema, prompt string) ([]string, error) {
 	switch config.Backend {
 	case BackendClaude:
 		args := []string{"-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--safe-mode", "--strict-mcp-config", "--disable-slash-commands", "--setting-sources", "user", "--permission-prompts", "none"}
@@ -546,7 +546,7 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 		if config.Model != "" {
 			args = append(args, "--model", config.Model)
 		}
-		return append(args, "--system-prompt", prompt)
+		return append(args, "--system-prompt", prompt), nil
 	case BackendCodex:
 		sandbox := "read-only"
 		if role == "fixer" {
@@ -559,7 +559,7 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 		}
 		var names []string
 		if err := json.Unmarshal([]byte(config.DisabledMCP), &names); err != nil {
-			return nil
+			return nil, fmt.Errorf("decode disabled Codex MCP configuration: %w", err)
 		}
 		for _, name := range names {
 			args = append(args, "-c", "mcp_servers."+tomlString(name)+".enabled=false")
@@ -574,12 +574,12 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 		if config.Model != "" {
 			args = append(args, "-m", config.Model)
 		}
-		return append(args, "-")
+		return append(args, "-"), nil
 	}
 	if role == "reviewer" {
-		return reviewerArgs(config.Model)
+		return reviewerArgs(config.Model), nil
 	}
-	return fixerArgs(config.Model)
+	return fixerArgs(config.Model), nil
 }
 
 func agentEnv(backend string) []string {
@@ -926,11 +926,11 @@ func fixerAgent(cfg FixerConfig) ReviewerConfig {
 	return ReviewerConfig{Native: cfg.Native, DisabledMCP: cfg.DisabledMCP, InstructionsFile: cfg.InstructionsFile, Backend: cfg.Backend, Executable: cfg.Executable, Model: cfg.Model, Provider: cfg.Provider}
 }
 
-func fixerArgsFor(cfg FixerConfig, prompt string) []string {
+func fixerArgsFor(cfg FixerConfig, prompt string) ([]string, error) {
 	if cfg.Backend == "" || cfg.Backend == BackendPi {
 		args := fixerArgs(cfg.Model)
 		args[len(args)-1] = prompt
-		return args
+		return args, nil
 	}
 	return agentArgs(fixerAgent(cfg), "fixer", "", prompt)
 }

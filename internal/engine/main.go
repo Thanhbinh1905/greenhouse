@@ -1670,7 +1670,10 @@ func repairHeld(x *Repair) bool {
 }
 
 func reviewArgsMatch(x *Execution) bool {
-	expected := agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	expected, err := agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	if err != nil {
+		return false
+	}
 	if !x.Config.Native {
 		expected = legacyAgentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
 	}

@@ -750,7 +750,11 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 	if len(selected) > 0 {
 		authorities, respond = deferralAuthorities(r), responseContract
 	}
-	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Authorities: authorities, Config: cfg, ConfigDigest: Digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: fixerArgsFor(cfg, gateFixerPrompt), Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
+	args, e := fixerArgsFor(cfg, gateFixerPrompt)
+	if e != nil {
+		return e
+	}
+	x := Repair{ID: id, Stage: st.Name, Actor: actor, Selected: selected, Authorities: authorities, Config: cfg, ConfigDigest: Digest(cfg), ExecutableDigest: fixerDigest, Paths: allowed, Args: args, Rules: identity, Worktree: p.Worktree, Ref: p.Ref, LeaseEpoch: p.LeaseEpoch, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "pipeline-custody", Grants: stageGrants(p, st.Name), Run: r.ID}
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Stage, Reason, Diff string
 		Paths                             []string

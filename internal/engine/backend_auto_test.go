@@ -46,6 +46,12 @@ func waitStatus(t *testing.T, bin, repo, home string, want ...string) map[string
 	return nil
 }
 
+func TestAgentArgsRejectsInvalidDisabledMCPJSON(t *testing.T) {
+	if _, err := agentArgs(ReviewerConfig{Backend: BackendCodex, DisabledMCP: "{"}, "reviewer", "{}", "prompt"); err == nil {
+		t.Fatal("invalid disabled MCP configuration must not produce runnable arguments")
+	}
+}
+
 func TestAutoResumeWithBackoffSurvivesDaemonRestart(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
