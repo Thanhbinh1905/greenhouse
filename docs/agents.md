@@ -66,13 +66,17 @@ If the policy cannot be applied, the agent does not start. The review becomes `i
 
 ## Backend pause, resume and rerun
 
-Greenhouse classifies a failed backend run from the CLI's exit code and output. Text matches are case-insensitive substrings. The main patterns are:
+Greenhouse classifies a failed backend run from the CLI's exit code and output. Each backend matches differently:
+
+- Claude: the `api_error`, `api_error_status` and `result` fields of an error `result` event. Text matches are case-insensitive substrings of `result`.
+- Codex: the message of a `turn.failed` event, matched as case-insensitive substrings. When that gives no reason, a last `error` or `turn.failed` message containing "waiting for network" (case-sensitive) means `unavailable`.
+- Pi: "No API key found" is a case-sensitive substring of stderr with a non-zero exit. Otherwise Greenhouse reads the error message of the last assistant `message_end` event with `stopReason` `error`, and takes a status code only from a leading `NNN:`.
 
 | Reason | Claude | Codex | Pi |
 |---|---|---|---|
-| `quota` | `api_error: usage_limit_reached`, status 429, "hit your" or "rate limit"; the reset comes from the `rate_limit_event` `resetsAt` | "usage limit", "quota", "429" or "rate limit"; the reset comes from "try again at ..." | `429:` error message |
-| `auth` | status 401 or 403, "not logged in", "/login" or "authentication" | "401", "403", "unauthorized", "not logged in" or "codex login" | "No API key found" on stderr with a non-zero exit, or `401:`/`403:` |
-| `unavailable` | status 5xx, a connection failure or "overloaded" | 5xx, "connection failed", "service unavailable", or "waiting for network" as the final error | `5xx:` or "Connection error." |
+| `quota` | `api_error: usage_limit_reached`, status 429, "hit your" or "rate limit"; the reset comes from the `rate_limit_event` `resetsAt` | "usage limit", "quota", "429" or "rate limit"; the reset comes from "try again at ..." | a message starting with `429:` |
+| `auth` | status 401 or 403, "not logged in", "/login" or "authentication" | "401", "403", "unauthorized", "not logged in" or "codex login" | "No API key found" on stderr, or a message starting with `401:` or `403:` |
+| `unavailable` | status 5xx, `api_error: connection_failed`, "connection" or "overloaded" | "status 5xx", "connection failed", "service unavailable" or "waiting for network" | a message starting with `5xx:`, or containing "connection error" (case-insensitive) |
 
 Greenhouse stops a Codex run after three "waiting for network" lines. The review or repair then ends cancelled or failed, not paused.
 
