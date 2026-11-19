@@ -152,7 +152,9 @@ func TestSaveTargetsTrustedRepositoryOverride(t *testing.T) {
 	}
 	b, _ := os.ReadFile(override)
 	var written map[string]any
-	json.Unmarshal(b, &written)
+	if err := json.Unmarshal(b, &written); err != nil {
+		t.Fatal(err)
+	}
 	if written["version"] != 1.0 || written["mode"] != "ask" || written["limit"] != 2.0 || written["budget_unit"] != "rounds" || written["preset"] != nil {
 		t.Fatalf("override file does not hold only the narrowed values: %s", b)
 	}
@@ -169,7 +171,9 @@ func TestRepositorySaveDoesNotBlockHandback(t *testing.T) {
 	bin, repo, home, v := repairFixture(t)
 	repairRequest(t, bin, repo, home, v, "repair", "repair", selectedID(t, v))
 	done := waitRepair(t, bin, repo, home)
-	os.Remove(filepath.Join(repo, "dirty"))
+	if err := os.Remove(filepath.Join(repo, "dirty")); err != nil {
+		t.Fatal(err)
+	}
 	done = act(t, bin, repo, home, done, "trust", "trust", map[string]any{"digest": repositoryOf(t, done)["digest"]})
 	narrow := map[string]any{"mode": "ask", "preset": "one-pass", "limit": 2, "rules": []string{"unslop", "no-comments"}}
 	saved := act(t, bin, repo, home, done, "save", "save-repo", map[string]any{"target": "repository", "settings": narrow})

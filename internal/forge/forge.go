@@ -67,7 +67,7 @@ func (g GitHubForge) request(ctx context.Context, method, path string, body any,
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() // The response body is read-only and already consumed.
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("forge returned HTTP %d", resp.StatusCode)
 	}

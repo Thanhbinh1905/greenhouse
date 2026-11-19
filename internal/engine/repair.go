@@ -83,12 +83,12 @@ type Repair struct {
 	LeaseEpoch       int                  `json:"lease_epoch,omitempty"`
 }
 
-func executableDigest(path string) (string, error) {
+func executableDigest(path string) (digest string, retErr error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 	h := sha256.New()
 	n, err := io.Copy(h, io.LimitReader(f, 1<<30))
 	if err != nil {
@@ -430,7 +430,11 @@ func executeRepair(ctx context.Context, x *Repair, source repository.Identity, c
 		fail("failed", err)
 		return
 	}
-	defer unlock()
+	defer func() {
+		if err := unlock(); err != nil {
+			fail("failed", err)
+		}
+	}()
 	current, e := repository.Resolve(source.Worktree)
 	if e != nil || current != source {
 		fail("refused", errors.New("source moved before writer start"))
@@ -480,7 +484,7 @@ func executeRepair(ctx context.Context, x *Repair, source repository.Identity, c
 		fail("failed", e)
 		return
 	}
-	defer os.RemoveAll(agentDir)
+	defer func() { _ = os.RemoveAll(agentDir) }() // Best-effort cleanup of the temporary agent directory.
 	x.Writer = "unknown"
 	x.Status = "fixing"
 	if !save() {
@@ -694,7 +698,7 @@ func authorizeHandback(r *Run) error {
 	return nil
 }
 
-func handback(r *Run, trusted string) error {
+func handback(r *Run, trusted string) (retErr error) {
 	x := r.Repair
 	if x == nil {
 		return errors.New("no repair candidate")
@@ -725,7 +729,7 @@ func handback(r *Run, trusted string) error {
 	if e != nil {
 		return e
 	}
-	defer unlock()
+	defer func() { retErr = errors.Join(retErr, unlock()) }()
 	if e := gitHazards(r.Submitted.Worktree); e != nil {
 		return e
 	}

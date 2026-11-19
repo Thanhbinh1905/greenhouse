@@ -63,7 +63,9 @@ func budgetUnit(name string, fields map[string]json.RawMessage) error {
 		return schemaError{name + ": budget_unit is required; the only supported unit is \"rounds\""}
 	}
 	var unit string
-	json.Unmarshal(raw, &unit)
+	if err := json.Unmarshal(raw, &unit); err != nil {
+		return schemaError{name + ": budget_unit must be a string"}
+	}
 	if unit != "rounds" {
 		return schemaError{fmt.Sprintf("%s: budget_unit %s is unsupported; Greenhouse counts rounds and never converts or reinterprets a budget unit", name, raw)}
 	}
@@ -251,7 +253,7 @@ func replaceFile(path string, b []byte, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }() // Best-effort cleanup of the temporary config file.
 	if err = f.Chmod(mode); err == nil {
 		if _, err = f.Write(b); err == nil {
 			err = f.Sync()
@@ -270,6 +272,6 @@ func replaceFile(path string, b []byte, mode os.FileMode) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
+	defer func() { _ = d.Close() }() // Directory close is best-effort after the durable write.
 	return d.Sync()
 }

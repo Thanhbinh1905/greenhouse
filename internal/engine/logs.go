@@ -32,7 +32,7 @@ func validStep(step string) bool {
 	return has([]string{"review", "repair", "sync", "test", "docs", "lint", "push", "pr", "ci"}, step)
 }
 
-func appendLog(run, step string, data []byte) {
+func appendLog(run, step string, data []byte) (retErr error) {
 	if run == "" || !validStep(step) {
 		return
 	}
@@ -50,16 +50,20 @@ func appendLog(run, step string, data []byte) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 	info, err := f.Stat()
-	if err != nil || info.Size() >= transcriptLimit {
-		return
+	if err != nil {
+		return err
+	}
+	if info.Size() >= transcriptLimit {
+		return nil
 	}
 	data = Redact(data)
 	if room := int64(transcriptLimit) - info.Size(); int64(len(data)) > room {
 		data = data[:room]
 	}
-	f.Write(data)
+	_, retErr = f.Write(data)
+	return retErr
 }
 
 func readLogs(run string, q Request) (*LogsView, error) {
@@ -81,7 +85,7 @@ func readLogs(run string, q Request) (*LogsView, error) {
 		return nil, err
 	}
 	if err == nil {
-		defer f.Close()
+		defer func() { _ = f.Close() }() // Closing a read-only log is best-effort after reading.
 		info, statErr := f.Stat()
 		if statErr != nil {
 			return nil, statErr
@@ -148,30 +152,35 @@ func (w *logWriter) Write(data []byte) (int, error) {
 			}
 		}
 		if i >= 0 {
-			w.flush()
+			if err := w.flush(); err != nil {
+				return n - len(data), err
+			}
 		}
 	}
 	return n, nil
 }
-func (w *logWriter) flush() {
+func (w *logWriter) flush() error {
 	data := w.pending
 	if w.discard {
 		data = []byte("[oversized output line omitted]\n")
 	}
 	if w.output != nil {
-		w.output.Write(Redact(data))
+		if _, err := w.output.Write(Redact(data)); err != nil {
+			return err
+		}
 	} else if len(data) > 0 {
-		appendLog(w.run, w.step, data)
+		_ = appendLog(w.run, w.step, data) // Logs are supplementary evidence; workflow output remains authoritative.
 	}
 	w.pending = nil
 	w.discard = false
+	return nil
 }
 
 type stageLogKey struct{}
 type checkProgressKey struct{}
 
 func observeProcesses(ctx context.Context, run, step string, emit func(FeedEvent)) context.Context {
-	ctx = context.WithValue(ctx, stageLogKey{}, func(data []byte) { appendLog(run, step, data) })
+	ctx = context.WithValue(ctx, stageLogKey{}, func(data []byte) { _ = appendLog(run, step, data) })
 	ctx = context.WithValue(ctx, checkProgressKey{}, func(checks []forge.CheckState) {
 		emit(FeedEvent{Run: run, Stage: step, Kind: "checks", Checks: checks})
 	})
@@ -187,7 +196,7 @@ func processObserver(run, step string, emit func(FeedEvent)) runner.ProcessObser
 		id := opaque()
 		emit(FeedEvent{Run: run, Stage: step, Kind: "step-started", Execution: id, Command: safe})
 		header, _ := json.Marshal(safe)
-		appendLog(run, step, append(append([]byte("=== "), header...), '\n'))
+		_ = appendLog(run, step, append(append([]byte("=== "), header...), '\n'))
 		out, errOut := &logWriter{run: run, step: step}, &logWriter{run: run, step: step}
 		if stdout == nil {
 			stdout = io.Discard
@@ -197,14 +206,14 @@ func processObserver(run, step string, emit func(FeedEvent)) runner.ProcessObser
 		}
 		lock := &sync.Mutex{}
 		return synchronizedWriter{lock, io.MultiWriter(stdout, out)}, synchronizedWriter{lock, io.MultiWriter(stderr, errOut)}, func(code int, executionErr error, duration time.Duration) {
-			out.flush()
-			errOut.flush()
+			_ = out.flush()
+			_ = errOut.flush()
 			elapsed := duration.Milliseconds()
 			kind := "step-finished"
 			if code != 0 || executionErr != nil {
 				kind = "step-failed"
 			}
-			appendLog(run, step, []byte(fmt.Sprintf("exit=%d elapsed_ms=%d\n", code, elapsed)))
+			_ = appendLog(run, step, []byte(fmt.Sprintf("exit=%d elapsed_ms=%d\n", code, elapsed)))
 			emit(FeedEvent{Run: run, Stage: step, Kind: kind, Execution: id, Command: safe, ExitCode: &code, ElapsedMS: &elapsed})
 		}
 	}
@@ -212,7 +221,7 @@ func processObserver(run, step string, emit func(FeedEvent)) runner.ProcessObser
 
 func logStageResult(run string, stage StageResult) {
 	b, _ := json.Marshal(stage)
-	appendLog(run, stage.Name, append(b, '\n'))
+	_ = appendLog(run, stage.Name, append(b, '\n'))
 }
 
 func logsComplete(r *Run, step string) bool {
@@ -224,7 +233,7 @@ func logsComplete(r *Run, step string) bool {
 	}
 	if r.Pipeline != nil && r.Pipeline.Active != nil {
 		active := r.Pipeline.Active
-		return active.Stage != step && !(step == "repair" && (active.Kind == "repair" || active.Kind == "conflict"))
+		return active.Stage != step && (step != "repair" || (active.Kind != "repair" && active.Kind != "conflict"))
 	}
 	switch r.Stage {
 	case "independent-review":

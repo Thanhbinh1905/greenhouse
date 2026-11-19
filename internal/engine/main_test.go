@@ -25,7 +25,7 @@ func TestCLIHelp(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer stdin.Close()
+			defer func() { _ = stdin.Close() }() // Best-effort test cleanup.
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			if err := cmd.Run(); err != nil {

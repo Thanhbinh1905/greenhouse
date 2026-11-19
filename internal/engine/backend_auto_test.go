@@ -184,7 +184,9 @@ func TestQuotaResetTimeDecidesAutomaticResume(t *testing.T) {
 			t.Parallel()
 			for _, reset := range []string{"3600", "-120"} {
 				bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
-				os.WriteFile(filepath.Join(root, "reset-in-"+c.backend), []byte(reset), 0600)
+				if err := os.WriteFile(filepath.Join(root, "reset-in-"+c.backend), []byte(reset), 0600); err != nil {
+					t.Fatal(err)
+				}
 				setModes(t, root, c.backend, "quota", "success")
 				mutate(t, bin, repo, home, v, "review", "review-reset-"+reset, nil)
 				if reset == "3600" {

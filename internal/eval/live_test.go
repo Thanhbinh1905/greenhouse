@@ -153,13 +153,17 @@ func TestShimCountsTimeBeforeInterruptedTurn(t *testing.T) {
 	}
 	prior := shimTiming{Start: time.Now().Add(-time.Second)}
 	data, _ := json.Marshal(prior)
-	os.WriteFile(filepath.Join(dir, "timing.json"), data, 0600)
+	if err := os.WriteFile(filepath.Join(dir, "timing.json"), data, 0600); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := shim(shimConfig{Pi: pi, Capture: dir}, []string{"--no-tools"}, strings.NewReader("final"), io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(filepath.Join(dir, "timing.json"))
 	var timing shimTiming
-	json.Unmarshal(data, &timing)
+	if err := json.Unmarshal(data, &timing); err != nil {
+		t.Fatal(err)
+	}
 	if timing.Millis < 1000 {
 		t.Fatalf("lost interrupted exploration time: %+v", timing)
 	}

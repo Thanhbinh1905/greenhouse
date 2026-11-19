@@ -2,6 +2,7 @@ package engine
 
 import (
 	"bytes"
+	"errors"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -54,22 +55,28 @@ func Redact(b []byte) []byte {
 
 func transcriptName(run string) string { return filepath.Join("transcripts", run+".log") }
 
-func appendTranscript(run, header string, stdout, stderr []byte) {
+func appendTranscript(run, header string, stdout, stderr []byte) (retErr error) {
 	h, err := Home()
-	if err != nil || run == "" {
-		return
+	if err != nil {
+		return err
 	}
-	if os.MkdirAll(filepath.Join(h, "transcripts"), 0700) != nil {
-		return
+	if run == "" {
+		return nil
+	}
+	if err := os.MkdirAll(filepath.Join(h, "transcripts"), 0700); err != nil {
+		return err
 	}
 	f, err := os.OpenFile(filepath.Join(h, transcriptName(run)), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 	info, err := f.Stat()
-	if err != nil || info.Size() >= transcriptLimit {
-		return
+	if err != nil {
+		return err
+	}
+	if info.Size() >= transcriptLimit {
+		return nil
 	}
 	var section bytes.Buffer
 	section.WriteString("=== " + header + " ===\n--- stdout ---\n")
@@ -81,7 +88,8 @@ func appendTranscript(run, header string, stdout, stderr []byte) {
 	if room := transcriptLimit - len(transcriptOmitted) - int(info.Size()); len(out) > room {
 		out = append(out[:max(room, 0)], transcriptOmitted...)
 	}
-	f.Write(out)
+	_, retErr = f.Write(out)
+	return retErr
 }
 
 func readTranscript(run string) (*TranscriptView, error) {

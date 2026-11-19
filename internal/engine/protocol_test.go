@@ -48,7 +48,9 @@ func TestTerminalRefusesIncompatibleDaemon(t *testing.T) {
 		{`{"version":3,"outcome":"refused","error":"unsupported protocol version 2; this daemon supports 3-4","protocol":{"version":3,"min":3,"max":4}}`, "running daemon supports 3-4"},
 	} {
 		bin, repo, home := fixture(t)
-		os.Mkdir(home, 0700)
+		if err := os.Mkdir(home, 0700); err != nil {
+			t.Fatal(err)
+		}
 		listener, err := net.Listen("unix", filepath.Join(home, "socket"))
 		if err != nil {
 			t.Fatal(err)
@@ -59,9 +61,14 @@ func TestTerminalRefusesIncompatibleDaemon(t *testing.T) {
 				if err != nil {
 					return
 				}
-				json.NewDecoder(c).Decode(&map[string]any{})
-				io.WriteString(c, daemon.reply+"\n")
-				c.Close()
+				if err := json.NewDecoder(c).Decode(&map[string]any{}); err != nil {
+					t.Errorf("decode request: %v", err)
+					return
+				}
+				if _, err := io.WriteString(c, daemon.reply+"\n"); err != nil {
+					t.Errorf("write test response: %v", err)
+				}
+				_ = c.Close() // Best-effort test connection cleanup.
 			}
 		}()
 		c := exec.Command(bin)
@@ -69,7 +76,7 @@ func TestTerminalRefusesIncompatibleDaemon(t *testing.T) {
 		c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "GORACE=atexit_sleep_ms=0")
 		c.Stdin = strings.NewReader("q\n")
 		out, err := c.CombinedOutput()
-		listener.Close()
+		_ = listener.Close() // Best-effort test cleanup.
 		if err == nil || !strings.Contains(string(out), daemon.want) {
 			t.Fatalf("terminal must refuse clearly, got %v:\n%s", err, out)
 		}

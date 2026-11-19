@@ -29,14 +29,17 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			var request struct {
 				Head  string `json:"head"`
 				Title string `json:"title"`
 				Body  string `json:"body"`
 			}
-			json.NewDecoder(r.Body).Decode(&request)
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+				return
+			}
 			prTitle, prBody = request.Title, request.Body
 			prBranch = strings.TrimPrefix(request.Head, "acme:")
 			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+prBranch).Output()
@@ -44,18 +47,18 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 				t.Errorf("read pushed head: %v", err)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}}) // Best-effort HTTP test response.
 		case strings.HasSuffix(r.URL.Path, "/pulls/12") && r.Method == http.MethodGet:
 			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+prBranch).Output()
 			if err != nil {
 				t.Errorf("read PR head: %v", err)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
 			head := strings.Split(r.URL.Path, "/")
 			sha := head[len(head)-2]
-			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha}}})
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -144,10 +147,10 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 			found, head, title, body := exists, prHead, prTitle, prBody
 			mu.Unlock()
 			if !found {
-				w.Write([]byte(`[]`))
+				_, _ = w.Write([]byte(`[]`))
 				return
 			}
-			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": title, "body": body, "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": head}}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": title, "body": body, "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": head}}})
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			creates.Add(1)
 			var request struct {
@@ -171,7 +174,7 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 			mu.Unlock()
 			close(postStarted)
 			<-releasePost
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": request.Title, "body": request.Body, "base": map[string]string{"ref": request.Base}, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": request.Title, "body": request.Body, "base": map[string]string{"ref": request.Base}, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
 			close(postFinished)
 		case r.URL.Path == "/repos/acme/garden/pulls/12" && r.Method == http.MethodPatch:
 			updates.Add(1)
@@ -179,20 +182,23 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 				Title string `json:"title"`
 				Body  string `json:"body"`
 			}
-			json.NewDecoder(r.Body).Decode(&request)
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+				return
+			}
 			mu.Lock()
 			prTitle, prBody = request.Title, request.Body
 			head := prHead
 			mu.Unlock()
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": head}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": head}})
 		case r.URL.Path == "/repos/acme/garden/pulls/12" && r.Method == http.MethodGet:
 			mu.Lock()
 			head := prHead
 			mu.Unlock()
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": head}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": head}})
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
 			sha := strings.Split(r.URL.Path, "/")
-			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -250,13 +256,15 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 		deadline := time.Now().Add(30 * time.Second)
 		for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 			if time.Now().After(deadline) {
-				lock.Close()
+				_ = lock.Close() // Best-effort test lock cleanup.
 				t.Fatal("interrupted daemon retained its lock")
 			}
 			time.Sleep(time.Millisecond)
 		}
-		_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-		_ = lock.Close()
+		if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); err != nil {
+			t.Errorf("unlock test lock: %v", err)
+		}
+		_ = lock.Close() // Best-effort test lock cleanup.
 	}
 	waitForFile(hookStarted)
 	killDaemon()
@@ -320,33 +328,36 @@ func TestFullPipelineReportsMissingAndStaleChecksThroughAXI(t *testing.T) {
 				w.Header().Set("Content-Type", "application/json")
 				switch {
 				case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
-					w.Write([]byte(`[]`))
+					_, _ = w.Write([]byte(`[]`))
 				case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 					var request struct {
 						Head string `json:"head"`
 					}
-					json.NewDecoder(r.Body).Decode(&request)
+					if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+						t.Error(err)
+						return
+					}
 					branch = strings.TrimPrefix(request.Head, "acme:")
 					head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
 					if err != nil {
 						t.Errorf("read pushed head: %v", err)
 						return
 					}
-					json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+					_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}}) // Best-effort HTTP test response.
 				case r.URL.Path == "/repos/acme/garden/pulls/12":
 					head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
 					if err != nil {
 						t.Errorf("read PR head: %v", err)
 						return
 					}
-					json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+					_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
 				case strings.HasSuffix(r.URL.Path, "/check-runs"):
 					if tc.name == "missing" && checkCalls.Add(1) > 1 {
 						sha := strings.Split(r.URL.Path, "/")
-						json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+						_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
 						return
 					}
-					w.Write([]byte(tc.payload))
+					_, _ = w.Write([]byte(tc.payload))
 				default:
 					t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 					http.NotFound(w, r)
@@ -386,33 +397,36 @@ func TestFullPipelineWaitsForRequiredCheckToAppear(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			var request struct {
 				Head string `json:"head"`
 			}
-			json.NewDecoder(r.Body).Decode(&request)
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+				return
+			}
 			branch = strings.TrimPrefix(request.Head, "acme:")
 			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
 			if err != nil {
 				t.Errorf("read pushed head: %v", err)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]string{"sha": strings.TrimSpace(string(head))}}) // Best-effort HTTP test response.
 		case r.URL.Path == "/repos/acme/garden/pulls/12":
 			head, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+branch).Output()
 			if err != nil {
 				t.Errorf("read PR head: %v", err)
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": strings.TrimSpace(string(head))}})
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
 			sha := strings.Split(r.URL.Path, "/")
 			if checks.Add(1) == 1 {
-				json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "optional-lint", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+				_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "optional-lint", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
 				return
 			}
-			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": sha[len(sha)-2]}}})
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -445,7 +459,7 @@ func TestFullPipelineTransportExhaustionDoesNotDispatchFixer(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet {
 			requests++
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 			return
 		}
 		if r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost {
@@ -493,24 +507,27 @@ func TestFullPipelineRepairsFailedCIWithinBound(t *testing.T) {
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
 			if prCreates == 0 {
-				w.Write([]byte(`[]`))
+				_, _ = w.Write([]byte(`[]`))
 				return
 			}
 			branchName = r.URL.Query().Get("head")
-			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]any{"sha": currentHead(branchName)}}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]any{"sha": currentHead(branchName)}}})
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			prCreates++
 			var req struct {
 				Head string `json:"head"`
 			}
-			json.NewDecoder(r.Body).Decode(&req)
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				t.Error(err)
+				return
+			}
 			branchName = req.Head
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]any{"sha": currentHead(branchName)}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]any{"sha": currentHead(branchName)}})
 		case r.Method == http.MethodPatch:
 			prUpdates++
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]any{"sha": currentHead(branchName)}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "head": map[string]any{"sha": currentHead(branchName)}})
 		case strings.HasSuffix(r.URL.Path, "/pulls/12") && r.Method == http.MethodGet:
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": currentHead(branchName)}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": currentHead(branchName)}})
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
 			ciCalls++
 			split := strings.Split(r.URL.Path, "/")
@@ -519,7 +536,7 @@ func TestFullPipelineRepairsFailedCIWithinBound(t *testing.T) {
 			if ciCalls == 1 {
 				conclusion = "failure"
 			}
-			json.NewEncoder(w).Encode(map[string]any{"total_count": 2, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": conclusion, "head_sha": sha}, {"name": "optional-lint", "status": "completed", "conclusion": "success", "head_sha": sha}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 2, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": conclusion, "head_sha": sha}, {"name": "optional-lint", "status": "completed", "conclusion": "success", "head_sha": sha}}})
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -535,7 +552,9 @@ func TestFullPipelineRepairsFailedCIWithinBound(t *testing.T) {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}, "repairs": []string{"ci"}, "repair_limit": 1}
 	})
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "fix-content"), []byte("repaired\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "fix-content"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	started := mutate(t, bin, repo, home, attached, "pipeline", "start", nil)
 	if started["outcome"] != "ok" {
 		t.Fatal(started)
@@ -610,9 +629,9 @@ func setForgeAPI(t *testing.T, value string) {
 	}
 	t.Cleanup(func() {
 		if had {
-			os.Setenv("GREENHOUSE_GITHUB_API", previous)
+			_ = os.Setenv("GREENHOUSE_GITHUB_API", previous) // Restore test environment.
 		} else {
-			os.Unsetenv("GREENHOUSE_GITHUB_API")
+			_ = os.Unsetenv("GREENHOUSE_GITHUB_API") // Restore test environment.
 		}
 	})
 }
@@ -656,28 +675,31 @@ func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
 		}
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`))
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			var request struct {
 				Head string `json:"head"`
 			}
-			json.NewDecoder(r.Body).Decode(&request)
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Error(err)
+				return
+			}
 			branch := strings.TrimPrefix(request.Head, "acme:")
 			mu.Lock()
 			number := 20 + len(branches)
 			branches[number] = branch
 			mu.Unlock()
-			json.NewEncoder(w).Encode(map[string]any{"number": number, "html_url": fmt.Sprintf("https://example.invalid/acme/garden/pull/%d", number), "head": map[string]string{"sha": remoteHead(branch)}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": number, "html_url": fmt.Sprintf("https://example.invalid/acme/garden/pull/%d", number), "head": map[string]string{"sha": remoteHead(branch)}})
 		case strings.HasPrefix(r.URL.Path, "/repos/acme/garden/pulls/") && r.Method == http.MethodGet:
 			var number int
-			fmt.Sscanf(strings.TrimPrefix(r.URL.Path, "/repos/acme/garden/pulls/"), "%d", &number)
+			_, _ = fmt.Sscanf(strings.TrimPrefix(r.URL.Path, "/repos/acme/garden/pulls/"), "%d", &number) // Path is controlled by this test.
 			mu.Lock()
 			branch := branches[number]
 			mu.Unlock()
-			json.NewEncoder(w).Encode(map[string]any{"number": number, "head": map[string]string{"sha": remoteHead(branch)}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": number, "head": map[string]string{"sha": remoteHead(branch)}})
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
 			parts := strings.Split(r.URL.Path, "/")
-			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": parts[len(parts)-2]}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": parts[len(parts)-2]}}})
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -706,14 +728,18 @@ func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
 	}
 	linked := filepath.Join(root, "linked")
 	git(t, repo, "worktree", "add", "-q", "-b", "feature", linked, "HEAD")
-	os.WriteFile(filepath.Join(linked, "sample.txt"), []byte("feature sample\n"), 0600)
+	if err := os.WriteFile(filepath.Join(linked, "sample.txt"), []byte("feature sample\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, linked, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-qam", "feature candidate")
 	second := prepare(linked, "linked")
 	same := filepath.Join(root, "same-branch")
 	git(t, repo, "worktree", "add", "-q", "-f", same, "main")
 	sameBranch := prepare(same, "same")
 
-	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("2"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "sleep-test"), []byte("2"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if started := mutate(t, bin, repo, home, first, "pipeline", "start", nil); started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
@@ -731,7 +757,7 @@ func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
 	if runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`))["status"] != "running" {
 		t.Fatal("first pipeline finished before the second started; runs did not overlap")
 	}
-	os.Remove(filepath.Join(root, "sleep-test"))
+	_ = os.Remove(filepath.Join(root, "sleep-test")) // Best-effort test fixture cleanup.
 
 	firstDone, secondDone := waitPipeline(t, bin, repo, home), waitPipeline(t, bin, linked, home)
 	for _, done := range []map[string]any{firstDone, secondDone} {

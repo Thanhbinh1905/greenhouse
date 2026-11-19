@@ -37,8 +37,12 @@ func newIntentFixture(t *testing.T) intentFixture {
 	git("init", "-b", "main")
 	git("commit", "--allow-empty", "-m", "base")
 	target := git("rev-parse", "HEAD")
-	os.WriteFile(filepath.Join(repo, "retry.go"), []byte("package x\n"), 0600)
-	os.WriteFile(filepath.Join(repo, "pkg", "backoff.go"), []byte("package pkg\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "retry.go"), []byte("package x\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "pkg", "backoff.go"), []byte("package pkg\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git("add", ".")
 	git("commit", "-m", "change")
 	repo, _ = filepath.EvalSymlinks(repo)
@@ -142,7 +146,9 @@ func TestCollectedIntentKeepsRequirementsAtTheEndOfALongSession(t *testing.T) {
 	path := filepath.Join(f.home, ".claude", "projects", encodedPath(f.repo), "ffffffff.jsonl")
 	b, _ := os.ReadFile(path)
 	late, _ := json.Marshal(map[string]any{"type": "user", "cwd": f.repo, "message": map[string]any{"content": "Final requirement: cap retries at five."}})
-	os.WriteFile(path, append(b, append(late, '\n')...), 0600)
+	if err := os.WriteFile(path, append(b, append(late, '\n')...), 0600); err != nil {
+		t.Fatal(err)
+	}
 	m, err := Collect(context.Background(), f.home, f.repo, f.target, f.head)
 	if err != nil || m.Session == nil {
 		t.Fatalf("no match: %v", err)

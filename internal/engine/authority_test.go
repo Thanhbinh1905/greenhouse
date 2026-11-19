@@ -68,8 +68,12 @@ func budgetIn(t *testing.T, v map[string]any) map[string]any {
 func TestAutoRepairsFindingsWithinCombinedCap(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 6, repairPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
@@ -100,8 +104,12 @@ func TestAutoRepairsFindingsWithinCombinedCap(t *testing.T) {
 func TestAskGroupsActionableFindingsIntoOneDecision(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "ask", 6, repairPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("mixed"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("mixed"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	d := decisionIn(t, parked)
@@ -147,7 +155,9 @@ func TestAskGroupsActionableFindingsIntoOneDecision(t *testing.T) {
 	}
 	input, _ := os.ReadFile(filepath.Join(root, "fix-input.json"))
 	var fix struct{ Selected []Finding }
-	json.Unmarshal(input, &fix)
+	if err := json.Unmarshal(input, &fix); err != nil {
+		t.Fatal(err)
+	}
 	if len(fix.Selected) != 2 {
 		t.Fatalf("fixer did not receive the grouped findings: %s", input)
 	}
@@ -163,8 +173,12 @@ func TestAskGroupsActionableFindingsIntoOneDecision(t *testing.T) {
 func capFixture(t *testing.T, mode string, limit int, plan func(root string) map[string]any) (string, string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home, root, v := authorityFixture(t, mode, limit, plan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-content"), []byte("APPEND"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-content"), []byte("APPEND"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	return bin, repo, home, root, waitPipeline(t, bin, repo, home)
 }
@@ -230,8 +244,12 @@ func strictPlan(root string) map[string]any {
 func TestAcceptHeadBindsExactCandidateAndNeverPassesGates(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 1, strictPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	if decisionIn(t, parked)["kind"] != "cap" {
@@ -254,7 +272,9 @@ func TestAcceptHeadBindsExactCandidateAndNeverPassesGates(t *testing.T) {
 	}
 
 	bin, repo, home, root, v = authorityFixture(t, "auto", 1, strictPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	decide(t, bin, repo, home, waitPipeline(t, bin, repo, home), "accept", "accept-head", nil)
 	ready := waitPipeline(t, bin, repo, home)
@@ -275,8 +295,12 @@ func TestAcceptHeadBindsExactCandidateAndNeverPassesGates(t *testing.T) {
 func TestFinalFixGrantsOneRepairAndFinalReviewAcrossRestart(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 1, repairPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	granted := decide(t, bin, repo, home, parked, "final", "final-fix", nil)
@@ -321,8 +345,10 @@ func TestFinalFixGrantsOneRepairAndFinalReviewAcrossRestart(t *testing.T) {
 func TestFinalFixWithoutRepairableFindingsRunsFinalReview(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 1, strictPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.Remove(filepath.Join(home, "fixer.json"))
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Remove(filepath.Join(home, "fixer.json")) // Best-effort fixture cleanup.
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	decide(t, bin, repo, home, parked, "final", "final-fix", nil)
@@ -430,7 +456,9 @@ func TestYoloDelegatesOnlyOperationalAndCapChoices(t *testing.T) {
 func TestYoloWithoutActorParks(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "yolo", 6, repairPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	if d := decisionIn(t, parked); d["kind"] != "findings" || !strings.Contains(d["reason"].(string), "no configured actor") {
@@ -449,8 +477,12 @@ func TestUserOnlyAuthorityParksInEveryMode(t *testing.T) {
 		t.Run(tc.mode+"-"+tc.category, func(t *testing.T) {
 			t.Parallel()
 			bin, repo, home, root, v := authorityFixture(t, tc.mode, 6, yoloPlan)
-			os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-			os.WriteFile(filepath.Join(root, tc.file), []byte(tc.value), 0600)
+			if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, tc.file), []byte(tc.value), 0600); err != nil {
+				t.Fatal(err)
+			}
 			mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 			parked := waitPipeline(t, bin, repo, home)
 			if tc.mode == "ask" {
@@ -488,12 +520,24 @@ func TestUserOnlyAuthorityParksInEveryMode(t *testing.T) {
 func TestLaterReviewReopensResolvedFinding(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 4, repairPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-content-review"), []byte("review me\nreview fixed\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review-review"), []byte("clean"), 0600)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("review me\ngate fixed\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-content-test"), []byte("review me\ngate fixed\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review-test"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-content-review"), []byte("review me\nreview fixed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("review me\ngate fixed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-content-test"), []byte("review me\ngate fixed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review-test"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)

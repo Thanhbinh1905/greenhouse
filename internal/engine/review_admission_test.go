@@ -38,23 +38,33 @@ func TestGitlinkReview(t *testing.T) {
 				t.Fatal(err)
 			}
 			git(t, sub, "init", "-b", "main")
-			os.WriteFile(filepath.Join(sub, "code.txt"), []byte("old\n"), 0600)
+			if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte("old\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			old := commitReviewFixture(t, sub, "old")
 			git(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", "--name", "library", sub, "deps/lib")
 			target := commitReviewFixture(t, repo, "base pin")
-			os.WriteFile(filepath.Join(sub, "code.txt"), []byte("new\n"), 0600)
+			if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte("new\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			if mode == "truncated" {
-				os.WriteFile(filepath.Join(sub, "code.txt"), []byte(strings.Repeat("new implementation line\n", 12000)), 0600)
+				if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte(strings.Repeat("new implementation line\n", 12000)), 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if mode == "binary" {
-				os.WriteFile(filepath.Join(sub, "code.txt"), []byte{0, 1, 2, 3}, 0600)
+				if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte{0, 1, 2, 3}, 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			pin := commitReviewFixture(t, sub, "new implementation")
 			work := filepath.Join(repo, "deps/lib")
 			git(t, work, "fetch", sub, "main")
 			git(t, work, "checkout", pin)
 			if mode == "mixed" {
-				os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("text\n"), 0600)
+				if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("text\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if mode == "missing" {
 				pin = strings.Repeat("a", 40)
@@ -67,12 +77,16 @@ func TestGitlinkReview(t *testing.T) {
 			}
 			if mode == "uninitialized" {
 				git(t, repo, "submodule", "deinit", "-f", "--", "deps/lib")
-				os.WriteFile(filepath.Join(repo, ".gitmodules"), []byte("invalid working tree data\n"), 0600)
+				if err := os.WriteFile(filepath.Join(repo, ".gitmodules"), []byte("invalid working tree data\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			v := prepareReviewAdmission(t, bin, repo, home, target)
 			script := filepath.Join(filepath.Dir(home), "fake-pi")
 			b, _ := os.ReadFile(script)
-			os.WriteFile(script, []byte(strings.ReplaceAll(string(b), "'file':'sample.txt'", "'file':'deps/lib'")), 0700)
+			if err := os.WriteFile(script, []byte(strings.ReplaceAll(string(b), "'file':'sample.txt'", "'file':'deps/lib'")), 0700); err != nil {
+				t.Fatal(err)
+			}
 			v = mutate(t, bin, repo, home, v, "review", "review", nil)
 			if mode == "binary" {
 				if v["error_code"] != "unsupported_binary_diff" || v["retryable"] != false || !strings.Contains(v["error"].(string), "deps/lib") {
@@ -124,7 +138,9 @@ func TestGitlinkReview(t *testing.T) {
 			}
 			var x Execution
 			b, _ = json.Marshal(review)
-			json.Unmarshal(b, &x)
+			if err := json.Unmarshal(b, &x); err != nil {
+				t.Fatal(err)
+			}
 			first := x.Result.Findings[0].ID
 			result, err := verdictFrom(agentAnswer{Text: mustJSON(t, map[string]any{"head": x.Result.Head, "verdict": x.Result.Verdict, "coverage": x.Result.Coverage, "findings": x.Result.Findings}), Provider: "fixture", Model: "model"}, &x)
 			if err != nil || result.Findings[0].ID != first {
@@ -152,10 +168,14 @@ func mustJSON(t *testing.T, v any) string {
 func TestReviewInputLargeFile(t *testing.T) {
 	bin, repo, home := fixture(t)
 	content := strings.Repeat("unchanged candidate line\n", 60000)
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(content), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 	target := commitReviewFixture(t, repo, "large base")
 	content = strings.Replace(content, "unchanged candidate line\n", "changed candidate line\n", 1)
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(content), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 	commitReviewFixture(t, repo, "small hunk")
 	v := prepareReviewAdmission(t, bin, repo, home, target)
 	v = mutate(t, bin, repo, home, v, "review", "large", nil)
@@ -173,7 +193,9 @@ func TestReviewInputLargeFile(t *testing.T) {
 			Diff  string
 		}
 	}
-	json.Unmarshal(b, &c)
+	if err := json.Unmarshal(b, &c); err != nil {
+		t.Fatal(err)
+	}
 	if len(b) > 2*1024*1024 || len(c.Input.Files) != 1 || len(c.Input.Files[0].Lines) > 64*1024 || !strings.HasPrefix(c.Input.Files[0].Lines, "1: changed candidate line\n") || !strings.Contains(c.Input.Files[0].Lines, "...") {
 		t.Fatalf("unbounded file bundle: %d", len(b))
 	}
@@ -192,7 +214,9 @@ func TestReviewInputTooLarge(t *testing.T) {
 	v := refusalResponse(Response{Version: 2}, err)
 	b, _ := json.Marshal(v)
 	var response map[string]any
-	json.Unmarshal(b, &response)
+	if err := json.Unmarshal(b, &response); err != nil {
+		t.Fatal(err)
+	}
 	if response["outcome"] != "refused" || response["error_code"] != "review_input_too_large" || response["retryable"] != false {
 		t.Fatal(response)
 	}
@@ -209,7 +233,9 @@ func TestReviewInputWindowsAndAggregate(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		path := fmt.Sprintf("file-%02d.txt", i)
 		names = append(names, path)
-		os.WriteFile(filepath.Join(repo, path), []byte(strings.Repeat("unchanged line\n", 3000)), 0600)
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(strings.Repeat("unchanged line\n", 3000)), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	target := commitReviewFixture(t, repo, "base files")
 	for _, path := range names {
@@ -217,7 +243,9 @@ func TestReviewInputWindowsAndAggregate(t *testing.T) {
 		lines := strings.Split(content, "\n")
 		lines[2499] = "changed middle"
 		lines[2999] = "changed end"
-		os.WriteFile(filepath.Join(repo, path), []byte(strings.Join(lines, "\n")), 0600)
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(strings.Join(lines, "\n")), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	head := commitReviewFixture(t, repo, "change two hunks")
 	diff := git(t, repo, "diff", target, head, "--")
@@ -243,7 +271,9 @@ func TestReviewInputWindowsAndAggregate(t *testing.T) {
 func TestReviewBinaryRefusal(t *testing.T) {
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "image.bin"), []byte{0, 1, 2, 3}, 0600)
+	if err := os.WriteFile(filepath.Join(repo, "image.bin"), []byte{0, 1, 2, 3}, 0600); err != nil {
+		t.Fatal(err)
+	}
 	commitReviewFixture(t, repo, "binary")
 	v := prepareReviewAdmission(t, bin, repo, home, target)
 	v = mutate(t, bin, repo, home, v, "review", "binary", nil)
@@ -262,7 +292,9 @@ func TestReviewInputUnevenFilesFitAggregate(t *testing.T) {
 		if i == 0 {
 			content = strings.Repeat("new content\n", 3000)
 		}
-		os.WriteFile(filepath.Join(repo, path), []byte(content), 0600)
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	head := commitReviewFixture(t, repo, "uneven additions")

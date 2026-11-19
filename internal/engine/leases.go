@@ -171,7 +171,7 @@ func releaseDeadLeases(s *Store) {
 			}
 			for _, r := range s.Runs {
 				if epoch, ok := leasesOf(r)[heldLease{l.Ref, r.ID}]; ok && epoch == l.Epoch && !leaseAlive(r, l.Ref) {
-					withWriterLock(r.Submitted, func() error { return os.Remove(path) })
+					_ = withWriterLock(r.Submitted, func() error { return os.Remove(path) }) // Best-effort cleanup; a failed lock leaves the stale lease in place.
 				}
 			}
 		}

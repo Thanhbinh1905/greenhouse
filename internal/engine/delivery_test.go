@@ -61,19 +61,22 @@ func TestDeliveryPipelinePushesCreatesPRAndWaitsForExactChecks(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodGet:
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`)) // Best-effort HTTP test response.
 		case r.URL.Path == "/repos/acme/garden/pulls/8" && r.Method == http.MethodGet:
-			json.NewEncoder(w).Encode(map[string]any{"number": 8, "head": map[string]string{"sha": id.Head}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 8, "head": map[string]string{"sha": id.Head}}) // Best-effort HTTP test response.
 		case r.URL.Path == "/repos/acme/garden/pulls" && r.Method == http.MethodPost:
 			prCreated++
 			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Error(err)
+				return
+			}
 			if body["head"] != "greenhouse/test" || body["base"] != "main" {
 				t.Errorf("unexpected PR request: %v", body)
 			}
-			json.NewEncoder(w).Encode(map[string]any{"number": 8, "html_url": "https://example.invalid/acme/garden/pull/8", "head": map[string]string{"sha": id.Head}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 8, "html_url": "https://example.invalid/acme/garden/pull/8", "head": map[string]string{"sha": id.Head}}) // Best-effort test response.
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
-			w.Write([]byte(`{"check_runs":[{"name":"ci","status":"completed","conclusion":"success","head_sha":"` + id.Head + `"}]}`))
+			_, _ = w.Write([]byte(`{"check_runs":[{"name":"ci","status":"completed","conclusion":"success","head_sha":"` + id.Head + `"}]}`)) // Best-effort HTTP test response.
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -81,8 +84,14 @@ func TestDeliveryPipelinePushesCreatesPRAndWaitsForExactChecks(t *testing.T) {
 	}))
 	defer server.Close()
 	old := os.Getenv("GREENHOUSE_GITHUB_API")
-	os.Setenv("GREENHOUSE_GITHUB_API", server.URL)
-	defer os.Setenv("GREENHOUSE_GITHUB_API", old)
+	if err := os.Setenv("GREENHOUSE_GITHUB_API", server.URL); err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := os.Setenv("GREENHOUSE_GITHUB_API", old); err != nil {
+			t.Errorf("restore test environment: %v", err)
+		}
+	}()
 
 	push, head, _ := runDeliveryStage(context.Background(), p, "push", id.Head)
 	if push.Status != "passed" || head != id.Head || strings.Contains(strings.Join(commandNames(push.Commands), " "), "push") == false {

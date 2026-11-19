@@ -379,7 +379,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	if e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: "private execution directory unavailable"}
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }() // Best-effort cleanup of a temporary review directory.
 	tree := filepath.Join(dir, "tree")
 	if x.Snapshot == nil {
 		return reviewOutcome{Status: "inconclusive", Log: "review admitted without a candidate snapshot; prepare again"}
@@ -538,7 +538,11 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		return nil, errors.New("incomplete coverage")
 	}
 	var input AgentInput
-	json.Unmarshal(x.Rules.Content, &input)
+	if len(x.Rules.Content) > 0 {
+		if err := json.Unmarshal(x.Rules.Content, &input); err != nil {
+			return nil, errors.New("invalid rule snapshot")
+		}
+	}
 	rules := map[string]bool{}
 	for _, c := range input.Criteria {
 		rules[c.Pack+"/"+c.Rule] = true
@@ -562,9 +566,10 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 			v.Diagnostics = append(v.Diagnostics, safeMessage(fmt.Sprintf("dropped finding %d: finding range outside changed hunks (%s:%d-%d)", i+1, f.File, f.Start, f.End)))
 			continue
 		}
-		if x.FindingIdentity == "" {
+		switch x.FindingIdentity {
+		case "":
 			f.ID = Digest([]any{f.Origin, f.File, f.Start, f.End, f.Rule, strings.Join(strings.Fields(f.Explanation), " ")})
-		} else if x.FindingIdentity == "code-v1" {
+		case "code-v1":
 			lines, ok := files[f.File]
 			if !ok {
 				content, err := findingContent(x.Source.Worktree, f.Head, f.File)
@@ -586,7 +591,7 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 				}
 			}
 			f.ID = Digest([]any{f.Origin, f.File, f.Rule, strings.Join(normalized, "\n")})
-		} else {
+		default:
 			return nil, errors.New("unknown finding identity version")
 		}
 		if ids[f.ID] {

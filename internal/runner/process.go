@@ -35,9 +35,12 @@ func reapChildTree() bool {
 		if len(pids) == 0 {
 			return true
 		}
+		killFailed := false
 		for _, child := range pids {
 			if pid, err := strconv.Atoi(child); err == nil {
-				syscall.Kill(pid, syscall.SIGKILL)
+				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+					killFailed = true
+				}
 			}
 		}
 		var status syscall.WaitStatus
@@ -46,6 +49,9 @@ func reapChildTree() bool {
 			if err != nil || pid <= 0 {
 				break
 			}
+		}
+		if killFailed {
+			return false
 		}
 		time.Sleep(10 * time.Millisecond)
 	}

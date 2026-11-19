@@ -53,7 +53,9 @@ func TestLoadCorpusReadsManifestCasesAndTrees(t *testing.T) {
 		t.Fatalf("case = %+v", k)
 	}
 	before := c.Digest
-	os.WriteFile(filepath.Join(root, "bug", "head", "a.go"), []byte("package a\nx\nz\n"), 0o644)
+	if err := os.WriteFile(filepath.Join(root, "bug", "head", "a.go"), []byte("package a\nx\nz\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	c, err = LoadCorpus(root)
 	if err != nil || c.Digest == before {
 		t.Fatalf("digest must cover tree bytes: %v %s", err, c.Digest)
@@ -188,7 +190,9 @@ func TestPublicProvenanceValidation(t *testing.T) {
 			root := t.TempDir()
 			writeManifest(t, root, `{"version":1,"revision":5,"cases":["bug"]}`)
 			var spec map[string]any
-			json.Unmarshal([]byte(bugSpec), &spec)
+			if err := json.Unmarshal([]byte(bugSpec), &spec); err != nil {
+				t.Fatal(err)
+			}
 			source := map[string]any{"kind": "public", "repo": "https://example.org/project", "url": "https://example.org/commit/" + strings.Repeat("a", 40), "commit": strings.Repeat("a", 40), "license": "MIT", "files": []string{"a.go"}, "derivation": "Reversed known bounds fix."}
 			delete(source, field)
 			spec["source"] = source

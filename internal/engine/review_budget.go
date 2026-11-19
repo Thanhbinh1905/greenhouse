@@ -245,7 +245,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		turn, stopTurn := context.WithCancel(turn)
 		defer stopTurn()
 		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stallWatch(out, x.Config.Backend, stopTurn), stderr)
-		appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes())
+		_ = appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
 		result := reviewFrom(x, code, out, stderr, err, executorStop(turn))
 		if errors.Is(err, runner.ErrWriterTreeUnknown) {
 			result.Answer.Reason = "writer_tree_unknown"
@@ -261,7 +261,12 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 	if ctx.Err() == nil && first.Answer.Reason != "writer_tree_unknown" && (nearLimit || first.Answer.Reason == "invalid_output") {
 		args, ok := s.finalArgs(stdout)
 		if ok {
-			data := reviewFinalizationInput(x, first, nearLimit)
+			data, inputErr := reviewFinalizationInput(x, first, nearLimit)
+			if inputErr != nil {
+				first.Status = "inconclusive"
+				first.Log += "; finalization input invalid: " + inputErr.Error()
+				return first, confinement
+			}
 			final, _ := run(ctx, args, data)
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
@@ -283,16 +288,18 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 	return first, confinement
 }
 
-func reviewFinalizationInput(x *Execution, first reviewOutcome, nearLimit bool) []byte {
+func reviewFinalizationInput(x *Execution, first reviewOutcome, nearLimit bool) ([]byte, error) {
 	var original map[string]any
-	json.Unmarshal(x.Input, &original)
+	if err := json.Unmarshal(x.Input, &original); err != nil {
+		return nil, fmt.Errorf("decode original review input: %w", err)
+	}
 	input := map[string]any{"Head": original["Head"], "Paths": original["Paths"], "Contract": original["Contract"]}
 	input["Controller"] = "Return your verdict now. Stop exploring. No further tools or investigation. Use the evidence already gathered in this session and the supplied changed hunks. Return only the required JSON object."
 	if !nearLimit {
 		input["PreviousAnswerError"] = safeMessage(first.Answer.Diagnostic)
 	}
-	data, _ := json.Marshal(input)
-	return data
+	data, err := json.Marshal(input)
+	return data, err
 }
 
 func hunkContext(files []reviewFile, ranges map[string][][2]int) []reviewFile {

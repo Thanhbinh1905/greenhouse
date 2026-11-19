@@ -24,7 +24,7 @@ func testWatchReadDuringCommit(t *testing.T, wait string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { listener.Close() })
+	t.Cleanup(func() { _ = listener.Close() })
 	requests := make(chan engine.Request, 2)
 	go func() {
 		for i := 0; i < 2; i++ {
@@ -32,16 +32,22 @@ func testWatchReadDuringCommit(t *testing.T, wait string) {
 			if err != nil {
 				return
 			}
-			conn.SetDeadline(time.Now().Add(3 * time.Second))
+			if err := conn.SetDeadline(time.Now().Add(3 * time.Second)); err != nil {
+				t.Errorf("set test deadline: %v", err)
+				return
+			}
 			var request engine.Request
-			json.NewDecoder(conn).Decode(&request)
+			if err := json.NewDecoder(conn).Decode(&request); err != nil {
+				t.Errorf("decode request: %v", err)
+				return
+			}
 			requests <- request
 			response := engine.Response{Outcome: "ok", Wait: "elapsed", Stream: "stream"}
 			if i == 0 {
 				response = engine.Response{Outcome: "refused", Error: "storage commit in progress; retry the read request"}
 			}
-			json.NewEncoder(conn).Encode(response)
-			conn.Close()
+			_ = json.NewEncoder(conn).Encode(response) // Best-effort HTTP test response.
+			_ = conn.Close()                           // Best-effort test cleanup.
 		}
 	}()
 	response, err := axiCommand(home, t.TempDir(), []string{"watch", "--stream", "stream", "--after", "7", "--wait", wait})

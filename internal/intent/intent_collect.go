@@ -195,7 +195,7 @@ func firstRecord(path string, v any, accept func() bool) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // Closing a read-only session log cannot affect the result.
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64<<10), 16<<20)
 	for i := 0; i < 50 && scanner.Scan(); i++ {
@@ -299,7 +299,7 @@ func loadIntentSession(ctx context.Context, s *Session, worktree string, files [
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // Closing a read-only session log cannot affect the result.
 	mentioned := map[string]bool{}
 	scanner := bufio.NewScanner(f)
 	scanner.Buffer(make([]byte, 0, 64<<10), 16<<20)

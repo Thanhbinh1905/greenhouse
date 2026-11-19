@@ -93,7 +93,7 @@ func parseResponseItems(text string, x *Repair, host bool) ([]ResolutionResponse
 			return nil, fmt.Errorf("host resolution response %q is not fixed or disputed", r.Response)
 		case resolutionKinds[r.Response] == "":
 			return nil, fmt.Errorf("resolution response %q is not fixed, disputed or deferred", r.Response)
-		case !ValidText(r.Reason) && !(host && r.Response == "fixed" && r.Reason == ""):
+		case !ValidText(r.Reason) && (!host || r.Response != "fixed" || r.Reason != ""):
 			return nil, fmt.Errorf("resolution response for %s needs a reason", r.Finding)
 		case r.Response == "deferred" && !authorities[r.Authority]:
 			return nil, fmt.Errorf("deferred resolution response for %s cites no answered decision", r.Finding)

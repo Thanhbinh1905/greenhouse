@@ -972,7 +972,9 @@ func runGateCommand(ctx context.Context, dir string, args []string, digests map[
 	out := &tailBuffer{limit: 16384}
 	safeOut := &logWriter{output: out}
 	code, err := runner.RunProcess(ctx, dir, args[0], args[1:], nil, reviewerEnv(), safeOut, safeOut)
-	safeOut.flush()
+	if err := safeOut.flush(); err != nil {
+		return res, err
+	}
 	res.Exit = code
 	res.Output = out.String()
 	res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", code, out.total, out.truncated())
@@ -1228,7 +1230,7 @@ func gitArgv(identity CommandPlan, args ...string) []string {
 
 var errWriterConflict = errors.New("another writer owns")
 
-func lockWriter(source repository.Identity) (func(), error) {
+func lockWriter(source repository.Identity) (func() error, error) {
 	dir := filepath.Join(source.Repository, "greenhouse-writers")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
@@ -1238,10 +1240,9 @@ func lockWriter(source repository.Identity) (func(), error) {
 		return nil, err
 	}
 	if err = syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
-		lock.Close()
-		return nil, fmt.Errorf("%w %s", errWriterConflict, writerScope(source))
+		return nil, errors.Join(fmt.Errorf("%w %s", errWriterConflict, writerScope(source)), lock.Close())
 	}
-	return func() { lock.Close() }, nil
+	return lock.Close, nil
 }
 
 func withWriterLock(source repository.Identity, fn func() error) error {
@@ -1249,8 +1250,7 @@ func withWriterLock(source repository.Identity, fn func() error) error {
 	if err != nil {
 		return err
 	}
-	defer unlock()
-	return fn()
+	return errors.Join(fn(), unlock())
 }
 
 func unmergedPaths(dir string) []string {
@@ -1393,7 +1393,7 @@ func executeConflictRepair(ctx context.Context, x *Repair, p Pipeline, target st
 		if e != nil {
 			return e
 		}
-		defer os.RemoveAll(agentDir)
+		defer func() { _ = os.RemoveAll(agentDir) }() // Best-effort cleanup of the temporary agent directory.
 		run := runFixer(ctx, x, filepath.Join(agentDir, "agent"))
 		e = run.err
 		x.Log = run.log
@@ -1494,7 +1494,7 @@ func authorizePipelineHandback(r *Run) error {
 	if p.Handback == "handed-back" || p.Handback == "handback-in-progress" {
 		return nil
 	}
-	if p.Status != "ci-ready" && !(p.Status == "locally-ready" && localOnlyPipeline(p)) || r.Candidate == r.Submitted.Head {
+	if p.Status != "ci-ready" && (p.Status != "locally-ready" || !localOnlyPipeline(p)) || r.Candidate == r.Submitted.Head {
 		return errors.New("only a CI-ready or explicitly local-only ready candidate with new commits can be handed back")
 	}
 	p.Handback = "handback-in-progress"
