@@ -185,7 +185,7 @@ sys.exit(p.returncode)
 		if dialErr != nil {
 			break
 		}
-		conn.Close()
+		_ = conn.Close() // Best-effort test cleanup.
 		time.Sleep(10 * time.Millisecond)
 	}
 	recovered := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)

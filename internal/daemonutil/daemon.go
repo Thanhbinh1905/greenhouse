@@ -68,34 +68,28 @@ func signalDaemonWith(home string, signal syscall.Signal, openPidfd func(int) (i
 		}
 		released, err := tryAcquireLock(lock)
 		if err != nil {
-			lock.Close()
-			return err
+			return errors.Join(err, lock.Close())
 		}
 		if released {
-			lock.Close()
-			return nil
+			return lock.Close()
 		}
 		pidfd, err := openPidfd(pid)
 		if err != nil {
-			lock.Close()
-			return fmt.Errorf("open pidfd for daemon %d: %w", pid, err)
+			return errors.Join(fmt.Errorf("open pidfd for daemon %d: %w", pid, err), lock.Close())
 		}
 		if !ownsHome(pid, home, procRoot) {
-			unix.Close(pidfd)
-			lock.Close()
-			return fmt.Errorf("daemon %d does not match state home; refusing to signal", pid)
+			closeErr := unix.Close(pidfd)
+			return errors.Join(fmt.Errorf("daemon %d does not match state home; refusing to signal", pid), closeErr, lock.Close())
 		}
 		err = unix.PidfdSendSignal(pidfd, signal, nil, 0)
-		unix.Close(pidfd)
+		closeErr := unix.Close(pidfd)
 		if err != nil && !errors.Is(err, syscall.ESRCH) {
-			lock.Close()
-			return err
+			return errors.Join(err, closeErr, lock.Close())
 		}
 		if err := waitForLockRelease(lock, deadline); err != nil {
-			lock.Close()
-			return fmt.Errorf("daemon %d: %w", pid, err)
+			return errors.Join(fmt.Errorf("daemon %d: %w", pid, err), closeErr, lock.Close())
 		}
-		return lock.Close()
+		return errors.Join(closeErr, lock.Close())
 	}
 	return fmt.Errorf("daemon pid remained unavailable while state lock was held")
 }
@@ -108,7 +102,7 @@ func tryAcquireStateLock(home string) (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }() // Closing a released state lock is best-effort cleanup.
 	return tryAcquireLock(lock)
 }
 
@@ -166,6 +160,5 @@ func ownsHome(pid int, home, procRoot string) bool {
 	if err != nil {
 		return false
 	}
-	conn.Close()
-	return true
+	return conn.Close() == nil
 }

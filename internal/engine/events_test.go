@@ -145,7 +145,7 @@ func startTerminal(t *testing.T, bin, repo, home string, env ...string) *termina
 		t.Fatal(err)
 	}
 	go func() { term.done <- c.Wait() }()
-	t.Cleanup(func() { stdin.Close(); c.Process.Kill() })
+	t.Cleanup(func() { _ = stdin.Close(); _ = c.Process.Kill() })
 	return term
 }
 
@@ -188,7 +188,9 @@ func TestTerminalFollowsEventsWithoutInput(t *testing.T) {
 	if strings.Count(screen, "Run "+v["run_id"].(string)) <= before || !strings.Contains(screen, "Changed prose is redundant") {
 		t.Fatalf("terminal did not redraw from events:\n%s", screen)
 	}
-	io.WriteString(term.stdin, "q\n")
+	if _, err := io.WriteString(term.stdin, "q\n"); err != nil {
+		t.Fatal(err)
+	}
 	if err := <-term.done; err != nil {
 		t.Fatalf("detach: %v\n%s", err, term.text())
 	}

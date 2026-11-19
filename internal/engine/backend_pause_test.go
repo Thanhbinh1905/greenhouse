@@ -105,9 +105,15 @@ func TestPipelineReviewPauseKeepsEvidenceAndResumesAtReview(t *testing.T) {
 func TestPipelineRepairPauseRestoresCandidateAndResumes(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := pipelineWith(t, "pi", "fixture/model", "claude", "claude-haiku-5-5")
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "edit-claude"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "partial-claude"), []byte("half done\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "edit-claude"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "partial-claude"), []byte("half done\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	setModes(t, root, "claude", "quota", "success")
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	v = waitPipeline(t, bin, repo, home)
@@ -151,7 +157,9 @@ func TestPipelineRepairPauseRestoresCandidateAndResumes(t *testing.T) {
 func TestFailedAndPausedAttemptsKeepReportedUsage(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := onePassWith(t, "claude", "claude-haiku-5-5")
-	os.WriteFile(filepath.Join(root, "bad-verdict-claude"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "bad-verdict-claude"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "review", "review-bad-verdict", nil)
 	v = waitStatus(t, bin, repo, home, "inconclusive")
 	attempts := runOf(t, v)["attempts"].([]any)

@@ -18,9 +18,9 @@ func captureTerminal(t *testing.T, draw func()) string {
 	}
 	previous := os.Stdout
 	os.Stdout = writer
-	defer func() { os.Stdout = previous; reader.Close() }()
+	defer func() { os.Stdout = previous; _ = reader.Close() }()
 	draw()
-	writer.Close()
+	_ = writer.Close() // Best-effort test cleanup.
 	b, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatal(err)

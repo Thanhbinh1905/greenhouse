@@ -12,7 +12,9 @@ func TestReadBoundedRetainsPrefix(t *testing.T) {
 	repo := t.TempDir()
 	git(t, repo, "init", "-b", "main")
 	content := strings.Repeat("bounded content\n", 100000)
-	os.WriteFile(filepath.Join(repo, "large.txt"), []byte(content), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "large.txt"), []byte(content), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "large.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "large")
 	args := []string{"cat-file", "blob", "HEAD:large.txt"}

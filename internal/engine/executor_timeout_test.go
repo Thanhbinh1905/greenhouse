@@ -86,7 +86,7 @@ func TestConfiguredFixerExecutorTimeout(t *testing.T) {
 	settings["executor_timeout"] = "2s"
 	v = mutate(t, bin, repo, home, v, "apply", "fixer-timeout", settings)
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "fixer-rules", nil)
-	v = mutate(t, bin, repo, home, v, "review", "review", nil)
+	mutate(t, bin, repo, home, v, "review", "review", nil)
 	v = waitReview(t, bin, repo, home)
 	if runOf(t, v)["status"] != "outstanding-findings" {
 		t.Fatal(v)

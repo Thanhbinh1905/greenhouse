@@ -186,16 +186,22 @@ func writeConfigBytes(path string, data []byte, perm os.FileMode) error {
 		var cfg struct {
 			Executable string `json:"executable"`
 		}
-		json.Unmarshal(data, &cfg)
+		if err := json.Unmarshal(data, &cfg); err != nil {
+			return err
+		}
 		if cfg.Executable != "" {
 			root := filepath.Dir(filepath.Dir(path))
 			native := filepath.Join(root, "native-bin")
-			os.MkdirAll(native, 0700)
+			if err := os.MkdirAll(native, 0700); err != nil {
+				return err
+			}
 			role := "reviewer"
 			if name == "fixer.json" {
 				role = "fixer"
 			}
-			os.WriteFile(filepath.Join(native, role), []byte(cfg.Executable), 0600)
+			if err := os.WriteFile(filepath.Join(native, role), []byte(cfg.Executable), 0600); err != nil {
+				return err
+			}
 			script := `#!/usr/bin/python3
 import os,sys
 root=os.path.dirname(__file__)
@@ -203,7 +209,9 @@ role='fixer' if any('read,edit,write' in x for x in sys.argv) else 'reviewer'
 with open(root+'/'+role) as f: target=f.read()
 os.execv(target,[target]+sys.argv[1:])
 `
-			os.WriteFile(filepath.Join(native, "pi"), []byte(script), 0700)
+			if err := os.WriteFile(filepath.Join(native, "pi"), []byte(script), 0700); err != nil {
+				return err
+			}
 		}
 	}
 	return os.WriteFile(path, data, perm)
@@ -215,7 +223,9 @@ func allowFixtureWrites(t *testing.T, home string) {
 	t.Helper()
 	path := filepath.Join(home, "backends.json")
 	if _, err := os.Stat(path); os.IsNotExist(err) {
-		os.MkdirAll(home, 0700)
+		if err := os.MkdirAll(home, 0700); err != nil {
+			t.Fatal(err)
+		}
 		if err = writeConfigBytes(path, []byte("{}"), 0600); err != nil {
 			t.Fatal(err)
 		}
@@ -225,7 +235,7 @@ func allowFixtureWrites(t *testing.T, home string) {
 func installPipelineProvider(t *testing.T, home string) {
 	t.Helper()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}}})
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}}})
 	}))
 	t.Cleanup(server.Close)
 	allowFixtureWrites(t, home)
@@ -237,8 +247,12 @@ func pipelineFixture(t *testing.T, plan func(root string) map[string]any) (strin
 	bin, repo, home := fixture(t)
 	root := filepath.Dir(home)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
-	os.WriteFile(filepath.Join(repo, "README.md"), []byte("# Sample\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "README.md"), []byte("# Sample\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt", "README.md")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	if err := os.MkdirAll(home, 0700); err != nil {
@@ -469,7 +483,9 @@ func TestPassingDocBuildDoesNotProveDocumentation(t *testing.T) {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "docs": [][]string{gateArgv(root, "docs")}, "lint": [][]string{gateArgv(root, "lint")}}
 	})
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("docs-missing"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("docs-missing"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	docs := stageOf(t, done, "docs")
@@ -492,7 +508,9 @@ func TestGateRepairRerunsReviewAndGates(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	submitted := runOf(t, v)["submitted"].(map[string]any)["head"]
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
@@ -535,7 +553,9 @@ func TestGateRepairRerunsReviewAndGates(t *testing.T) {
 	if mutate(t, bin, repo, home, done, "new", "new-before-handback", nil)["outcome"] != "refused" {
 		t.Fatal("unpublished pipeline custody allowed New run")
 	}
-	os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	refused := mutate(t, bin, repo, home, done, "handback", "dirty-handback", nil)
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "CI-ready") {
 		t.Fatal(refused)
@@ -552,8 +572,12 @@ func TestGateRepairFailuresAreBounded(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-content"), []byte("APPEND"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-content"), []byte("APPEND"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
@@ -581,8 +605,12 @@ func TestRepairedHeadStaysUnreviewedUntilReviewPasses(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	v = mutate(t, bin, repo, home, v, "apply", "no-room-for-finding-repair", map[string]any{"mode": "auto", "preset": "full", "limit": 3, "rules": []string{"unslop"}})
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
@@ -602,8 +630,12 @@ func TestRestartPreservesStageStateWithoutDuplicateWork(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-content"), []byte("APPEND"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-content"), []byte("APPEND"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	before := countLines(t, filepath.Join(root, "commands.log"))
@@ -627,7 +659,9 @@ func TestRestartDuringCommandAdoptsRecordedOutcome(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("1.5"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "sleep-test"), []byte("1.5"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) && countLines(t, filepath.Join(root, "commands.log"))["test"] == 0 {
@@ -663,7 +697,9 @@ func conflictFixture(t *testing.T, env ...string) (string, string, string, strin
 	root := filepath.Dir(home)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "-q", "-b", "target")
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("target side\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("target side\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "target")
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
@@ -671,11 +707,15 @@ func conflictFixture(t *testing.T, env ...string) (string, string, string, strin
 	if strings.TrimSpace(git(t, repo, "rev-parse", "HEAD")) != base {
 		t.Fatal("fixture branch")
 	}
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	submitted := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.MkdirAll(home, 0700)
+	if err := os.MkdirAll(home, 0700); err != nil {
+		t.Fatal(err)
+	}
 	writeExecutable(t, filepath.Join(root, "fake-pi"), fullReviewer)
 	writeExecutable(t, filepath.Join(root, "gate"), gateCommand)
 	writeExecutable(t, filepath.Join(root, "fake-fixer"), gateFixer)
@@ -781,7 +821,9 @@ func TestPipelineCancellationStopsCommandAndKeepsBudget(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) && countLines(t, filepath.Join(root, "commands.log"))["test"] == 0 {
@@ -795,7 +837,7 @@ func TestPipelineCancellationStopsCommandAndKeepsBudget(t *testing.T) {
 	if runOf(t, done)["status"] != "cancelled" || stageOf(t, done, "test")["status"] != "cancelled" || runOf(t, done)["review_used"] != float64(1) {
 		t.Fatalf("cancellation not recorded: %v", runOf(t, done)["pipeline"])
 	}
-	os.Remove(filepath.Join(root, "sleep-test"))
+	_ = os.Remove(filepath.Join(root, "sleep-test")) // Best-effort test cleanup.
 	mutate(t, bin, repo, home, done, "pipeline", "continue", nil)
 	if runOf(t, waitPipeline(t, bin, repo, home))["status"] != "needs-decision" {
 		t.Fatal("explicit continue after cancellation did not finish")
@@ -809,7 +851,9 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
@@ -855,7 +899,7 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 	if got := mutate(t, bin, linked, home, other, "pipeline", "linked-start", nil); got["outcome"] != "refused" || !strings.Contains(got["error"].(string), "custody") {
 		t.Fatalf("linked worktree ignored ambiguous custody: %v", got)
 	}
-	os.Remove(filepath.Join(root, "kill-test"))
+	_ = os.Remove(filepath.Join(root, "kill-test")) // Best-effort test fixture cleanup.
 	recovered := waitProbed(t, bin, repo, home)
 	if rec := runOf(t, recovered)["recovery"].(map[string]any); rec["kind"] != "commands" || fmt.Sprint(rec["options"]) != "[inspect discard new-run]" {
 		t.Fatalf("unknown command recovery options: %v", rec)
@@ -876,14 +920,18 @@ func TestRetainedFindingsBlockCleanFullReview(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	v = mutate(t, bin, repo, home, v, "apply", "ask", map[string]any{"mode": "ask", "preset": "full", "limit": 6, "rules": []string{"unslop"}})
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	if stageOf(t, parked, "review")["status"] != "needs-decision" {
 		t.Fatal(runOf(t, parked)["pipeline"])
 	}
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	changed := mutate(t, bin, repo, home, parked, "apply", "change-rules", map[string]any{"mode": "ask", "preset": "full", "limit": 7, "rules": []string{"unslop", "no-comments"}})
 	mutate(t, bin, repo, home, changed, "pipeline", "continue", nil)
 	done := waitPipeline(t, bin, repo, home)
@@ -902,7 +950,9 @@ func TestNotApplicableDocsStillRequiresDocumentation(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("docs-missing"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("docs-missing"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	docs := stageOf(t, done, "docs")
@@ -960,7 +1010,9 @@ func TestConflictMergeUnknownOutcomeLaunchesNothing(t *testing.T) {
 	scratch := t.TempDir()
 	path := gitWrapper(t, scratch)
 	bin, repo, home, root, _, _, parked := conflictFixture(t, path)
-	os.WriteFile(filepath.Join(scratch, "kill-merge"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(scratch, "kill-merge"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if resolved := mutate(t, bin, repo, home, parked, "resolve-conflict", "resolve", nil); resolved["outcome"] != "ok" {
 		t.Fatal(resolved)
 	}
@@ -1009,8 +1061,12 @@ func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {
 	scratch := t.TempDir()
 	path := gitWrapper(t, scratch)
 	bin, repo, home, root, _, _, parked := conflictFixture(t, path)
-	os.WriteFile(filepath.Join(root, "fix-fail"), []byte("1"), 0600)
-	os.WriteFile(filepath.Join(scratch, "kill-abort"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "fix-fail"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(scratch, "kill-abort"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if resolved := mutate(t, bin, repo, home, parked, "resolve-conflict", "resolve", nil); resolved["outcome"] != "ok" {
 		t.Fatal(resolved)
 	}
@@ -1026,12 +1082,16 @@ func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {
 	root := filepath.Dir(home)
 	target := runOf(t, v)["target"].(string)
 	git(t, repo, "checkout", "--detach", target)
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("original\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("original\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "baseline sample")
 	target = strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "-b", "restoration")
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("regression\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("regression\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "regression")
 	v = axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
@@ -1043,9 +1103,15 @@ func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {
 	if v["outcome"] != "ok" {
 		t.Fatal(v)
 	}
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-content"), []byte("original\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-content"), []byte("original\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "restore-tree", nil)
 	v = waitPipeline(t, bin, repo, home)
 	if runOf(t, v)["status"] != "locally-ready" {

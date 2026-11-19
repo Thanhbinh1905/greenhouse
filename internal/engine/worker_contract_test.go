@@ -96,21 +96,24 @@ func TestWorkerDeliveryContract(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/check-runs"):
-			json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": head}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"total_count": 1, "check_runs": []map[string]string{{"name": "fixture-ci", "status": "completed", "conclusion": "success", "head_sha": head}}})
 		case strings.HasSuffix(r.URL.Path, "/pulls/12"):
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": head}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "head": map[string]string{"sha": head}})
 		case r.Method == http.MethodGet:
-			w.Write([]byte(`[]`))
+			_, _ = w.Write([]byte(`[]`)) // Best-effort HTTP test response.
 		case r.Method == http.MethodPost:
 			var request struct{ Head string }
-			json.NewDecoder(r.Body).Decode(&request)
+			if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+				t.Errorf("decode request: %v", err)
+				return
+			}
 			b, err := exec.Command("git", "--git-dir", bare, "rev-parse", "refs/heads/"+strings.TrimPrefix(request.Head, "acme:")).Output()
 			if err != nil {
 				t.Error(err)
 				return
 			}
 			head = strings.TrimSpace(string(b))
-			json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/pull/12", "head": map[string]string{"sha": head}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"number": 12, "html_url": "https://example.invalid/pull/12", "head": map[string]string{"sha": head}})
 		default:
 			http.NotFound(w, r)
 		}
@@ -124,9 +127,11 @@ func TestWorkerDeliveryContract(t *testing.T) {
 		}
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "remote": bare, "github_owner": "acme", "github_repo": "garden", "pull_base": "main", "required_checks": []string{"fixture-ci"}, "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
 	})
-	os.WriteFile(filepath.Join(filepath.Dir(home), "review-mode"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	state := workerCommand(t, bin, repo, home, "inspect")
-	state = mutate(t, bin, repo, home, state, "apply", "ask", map[string]any{"mode": "ask", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
+	mutate(t, bin, repo, home, state, "apply", "ask", map[string]any{"mode": "ask", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
 	state = workerCommand(t, bin, repo, home, "pipeline", "--wait", "30s")
 	decision, ok := state["decision"].(map[string]any)
 	if !ok || decision["kind"] == nil || decision["options"] == nil || state["token"] == nil {
@@ -142,7 +147,9 @@ func TestWorkerDeliveryContract(t *testing.T) {
 	if eventState["events"] == nil {
 		t.Fatal("decision events missing")
 	}
-	os.WriteFile(filepath.Join(filepath.Dir(home), "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	state = workerCommand(t, bin, repo, home, "decide", "repair", "--reason", "Fix the sample")
 	for deadline := time.Now().Add(30 * time.Second); runOf(t, state)["status"] == "running" && time.Now().Before(deadline); {
 		state = workerCommand(t, bin, repo, home, "watch", "--stream", state["stream"].(string), "--after", fmt.Sprint(state["sequence"]), "--wait", "5s")
@@ -266,7 +273,9 @@ func TestWorkerStartsUnpreparedFullRunAndCancels(t *testing.T) {
 	if err := persist(home, &store); err != nil {
 		t.Fatal(err)
 	}
-	os.WriteFile(filepath.Join(filepath.Dir(home), "sleep-test"), []byte("5"), 0600)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "sleep-test"), []byte("5"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	state := workerCommand(t, bin, repo, home, "pipeline", "--intent", "Change the sample", "--target", target, "--wait", "1ms")
 	if state["wait"] != "elapsed" || runOf(t, state)["intent"] != "Change the sample" {
 		t.Fatalf("fresh full run: %v", state)
@@ -283,7 +292,9 @@ func TestWorkerStepEventsAndLogBounds(t *testing.T) {
 	bin, repo, home, _ := pipelineFixture(t, func(root string) map[string]any {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "fixture has no docs"}}
 	})
-	os.WriteFile(filepath.Join(filepath.Dir(home), "require-test"), []byte("different\n"), 0600)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "require-test"), []byte("different\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	cursor := workerCommand(t, bin, repo, home, "watch")
 	workerCommand(t, bin, repo, home, "pipeline", "--wait", "30s")
 	events := workerCommand(t, bin, repo, home, "watch", "--stream", cursor["stream"].(string), "--after", fmt.Sprint(cursor["sequence"]))["events"].([]any)
@@ -332,7 +343,9 @@ func TestWorkerStepEventsAndLogBounds(t *testing.T) {
 func TestWorkerPipelineWaitsForCancellationCleanup(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, _ := pipelineFixture(t, localPlan)
-	os.WriteFile(filepath.Join(filepath.Dir(home), "sleep-test"), []byte("30"), 0600)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "sleep-test"), []byte("30"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	waited := make(chan map[string]any, 1)
 	go func() { waited <- workerCommand(t, bin, repo, home, "pipeline", "--wait", "30s") }()
 	state := workerCommand(t, bin, repo, home, "watch")

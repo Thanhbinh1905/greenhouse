@@ -140,11 +140,11 @@ func TestStopUnsupportedDaemon(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer listener.Close()
+			defer func() { _ = listener.Close() }() // Best-effort test listener cleanup.
 			if err := os.WriteFile(filepath.Join(home, "pid"), []byte(strconv.Itoa(os.Getpid())), 0600); err != nil {
 				t.Fatal(err)
 			}
-			defer os.Remove(filepath.Join(home, "pid"))
+			defer func() { _ = os.Remove(filepath.Join(home, "pid")) }() // Best-effort test fixture cleanup.
 			finished := make(chan error, 1)
 			go func() {
 				c, err := listener.Accept()
@@ -152,7 +152,7 @@ func TestStopUnsupportedDaemon(t *testing.T) {
 					finished <- err
 					return
 				}
-				defer c.Close()
+				defer func() { _ = c.Close() }() // Best-effort test connection cleanup.
 				var q Request
 				if err := json.NewDecoder(c).Decode(&q); err != nil {
 					finished <- err

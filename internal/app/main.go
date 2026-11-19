@@ -56,7 +56,7 @@ Complete host requests and response fields: docs/embedding.md
 				if v.Outcome != "ok" {
 					e = errors.New(v.Error)
 				} else {
-					fmt.Fprintln(os.Stdout, v.Explanation)
+					_, e = fmt.Fprintln(os.Stdout, v.Explanation)
 				}
 			}
 		case len(os.Args) > 2 && os.Args[1] == "axi":
@@ -85,7 +85,11 @@ Complete host requests and response fields: docs/embedding.md
 	}
 	if e != nil {
 		if len(os.Args) > 1 && os.Args[1] == "axi" {
-			json.NewEncoder(os.Stdout).Encode(engine.Response{Version: 1, Outcome: "error", Error: e.Error()})
+			if encodeErr := json.NewEncoder(os.Stdout).Encode(engine.Response{Version: 1, Outcome: "error", Error: e.Error()}); encodeErr != nil {
+				if _, writeErr := fmt.Fprintln(os.Stderr, errors.Join(e, encodeErr)); writeErr != nil {
+					os.Exit(1)
+				}
+			}
 		} else {
 			fmt.Fprintln(os.Stderr, e)
 		}

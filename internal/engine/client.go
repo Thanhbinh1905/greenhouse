@@ -16,12 +16,12 @@ func waitDaemonStopped(h string, wait bool) error {
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // Closing a read-only lock file is best-effort after unlock.
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {
-			defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+			defer func() { _ = syscall.Flock(int(f.Fd()), syscall.LOCK_UN) }() // Best-effort lock release after the request.
 			return nil
 		}
 		if !errors.Is(err, syscall.EWOULDBLOCK) {

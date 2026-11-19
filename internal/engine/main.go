@@ -545,7 +545,7 @@ func validModelSelection(backend, model string) bool {
 			return false
 		}
 		for _, c := range model {
-			if !(c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '.' || c == '-' || c == '_') {
+			if (c < 'a' || c > 'z') && (c < 'A' || c > 'Z') && (c < '0' || c > '9') && c != '.' && c != '-' && c != '_' {
 				return false
 			}
 		}
@@ -1012,14 +1012,14 @@ func handleRequest(s *Store, q Request) Response {
 	v := view(s, r)
 	b, _ := json.Marshal(v)
 	var frozen Response
-	json.Unmarshal(b, &frozen)
+	_ = json.Unmarshal(b, &frozen)
 	s.Receipts[q.Action] = Receipt{d, frozen}
 	return v
 }
 func frozen(v Response) Response {
 	b, _ := json.Marshal(v)
 	var out Response
-	json.Unmarshal(b, &out)
+	_ = json.Unmarshal(b, &out)
 	return out
 }
 func acceptRepairProgress(r *Run, id string, value Repair) bool {
@@ -1030,16 +1030,17 @@ func acceptRepairProgress(r *Run, id string, value Repair) bool {
 	return true
 }
 
-func Daemon(h string) error {
+func Daemon(h string) (retErr error) {
 	f, e := os.OpenFile(filepath.Join(h, "lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if e != nil {
 		return e
 	}
-	defer f.Close()
 	if e = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); e != nil {
-		return errors.New("daemon already owns state home")
+		return errors.Join(errors.New("daemon already owns state home"), f.Close())
 	}
-	defer syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	defer func() {
+		retErr = errors.Join(retErr, syscall.Flock(int(f.Fd()), syscall.LOCK_UN), f.Close())
+	}()
 	s, e := load(h)
 	if e != nil {
 		return e
@@ -1050,8 +1051,7 @@ func Daemon(h string) error {
 	}
 	socket := filepath.Join(h, "socket")
 	if c, e := net.DialTimeout("unix", socket, time.Second); e == nil {
-		c.Close()
-		return errors.New("live listener exists; refusing replacement")
+		return errors.Join(errors.New("live listener exists; refusing replacement"), c.Close())
 	}
 	if e = os.Remove(socket); e != nil && !os.IsNotExist(e) {
 		return e
@@ -1060,12 +1060,16 @@ func Daemon(h string) error {
 	if e != nil {
 		return e
 	}
-	defer l.Close()
+	defer func() {
+		if err := l.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			retErr = errors.Join(retErr, err)
+		}
+	}()
 	pid, _ := json.Marshal(os.Getpid())
 	if e = os.WriteFile(filepath.Join(h, "pid"), pid, 0600); e != nil {
 		return e
 	}
-	defer os.Remove(filepath.Join(h, "pid"))
+	defer func() { _ = os.Remove(filepath.Join(h, "pid")) }() // Best-effort cleanup of daemon pid file.
 	signalDone := make(chan struct{})
 	defer close(signalDone)
 	signals := make(chan os.Signal, 1)
@@ -1074,7 +1078,7 @@ func Daemon(h string) error {
 	go func() {
 		select {
 		case <-signals:
-			l.Close()
+			_ = l.Close() // Closing the listener unblocks Accept during shutdown.
 		case <-signalDone:
 		}
 	}()
@@ -1268,7 +1272,7 @@ func Daemon(h string) error {
 			select {
 			case connections <- c:
 			case <-stopped:
-				c.Close()
+				_ = c.Close() // Close the accepted connection during server shutdown.
 				return
 			}
 		}
@@ -1474,7 +1478,10 @@ func Daemon(h string) error {
 			}
 			c = conn
 		}
-		c.SetReadDeadline(time.Now().Add(5 * time.Second))
+		if err := c.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+			_ = c.Close() // A connection with no read timeout cannot be serviced safely.
+			continue
+		}
 		var q Request
 		dec := json.NewDecoder(io.LimitReader(c, 65536))
 		dec.DisallowUnknownFields()
@@ -1492,8 +1499,9 @@ func Daemon(h string) error {
 				v.Explanation = "daemon stopped"
 			}
 			stamp(&v, q.Version)
-			json.NewEncoder(c).Encode(v)
-			c.Close()
+			if err := writeResponse(c, v); err != nil && v.Outcome != "ok" {
+				continue
+			}
 			if v.Outcome == "ok" {
 				return nil
 			}
@@ -1509,17 +1517,19 @@ func Daemon(h string) error {
 		} else if q.Op == "inspect" || q.Op == "transcript" || q.Op == "models" {
 			v = handle(s, q)
 		} else {
-			b, _ := json.Marshal(s)
+			b, err := json.Marshal(s)
+			if err != nil {
+				return err
+			}
 			var next Store
-			json.Unmarshal(b, &next)
+			if err := json.Unmarshal(b, &next); err != nil {
+				return err
+			}
 			next.home = h
 			v = handle(&next, q)
 			if e = commit(&next); e != nil {
 				v = Response{Version: 1, Outcome: "error", Error: "storage commit failed: " + e.Error()}
-				c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-				json.NewEncoder(c).Encode(v)
-				c.Close()
-				return e
+				return errors.Join(e, writeResponse(c, v))
 			}
 			s = &next
 			reconcileHandbacks(s)
@@ -1537,7 +1547,7 @@ func Daemon(h string) error {
 				}
 				b, _ := json.Marshal(v)
 				var frozen Response
-				json.Unmarshal(b, &frozen)
+				_ = json.Unmarshal(b, &frozen)
 				s.Receipts[q.Action] = Receipt{Digest: Digest(q), Result: frozen}
 			}
 			if q.Version >= 2 && !v.replayed {
@@ -1561,20 +1571,22 @@ func Daemon(h string) error {
 				v.Wait = "elapsed"
 			} else {
 				q.RunID = v.RunID
-				c.SetDeadline(time.Time{})
-				events.waiters = append(events.waiters, &waiter{conn: c, q: q, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
-				continue
+				if err := c.SetDeadline(time.Time{}); err == nil {
+					events.waiters = append(events.waiters, &waiter{conn: c, q: q, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
+					continue
+				} else {
+					v = Response{Outcome: "error", Error: err.Error()}
+				}
 			}
 		}
 		stamp(&v, q.Version)
-		c.SetWriteDeadline(time.Now().Add(5 * time.Second))
-		json.NewEncoder(c).Encode(v)
-		c.Close()
+		if err := writeResponse(c, v); err != nil {
+			continue // A disconnected client must not stop the daemon.
+		}
 	}
 }
 
-func Send(h string, q Request, spawn bool) (Response, error) {
-	var v Response
+func Send(h string, q Request, spawn bool) (v Response, retErr error) {
 	if q.Op == "stop" {
 		spawn = false
 	}
@@ -1591,7 +1603,7 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 		if x = cmd.Start(); x != nil {
 			return v, x
 		}
-		go cmd.Wait()
+		go func() { _ = cmd.Wait() }() // The daemon's lifecycle is observed through its socket.
 		deadline := time.Now().Add(60 * time.Second)
 		for time.Now().Before(deadline) {
 			c, e = net.DialTimeout("unix", socket, 100*time.Millisecond)
@@ -1615,8 +1627,10 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 		}
 		return v, fmt.Errorf("daemon unavailable: %w", e)
 	}
-	defer c.Close()
-	c.SetDeadline(time.Now().Add(10*time.Second + time.Duration(q.WaitMS)*time.Millisecond))
+	defer func() { retErr = errors.Join(retErr, c.Close()) }()
+	if err := c.SetDeadline(time.Now().Add(10*time.Second + time.Duration(q.WaitMS)*time.Millisecond)); err != nil {
+		return v, err
+	}
 	if e = json.NewEncoder(c).Encode(q); e != nil {
 		return v, e
 	}
@@ -1630,6 +1644,13 @@ func Send(h string, q Request, spawn bool) (Response, error) {
 		e = waitDaemonStopped(h, true)
 	}
 	return v, e
+}
+
+func writeResponse(conn net.Conn, response Response) error {
+	if err := conn.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		return errors.Join(err, conn.Close())
+	}
+	return errors.Join(json.NewEncoder(conn).Encode(response), conn.Close())
 }
 
 func finishReview(r *Run, done reviewOutcome) {
@@ -1681,7 +1702,10 @@ func repairHeld(x *Repair) bool {
 }
 
 func reviewArgsMatch(x *Execution) bool {
-	expected := agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	expected, err := agentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
+	if err != nil {
+		return false
+	}
 	if !x.Config.Native {
 		expected = legacyAgentArgs(x.Config, "reviewer", verdictSchema(x.Full, len(x.Responses) > 0), reviewerPrompt)
 	}

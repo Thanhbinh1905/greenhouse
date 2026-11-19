@@ -12,11 +12,15 @@ func TestFreshInstalledAgentReview(t *testing.T) {
 	bin, repo, state := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "-b", "feature")
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=t@example.invalid", "commit", "-m", "change")
 	agents := filepath.Join(filepath.Dir(state), "bin")
-	os.Mkdir(agents, 0700)
+	if err := os.Mkdir(agents, 0700); err != nil {
+		t.Fatal(err)
+	}
 	script := `#!/usr/bin/python3
 import json,os,sys
 assert os.sched_getaffinity(0) == os.sched_getaffinity(os.getppid())
@@ -40,10 +44,16 @@ v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'native','model':'default','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))
 `
-	os.WriteFile(filepath.Join(agents, "pi"), []byte(script), 0700)
+	if err := os.WriteFile(filepath.Join(agents, "pi"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
 	nativeHome := filepath.Join(filepath.Dir(state), "native-login")
-	os.Mkdir(nativeHome, 0700)
-	os.WriteFile(filepath.Join(nativeHome, "auth.json"), []byte("fixture native login"), 0600)
+	if err := os.Mkdir(nativeHome, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nativeHome, "auth.json"), []byte("fixture native login"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	env := []string{"PATH=" + agents + ":/usr/bin:/bin", "PI_CODING_AGENT_DIR=" + nativeHome, "PI_CODING_AGENT_SESSION_ID=author-session"}
 	if _, err := landlockABI(); err == nil {
 		env = append(env, "EXPECT_NATIVE_READ_ONLY=1")
@@ -73,13 +83,19 @@ func TestFreshMissingAgentAndLogin(t *testing.T) {
 		t.Run(kind, func(t *testing.T) {
 			bin, repo, state := fixture(t)
 			git(t, repo, "checkout", "-b", "feature")
-			os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+			if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			git(t, repo, "add", "sample.txt")
 			git(t, repo, "-c", "user.name=Test", "-c", "user.email=t@example.invalid", "commit", "-m", "change")
 			agents := filepath.Join(filepath.Dir(state), "bin")
-			os.Mkdir(agents, 0700)
+			if err := os.Mkdir(agents, 0700); err != nil {
+				t.Fatal(err)
+			}
 			if kind == "missing-login" {
-				os.WriteFile(filepath.Join(agents, "pi"), []byte("#!/bin/sh\nprintf 'No API key found for native provider\\n' >&2\nexit 1\n"), 0700)
+				if err := os.WriteFile(filepath.Join(agents, "pi"), []byte("#!/bin/sh\nprintf 'No API key found for native provider\\n' >&2\nexit 1\n"), 0700); err != nil {
+					t.Fatal(err)
+				}
 			}
 			env := []string{"PATH=" + agents + ":/usr/bin:/bin"}
 			v := axi(t, bin, repo, state, `{"version":1,"op":"attach"}`, env...)
@@ -125,8 +141,12 @@ func TestNativeClaudeAndCodexDefaultModels(t *testing.T) {
 		})
 		t.Run(backend+"-repair", func(t *testing.T) {
 			bin, repo, state, root, v := pipelineWith(t, BackendPi, "fixture/model", backend, "")
-			os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-			os.WriteFile(filepath.Join(root, "edit-"+backend), []byte("repaired\n"), 0600)
+			if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "edit-"+backend), []byte("repaired\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			mutate(t, bin, repo, state, v, "pipeline", "native-fixer-default", nil)
 			v = waitPipeline(t, bin, repo, state)
 			if runOf(t, v)["status"] != "locally-ready" {

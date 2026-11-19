@@ -14,7 +14,9 @@ func resolutionPipeline(t *testing.T, mode string) (string, string, string, map[
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}}
 	})
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if mode != "auto" {
 		v = mutate(t, bin, repo, home, v, "apply", "mode-"+mode, map[string]any{"mode": mode, "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"})
 	}
@@ -24,8 +26,13 @@ func resolutionPipeline(t *testing.T, mode string) (string, string, string, map[
 func capturedReviewInput(t *testing.T, root string) map[string]json.RawMessage {
 	t.Helper()
 	var input map[string]json.RawMessage
-	b, _ := os.ReadFile(filepath.Join(root, "review-input.json"))
-	json.Unmarshal(b, &input)
+	b, err := os.ReadFile(filepath.Join(root, "review-input.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(b, &input); err != nil {
+		t.Fatal(err)
+	}
 	return input
 }
 
@@ -47,7 +54,9 @@ func TestFixedResponseIsCheckedByTheNextIndependentReview(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := resolutionPipeline(t, "auto")
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
@@ -89,11 +98,19 @@ func TestDisputeIsNeverCountedAsAFix(t *testing.T) {
 		t.Run(check, func(t *testing.T) {
 			bin, repo, home, v := resolutionPipeline(t, "auto")
 			root := filepath.Dir(home)
-			os.WriteFile(filepath.Join(root, "fix-response"), []byte("disputed"), 0600)
-			os.WriteFile(filepath.Join(root, "review-check"), []byte(check), 0600)
-			os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+			if err := os.WriteFile(filepath.Join(root, "fix-response"), []byte("disputed"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "review-check"), []byte(check), 0600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			if check == "rejected" {
-				os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("findings"), 0600)
+				if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("findings"), 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
 				t.Fatal(started)
@@ -152,7 +169,9 @@ func TestInvalidResolutionResponsesRefuseTheRepair(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			bin, repo, home, v := resolutionPipeline(t, "auto")
 			root := filepath.Dir(home)
-			os.WriteFile(filepath.Join(root, "fix-response"), []byte(response), 0600)
+			if err := os.WriteFile(filepath.Join(root, "fix-response"), []byte(response), 0600); err != nil {
+				t.Fatal(err)
+			}
 			if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
 				t.Fatal(started)
 			}
@@ -169,8 +188,12 @@ func TestDeferralCitesAnsweredDecision(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := resolutionPipeline(t, "ask")
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "fix-response"), []byte("deferred"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "fix-response"), []byte("deferred"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if started := mutate(t, bin, repo, home, v, "pipeline", "start", nil); started["outcome"] != "ok" {
 		t.Fatal(started)
 	}

@@ -110,7 +110,9 @@ func axiCommand(home, path string, args []string) (engine.Response, error) {
 func compactResponse(v engine.Response) map[string]any {
 	b, _ := json.Marshal(v)
 	var result map[string]any
-	json.Unmarshal(b, &result)
+	if err := json.Unmarshal(b, &result); err != nil {
+		return map[string]any{"outcome": "error", "error": err.Error()}
+	}
 	for _, key := range []string{"rules", "rule_scope", "defaults", "defaults_sources", "config", "migrations", "models"} {
 		delete(result, key)
 	}

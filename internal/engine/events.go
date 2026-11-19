@@ -156,7 +156,9 @@ func (f *feed) subscribe(s *Store, c net.Conn, q Request) (Response, bool) {
 			return refuse(errors.New("too many waiting subscribers; retry later"))
 		}
 		q.RunID = v.RunID
-		c.SetDeadline(time.Time{})
+		if err := c.SetDeadline(time.Time{}); err != nil {
+			return refuse(err)
+		}
 		f.waiters = append(f.waiters, &waiter{conn: c, q: q, repository: id.Repository, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
 		return Response{}, true
 	}
@@ -171,7 +173,9 @@ func (f *feed) subscribe(s *Store, c net.Conn, q Request) (Response, bool) {
 	case len(f.waiters) >= waiterLimit:
 		return refuse(errors.New("too many waiting subscribers; retry later"))
 	}
-	c.SetDeadline(time.Time{})
+	if err := c.SetDeadline(time.Time{}); err != nil {
+		return refuse(err)
+	}
 	f.waiters = append(f.waiters, &waiter{conn: c, q: q, repository: id.Repository, deadline: time.Now().Add(time.Duration(q.WaitMS) * time.Millisecond)})
 	return Response{}, true
 }
@@ -191,9 +195,7 @@ func (f *feed) flush(s *Store, now time.Time) {
 				v.Wait = "elapsed"
 			}
 			stamp(&v, w.q.Version)
-			w.conn.SetWriteDeadline(now.Add(2 * time.Second))
-			json.NewEncoder(w.conn).Encode(v)
-			w.conn.Close()
+			writeWaiterResponse(w.conn, now, v)
 			continue
 		}
 		if w.q.Op == "logs" {
@@ -209,9 +211,7 @@ func (f *feed) flush(s *Store, now time.Time) {
 				v.Wait = "complete"
 			}
 			stamp(&v, w.q.Version)
-			w.conn.SetWriteDeadline(now.Add(2 * time.Second))
-			json.NewEncoder(w.conn).Encode(v)
-			w.conn.Close()
+			writeWaiterResponse(w.conn, now, v)
 			continue
 		}
 		events, resync := f.since(s, w.q, w.repository)
@@ -228,11 +228,21 @@ func (f *feed) flush(s *Store, now time.Time) {
 			continue
 		}
 		stamp(&v, w.q.Version)
-		w.conn.SetWriteDeadline(now.Add(2 * time.Second))
-		json.NewEncoder(w.conn).Encode(v)
-		w.conn.Close()
+		writeWaiterResponse(w.conn, now, v)
 	}
 	f.waiters = kept
+}
+
+func writeWaiterResponse(conn net.Conn, now time.Time, response Response) {
+	if err := conn.SetWriteDeadline(now.Add(2 * time.Second)); err != nil {
+		_ = conn.Close() // A waiter with no write deadline could block the event loop.
+		return
+	}
+	if err := json.NewEncoder(conn).Encode(response); err != nil {
+		_ = conn.Close() // A failed response cannot be retried on this connection.
+		return
+	}
+	_ = conn.Close() // The response is sent; close is best-effort connection cleanup.
 }
 
 func (f *feed) next(now time.Time) time.Duration {
@@ -248,7 +258,7 @@ func (f *feed) next(now time.Time) time.Duration {
 
 func (f *feed) close() {
 	for _, w := range f.waiters {
-		w.conn.Close()
+		_ = w.conn.Close() // Closing abandoned waiters is best-effort cleanup.
 	}
 	f.waiters = nil
 }

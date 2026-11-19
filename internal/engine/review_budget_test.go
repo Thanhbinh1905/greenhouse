@@ -113,8 +113,13 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 sys.exit(0)
 `)
 	var cfg map[string]any
-	data, _ := os.ReadFile(filepath.Join(home, "backends.json"))
-	json.Unmarshal(data, &cfg)
+	data, err := os.ReadFile(filepath.Join(home, "backends.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
 	cfg["review_budget"] = "2s"
 	writePrivateJSON(t, filepath.Join(home, "backends.json"), cfg)
 	start := time.Now()
@@ -152,11 +157,15 @@ func TestReviewInputKeepsNumberedHunkContext(t *testing.T) {
 	for i := 1; i <= 2000; i++ {
 		fmt.Fprintf(&lines, "line %d\n", i)
 	}
-	os.WriteFile(filepath.Join(repo, "large.txt"), []byte(lines.String()), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "large.txt"), []byte(lines.String()), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "large.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "large base")
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "large.txt"), []byte(strings.Replace(lines.String(), "line 1000\n", "changed 1000\n", 1)), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "large.txt"), []byte(strings.Replace(lines.String(), "line 1000\n", "changed 1000\n", 1)), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "large.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "one line")
 	v = mutate(t, bin, repo, home, v, "new", "new-run", nil)

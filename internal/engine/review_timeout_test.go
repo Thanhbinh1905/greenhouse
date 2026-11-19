@@ -95,7 +95,11 @@ func TestAdoptFinalizedTimeoutValidatesInputAndUsage(t *testing.T) {
 	for _, valid := range []bool{true, false} {
 		x := &Execution{ID: "review", Input: []byte(`{"Head":"candidate","Paths":["sample"]}`), InputDigest: "bound-input", Config: ReviewerConfig{Backend: "pi"}}
 		r := &Run{Status: "recovery-required", Configs: []Snapshot{{Settings: Settings{ExecutorTimeout: "1s"}}}, Review: x, Pipeline: &Pipeline{Stages: []StageResult{{Name: "review"}}}, Recovery: &Recovery{Kind: "review", Stage: "review", Execution: "review"}}
-		finalInput := runner.BytesDigest(reviewFinalizationInput(x, reviewOutcome{}, true))
+		finalizationInput, err := reviewFinalizationInput(x, reviewOutcome{}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		finalInput := runner.BytesDigest(finalizationInput)
 		if !valid {
 			finalInput = "unrelated-input"
 		}

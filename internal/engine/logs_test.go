@@ -12,17 +12,35 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
+func TestAppendLogReportsOpenError(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "state")
+	t.Setenv("GREENHOUSE_HOME", home)
+	path := filepath.Join(home, "logs", "run", "test.log")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendLog("run", "test", []byte("output")); err == nil {
+		t.Fatal("appendLog must return an error when its log file cannot be opened")
+	}
+}
+
 func TestLogsPreserveCursorsAndRedactSplitSecrets(t *testing.T) {
 	t.Setenv("GREENHOUSE_HOME", filepath.Join(t.TempDir(), "state"))
 	t.Setenv("WORKER_SECRET", "a-secret-across-chunks")
 	writer := &logWriter{run: "run", step: "test"}
-	writer.Write([]byte("before a-secret-"))
+	if _, err := writer.Write([]byte("before a-secret-")); err != nil {
+		t.Fatal(err)
+	}
 	view, err := readLogs("run", Request{Step: "test", Full: true})
 	if err != nil || view.Bytes != 0 {
 		t.Fatalf("partial output exposed: %v %v", view, err)
 	}
-	writer.Write([]byte("across-chunks\n"))
-	writer.Write([]byte(strings.Repeat("plain output\n", 10000)))
+	if _, err := writer.Write([]byte("across-chunks\n")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := writer.Write([]byte(strings.Repeat("plain output\n", 10000))); err != nil {
+		t.Fatal(err)
+	}
 	zero := int64(0)
 	view, err = readLogs("run", Request{Step: "test", Offset: &zero})
 	if err != nil || view.Offset != 0 || view.Next != 65536 || !strings.HasPrefix(view.Content, "before [REDACTED:WORKER_SECRET]") {
@@ -32,7 +50,9 @@ func TestLogsPreserveCursorsAndRedactSplitSecrets(t *testing.T) {
 	if err != nil || tail.Offset <= 0 || len(tail.Content) != 16384 {
 		t.Fatalf("tail: %v %v", tail, err)
 	}
-	appendLog("run", "test", []byte(strings.Repeat("x", transcriptLimit)))
+	if err := appendLog("run", "test", []byte(strings.Repeat("x", transcriptLimit))); err != nil {
+		t.Fatal(err)
+	}
 	full, err := readLogs("run", Request{Step: "test", Full: true})
 	if err != nil || !full.Truncated || full.Bytes != transcriptLimit {
 		t.Fatalf("bounded retention: %d %v %v", full.Bytes, full.Truncated, err)
@@ -81,10 +101,14 @@ func TestSnapshotTailRedactsBeforeTruncation(t *testing.T) {
 	t.Setenv("WORKER_SECRET", "a-secret-across-chunks")
 	tail := &tailBuffer{limit: 32}
 	writer := &logWriter{output: tail}
-	writer.Write([]byte("a-secret-"))
-	writer.Write([]byte("across-chunks\n"))
-	writer.Write([]byte("safe output\n"))
-	writer.flush()
+	for _, chunk := range [][]byte{[]byte("a-secret-"), []byte("across-chunks\n"), []byte("safe output\n")} {
+		if _, err := writer.Write(chunk); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := writer.flush(); err != nil {
+		t.Fatal(err)
+	}
 	if strings.Contains(tail.String(), "across-chunks") || !strings.Contains(tail.String(), "safe output") {
 		t.Fatalf("redaction must precede tail truncation: %q", tail.String())
 	}

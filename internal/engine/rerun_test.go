@@ -17,14 +17,18 @@ func TestRerunFailedGateKeepsEarlierStagesAndBudget(t *testing.T) {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}, "repair_limit": 0}
 	})
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	v = waitPipeline(t, bin, repo, home)
 	if stageOf(t, v, "test")["status"] != "failed" || !has(strs(v["actions"]), "rerun") || !has(strs(v["actions"]), "rerun-from-start") {
 		t.Fatalf("a failed stage offers rerun and rerun from start: %v %v", stageOf(t, v, "test"), v["actions"])
 	}
 	used := runOf(t, v)["review_used"]
-	os.Remove(filepath.Join(root, "require-test"))
+	if err := os.Remove(filepath.Join(root, "require-test")); err != nil {
+		t.Fatal(err)
+	}
 	v = mutate(t, bin, repo, home, v, "rerun", "rerun-test", nil)
 	if v["outcome"] != "ok" {
 		t.Fatalf("rerun: %v", v)
@@ -43,7 +47,9 @@ func TestRerunAfterCancelAndRefusalWhileLive(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, localPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "sleep-test"), []byte("30"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	v = waitStatus(t, bin, repo, home, "running")
 	for i := 0; i < 200 && stageOf(t, v, "test")["status"] != "running"; i++ {
@@ -57,7 +63,9 @@ func TestRerunAfterCancelAndRefusalWhileLive(t *testing.T) {
 	if runOf(t, v)["status"] != "cancelled" || !has(strs(v["actions"]), "rerun") {
 		t.Fatalf("cancel is an abort that leaves the run rerunnable: %v %v", runOf(t, v)["status"], v["actions"])
 	}
-	os.Remove(filepath.Join(root, "sleep-test"))
+	if err := os.Remove(filepath.Join(root, "sleep-test")); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "rerun", "rerun-cancelled", nil)
 	v = waitPipeline(t, bin, repo, home)
 	if runOf(t, v)["status"] != "needs-decision" && runOf(t, v)["status"] != "locally-ready" {
@@ -74,7 +82,9 @@ func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}, "repair_limit": 0}
 	})
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	old := waitPipeline(t, bin, repo, home)
 	oldRun := runOf(t, old)
@@ -99,10 +109,14 @@ func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
-	os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "findings-codex"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	writeExecutable(t, filepath.Join(root, "one-pass-fixer"), "#!/usr/bin/python3\nimport json,os,sys,time\nroot=os.path.dirname(os.path.abspath(__file__))\nb=json.load(sys.stdin)\nmode=open(root+'/fix-mode').read() if os.path.exists(root+'/fix-mode') else ''\nopen('sample.txt','w').write('half '+mode+'\\n' if mode else 'repaired\\n')\nif mode=='cancel': open(root+'/fixer-ready','w').write('ready')\nif mode=='untracked': open('notes.txt','w').write('unique-untracked-content-7f3a\\n')\nif mode=='symlink': os.symlink('unique-symlink-target-9e1f','link.txt')\nif mode=='fifo': open('.gitignore','w').write('ignored-pipe\\n'); os.mkfifo('pipe.txt'); os.mkfifo('ignored-pipe')\nif mode=='ignored-directory': open('.gitignore','w').write('ignored-dir/\\n'); os.mkdir('ignored-dir'); os.mkfifo('ignored-dir/pipe'); os.chmod('ignored-dir',0); os.mkdir('blocked-dir'); os.mkdir('blocked-dir/nested'); os.mkdir('blocked-dir/nested/deep'); os.mkfifo('blocked-dir/nested/deep/pipe'); os.chmod('blocked-dir/nested/deep',0); os.chmod('blocked-dir/nested',0); os.chmod('blocked-dir',0); os.mkdir('readonly-dir'); os.mkfifo('readonly-dir/pipe'); os.chmod('readonly-dir',0o500); open('unreadable.txt','w').write('hidden contents\\n'); os.chmod('unreadable.txt',0); os.mkfifo('pipe.txt')\nif mode=='commit': import subprocess; subprocess.run(['git','-c','user.name=F','-c','user.email=f@example.invalid','commit','-qam','fixer commit'],check=True)\nif mode=='cancel': time.sleep(30)\nif mode: sys.exit(1)\n"+respondFixed)
 	writePrivateJSON(t, filepath.Join(home, "fixer.json"), map[string]any{"executable": filepath.Join(root, "one-pass-fixer"), "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/true"}}})
-	os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600)
+	if err := os.WriteFile(filepath.Join(root, "fix-mode"), []byte(stop), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "review", "review-findings", nil)
 	v = waitStatus(t, bin, repo, home, "outstanding-findings")
 	q := map[string]any{"version": 1, "op": "repair", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": "none", "action_id": "repair", "selected": []string{runOf(t, v)["findings"].([]any)[0].(map[string]any)["id"].(string)}}
@@ -144,7 +158,9 @@ func TestRerunStoppedSelectedRepairKeepsEvidenceAndCounters(t *testing.T) {
 			if !has(strs(v["actions"]), "rerun") {
 				t.Fatalf("a stopped selected repair must offer rerun: %v", v["actions"])
 			}
-			os.Remove(filepath.Join(root, "fix-mode"))
+			if err := os.Remove(filepath.Join(root, "fix-mode")); err != nil {
+				t.Fatal(err)
+			}
 			if v = mutate(t, bin, repo, home, v, "rerun", "rerun-repair", nil); v["outcome"] != "ok" {
 				t.Fatalf("rerun: %v", v)
 			}
@@ -171,7 +187,9 @@ func TestRefusedRepairRerunLeavesCandidateUntouched(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, _, v := stoppedRepairFixture(t, "fail")
 	worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string)
-	os.Remove(filepath.Join(home, "fixer.json"))
+	if err := os.Remove(filepath.Join(home, "fixer.json")); err != nil {
+		t.Fatal(err)
+	}
 	refused := mutate(t, bin, repo, home, v, "rerun", "rerun-unconfigured", nil)
 	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	run := runOf(t, v)
@@ -194,12 +212,16 @@ func priorEvidence(t *testing.T, prior any, content string) string {
 func TestRepeatedRerunsKeepEachFailedRepairsEvidence(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := stoppedRepairFixture(t, "fail")
-	os.WriteFile(filepath.Join(root, "fix-mode"), []byte("again"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "fix-mode"), []byte("again"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-again", nil); v["outcome"] != "ok" {
 		t.Fatalf("second attempt: %v", v)
 	}
 	v = waitStatus(t, bin, repo, home, "fixer-failed")
-	os.Remove(filepath.Join(root, "fix-mode"))
+	if err := os.Remove(filepath.Join(root, "fix-mode")); err != nil {
+		t.Fatal(err)
+	}
 	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-third", nil); v["outcome"] != "ok" {
 		t.Fatalf("third attempt: %v", v)
 	}
@@ -219,17 +241,20 @@ func TestRerunSkipsUnreadableIgnoredDirectory(t *testing.T) {
 	worktree := runOf(t, v)["repair"].(map[string]any)["worktree"].(string)
 	ignoredDir := filepath.Join(worktree, "ignored-dir")
 	blockedDir := filepath.Join(worktree, "blocked-dir")
+	readonlyDir := filepath.Join(worktree, "readonly-dir")
 	defer func() {
-		os.Chmod(ignoredDir, 0700)
-		os.RemoveAll(ignoredDir)
-		os.Chmod(filepath.Join(worktree, "readonly-dir"), 0700)
-		os.RemoveAll(filepath.Join(worktree, "readonly-dir"))
-		for _, dir := range []string{filepath.Join(blockedDir, "nested", "deep"), filepath.Join(blockedDir, "nested"), blockedDir} {
-			os.Chmod(dir, 0700)
+		for _, dir := range []string{ignoredDir, readonlyDir, filepath.Join(blockedDir, "nested", "deep"), filepath.Join(blockedDir, "nested"), blockedDir} {
+			if err := os.Chmod(dir, 0700); err != nil && !os.IsNotExist(err) {
+				t.Fatal(err)
+			}
 		}
-		os.RemoveAll(blockedDir)
+		_ = os.RemoveAll(ignoredDir)  // Best-effort test directory cleanup.
+		_ = os.RemoveAll(readonlyDir) // Best-effort test directory cleanup.
+		_ = os.RemoveAll(blockedDir)  // Best-effort test directory cleanup.
 	}()
-	os.Remove(filepath.Join(root, "fix-mode"))
+	if err := os.Remove(filepath.Join(root, "fix-mode")); err != nil {
+		t.Fatal(err)
+	}
 	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-ignored-dir", nil); v["outcome"] != "ok" {
 		t.Fatalf("rerun: %v", v)
 	}
@@ -259,7 +284,9 @@ func TestRerunSkipsUnreadableIgnoredDirectory(t *testing.T) {
 func TestRerunKeepsUntrackedFIFOEvidence(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := stoppedRepairFixture(t, "fifo")
-	os.Remove(filepath.Join(root, "fix-mode"))
+	if err := os.Remove(filepath.Join(root, "fix-mode")); err != nil {
+		t.Fatal(err)
+	}
 	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-fifo", nil); v["outcome"] != "ok" {
 		t.Fatalf("rerun: %v", v)
 	}
@@ -280,7 +307,9 @@ func TestRerunKeepsUntrackedFIFOEvidence(t *testing.T) {
 func TestRerunKeepsUntrackedSymlinkTarget(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := stoppedRepairFixture(t, "symlink")
-	os.Remove(filepath.Join(root, "fix-mode"))
+	if err := os.Remove(filepath.Join(root, "fix-mode")); err != nil {
+		t.Fatal(err)
+	}
 	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-symlink", nil); v["outcome"] != "ok" {
 		t.Fatalf("rerun: %v", v)
 	}
@@ -295,7 +324,9 @@ func TestRerunKeepsUntrackedSymlinkTarget(t *testing.T) {
 func TestRerunKeepsUntrackedFileContents(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := stoppedRepairFixture(t, "untracked")
-	os.Remove(filepath.Join(root, "fix-mode"))
+	if err := os.Remove(filepath.Join(root, "fix-mode")); err != nil {
+		t.Fatal(err)
+	}
 	if v = mutate(t, bin, repo, home, v, "rerun", "rerun-untracked", nil); v["outcome"] != "ok" {
 		t.Fatalf("rerun: %v", v)
 	}

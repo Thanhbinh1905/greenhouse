@@ -29,7 +29,9 @@ func prepareFixture(t *testing.T) (string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
@@ -51,7 +53,7 @@ func installFake(t *testing.T, home, mode string) string {
 	providerPath := filepath.Join(home, "providers.json")
 	if _, err := os.Stat(providerPath); os.IsNotExist(err) {
 		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}, {"id": "gpt-6-luna"}}})
+			_ = json.NewEncoder(w).Encode(map[string]any{"data": []map[string]string{{"id": "model"}, {"id": "gpt-5.6-luna"}, {"id": "gpt-6-luna"}}}) // Best-effort test response.
 		}))
 		t.Cleanup(server.Close)
 		providerConfig := TrustedProviderConfig{Providers: map[string]ProviderConfig{"fixture": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}, "openai": {BaseURL: server.URL, APIKeyEnv: "GREENHOUSE_TEST_PROVIDER_KEY", API: "openai-completions"}}}
@@ -106,7 +108,9 @@ func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	invocations := installFake(t, home, "")
-	os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserved"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	before := git(t, repo, "status", "--porcelain")
 	refs := git(t, repo, "show-ref")
 	var a, b map[string]any
@@ -206,11 +210,17 @@ func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 		git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", msg)
 		return strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	}
-	os.WriteFile(filepath.Join(repo, "old.txt"), []byte("gone\n"), 0600)
-	os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nb\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "old.txt"), []byte("gone\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nb\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	target := commit("base")
-	os.Remove(filepath.Join(repo, "old.txt"))
-	os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nchanged\nc"), 0600)
+	_ = os.Remove(filepath.Join(repo, "old.txt")) // Best-effort test cleanup.
+	if err := os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nchanged\nc"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	commit("candidate")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	installFake(t, home, `v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[]}

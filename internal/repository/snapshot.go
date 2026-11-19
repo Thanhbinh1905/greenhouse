@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"hash"
 	"io"
 	"io/fs"
 	"os"
@@ -128,12 +127,16 @@ func materializeWithOpen(worktree string, s *TreeSnapshot, root string, openFile
 		return err
 	}
 	defer func() {
-		if retErr != nil {
-			c.Process.Kill()
+		if err := stdin.Close(); err != nil {
+			retErr = errors.Join(retErr, err)
 		}
-		c.Wait()
+		if retErr != nil {
+			if err := c.Process.Kill(); err != nil && !errors.Is(err, os.ErrProcessDone) {
+				retErr = errors.Join(retErr, err)
+			}
+		}
+		retErr = errors.Join(retErr, c.Wait())
 	}()
-	defer stdin.Close()
 	reader := bufio.NewReader(stdout)
 	var dirs []string
 	for _, e := range entries {
@@ -278,21 +281,21 @@ func VerifySnapshot(worktree string, s *TreeSnapshot, root string) error {
 }
 
 func gitObject(like string, content []byte) string {
-	var h hash.Hash = sha1.New()
+	var h = sha1.New()
 	if len(like) == 64 {
 		h = sha256.New()
 	}
-	fmt.Fprintf(h, "blob %d\x00", len(content))
-	h.Write(content)
+	_, _ = fmt.Fprintf(h, "blob %d\x00", len(content)) // hash.Hash writes cannot fail.
+	_, _ = h.Write(content)
 	return hex.EncodeToString(h.Sum(nil))
 }
 
 func RemoveSnapshot(root string) {
-	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err == nil && d.IsDir() {
-			os.Chmod(path, 0700)
+			_ = os.Chmod(path, 0700) // Best effort so RemoveAll can remove read-only directories.
 		}
 		return nil
-	})
-	os.RemoveAll(root)
+	}) // Best-effort cleanup; callers cannot recover from removal failures.
+	_ = os.RemoveAll(root) // Best-effort cleanup; callers cannot recover from removal failures.
 }

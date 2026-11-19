@@ -229,7 +229,9 @@ func runFixCase(o fixOptions, bin, shimBin string, checks [][]string, settings m
 		} `json:"findings"`
 	}
 	b, _ := json.Marshal(review["result"])
-	json.Unmarshal(b, &result)
+	if err := json.Unmarshal(b, &result); err != nil {
+		return fail(fmt.Errorf("decode review result: %w", err))
+	}
 	labels := map[string]string{}
 	var ids []string
 	for _, f := range result.Findings {
@@ -348,7 +350,7 @@ func runFixLive(o fixOptions) (*FixReport, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(work)
+	defer func() { _ = os.RemoveAll(work) }() // Best-effort temporary workspace cleanup.
 	bin := filepath.Join(work, "greenhouse")
 	if _, err := command(root, nil, "go", "build", "-o", bin, "./cmd/greenhouse"); err != nil {
 		return nil, err

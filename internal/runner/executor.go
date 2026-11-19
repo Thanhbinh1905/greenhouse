@@ -89,7 +89,11 @@ func (c *capturedOutput) Write(p []byte) (int, error) {
 		if int64(len(chunk)) > room {
 			chunk = chunk[:room]
 		}
-		c.file.Write(chunk)
+		if n, err := c.file.Write(chunk); err != nil {
+			return n, err
+		} else if n != len(chunk) {
+			return n, io.ErrShortWrite
+		}
 	}
 	c.total += int64(len(p))
 	if c.pass != nil {
@@ -105,7 +109,7 @@ func writeFileDurably(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }() // Best-effort cleanup when the durable write fails.
 	if _, err = f.Write(data); err == nil {
 		err = f.Sync()
 	}
@@ -122,11 +126,12 @@ func writeFileDurably(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
-	return d.Sync()
+	syncErr := d.Sync()
+	closeErr := d.Close()
+	return errors.Join(syncErr, closeErr)
 }
 
-func runChild(args []string) int {
+func runChild(args []string) (result int) {
 	if len(args) < 3 {
 		return 127
 	}
@@ -159,7 +164,11 @@ func runChild(args []string) int {
 		if err != nil {
 			return 254
 		}
-		defer lease.Close()
+		defer func() {
+			if err := lease.Close(); err != nil {
+				result = 254
+			}
+		}()
 		if err = syscall.Flock(int(lease.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 			return 254
 		}
@@ -168,12 +177,20 @@ func runChild(args []string) int {
 		if err != nil {
 			return 254
 		}
-		defer stdout.Close()
+		defer func() {
+			if err := stdout.Close(); err != nil {
+				result = 254
+			}
+		}()
 		stderr, err := os.OpenFile(record+".err", os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 		if err != nil {
 			return 254
 		}
-		defer stderr.Close()
+		defer func() {
+			if err := stderr.Close(); err != nil {
+				result = 254
+			}
+		}()
 		out = &capturedOutput{file: stdout, limit: StdoutLimit + 1, pass: os.Stdout}
 		errOut = &capturedOutput{file: stderr, limit: StderrLimit + 1, pass: os.Stderr}
 		child.Stdout, child.Stderr = out, errOut
@@ -198,11 +215,16 @@ func runChild(args []string) int {
 	case <-deadline.C:
 		stopped, stopReason = true, "timeout"
 	}
+	killErr := error(nil)
 	if stopped {
-		syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
+		if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			killErr = err
+		}
 		childErr = <-done
 	}
-	syscall.Kill(-child.Process.Pid, syscall.SIGKILL)
+	if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		killErr = errors.Join(killErr, err)
+	}
 	reaped := reapChildTree()
 	code := 0
 	var exitErr *exec.ExitError
@@ -214,9 +236,13 @@ func runChild(args []string) int {
 	case childErr != nil:
 		code = 127
 	}
+	if killErr != nil {
+		return 254
+	}
 	if record != "-" {
-		out.file.Sync()
-		errOut.file.Sync()
+		if err := errors.Join(out.file.Sync(), errOut.file.Sync()); err != nil {
+			return 254
+		}
 		data, _ := json.Marshal(ExecutorRecord{InputDigest: BytesDigest(input), Exit: code, Stopped: stopped, StopReason: stopReason, Reaped: reaped, Stdout: out.total, Stderr: errOut.total})
 		if writeFileDurably(record+".json", data) != nil {
 			return 254
@@ -247,11 +273,13 @@ func leaseHeld(path string) bool {
 	if err != nil {
 		return false
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // Close releases the probe descriptor after ownership is established.
 	if syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		return true
 	}
-	syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
+	if err := syscall.Flock(int(f.Fd()), syscall.LOCK_UN); err != nil {
+		return true
+	}
 	return false
 }
 
@@ -306,6 +334,6 @@ func readBounded(path string, limit int64) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }() // Closing a read-only capture is best-effort after reading.
 	return io.ReadAll(io.LimitReader(f, limit))
 }

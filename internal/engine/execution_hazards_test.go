@@ -31,7 +31,9 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 			}
 			if scenario == "movement" {
 				git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "moving source")
-				os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600)
+				if err := os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600); err != nil {
+					t.Fatal(err)
+				}
 				v = waitReview(t, bin, repo, home)
 				if runOf(t, v)["status"] != "stale" {
 					t.Fatal(v)
@@ -58,8 +60,8 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 					}
 					time.Sleep(time.Millisecond)
 				}
-				syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-				lock.Close()
+				_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) // Best-effort unlock after the test.
+				_ = lock.Close()                                   // Best-effort test cleanup.
 				v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 				if runOf(t, v)["status"] != "recovery-required" {
 					t.Fatal(v)
@@ -71,8 +73,12 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 				copyRoot := string(cwd)
 				switch scenario {
 				case "restart-modified":
-					os.Chmod(copyRoot, 0700)
-					os.Chmod(filepath.Join(copyRoot, "sample.txt"), 0600)
+					if err := os.Chmod(copyRoot, 0700); err != nil {
+						t.Fatal(err)
+					}
+					if err := os.Chmod(filepath.Join(copyRoot, "sample.txt"), 0600); err != nil {
+						t.Fatal(err)
+					}
 					if err := os.WriteFile(filepath.Join(copyRoot, "sample.txt"), []byte("altered\n"), 0600); err != nil {
 						t.Fatal(err)
 					}
@@ -80,7 +86,9 @@ func TestReviewMovementAndUnknownRestart(t *testing.T) {
 					repository.RemoveSnapshot(copyRoot)
 				}
 			}
-			os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600)
+			if err := os.WriteFile(filepath.Join(filepath.Dir(home), "release"), []byte("release"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			for {
 				if _, err := os.Stat(filepath.Join(filepath.Dir(home), "released")); err == nil {
 					break
@@ -134,11 +142,15 @@ func TestRequiredRulesAndBudgetRefuseDispatch(t *testing.T) {
 		t.Fatal(err)
 	}
 	var s Store
-	json.Unmarshal(b, &s)
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
 	r := s.Runs[v["run_id"].(string)]
 	r.ReviewUsed = 1
 	b, _ = json.Marshal(s)
-	os.WriteFile(filepath.Join(home, "state.json"), b, 0600)
+	if err := os.WriteFile(filepath.Join(home, "state.json"), b, 0600); err != nil {
+		t.Fatal(err)
+	}
 	v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	refused = mutate(t, bin, repo, home, v, "review", "cap", nil)
 	if refused["outcome"] != "refused" || refused["error"] != "review budget exhausted" {

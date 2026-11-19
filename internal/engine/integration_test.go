@@ -86,16 +86,22 @@ func fixture(t *testing.T) (string, string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { os.RemoveAll(root) })
+	t.Cleanup(func() { _ = os.RemoveAll(root) })
 	bin := sharedFixtureBinary(t)
 	repo := filepath.Join(root, "repo")
-	os.Mkdir(repo, 0700)
+	if err := os.Mkdir(repo, 0700); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "init", "-b", "main")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "initial")
 	home := filepath.Join(root, "state")
 	nativeHome := filepath.Join(root, "native-agent")
-	os.Mkdir(nativeHome, 0700)
-	os.WriteFile(filepath.Join(nativeHome, "models.json"), []byte(`{"providers":{"fixture":{"models":[{"id":"model","reasoning":true}]}}}`), 0600)
+	if err := os.Mkdir(nativeHome, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nativeHome, "models.json"), []byte(`{"providers":{"fixture":{"models":[{"id":"model","reasoning":true}]}}}`), 0600); err != nil {
+		t.Fatal(err)
+	}
 	registerDaemonCleanup(t, home)
 	return bin, repo, home
 }

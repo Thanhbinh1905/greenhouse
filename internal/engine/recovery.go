@@ -80,7 +80,7 @@ func needsProbe(s *Store) bool {
 
 func outputBuffer(b []byte, limit int) *runner.Buffer {
 	out := runner.NewBuffer(limit)
-	out.Write(b)
+	_, _ = out.Write(b) // runner.Buffer is an in-memory buffer and cannot fail.
 	return out
 }
 
@@ -108,8 +108,15 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 			if o.State != "exited" && o.State != "stopped" {
 				return false
 			}
-			if i == 1 && o.Record.InputDigest != runner.BytesDigest(reviewFinalizationInput(x, done, true)) && o.Record.InputDigest != runner.BytesDigest(reviewFinalizationInput(x, done, false)) {
-				return false
+			if i == 1 {
+				nearInput, err := reviewFinalizationInput(x, done, true)
+				if err != nil {
+					return false
+				}
+				fullInput, err := reviewFinalizationInput(x, done, false)
+				if err != nil || o.Record.InputDigest != runner.BytesDigest(nearInput) && o.Record.InputDigest != runner.BytesDigest(fullInput) {
+					return false
+				}
 			}
 			var runErr, stopErr error
 			if o.Exit != 0 {
@@ -184,10 +191,10 @@ func recordedCommands(p *Pipeline, stage string, observed []runner.ObservedExecu
 		o := observed[i]
 		tail := &tailBuffer{limit: 16384}
 		safeOut := &logWriter{output: tail}
-		safeOut.Write(o.Stdout)
-		safeOut.flush()
-		safeOut.Write(o.Stderr)
-		safeOut.flush()
+		_, _ = safeOut.Write(o.Stdout) // tailBuffer is in-memory and cannot fail.
+		_ = safeOut.flush()            // tailBuffer is in-memory and cannot fail.
+		_, _ = safeOut.Write(o.Stderr) // tailBuffer is in-memory and cannot fail.
+		_ = safeOut.flush()            // tailBuffer is in-memory and cannot fail.
 		tail.total = int(o.Record.Stdout + o.Record.Stderr)
 		res := CheckResult{Args: args, ExecutableDigest: p.CommandDigests[args[0]], Exit: o.Exit, Output: tail.String(), Status: "passed"}
 		res.Log = fmt.Sprintf("exit=%d output=%d bytes truncated=%t", o.Exit, tail.total, tail.truncated())
