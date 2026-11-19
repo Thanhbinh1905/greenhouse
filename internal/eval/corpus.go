@@ -378,7 +378,7 @@ func treeDigest(root string) (string, error) {
 			return "", err
 		}
 		rel, _ := filepath.Rel(root, p)
-		fmt.Fprintf(h, "%s\x00%d\x00", filepath.ToSlash(rel), len(b))
+		_, _ = fmt.Fprintf(h, "%s\x00%d\x00", filepath.ToSlash(rel), len(b)) // sha256.Hash writes cannot fail.
 		h.Write(b)
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil

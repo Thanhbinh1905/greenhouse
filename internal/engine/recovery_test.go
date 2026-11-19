@@ -59,7 +59,9 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, repairPlan)
 	root := filepath.Dir(home)
-	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := runOf(t, waitPipeline(t, bin, repo, home))
 	pipe := parked["pipeline"].(map[string]any)
@@ -67,7 +69,7 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 	if parked["status"] != "recovery-required" || pipe["lease_epoch"] != float64(1) {
 		t.Fatalf("pipeline did not record its candidate lease: %v", pipe)
 	}
-	os.Remove(filepath.Join(root, "kill-test"))
+	_ = os.Remove(filepath.Join(root, "kill-test"))
 	stopDaemonAndWait(t, home)
 	lease := readRefLease(t, repo, ref)
 	if lease == nil || lease.Epoch != 1 || lease.Home != home {
@@ -89,7 +91,9 @@ func TestRefLeaseSurvivesRestartAndRefusesOtherWriters(t *testing.T) {
 	stopDaemonAndWait(t, second)
 
 	current := waitProbed(t, bin, repo, home)
-	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	if discarded := recoverRequest(t, bin, repo, home, current, "discard", "owner-discard"); discarded["outcome"] != "ok" {
 		t.Fatal(discarded)
 	}
@@ -160,9 +164,13 @@ func TestAdoptedGateRepairCommitContinuesPipeline(t *testing.T) {
 		t.Fatal(err)
 	}
 	wrapper := filepath.Join(root, "commit-crash-bin")
-	os.MkdirAll(wrapper, 0700)
+	if err := os.MkdirAll(wrapper, 0700); err != nil {
+		t.Fatal(err)
+	}
 	marker := filepath.Join(root, "kill-after-commit")
-	os.WriteFile(marker, []byte("1"), 0600)
+	if err := os.WriteFile(marker, []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	writeExecutable(t, filepath.Join(wrapper, "git"), `#!/bin/sh
 commit=false
 candidate=false
@@ -187,7 +195,9 @@ fi
 exit "$status"
 `)
 	path := "PATH=" + wrapper + string(os.PathListSeparator) + os.Getenv("PATH")
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	prepare := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": v["gate_id"], "action_id": "prepare-wrapped", "intent": "Change the sample", "target": runOf(t, v)["target"]}
 	b, _ := json.Marshal(prepare)
 	if v = axi(t, bin, repo, home, string(b), path); v["outcome"] != "ok" {
@@ -299,9 +309,15 @@ func TestRecoveryNewRunCarriesHostIdentityAndSpentGrants(t *testing.T) {
 func TestRecoveryNewRunKeepsFinalFixGrantAcrossPrepare(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 1, repairPlan)
-	os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600)
-	os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("findings"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-then-review"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "kill-test"), []byte("1"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	if granted := decide(t, bin, repo, home, waitPipeline(t, bin, repo, home), "final", "final-fix", nil); granted["outcome"] != "ok" {
 		t.Fatal(granted)
@@ -310,7 +326,7 @@ func TestRecoveryNewRunKeepsFinalFixGrantAcrossPrepare(t *testing.T) {
 	if runOf(t, parked)["status"] != "recovery-required" {
 		t.Fatalf("final-fix run did not reach the interrupted test stage: %v", runOf(t, parked)["pipeline"])
 	}
-	os.Remove(filepath.Join(root, "kill-test"))
+	_ = os.Remove(filepath.Join(root, "kill-test")) // Best-effort cleanup of the test marker.
 	recovered := waitProbed(t, bin, repo, home)
 	before := recovered["budget"].(map[string]any)
 	grant := runOf(t, recovered)["pipeline"].(map[string]any)["final_fix"]
@@ -363,7 +379,7 @@ func waitDaemonExit(t *testing.T, home string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Close()
+	defer func() { _ = lock.Close() }() // Best-effort test lock cleanup.
 	deadline := time.Now().Add(10 * time.Second)
 	for syscall.Flock(int(lock.Fd()), syscall.LOCK_EX|syscall.LOCK_NB) != nil {
 		if time.Now().After(deadline) {
@@ -371,5 +387,5 @@ func waitDaemonExit(t *testing.T, home string) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	_ = syscall.Flock(int(lock.Fd()), syscall.LOCK_UN) // Best-effort unlock after the test.
 }

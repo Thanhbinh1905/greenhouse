@@ -89,7 +89,9 @@ func TestLifecycleSettingsAndIdentity(t *testing.T) {
 	if runOf(t, newSaved)["configs"].([]any)[0].(map[string]any)["settings"].(map[string]any)["mode"] != "ask" {
 		t.Fatal("save not inherited")
 	}
-	os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserve"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "dirty"), []byte("preserve"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	before := git(t, repo, "status", "--porcelain=v1")
 	refs := git(t, repo, "show-ref")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "unpublished")
@@ -147,7 +149,7 @@ func TestRestartAndUnknownWriter(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	c.Close()
+	_ = c.Close() // Best-effort test cleanup.
 	duplicate := exec.Command(bin, "daemon")
 	duplicate.Env = append(os.Environ(), "GREENHOUSE_HOME="+home)
 	if b, e := duplicate.CombinedOutput(); e == nil || !strings.Contains(string(b), "already owns") {
@@ -163,7 +165,9 @@ func TestRestartAndUnknownWriter(t *testing.T) {
 	stopDaemon(t, home)
 	b, _ := os.ReadFile(filepath.Join(home, "state.json"))
 	var s Store
-	json.Unmarshal(b, &s)
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
 	r := s.Runs[v["run_id"].(string)]
 	r.Status = "writing"
 	r.ReviewUsed = 2

@@ -41,7 +41,7 @@ func judgeOnce(o judgeOptions, t judgeTask) (judgeVerdict, Usage, error) {
 	if err != nil {
 		return v, Usage{}, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }() // Best-effort temporary directory cleanup.
 	if o.BaseURL != "" {
 		return v, Usage{}, fmt.Errorf("configure judge routing in native Pi settings; -base-url is retired")
 	}

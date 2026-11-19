@@ -25,7 +25,11 @@ func TestStopDaemonWaitsForPidAfterLockAcquisition(t *testing.T) {
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer func() {
+		if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); err != nil {
+			t.Errorf("unlock test lock: %v", err)
+		}
+	}()
 	started := make(chan error, 1)
 	go func() { started <- StopDaemon(home) }()
 	time.Sleep(50 * time.Millisecond)
@@ -60,7 +64,7 @@ func TestStopDaemonRejectsUnreadableEnviron(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }() // Best-effort child cleanup; process exit status is checked separately.
 	proc := filepath.Join(procRoot, fmt.Sprint(cmd.Process.Pid))
 	if err := os.Mkdir(proc, 0700); err != nil {
 		t.Fatal(err)
@@ -72,12 +76,20 @@ func TestStopDaemonRejectsUnreadableEnviron(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close test listener: %v", err)
+		}
+	}()
 	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Close()
+	defer func() {
+		if err := lock.Close(); err != nil {
+			t.Errorf("close test lock: %v", err)
+		}
+	}()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
@@ -102,12 +114,16 @@ func TestStopDaemonRefusesWithoutPidfd(t *testing.T) {
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer func() { cmd.Process.Kill(); cmd.Wait() }()
+	defer func() { _ = cmd.Process.Kill(); _ = cmd.Wait() }() // Best-effort child cleanup; process exit status is checked separately.
 	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Close()
+	defer func() {
+		if err := lock.Close(); err != nil {
+			t.Errorf("close test lock: %v", err)
+		}
+	}()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
@@ -115,7 +131,11 @@ func TestStopDaemonRefusesWithoutPidfd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close test listener: %v", err)
+		}
+	}()
 	if err := os.WriteFile(filepath.Join(home, "pid"), []byte(fmt.Sprint(cmd.Process.Pid)), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -148,14 +168,18 @@ func TestWaitForLockReleaseAfterProcessExit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Close()
+	defer func() {
+		if err := lock.Close(); err != nil {
+			t.Errorf("close test lock: %v", err)
+		}
+	}()
 	ready := filepath.Join(home, "ready")
 	cmd := exec.Command(os.Args[0], "-test.run=^TestWaitForLockReleaseAfterProcessExit$")
 	cmd.Env = append(os.Environ(), "DAEMONUTIL_HELPER=lock-holder", "DAEMONUTIL_READY="+ready, "GREENHOUSE_HOME="+home)
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	defer cmd.Wait()
+	defer func() { _ = cmd.Wait() }() // Exit status is observed through lock behavior.
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(ready); err == nil {
@@ -200,24 +224,36 @@ func TestStopDaemonIgnoresUnrelatedPID(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() {
-		cmd.Process.Kill()
-		cmd.Wait()
+		_ = cmd.Process.Kill() // Best-effort child cleanup.
+		_ = cmd.Wait()         // Reap the child; its exit status is not under test.
 	}()
 	time.Sleep(20 * time.Millisecond)
 	lock, err := os.OpenFile(filepath.Join(home, "lock"), os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer lock.Close()
+	defer func() {
+		if err := lock.Close(); err != nil {
+			t.Errorf("close test lock: %v", err)
+		}
+	}()
 	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_EX); err != nil {
 		t.Fatal(err)
 	}
-	defer syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
+	defer func() {
+		if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); err != nil {
+			t.Errorf("unlock test lock: %v", err)
+		}
+	}()
 	listener, err := net.Listen("unix", filepath.Join(home, "socket"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() {
+		if err := listener.Close(); err != nil {
+			t.Errorf("close test listener: %v", err)
+		}
+	}()
 	if err := os.WriteFile(filepath.Join(home, "pid"), []byte(fmt.Sprint(cmd.Process.Pid)), 0600); err != nil {
 		t.Fatal(err)
 	}

@@ -168,7 +168,9 @@ func resolveRules(r *Run) RuleSnapshot {
 					if err == nil {
 						raw, err = io.ReadAll(io.LimitReader(f, maxPackBytes+1))
 					}
-					f.Close()
+					if closeErr := f.Close(); err == nil {
+						err = closeErr
+					}
 				}
 			}
 		}

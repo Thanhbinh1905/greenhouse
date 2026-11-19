@@ -54,7 +54,7 @@ func runTests(dir string, tree, hidden map[string]string) (TestOutcomes, string,
 	c.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=local")
 	var out, errb bytes.Buffer
 	c.Stdout, c.Stderr = &out, &errb
-	c.Run()
+	_ = c.Run() // Seeded test failures are expected; score their JSON results below.
 	results := TestOutcomes{}
 	sc := bufio.NewScanner(&out)
 	sc.Buffer(make([]byte, 4096), 4*1024*1024)
@@ -93,7 +93,7 @@ func runOneTest(dir, name string) string {
 	c := exec.Command("go", "test", "-p", "1", "-parallel", "1", "-count=1", "-run", "^"+name+"$", "./...")
 	c.Dir = dir
 	c.Env = append(os.Environ(), "GOWORK=off", "GOTOOLCHAIN=local")
-	if c.Run() != nil {
+	if err := c.Run(); err != nil {
 		return "fail"
 	}
 	return "pass"

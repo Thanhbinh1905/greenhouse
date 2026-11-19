@@ -19,9 +19,13 @@ func TestDamagedStoreRefusedBeforeBinding(t *testing.T) {
 	stopDaemon(t, home)
 	b, _ := os.ReadFile(filepath.Join(home, "state.json"))
 	var s Store
-	json.Unmarshal(b, &s)
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
 	s.Runs[v["run_id"].(string)].Configs = nil
-	persist(home, &s)
+	if err := persist(home, &s); err != nil {
+		t.Fatal(err)
+	}
 	before, _ := os.ReadFile(filepath.Join(home, "state.json"))
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
@@ -108,7 +112,9 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 	}
 	store.Defaults.ReviewerBackend, store.Defaults.ReviewerModel = "", ""
 	store.Defaults.FixerBackend, store.Defaults.FixerModel = "", ""
-	persist(home, &store)
+	if err := persist(home, &store); err != nil {
+		t.Fatal(err)
+	}
 	upgradedStore, err := load(home)
 	if err != nil {
 		t.Fatalf("legacy evidence rejected by upgrade: %v", err)
@@ -116,7 +122,9 @@ func TestLegacyCompletedReviewAndResolvedRulesSurviveUpgrade(t *testing.T) {
 	if !reflect.DeepEqual(upgradedStore.Runs[run.ID].Review.Result.Findings, legacyFindings) {
 		t.Fatal("stored legacy finding IDs changed during upgrade")
 	}
-	persist(home, upgradedStore)
+	if err := persist(home, upgradedStore); err != nil {
+		t.Fatal(err)
+	}
 	upgraded := axi(t, bin, repo, home, `{"version":1,"op":"inspect","run_id":"`+v["run_id"].(string)+`"}`)
 	loaded := runOf(t, upgraded)
 	loadedSnapshots := loaded["rule_snapshots"].([]any)
@@ -154,11 +162,15 @@ func TestRetainedUsageAndLimitEdits(t *testing.T) {
 	stopDaemon(t, home)
 	b, _ := os.ReadFile(filepath.Join(home, "state.json"))
 	var s Store
-	json.Unmarshal(b, &s)
+	if err := json.Unmarshal(b, &s); err != nil {
+		t.Fatal(err)
+	}
 	r := s.Runs[v["run_id"].(string)]
 	r.ReviewUsed = 2
 	r.RepairUsed = 1
-	persist(home, &s)
+	if err := persist(home, &s); err != nil {
+		t.Fatal(err)
+	}
 	v = axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	settings := Settings{Mode: "auto", Preset: "one-pass", Limit: 2, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "openai/gpt-5.6-luna", FixerBackend: "pi", FixerModel: "openai/gpt-5.6-luna"}
 	if mutate(t, bin, repo, home, v, "apply", "reduce", settings)["outcome"] != "refused" {

@@ -7,6 +7,18 @@ import (
 	"testing"
 )
 
+func TestAppendTranscriptReportsOpenError(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "state")
+	t.Setenv("GREENHOUSE_HOME", home)
+	path := filepath.Join(home, "transcripts", "run.log")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendTranscript("run", "reviewer", nil, nil); err == nil {
+		t.Fatal("appendTranscript must return an error when its transcript file cannot be opened")
+	}
+}
+
 func TestTranscriptLogIsRedactedBoundedAndViewable(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
@@ -53,10 +65,14 @@ func TestTranscriptLogIsRedactedBoundedAndViewable(t *testing.T) {
 func TestTranscriptNearLimitStaysBounded(t *testing.T) {
 	home := filepath.Join(t.TempDir(), "state")
 	t.Setenv("GREENHOUSE_HOME", home)
-	os.MkdirAll(filepath.Join(home, "transcripts"), 0700)
+	if err := os.MkdirAll(filepath.Join(home, "transcripts"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	path := filepath.Join(home, "transcripts", "run.log")
 	writeRaw(t, path, strings.Repeat("x", transcriptLimit-10))
-	appendTranscript("run", "reviewer exec", []byte("more output"), nil)
+	if err := appendTranscript("run", "reviewer exec", []byte("more output"), nil); err != nil {
+		t.Fatal(err)
+	}
 	b, err := os.ReadFile(path)
 	if err != nil || len(b) > transcriptLimit+len(transcriptOmitted) || !strings.HasSuffix(string(b), transcriptOmitted) {
 		t.Fatalf("near-limit append not bounded or unmarked: %d %v", len(b), err)
@@ -68,7 +84,9 @@ func TestTranscriptStopsAtPerRunLimit(t *testing.T) {
 	t.Setenv("GREENHOUSE_HOME", home)
 	big := []byte(strings.Repeat("x", transcriptLimit/3))
 	for i := 0; i < 5; i++ {
-		appendTranscript("run", "reviewer exec", big, nil)
+		if err := appendTranscript("run", "reviewer exec", big, nil); err != nil {
+			t.Fatal(err)
+		}
 	}
 	b, err := os.ReadFile(filepath.Join(home, "transcripts", "run.log"))
 	if err != nil || len(b) > transcriptLimit || !strings.HasSuffix(string(b), transcriptOmitted) {

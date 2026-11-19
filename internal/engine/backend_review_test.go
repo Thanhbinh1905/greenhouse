@@ -23,8 +23,12 @@ func installAgentCLIs(t *testing.T, home string) string {
 	for _, name := range []string{"claude", "codex"} {
 		writeExecutable(t, filepath.Join(root, "fake-"+name), script)
 		native := filepath.Join(root, "native-bin")
-		os.MkdirAll(native, 0700)
-		os.Symlink(filepath.Join(root, "fake-"+name), filepath.Join(native, name))
+		if err := os.MkdirAll(native, 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(root, "fake-"+name), filepath.Join(native, name)); err != nil {
+			t.Fatal(err)
+		}
 	}
 	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{
 		"claude": map[string]any{"executable": filepath.Join(root, "fake-claude")},

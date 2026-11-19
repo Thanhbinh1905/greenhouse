@@ -89,12 +89,12 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	if err != nil {
 		return 2, err
 	}
-	defer events.Close()
+	defer func() { _ = events.Close() }() // Event output close is best-effort after collection.
 	diag, err := os.OpenFile(filepath.Join(cfg.Capture, "stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 2, err
 	}
-	defer diag.Close()
+	defer func() { _ = diag.Close() }() // Diagnostic output close is best-effort after collection.
 	cmd := exec.Command(cfg.Pi, args...)
 	cmd.Env = env
 	cmd.Stdin = bytes.NewReader(input)
@@ -103,7 +103,9 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	var prior shimTiming
 	if b, err := os.ReadFile(filepath.Join(cfg.Capture, "timing.json")); err == nil {
-		json.Unmarshal(b, &prior)
+		if err := json.Unmarshal(b, &prior); err != nil {
+			return 2, err
+		}
 	}
 	timing := shimTiming{Start: time.Now()}
 	if !prior.Start.IsZero() {
@@ -121,7 +123,9 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		timing.ExitCode = cmd.ProcessState.ExitCode()
 	}
 	t, _ := json.Marshal(timing)
-	os.WriteFile(filepath.Join(cfg.Capture, "timing.json"), append(t, '\n'), 0o600)
+	if err := os.WriteFile(filepath.Join(cfg.Capture, "timing.json"), append(t, '\n'), 0o600); err != nil {
+		return 2, err
+	}
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
 		return timing.ExitCode, nil

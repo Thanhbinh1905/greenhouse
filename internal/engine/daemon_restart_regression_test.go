@@ -28,7 +28,7 @@ func TestStoppedDaemonCanRestartWithPendingRequest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }() // Best-effort test connection cleanup.
 	if _, err := conn.Write([]byte(`{"version":`)); err != nil {
 		t.Fatal(err)
 	}

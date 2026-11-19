@@ -22,7 +22,9 @@ func legacyConfigFixture(t *testing.T) (string, string, string, string, map[stri
 	bin, repo, home := fixture(t)
 	root := filepath.Dir(home)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	if err := os.MkdirAll(home, 0700); err != nil {
@@ -44,7 +46,9 @@ func legacyConfigFixture(t *testing.T) (string, string, string, string, map[stri
 		t.Fatal(err)
 	}
 	var unversioned map[string]any
-	json.Unmarshal(providers, &unversioned)
+	if err := json.Unmarshal(providers, &unversioned); err != nil {
+		t.Fatal(err)
+	}
 	delete(unversioned, "version")
 	b, _ := json.Marshal(unversioned)
 	legacy["providers.json"] = string(b)
@@ -113,8 +117,12 @@ func TestLegacyConfigurationMigratesExplicitlyWithBackup(t *testing.T) {
 			t.Fatalf("backup mode or after digest wrong: %v %v", info.Mode(), record)
 		}
 		var old, current map[string]json.RawMessage
-		json.Unmarshal([]byte(legacy[name]), &old)
-		json.Unmarshal(after, &current)
+		if err := json.Unmarshal([]byte(legacy[name]), &old); err != nil {
+			t.Fatal(err)
+		}
+		if err := json.Unmarshal(after, &current); err != nil {
+			t.Fatal(err)
+		}
 		if string(current["version"]) != "2" {
 			t.Fatalf("%s lacks the current version: %s", name, after)
 		}

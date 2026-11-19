@@ -44,8 +44,10 @@ func TestRecordedProcess(t *testing.T) {
 	if err := json.Unmarshal(data, &record); err != nil || record != got.Record {
 		t.Fatalf("durable record: %s %v", data, err)
 	}
-	out.Write([]byte("overflow"))
-	if !out.Exceeded() || out.Len() != 4 || string(out.Bytes()) != "data" {
+	if _, err := out.Write([]byte("overflow")); err != nil {
+		t.Fatal(err)
+	}
+	if !out.Exceeded() || out.Len() != 4 || out.String() != "data" {
 		t.Fatalf("bounded output: %q overflow=%t", out.Bytes(), out.Exceeded())
 	}
 }

@@ -53,7 +53,9 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	git(t, filepath.Dir(repo), "init", "--bare", remote)
 	git(t, repo, "remote", "add", "origin", remote)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
@@ -93,7 +95,9 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	}
 	term := startTerminal(t, bin, repo, home)
 	term.waitFor(t, "Host: fake-host task-7 | grant round-1 | findings | current true")
-	io.WriteString(term.stdin, "v\n")
+	if _, err := io.WriteString(term.stdin, "v\n"); err != nil {
+		t.Fatal(err)
+	}
 	term.waitFor(t, "refused run is owned by host fake-host task-7")
 	if again := hostCall(t, bin, repo, home, v, "review", "review-1-again", map[string]any{"grant": "round-1"}); again["outcome"] != "refused" || !strings.Contains(again["error"].(string), "grant already used") {
 		t.Fatalf("one grant must buy one review: %v", again)
@@ -109,7 +113,9 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 		}
 	}
 
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("reviewed and fixed by the host author\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("reviewed and fixed by the host author\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "-c", "user.name=Author", "-c", "user.email=author@example.invalid", "commit", "-am", "author repair")
 	moved := hostSettle(t, bin, repo, home)
 	if moved["host_result"].(map[string]any)["current"] != false {
@@ -139,7 +145,9 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	}
 
 	term.waitFor(t, "grant round-2")
-	io.WriteString(term.stdin, "q\n")
+	if _, err := io.WriteString(term.stdin, "q\n"); err != nil {
+		t.Fatal(err)
+	}
 	if err := <-term.done; err != nil {
 		t.Fatalf("terminal detach: %v", err)
 	}

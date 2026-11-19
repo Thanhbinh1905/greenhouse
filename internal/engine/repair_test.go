@@ -50,7 +50,9 @@ with open('sample.txt','w') as f: f.write('repaired\n')
 	}
 	cfg := map[string]any{"executable": p, "model": "fixture/model", "name": "Test", "email": "test@example.invalid", "checks": [][]string{{"/usr/bin/python3", "-c", "from pathlib import Path; assert Path('sample.txt').read_text() == 'repaired\\n'"}}}
 	b, _ := json.Marshal(cfg)
-	writeConfigBytes(filepath.Join(home, "fixer.json"), b, 0600)
+	if err := writeConfigBytes(filepath.Join(home, "fixer.json"), b, 0600); err != nil {
+		t.Fatal(err)
+	}
 	return bin, repo, home, v
 }
 func selectedID(t *testing.T, v map[string]any) []string {
@@ -76,7 +78,7 @@ func killRepairDaemon(t *testing.T, home string) {
 		if dialErr != nil {
 			return
 		}
-		conn.Close()
+		_ = conn.Close()
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatal("killed daemon listener remained open")
@@ -703,7 +705,12 @@ func TestExecutableSelectedRepair(t *testing.T) {
 		t.Fatal(err)
 	}
 	locked := repairRequest(t, bin, repo, home, changed, "handback", "handback-branch-locked", nil)
-	lock.Close()
+	if err := syscall.Flock(int(lock.Fd()), syscall.LOCK_UN); err != nil {
+		t.Fatal(err)
+	}
+	if err := lock.Close(); err != nil {
+		t.Fatal(err)
+	}
 	if locked["outcome"] != "refused" || !strings.Contains(locked["error"].(string), "another writer owns branch main") {
 		t.Fatalf("handback ignored the branch writer lock: %v", locked)
 	}
@@ -720,7 +727,9 @@ func TestExecutableSelectedRepair(t *testing.T) {
 	stored := store.Runs[handed["run_id"].(string)]
 	stored.Repair.Handback = "handback-in-progress"
 	stored.Status = "fixed-not-independently-rereviewed"
-	persist(home, &store)
+	if err := persist(home, &store); err != nil {
+		t.Fatal(err)
+	}
 	reconciled := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 	if reconciled["outcome"] != "ok" || runOf(t, reconciled)["repair"].(map[string]any)["handback"] != "handed-back" {
 		t.Fatalf("already-applied handback did not reconcile: %v", reconciled)

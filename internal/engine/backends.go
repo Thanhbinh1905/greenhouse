@@ -89,7 +89,7 @@ func backendDiagnostics(stdout, stderr []byte) string {
 			var failure struct {
 				Message string `json:"message"`
 			}
-			json.Unmarshal(event["error"], &failure)
+			_ = json.Unmarshal(event["error"], &failure) // Malformed optional event details produce an empty diagnostic.
 			messages = []string{failure.Message}
 		}
 	})
@@ -129,7 +129,9 @@ func jsonLines(b []byte, visit func(map[string]json.RawMessage)) {
 
 func field(event map[string]json.RawMessage, name string) string {
 	var s string
-	json.Unmarshal(event[name], &s)
+	if err := json.Unmarshal(event[name], &s); err != nil {
+		return ""
+	}
 	return s
 }
 
@@ -281,7 +283,7 @@ func classifyCodex(stdout []byte, now time.Time) *BackendFailure {
 			var e struct {
 				Message string `json:"message"`
 			}
-			json.Unmarshal(event["error"], &e)
+			_ = json.Unmarshal(event["error"], &e) // Malformed optional event details produce an empty diagnostic.
 			last = e.Message
 			if reason := codexReason(e.Message); reason != "" {
 				failure = &BackendFailure{Reason: reason, Message: safeMessage(e.Message)}
@@ -532,7 +534,7 @@ func tomlString(s string) string {
 	return string(b)
 }
 
-func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
+func agentArgs(config ReviewerConfig, role, schema, prompt string) ([]string, error) {
 	switch config.Backend {
 	case BackendClaude:
 		args := []string{"-p", "--output-format", "stream-json", "--verbose", "--no-session-persistence", "--safe-mode", "--strict-mcp-config", "--disable-slash-commands", "--setting-sources", "user", "--permission-prompts", "none"}
@@ -544,7 +546,7 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 		if config.Model != "" {
 			args = append(args, "--model", config.Model)
 		}
-		return append(args, "--system-prompt", prompt)
+		return append(args, "--system-prompt", prompt), nil
 	case BackendCodex:
 		sandbox := "read-only"
 		if role == "fixer" {
@@ -556,7 +558,9 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 			args = append(args, "-c", "model_instructions_file="+tomlString(config.InstructionsFile))
 		}
 		var names []string
-		json.Unmarshal([]byte(config.DisabledMCP), &names)
+		if err := json.Unmarshal([]byte(config.DisabledMCP), &names); err != nil {
+			return nil, fmt.Errorf("decode disabled Codex MCP configuration: %w", err)
+		}
 		for _, name := range names {
 			args = append(args, "-c", "mcp_servers."+tomlString(name)+".enabled=false")
 		}
@@ -570,12 +574,12 @@ func agentArgs(config ReviewerConfig, role, schema, prompt string) []string {
 		if config.Model != "" {
 			args = append(args, "-m", config.Model)
 		}
-		return append(args, "-")
+		return append(args, "-"), nil
 	}
 	if role == "reviewer" {
-		return reviewerArgs(config.Model)
+		return reviewerArgs(config.Model), nil
 	}
-	return fixerArgs(config.Model)
+	return fixerArgs(config.Model), nil
 }
 
 func agentEnv(backend string) []string {
@@ -669,7 +673,7 @@ func claudeAnswer(b []byte, tools []string) (agentAnswer, error) {
 		case "system":
 			if field(event, "subtype") == "init" {
 				initModel = field(event, "model")
-				json.Unmarshal(event["tools"], &initTools)
+				_ = json.Unmarshal(event["tools"], &initTools) // Tool metadata is optional; malformed data leaves the list empty.
 			}
 		case "result":
 			var result struct {
@@ -802,7 +806,7 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 					Cached int `json:"cacheReadInputTokens"`
 				} `json:"modelUsage"`
 			}
-			json.Unmarshal(mapJSON(event), &result)
+			_ = json.Unmarshal(mapJSON(event), &result) // Invalid optional events are ignored.
 			usage.CostUSD += result.Cost
 			for _, model := range result.Usage {
 				usage.InputTokens += model.Input
@@ -816,7 +820,7 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 					Output int `json:"output_tokens"`
 					Cached int `json:"cache_read_input_tokens"`
 				}
-				json.Unmarshal(event["usage"], &native)
+				_ = json.Unmarshal(event["usage"], &native) // Invalid optional usage data contributes zero tokens.
 				usage.InputTokens += native.Input
 				usage.OutputTokens += native.Output
 				usage.CachedInputTokens += native.Cached
@@ -828,7 +832,7 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 				Output int `json:"output_tokens"`
 				Cached int `json:"cached_input_tokens"`
 			}
-			json.Unmarshal(event["usage"], &native)
+			_ = json.Unmarshal(event["usage"], &native) // Invalid optional usage data contributes zero tokens.
 			usage.InputTokens += native.Input
 			usage.OutputTokens += native.Output
 			usage.CachedInputTokens += native.Cached
@@ -922,11 +926,11 @@ func fixerAgent(cfg FixerConfig) ReviewerConfig {
 	return ReviewerConfig{Native: cfg.Native, DisabledMCP: cfg.DisabledMCP, InstructionsFile: cfg.InstructionsFile, Backend: cfg.Backend, Executable: cfg.Executable, Model: cfg.Model, Provider: cfg.Provider}
 }
 
-func fixerArgsFor(cfg FixerConfig, prompt string) []string {
+func fixerArgsFor(cfg FixerConfig, prompt string) ([]string, error) {
 	if cfg.Backend == "" || cfg.Backend == BackendPi {
 		args := fixerArgs(cfg.Model)
 		args[len(args)-1] = prompt
-		return args
+		return args, nil
 	}
 	return agentArgs(fixerAgent(cfg), "fixer", "", prompt)
 }
@@ -966,7 +970,7 @@ func runFixer(ctx context.Context, x *Repair, agentDir string) fixerRun {
 	defer stop()
 	out, stderr := runner.NewBuffer(limit), runner.NewBuffer(65536)
 	code, err := runner.RunProcess(runCtx, x.Worktree, exe, args, x.Input, env, stallWatch(out, backend, stop), stderr)
-	appendTranscript(x.Run, fmt.Sprintf("fixer %s | %s %s | exit=%d", x.ID, backend, x.Config.Model, code), out.Bytes(), stderr.Bytes())
+	_ = appendTranscript(x.Run, fmt.Sprintf("fixer %s | %s %s | exit=%d", x.ID, backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
 	run := fixerRun{log: fmt.Sprintf("exit=%d stdout=%d stderr=%d overflow=%t; raw logs withheld", code, out.Len(), stderr.Len(), out.Exceeded() || stderr.Exceeded()), stdout: out.Bytes(), stderr: stderr.Bytes(), err: err}
 	if reason, failed := runner.ConfinementFailed(code, run.stderr); failed && err == nil {
 		run.log += "; " + reason
@@ -1123,12 +1127,12 @@ func capturePartial(x *Repair) {
 	w := &evidenceWriter{hash: sha256.New()}
 	diff, err := repository.Read(x.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--binary", x.Base, "--")
 	if err != nil {
-		fmt.Fprintf(w, "partial diff unavailable: %v\n", err)
+		_, _ = fmt.Fprintf(w, "partial diff unavailable: %v\n", err) // evidenceWriter is in-memory and cannot fail.
 	}
-	w.Write(diff)
+	_, _ = w.Write(diff) // evidenceWriter is in-memory and cannot fail.
 	untracked, err := repository.Read(x.Worktree, "ls-files", "--others", "--exclude-standard", "-z")
 	if err != nil {
-		fmt.Fprintf(w, "untracked files unavailable: %v\n", err)
+		_, _ = fmt.Fprintf(w, "untracked files unavailable: %v\n", err) // evidenceWriter is in-memory and cannot fail.
 	}
 	names := strings.Split(string(untracked), "\x00")
 	untrackedNames := make(map[string]bool, len(names))
@@ -1138,7 +1142,7 @@ func capturePartial(x *Repair) {
 	walkErr := walkUntrackedSpecialFiles(x.Worktree, func(_, name string, mode os.FileMode, walkErr error) error {
 		if mode.IsDir() {
 			if walkErr != nil {
-				fmt.Fprintf(w, "untracked: %s (directory unavailable: %v)\n", name, walkErr)
+				_, _ = fmt.Fprintf(w, "untracked: %s (directory unavailable: %v)\n", name, walkErr) // evidenceWriter is in-memory and cannot fail.
 				return filepath.SkipDir
 			}
 			return nil
@@ -1150,7 +1154,7 @@ func capturePartial(x *Repair) {
 		return nil
 	})
 	if walkErr != nil {
-		fmt.Fprintf(w, "untracked entries unavailable: %v\n", walkErr)
+		_, _ = fmt.Fprintf(w, "untracked entries unavailable: %v\n", walkErr) // evidenceWriter is in-memory and cannot fail.
 	}
 	for _, name := range names {
 		if name == "" {
@@ -1159,16 +1163,16 @@ func capturePartial(x *Repair) {
 		path := filepath.Join(x.Worktree, name)
 		info, err := os.Lstat(path)
 		if err != nil {
-			fmt.Fprintf(w, "untracked: %s (stat failed: %v)\n", name, err)
+			_, _ = fmt.Fprintf(w, "untracked: %s (stat failed: %v)\n", name, err) // evidenceWriter is in-memory and cannot fail.
 			continue
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(path)
 			if err != nil {
-				fmt.Fprintf(w, "untracked: %s (symlink target unavailable: %v)\n", name, err)
+				_, _ = fmt.Fprintf(w, "untracked: %s (symlink target unavailable: %v)\n", name, err) // evidenceWriter is in-memory and cannot fail.
 				continue
 			}
-			fmt.Fprintf(w, "untracked: %s (symlink -> %s)\n", name, target)
+			_, _ = fmt.Fprintf(w, "untracked: %s (symlink -> %s)\n", name, target) // evidenceWriter is in-memory and cannot fail.
 			continue
 		}
 		if !info.Mode().IsRegular() {
@@ -1181,18 +1185,20 @@ func capturePartial(x *Repair) {
 			case os.ModeDevice:
 				typeName = "device"
 			}
-			fmt.Fprintf(w, "untracked: %s (%s)\n", name, typeName)
+			_, _ = fmt.Fprintf(w, "untracked: %s (%s)\n", name, typeName) // evidenceWriter is in-memory and cannot fail.
 			continue
 		}
 		f, err := os.Open(path)
 		if err != nil {
-			fmt.Fprintf(w, "untracked: %s (read failed: %v)\n", name, err)
+			_, _ = fmt.Fprintf(w, "untracked: %s (read failed: %v)\n", name, err) // evidenceWriter is in-memory and cannot fail.
 			continue
 		}
-		fmt.Fprintf(w, "untracked: %s (%d bytes)\n", name, info.Size())
-		io.Copy(w, f)
-		f.Close()
-		w.Write([]byte("\n"))
+		_, _ = fmt.Fprintf(w, "untracked: %s (%d bytes)\n", name, info.Size()) // evidenceWriter is in-memory and cannot fail.
+		if _, err := io.Copy(w, f); err != nil {
+			_, _ = fmt.Fprintf(w, "untracked: %s (read incomplete: %v)\n", name, err)
+		}
+		_ = f.Close()                // Closing a read-only file is best-effort after capture.
+		_, _ = w.Write([]byte("\n")) // evidenceWriter is in-memory and cannot fail.
 	}
 	x.PartialDigest, x.PartialBytes = hex.EncodeToString(w.hash.Sum(nil)), w.total
 	x.Partial = strings.ToValidUTF8(string(w.text), "")

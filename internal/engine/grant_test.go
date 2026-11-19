@@ -22,8 +22,12 @@ func grantPlan(grants ...map[string]any) func(root string) map[string]any {
 func TestGateRepairAddingFileNeedsExplicitRunGrant(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "auto", 6, grantPlan())
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-extra"), []byte("fixtures/added.txt"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-extra"), []byte("fixtures/added.txt"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	submitted := runOf(t, v)["candidate"]
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
@@ -79,8 +83,12 @@ func TestTrustedConfigurationGrantIsScoped(t *testing.T) {
 	t.Parallel()
 	grant := map[string]any{"authority": "delete-files", "stages": []string{"test"}, "paths": []string{"README.md"}, "reason": "the test repair may remove the readme"}
 	bin, repo, home, root, v := authorityFixture(t, "auto", 6, grantPlan(grant))
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-remove"), []byte("README.md"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-remove"), []byte("README.md"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	done := waitPipeline(t, bin, repo, home)
 	run := runOf(t, done)
@@ -105,8 +113,12 @@ func TestGrantOutsideScopeStillParks(t *testing.T) {
 	t.Parallel()
 	grant := map[string]any{"authority": "delete-files", "stages": []string{"lint"}, "paths": []string{"README.md"}, "reason": "lint only"}
 	bin, repo, home, root, v := authorityFixture(t, "auto", 6, grantPlan(grant))
-	os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-	os.WriteFile(filepath.Join(root, "fix-remove"), []byte("README.md"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "fix-remove"), []byte("README.md"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 	parked := waitPipeline(t, bin, repo, home)
 	if d := decisionIn(t, parked); d["category"] != "destructive" || d["status"] != "open" {
@@ -117,7 +129,9 @@ func TestGrantOutsideScopeStillParks(t *testing.T) {
 func TestInvalidGrantConfigurationIsRefused(t *testing.T) {
 	root := t.TempDir()
 	home := filepath.Join(root, "state")
-	os.MkdirAll(home, 0700)
+	if err := os.MkdirAll(home, 0700); err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("GREENHOUSE_HOME", home)
 	writeExecutable(t, filepath.Join(root, "gate"), gateCommand)
 	repo := filepath.Join(root, "repo")

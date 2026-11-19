@@ -46,6 +46,12 @@ func waitStatus(t *testing.T, bin, repo, home string, want ...string) map[string
 	return nil
 }
 
+func TestAgentArgsRejectsInvalidDisabledMCPJSON(t *testing.T) {
+	if _, err := agentArgs(ReviewerConfig{Backend: BackendCodex, DisabledMCP: "{"}, "reviewer", "{}", "prompt"); err == nil {
+		t.Fatal("invalid disabled MCP configuration must not produce runnable arguments")
+	}
+}
+
 func TestAutoResumeWithBackoffSurvivesDaemonRestart(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")
@@ -184,7 +190,9 @@ func TestQuotaResetTimeDecidesAutomaticResume(t *testing.T) {
 			t.Parallel()
 			for _, reset := range []string{"3600", "-120"} {
 				bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
-				os.WriteFile(filepath.Join(root, "reset-in-"+c.backend), []byte(reset), 0600)
+				if err := os.WriteFile(filepath.Join(root, "reset-in-"+c.backend), []byte(reset), 0600); err != nil {
+					t.Fatal(err)
+				}
 				setModes(t, root, c.backend, "quota", "success")
 				mutate(t, bin, repo, home, v, "review", "review-reset-"+reset, nil)
 				if reset == "3600" {

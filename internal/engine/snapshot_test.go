@@ -18,13 +18,23 @@ func TestReviewerReceivesReadOnlyFullTreeSnapshot(t *testing.T) {
 		git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", msg)
 		return strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	}
-	os.MkdirAll(filepath.Join(repo, "lib"), 0700)
-	os.WriteFile(filepath.Join(repo, "lib", "context.go"), []byte("package lib\n\nfunc Helper() int { return 7 }\n"), 0600)
-	os.WriteFile(filepath.Join(repo, "run.sh"), []byte("#!/bin/sh\n"), 0700)
+	if err := os.MkdirAll(filepath.Join(repo, "lib"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "lib", "context.go"), []byte("package lib\n\nfunc Helper() int { return 7 }\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "run.sh"), []byte("#!/bin/sh\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
 	target := commit("base")
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	candidate := commit("candidate")
-	os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("not committed\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "untracked.txt"), []byte("not committed\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	installFake(t, home, `
 cwd=os.getcwd()
@@ -62,7 +72,9 @@ json.dump(probe,open(root+'/snapshot-probe.json','w'))
 	if err != nil {
 		t.Fatalf("reviewer probe missing: %v; run %v", err, runOf(t, done))
 	}
-	json.Unmarshal(raw, &probe)
+	if err := json.Unmarshal(raw, &probe); err != nil {
+		t.Fatal(err)
+	}
 	want := map[string]string{"lib/context.go": "0o444", "run.sh": "0o555", "sample.txt": "0o444"}
 	if len(probe.Files) != len(want) {
 		t.Fatalf("snapshot files = %v, want exactly %v", probe.Files, want)
@@ -93,7 +105,9 @@ json.dump(probe,open(root+'/snapshot-probe.json','w'))
 			Contract string
 		} `json:"input"`
 	}
-	json.Unmarshal(captured, &c)
+	if err := json.Unmarshal(captured, &c); err != nil {
+		t.Fatal(err)
+	}
 	if c.Input.Snapshot["Digest"] != snapshot["digest"] || c.Input.Snapshot["Tree"] != tree || strings.Contains(c.Input.Contract, "No repository checkout") || !strings.Contains(c.Input.Contract, "read-only snapshot") {
 		t.Fatalf("reviewer input must bind the snapshot digest: %v / %s", c.Input.Snapshot, c.Input.Contract)
 	}

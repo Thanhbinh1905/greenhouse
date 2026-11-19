@@ -35,12 +35,12 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			t.Cleanup(func() { os.RemoveAll(home) })
+			t.Cleanup(func() { _ = os.RemoveAll(home) })
 			listener, err := net.Listen("unix", filepath.Join(home, "socket"))
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer listener.Close()
+			defer func() { _ = listener.Close() }() // Best-effort test cleanup.
 			ctx, stop := context.WithTimeout(context.Background(), 15*time.Second)
 			defer stop()
 			watch, response, requested, sent := make(chan struct{}), make(chan struct{}), make(chan struct{}), make(chan struct{})
@@ -51,7 +51,7 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 						return
 					}
 					go func() {
-						defer conn.Close()
+						defer func() { _ = conn.Close() }() // Best-effort test cleanup.
 						var q engine.Request
 						if json.NewDecoder(conn).Decode(&q) != nil {
 							return
@@ -83,7 +83,7 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 						}
 						v.Version = q.Version
 						v.Protocol = &engine.Protocol{Version: v.Version, Min: 1, Max: engine.MaxVersion}
-						json.NewEncoder(conn).Encode(v)
+						_ = json.NewEncoder(conn).Encode(v) // Best-effort HTTP test response.
 						if q.Op == "watch" {
 							close(sent)
 						}
@@ -104,7 +104,7 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 			if err = cmd.Start(); err != nil {
 				t.Fatal(err)
 			}
-			defer func() { stop(); cmd.Wait() }()
+			defer func() { stop(); _ = cmd.Wait() }()
 			screens := make(chan string)
 			go func() {
 				reader := bufio.NewReader(output)
@@ -136,7 +136,9 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 				}
 			}
 			next()
-			io.WriteString(input, "x\n")
+			if _, err := io.WriteString(input, "x\n"); err != nil {
+				t.Fatal(err)
+			}
 			select {
 			case <-requested:
 			case <-ctx.Done():
@@ -161,8 +163,10 @@ func TestLineDelayedIntermediateDaemonResponse(t *testing.T) {
 			for !strings.Contains(page, "cancelled") {
 				page = next()
 			}
-			io.WriteString(input, "q\n")
-			input.Close()
+			if _, err := io.WriteString(input, "q\n"); err != nil {
+				t.Fatal(err)
+			}
+			_ = input.Close() // Best-effort test cleanup.
 			if err := cmd.Wait(); err != nil {
 				t.Fatal(err)
 			}

@@ -13,9 +13,11 @@ func TestClaudeFixerMustReportExactModelAndTools(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			bin, repo, home, root, v := pipelineWith(t, "pi", "fixture/model", "claude", "claude-haiku-5-5")
-			os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600)
-			os.WriteFile(filepath.Join(root, "edit-claude"), []byte("repaired\n"), 0600)
-			os.WriteFile(filepath.Join(root, name), []byte(file), 0600)
+			for path, content := range map[string]string{"require-test": "repaired\n", "edit-claude": "repaired\n", name: file} {
+				if err := os.WriteFile(filepath.Join(root, path), []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
 			submitted := runOf(t, v)["submitted"].(map[string]any)["head"]
 			mutate(t, bin, repo, home, v, "pipeline", "start", nil)
 			v = waitPipeline(t, bin, repo, home)
@@ -33,8 +35,12 @@ func TestConflictFixerMustReportExactModel(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, _, submitted, parked := conflictFixture(t)
 	installAgentCLIs(t, home)
-	os.WriteFile(filepath.Join(root, "edit-claude"), []byte("resolved\n"), 0600)
-	os.WriteFile(filepath.Join(root, "report-model-claude"), []byte("claude-opus-5-5"), 0600)
+	if err := os.WriteFile(filepath.Join(root, "edit-claude"), []byte("resolved\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "report-model-claude"), []byte("claude-opus-5-5"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	v := mutate(t, bin, repo, home, parked, "apply", "claude-fixer", map[string]any{"mode": "auto", "preset": "full", "limit": 6, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "claude", "fixer_model": "claude-haiku-5-5"})
 	if v["outcome"] != "ok" {
 		t.Fatalf("apply: %v", v)

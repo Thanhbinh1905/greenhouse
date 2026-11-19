@@ -83,12 +83,12 @@ type Repair struct {
 	LeaseEpoch       int                  `json:"lease_epoch,omitempty"`
 }
 
-func executableDigest(path string) (string, error) {
+func executableDigest(path string) (digest string, retErr error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return "", err
 	}
-	defer f.Close()
+	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 	h := sha256.New()
 	n, err := io.Copy(h, io.LimitReader(f, 1<<30))
 	if err != nil {
@@ -257,7 +257,11 @@ func admitRepair(s *Store, r *Run, q Request) error {
 		}
 	}
 	id := opaque()
-	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: Digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: fixerArgsFor(cfg, fixerPrompt), Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready", Run: r.ID}
+	args, e := fixerArgsFor(cfg, fixerPrompt)
+	if e != nil {
+		return e
+	}
+	x := &Repair{ID: id, Actor: "client", Binding: repairBinding(r, cfg, fixerDigest, checkDigests, selected), Config: cfg, ConfigDigest: Digest(cfg), ExecutableDigest: fixerDigest, CheckDigests: checkDigests, Selected: selected, Budget: "repair", Paths: names, Args: args, Rules: identity, Worktree: filepath.Join(h, "candidates", id), Ref: "refs/heads/greenhouse/" + id, Base: r.Candidate, Status: "admitted", Writer: "not-started", Handback: "not-ready", Run: r.ID}
 	x.Authorities = deferralAuthorities(r)
 	x.Input, _ = json.Marshal(struct {
 		Intent, Head, Diff string
@@ -430,7 +434,11 @@ func executeRepair(ctx context.Context, x *Repair, source repository.Identity, c
 		fail("failed", err)
 		return
 	}
-	defer unlock()
+	defer func() {
+		if err := unlock(); err != nil {
+			fail("failed", err)
+		}
+	}()
 	current, e := repository.Resolve(source.Worktree)
 	if e != nil || current != source {
 		fail("refused", errors.New("source moved before writer start"))
@@ -480,7 +488,7 @@ func executeRepair(ctx context.Context, x *Repair, source repository.Identity, c
 		fail("failed", e)
 		return
 	}
-	defer os.RemoveAll(agentDir)
+	defer func() { _ = os.RemoveAll(agentDir) }() // Best-effort cleanup of the temporary agent directory.
 	x.Writer = "unknown"
 	x.Status = "fixing"
 	if !save() {
@@ -694,7 +702,7 @@ func authorizeHandback(r *Run) error {
 	return nil
 }
 
-func handback(r *Run, trusted string) error {
+func handback(r *Run, trusted string) (retErr error) {
 	x := r.Repair
 	if x == nil {
 		return errors.New("no repair candidate")
@@ -725,7 +733,7 @@ func handback(r *Run, trusted string) error {
 	if e != nil {
 		return e
 	}
-	defer unlock()
+	defer func() { retErr = errors.Join(retErr, unlock()) }()
 	if e := gitHazards(r.Submitted.Worktree); e != nil {
 		return e
 	}

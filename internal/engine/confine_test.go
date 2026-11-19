@@ -56,14 +56,20 @@ func fixtureProviderPort(t *testing.T, home string) int {
 	var cfg TrustedProviderConfig
 	b, _ := os.ReadFile(filepath.Join(home, "providers.json"))
 	var fields map[string]json.RawMessage
-	json.Unmarshal(b, &fields)
-	json.Unmarshal(fields["providers"], &cfg.Providers)
+	if err := json.Unmarshal(b, &fields); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(fields["providers"], &cfg.Providers); err != nil {
+		t.Fatal(err)
+	}
 	u, err := url.Parse(cfg.Providers["fixture"].BaseURL)
 	if err != nil {
 		t.Fatal(err)
 	}
 	var port int
-	json.Unmarshal([]byte(u.Port()), &port)
+	if err := json.Unmarshal([]byte(u.Port()), &port); err != nil {
+		t.Fatal(err)
+	}
 	return port
 }
 
@@ -73,14 +79,14 @@ func probePorts(t *testing.T, home string) (string, string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { blocked.Close() })
+	t.Cleanup(func() { _ = blocked.Close() }) // Best-effort test cleanup.
 	go func() {
 		for {
 			c, err := blocked.Accept()
 			if err != nil {
 				return
 			}
-			c.Close()
+			_ = c.Close() // Best-effort test cleanup.
 		}
 	}()
 	allowed := fixtureProviderPort(t, home)
@@ -149,7 +155,9 @@ func readProbe(t *testing.T, path string) map[string]string {
 	if err != nil {
 		t.Fatalf("agent probe missing: %v", err)
 	}
-	json.Unmarshal(b, &out)
+	if err := json.Unmarshal(b, &out); err != nil {
+		t.Fatal(err)
+	}
 	return out
 }
 
@@ -160,7 +168,9 @@ func TestReviewerAndFixerRunUnderOSConfinement(t *testing.T) {
 	}
 	bin, repo, home, v := prepareFixture(t)
 	probe := filepath.Join(filepath.Dir(home), "probe")
-	os.Mkdir(probe, 0700)
+	if err := os.Mkdir(probe, 0700); err != nil {
+		t.Fatal(err)
+	}
 	blocked, allowed := probePorts(t, home)
 	confinedFakes(t, repo, home, probe, blocked, allowed, "")
 	v = reprepare(t, bin, repo, home, v, func(q string) map[string]any { return axi(t, bin, repo, home, q) })
@@ -235,7 +245,7 @@ func init() {
 	}
 	runtime.LockOSThread()
 	var args []string
-	json.Unmarshal([]byte(argv), &args)
+	_ = json.Unmarshal([]byte(argv), &args) // The test helper sets this environment variable from a valid JSON argv list.
 	filter := []struct {
 		code   uint16
 		jt, jf uint8
@@ -256,7 +266,7 @@ func init() {
 	if _, _, e := syscall.RawSyscall(syscall.SYS_PRCTL, 22, 2, uintptr(unsafe.Pointer(&prog))); e != 0 {
 		os.Exit(91)
 	}
-	syscall.Exec(args[0], args, os.Environ())
+	_ = syscall.Exec(args[0], args, os.Environ()) // Returning means exec failed; the following exit reports the failure.
 	os.Exit(92)
 }
 
@@ -286,7 +296,9 @@ func TestUnavailableConfinementIsVisibleAndSnapshotTamperingDetected(t *testing.
 		t.Fatal(current)
 	}
 	probe := filepath.Join(filepath.Dir(home), "probe")
-	os.Mkdir(probe, 0700)
+	if err := os.Mkdir(probe, 0700); err != nil {
+		t.Fatal(err)
+	}
 	blocked, allowed := probePorts(t, home)
 	confinedFakes(t, repo, home, probe, blocked, allowed, `
 os.chmod(cwd,0o755)
@@ -324,14 +336,22 @@ func TestVendorReviewersCannotWriteBackendConfig(t *testing.T) {
 		t.Run(c.backend, func(t *testing.T) {
 			bin, repo, home, root, v := onePassWith(t, c.backend, c.model)
 			probe := filepath.Join(root, "probe")
-			os.Mkdir(probe, 0700)
+			if err := os.Mkdir(probe, 0700); err != nil {
+				t.Fatal(err)
+			}
 			for _, dir := range []string{".claude", ".claude/hooks", ".codex"} {
-				os.MkdirAll(filepath.Join(root, dir), 0700)
+				if err := os.MkdirAll(filepath.Join(root, dir), 0700); err != nil {
+					t.Fatal(err)
+				}
 			}
 			for _, file := range []string{".claude/.credentials.json", ".claude.json", ".claude/settings.json", ".codex/auth.json", ".codex/config.toml"} {
-				os.WriteFile(filepath.Join(root, file), []byte("{}"), 0600)
+				if err := os.WriteFile(filepath.Join(root, file), []byte("{}"), 0600); err != nil {
+					t.Fatal(err)
+				}
 			}
-			os.WriteFile(filepath.Join(root, "probe-"+c.backend), []byte(probe), 0600)
+			if err := os.WriteFile(filepath.Join(root, "probe-"+c.backend), []byte(probe), 0600); err != nil {
+				t.Fatal(err)
+			}
 			writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{
 				"claude":   map[string]any{"executable": filepath.Join(root, "fake-claude")},
 				"codex":    map[string]any{"executable": filepath.Join(root, "fake-codex"), "provider": map[string]any{"base_url": "http://127.0.0.1:1/v1"}},

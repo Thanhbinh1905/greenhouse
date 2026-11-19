@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 )
@@ -10,7 +11,7 @@ func writeFileDurably(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(f.Name())
+	defer func() { _ = os.Remove(f.Name()) }() // Best-effort cleanup if the atomic write fails.
 	if _, err = f.Write(data); err == nil {
 		err = f.Sync()
 	}
@@ -27,6 +28,7 @@ func writeFileDurably(path string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	defer d.Close()
-	return d.Sync()
+	syncErr := d.Sync()
+	closeErr := d.Close()
+	return errors.Join(syncErr, closeErr)
 }

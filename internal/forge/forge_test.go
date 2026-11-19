@@ -13,23 +13,26 @@ func TestGitHubForgeReusesExistingPullRequest(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/repos/acme/garden/pulls/7" && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"number":7,"head":{"sha":"head-a"}}`))
+			_, _ = w.Write([]byte(`{"number":7,"head":{"sha":"head-a"}}`))
 			return
 		}
 		if r.URL.Path == "/repos/acme/garden/commits/head-a/check-runs" {
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"check_runs":[{"name":"trusted-ci","status":"completed","conclusion":"success","head_sha":"head-a"},{"name":"optional-lint","status":"completed","conclusion":"success","head_sha":"head-a"}]}`))
+			_, _ = w.Write([]byte(`{"check_runs":[{"name":"trusted-ci","status":"completed","conclusion":"success","head_sha":"head-a"},{"name":"optional-lint","status":"completed","conclusion":"success","head_sha":"head-a"}]}`))
 			return
 		}
 		if r.URL.Path == "/repos/acme/garden/pulls/7" && r.Method == http.MethodPatch {
 			updates++
 			var body map[string]string
-			json.NewDecoder(r.Body).Decode(&body)
+			if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+				t.Errorf("decode request: %v", err)
+				return
+			}
 			if body["title"] != "title" || body["base"] != "main" {
 				t.Errorf("unexpected PR update: %v", body)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-a"}}`))
+			_, _ = w.Write([]byte(`{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-a"}}`))
 			return
 		}
 		if r.URL.Path != "/repos/acme/garden/pulls" {
@@ -38,7 +41,7 @@ func TestGitHubForgeReusesExistingPullRequest(t *testing.T) {
 		switch r.Method {
 		case http.MethodGet:
 			w.Header().Set("Content-Type", "application/json")
-			w.Write([]byte(`[{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-a"}}]`))
+			_, _ = w.Write([]byte(`[{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-a"}}]`))
 		case http.MethodPost:
 			creates++
 			t.Fatal("existing PR should not be recreated")
@@ -68,10 +71,13 @@ func TestGitHubForgeUpdatesTextWhenCandidateHeadMoves(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/acme/garden/pulls":
-			json.NewEncoder(w).Encode([]map[string]any{{"number": 7, "html_url": "https://example.invalid/acme/garden/pull/7", "title": "feat: old", "body": "Validated head: `head-a`", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": "head-a"}}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"number": 7, "html_url": "https://example.invalid/acme/garden/pull/7", "title": "feat: old", "body": "Validated head: `head-a`", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": "head-a"}}})
 		case r.Method == http.MethodPatch && r.URL.Path == "/repos/acme/garden/pulls/7":
-			json.NewDecoder(r.Body).Decode(&patched)
-			w.Write([]byte(`{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-b"}}`))
+			if err := json.NewDecoder(r.Body).Decode(&patched); err != nil {
+				t.Errorf("decode request: %v", err)
+				return
+			}
+			_, _ = w.Write([]byte(`{"number":7,"html_url":"https://example.invalid/acme/garden/pull/7","head":{"sha":"head-b"}}`))
 		default:
 			t.Errorf("unexpected forge request %s %s", r.Method, r.URL.Path)
 			http.NotFound(w, r)
@@ -89,7 +95,7 @@ func TestGitHubForgeReconcilesAlreadyExactPullRequestWithoutMutation(t *testing.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodGet && r.URL.Path == "/repos/acme/garden/pulls" {
-			json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": "title", "body": "body", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": "head-a"}}})
+			_ = json.NewEncoder(w).Encode([]map[string]any{{"number": 12, "html_url": "https://example.invalid/acme/garden/pull/12", "title": "title", "body": "body", "base": map[string]string{"ref": "main"}, "head": map[string]string{"sha": "head-a"}}})
 			return
 		}
 		if r.Method == http.MethodPatch || r.Method == http.MethodPost {
@@ -120,10 +126,10 @@ func TestGitHubForgeMissingAndStaleChecksDoNotPass(t *testing.T) {
 					if tc.name == "pr-head-moved" {
 						sha = "head-b"
 					}
-					w.Write([]byte(`{"number":4,"head":{"sha":"` + sha + `"}}`))
+					_, _ = w.Write([]byte(`{"number":4,"head":{"sha":"` + sha + `"}}`))
 					return
 				}
-				w.Write([]byte(tc.payload))
+				_, _ = w.Write([]byte(tc.payload))
 			}))
 			defer server.Close()
 			passed, reason, err := (GitHubForge{BaseURL: server.URL, Client: server.Client()}).Checks(context.Background(), "acme", "garden", "head-a", 4, []string{"trusted-ci"})

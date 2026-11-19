@@ -60,7 +60,7 @@ func dispatch(sub string, args []string) error {
 		if err != nil {
 			return err
 		}
-		defer os.RemoveAll(work)
+		defer func() { _ = os.RemoveAll(work) }() // Best-effort temporary workspace cleanup.
 		for _, k := range c.Cases {
 			if err := checkFixCase(k, filepath.Join(work, k.ID)); err != nil {
 				return fmt.Errorf("%s: %w", k.ID, err)

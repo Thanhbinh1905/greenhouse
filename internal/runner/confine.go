@@ -155,7 +155,7 @@ func init() {
 	}
 }
 
-func enforce(policy Policy) error {
+func enforce(policy Policy) (retErr error) {
 	handled := handledFS(policy.ABI)
 	attr := make([]byte, 8, 16)
 	binary.LittleEndian.PutUint64(attr, handled)
@@ -166,13 +166,13 @@ func enforce(policy Policy) error {
 	if errno != 0 {
 		return fmt.Errorf("create ruleset: %v", errno)
 	}
-	defer syscall.Close(int(fd))
-	addPath := func(path string, access uint64) error {
+	defer func() { retErr = errors.Join(retErr, syscall.Close(int(fd))) }()
+	addPath := func(path string, access uint64) (retErr error) {
 		target, err := syscall.Open(path, oPath|syscall.O_CLOEXEC, 0)
 		if err != nil {
 			return fmt.Errorf("%s: %v", path, err)
 		}
-		defer syscall.Close(target)
+		defer func() { retErr = errors.Join(retErr, syscall.Close(target)) }()
 		rule := make([]byte, 12)
 		binary.LittleEndian.PutUint64(rule, access)
 		binary.LittleEndian.PutUint32(rule[8:], uint32(target))

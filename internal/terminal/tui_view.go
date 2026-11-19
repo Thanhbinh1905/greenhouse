@@ -728,7 +728,7 @@ func (m *tuiModel) settingsView(w, room int) []string {
 			mark, source = "*", "draft, was "+orDefault(fieldValue(current, i))
 		}
 		row := fmt.Sprintf("%s %-15s %s", mark, name, value)
-		if w >= 70 && !(m.editing && i == m.cursor) {
+		if w >= 70 && (!m.editing || i != m.cursor) {
 			row = fmt.Sprintf("%-40s %s", fit(row, 40), styleDim.Render(source))
 		}
 		rows = append(rows, row)

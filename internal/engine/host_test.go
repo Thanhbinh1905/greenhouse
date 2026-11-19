@@ -16,7 +16,9 @@ func TestHostFailedReviewDiagnostics(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			bin, repo, home := fixture(t)
 			target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-			os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+			if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
 			git(t, repo, "add", "sample.txt")
 			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 			installFake(t, home, c.mode)
@@ -75,7 +77,9 @@ func TestHostReviewMetadataSurvivesPersistence(t *testing.T) {
 func TestHostCodexDefaultModelUsage(t *testing.T) {
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	installFake(t, home, "")
@@ -105,7 +109,9 @@ func TestHostCodexDefaultModelUsage(t *testing.T) {
 func TestHostRecoveredStructuredError(t *testing.T) {
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	installFake(t, home, `print(json.dumps({'type':'message_end','message':{'role':'assistant','stopReason':'error','errorMessage':'404 model not found','content':[]}}))`)
@@ -125,7 +131,9 @@ func TestHostRecoveredStructuredError(t *testing.T) {
 func TestHostRecoveredCodexError(t *testing.T) {
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	installFake(t, home, "")

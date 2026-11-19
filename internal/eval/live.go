@@ -530,7 +530,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(work)
+	defer func() { _ = os.RemoveAll(work) }() // Best-effort temporary workspace cleanup.
 	bin := filepath.Join(work, "greenhouse")
 	if _, err := command(root, nil, "go", "build", "-o", bin, "./cmd/greenhouse"); err != nil {
 		return nil, err
