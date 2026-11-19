@@ -1002,14 +1002,14 @@ func handleRequest(s *Store, q Request) Response {
 	v := view(s, r)
 	b, _ := json.Marshal(v)
 	var frozen Response
-	_ = json.Unmarshal(b, &frozen) // This JSON was marshaled from a Response value.
+	_ = json.Unmarshal(b, &frozen)
 	s.Receipts[q.Action] = Receipt{d, frozen}
 	return v
 }
 func frozen(v Response) Response {
 	b, _ := json.Marshal(v)
 	var out Response
-	_ = json.Unmarshal(b, &out) // This JSON was marshaled from a Response value.
+	_ = json.Unmarshal(b, &out)
 	return out
 }
 func acceptRepairProgress(r *Run, id string, value Repair) bool {
@@ -1049,7 +1049,11 @@ func Daemon(h string) (retErr error) {
 	if e != nil {
 		return e
 	}
-	defer func() { retErr = errors.Join(retErr, l.Close()) }()
+	defer func() {
+		if err := l.Close(); err != nil && !errors.Is(err, net.ErrClosed) {
+			retErr = errors.Join(retErr, err)
+		}
+	}()
 	pid, _ := json.Marshal(os.Getpid())
 	if e = os.WriteFile(filepath.Join(h, "pid"), pid, 0600); e != nil {
 		return e
@@ -1515,7 +1519,7 @@ func Daemon(h string) (retErr error) {
 				}
 				b, _ := json.Marshal(v)
 				var frozen Response
-				_ = json.Unmarshal(b, &frozen) // This JSON was marshaled from a Response value.
+				_ = json.Unmarshal(b, &frozen)
 				s.Receipts[q.Action] = Receipt{Digest: Digest(q), Result: frozen}
 			}
 			if q.Version >= 2 && !v.replayed {

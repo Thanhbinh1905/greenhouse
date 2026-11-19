@@ -55,7 +55,7 @@ type RepositoryStatus struct {
 func settingValues(s Settings) map[string]string {
 	b, _ := json.Marshal(s)
 	var fields map[string]json.RawMessage
-	_ = json.Unmarshal(b, &fields) // JSON produced from Settings always decodes into an object.
+	_ = json.Unmarshal(b, &fields)
 	out := map[string]string{}
 	for _, name := range settingFields {
 		out[name] = string(fields[name])

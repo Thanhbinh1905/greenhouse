@@ -12,6 +12,18 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
+func TestAppendLogReportsOpenError(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "state")
+	t.Setenv("GREENHOUSE_HOME", home)
+	path := filepath.Join(home, "logs", "run", "test.log")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendLog("run", "test", []byte("output")); err == nil {
+		t.Fatal("appendLog must return an error when its log file cannot be opened")
+	}
+}
+
 func TestLogsPreserveCursorsAndRedactSplitSecrets(t *testing.T) {
 	t.Setenv("GREENHOUSE_HOME", filepath.Join(t.TempDir(), "state"))
 	t.Setenv("WORKER_SECRET", "a-secret-across-chunks")

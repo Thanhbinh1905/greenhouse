@@ -8,9 +8,61 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 )
+
+func TestDaemonSignalShutdownReturnsNil(t *testing.T) {
+	const helperEnv = "GREENHOUSE_TEST_SIGNAL_SHUTDOWN"
+	if os.Getenv(helperEnv) != "1" {
+		root, err := os.MkdirTemp(os.TempDir(), "sig-")
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(root) }) // Best-effort cleanup of the temporary daemon home.
+		home := filepath.Join(root, "state")
+		if err := os.MkdirAll(home, 0700); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(os.Args[0], "-test.run=^TestDaemonSignalShutdownReturnsNil$")
+		cmd.Env = append(os.Environ(), helperEnv+"=1", "GREENHOUSE_HOME="+home, "GORACE=atexit_sleep_ms=0")
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("signal shutdown failed: %v: %s", err, output)
+		}
+		return
+	}
+
+	home := os.Getenv("GREENHOUSE_HOME")
+	done := make(chan error, 1)
+	go func() { done <- Daemon(home) }()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if _, err := Send(home, Request{Version: 1, Op: "attach"}, false); err == nil {
+			break
+		}
+		select {
+		case err := <-done:
+			t.Fatalf("daemon stopped before becoming ready: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("daemon did not become ready")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("daemon returned an error after signal shutdown: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("daemon did not stop after SIGTERM")
+	}
+}
 
 func TestCLIHelp(t *testing.T) {
 	bin, repo, home := fixture(t)

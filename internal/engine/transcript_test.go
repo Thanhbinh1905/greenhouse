@@ -7,6 +7,18 @@ import (
 	"testing"
 )
 
+func TestAppendTranscriptReportsOpenError(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "state")
+	t.Setenv("GREENHOUSE_HOME", home)
+	path := filepath.Join(home, "transcripts", "run.log")
+	if err := os.MkdirAll(path, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := appendTranscript("run", "reviewer", nil, nil); err == nil {
+		t.Fatal("appendTranscript must return an error when its transcript file cannot be opened")
+	}
+}
+
 func TestTranscriptLogIsRedactedBoundedAndViewable(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)

@@ -34,21 +34,21 @@ func validStep(step string) bool {
 
 func appendLog(run, step string, data []byte) (retErr error) {
 	if run == "" || !validStep(step) {
-		return
+		return nil
 	}
 	h, err := Home()
 	if err != nil {
-		return
+		return err
 	}
 	logLock.Lock()
 	defer logLock.Unlock()
 	dir := filepath.Join(h, "logs", run)
-	if os.MkdirAll(dir, 0700) != nil {
-		return
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return err
 	}
 	f, err := os.OpenFile(filepath.Join(dir, step+".log"), os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
 	if err != nil {
-		return
+		return err
 	}
 	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 	info, err := f.Stat()

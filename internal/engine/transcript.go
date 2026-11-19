@@ -68,7 +68,7 @@ func appendTranscript(run, header string, stdout, stderr []byte) (retErr error) 
 	}
 	f, err := os.OpenFile(filepath.Join(h, transcriptName(run)), os.O_WRONLY|os.O_APPEND|os.O_CREATE, 0600)
 	if err != nil {
-		return
+		return err
 	}
 	defer func() { retErr = errors.Join(retErr, f.Close()) }()
 	info, err := f.Stat()
