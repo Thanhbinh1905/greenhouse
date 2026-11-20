@@ -191,6 +191,9 @@ func TestCrossHostReplacementSafety(t *testing.T) {
 			before := Digest(r)
 			for _, op := range []string{"attach", "new"} {
 				want := "run is owned by host posse task-a; this client may only attach and inspect"
+				if op == "attach" && (r.Status == "recovery-required" || r.Status == "unknown-outcome" || r.Recovery != nil) {
+					want = "run cannot progress; use recover and resolve its recovery options before starting or attaching to another run"
+				}
 				if got := hostRefusal(r, Request{Op: op, Host: requester}); got != want {
 					t.Fatalf("%s refusal = %q, want %q", op, got, want)
 				}

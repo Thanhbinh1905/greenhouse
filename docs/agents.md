@@ -8,6 +8,8 @@ Install and sign in to the agent with that CLI's own instructions. Greenhouse us
 
 Greenhouse discovers `pi`, `claude` and `codex` on PATH and ignores relative PATH entries. Prepare binds the selected executable. Model and agent choices stay ordinary Greenhouse preferences.
 
+An auto-started daemon inherits the environment of the client that starts it. Put the agent executables on that client's PATH. Later clients cannot change the running daemon's PATH; stop the daemon after its work settles and start it from a client with the required PATH.
+
 Prepare resolves a Git branch or commit to an immutable full commit ID. It records the candidate, the intent and the committed diff. A settings change does not rewrite old evidence.
 
 Review needs current rules and a matching prepared agent configuration. An explicit model must match the model the agent reports. An empty selection records the reported identity of the native default.

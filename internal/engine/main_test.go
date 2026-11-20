@@ -64,6 +64,43 @@ func TestDaemonSignalShutdownReturnsNil(t *testing.T) {
 	}
 }
 
+func TestAutoStartedDaemonDoesNotInheritClientWorkingDirectory(t *testing.T) {
+	bin, repo, home := fixture(t)
+	clientDir := filepath.Join(filepath.Dir(home), "client")
+	if err := os.Mkdir(clientDir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(bin, "axi")
+	cmd.Dir = clientDir
+	cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+home)
+	cmd.Stdin = strings.NewReader(`{"version":1,"op":"attach","path":"` + repo + `"}`)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("attach from temporary client directory: %v: %s", err, output)
+	}
+	pidBytes, err := os.ReadFile(filepath.Join(home, "pid"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pid := strings.TrimSpace(string(pidBytes))
+	cwd, err := os.Readlink(filepath.Join("/proc", pid, "cwd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cwd == clientDir {
+		t.Fatalf("auto-started daemon retained client cwd %s", cwd)
+	}
+	entries, err := os.ReadDir(filepath.Join("/proc", pid, "fd"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range entries {
+		target, err := os.Readlink(filepath.Join("/proc", pid, "fd", entry.Name()))
+		if err == nil && (target == clientDir || strings.HasPrefix(target, clientDir+string(os.PathSeparator))) {
+			t.Fatalf("auto-started daemon holds fd %s under client directory: %s", entry.Name(), target)
+		}
+	}
+}
+
 func TestCLIHelp(t *testing.T) {
 	bin, repo, home := fixture(t)
 	for _, args := range [][]string{{"--help"}, {"-h"}, {"axi", "--help"}, {"axi", "-h"}} {

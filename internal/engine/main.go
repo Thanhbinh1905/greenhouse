@@ -771,6 +771,9 @@ func handleRequest(s *Store, q Request) Response {
 		r.Status = "cancelling"
 		r.Token = opaque()
 	} else if q.Op != "recover" && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required") {
+		if r.Status == "recovery-required" {
+			return fail("run cannot progress; use recover and resolve its recovery options before retrying", r)
+		}
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
 	paused := r
@@ -1598,6 +1601,7 @@ func Send(h string, q Request, spawn bool) (v Response, retErr error) {
 			return v, x
 		}
 		cmd := exec.Command(exe, "daemon")
+		cmd.Dir = string(filepath.Separator)
 		cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+h)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if x = cmd.Start(); x != nil {
