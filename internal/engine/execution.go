@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -77,6 +78,8 @@ type Execution struct {
 	Rules        InputIdentity            `json:"rules"`
 	Diff         string                   `json:"diff"`
 	Paths        []string                 `json:"paths"`
+	Generated    []GeneratedPath          `json:"generated,omitempty"`
+	Uncovered    []UncoveredPath          `json:"uncovered,omitempty"`
 	Snapshot     *repository.TreeSnapshot `json:"snapshot,omitempty"`
 	Responses    []ResolutionResponse     `json:"responses,omitempty"`
 	Confinement  *runner.Confinement      `json:"confinement,omitempty"`
@@ -223,11 +226,38 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	files, e := candidateFiles(r.Submitted.Worktree, r.Candidate, names, string(diff))
+	generated, e := trustedGenerated(r.Submitted.Worktree, r.Target, base, r.Candidate, names)
 	if e != nil {
 		return nil, e
 	}
+	files, uncovered, e := candidateFiles(r.Submitted.Worktree, r.Candidate, names, string(diff), generated)
+	if e != nil {
+		return nil, e
+	}
+	covered := slices.DeleteFunc(slices.Clone(names), func(name string) bool {
+		return slices.ContainsFunc(uncovered, func(u UncoveredPath) bool { return u.Path == name })
+	})
 	files = hunkContext(files, changedRanges(string(diff)))
+	if files, e = generatorFiles(r.Submitted.Worktree, r.Candidate, generated, files); e != nil {
+		return nil, e
+	}
+	reviewedDiff := string(diff)
+	for _, g := range generated {
+		if reviewedDiff, e = omitDiffHunks(r.Submitted.Worktree, base, r.Candidate, reviewedDiff, g.Path, "[generated: hunks omitted; see Generated]"); e != nil {
+			return nil, e
+		}
+	}
+	for _, u := range uncovered {
+		if reviewedDiff, e = omitDiffHunks(r.Submitted.Worktree, base, r.Candidate, reviewedDiff, u.Path, "[uncovered: hunks omitted; see Uncovered]"); e != nil {
+			return nil, e
+		}
+	}
+	if len(generated) > 0 {
+		contract += generatedContract
+	}
+	if len(uncovered) > 0 {
+		contract += uncoveredContract
+	}
 	snap, e := repository.SnapshotOf(r.Submitted.Worktree, r.Candidate)
 	if e != nil {
 		return nil, e
@@ -250,16 +280,18 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		Paths                      []string
 		Files                      []reviewFile
 		Submodules                 []reviewSubmodule `json:",omitempty"`
+		Generated                  []GeneratedPath   `json:",omitempty"`
+		Uncovered                  []UncoveredPath   `json:",omitempty"`
 		Snapshot                   struct{ Commit, Tree, Digest string }
 		Responses                  []reviewResponse `json:",omitempty"`
 		Criteria                   json.RawMessage
 		Contract                   string
-	}{r.Intent, r.Target, r.Candidate, string(diff), budget, changedRanges(string(diff)), names, files, submodules, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, rules.Bytes(), contract}
-	input, e := renderReviewInput(bundle, string(diff), files, submodules)
+	}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, changedRanges(string(diff)), covered, files, submodules, generated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, rules.Bytes(), contract}
+	input, e := renderReviewInput(bundle, reviewedDiff, files, submodules)
 	if e != nil {
 		return nil, e
 	}
-	if e := checkReviewInput(input, string(diff), files, rules.Bytes(), checked, submodules); e != nil {
+	if e := checkReviewInput(input, reviewedDiff, files, rules.Bytes(), checked, submodules); e != nil {
 		return nil, e
 	}
 	current, err := repository.Resolve(r.Submitted.Worktree)
@@ -271,7 +303,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	return &Execution{ReviewBudget: budget, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{ReviewBudget: budget, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -313,15 +345,16 @@ func renderReviewInput(bundle any, diff string, files []reviewFile, modules []re
 	return input.Bytes(), nil
 }
 
-func candidateFiles(worktree, candidate string, names []string, diff string) ([]reviewFile, error) {
+func candidateFiles(worktree, candidate string, names []string, diff string, generated []GeneratedPath) ([]reviewFile, []UncoveredPath, error) {
 	listing, e := repository.Read(worktree, append([]string{"--literal-pathspecs", "ls-tree", "-r", "-z", "--full-tree", candidate, "--"}, names...)...)
 	if e != nil {
-		return nil, errors.New("cannot list candidate files")
+		return nil, nil, errors.New("cannot list candidate files")
 	}
 	ranges := changedRanges(diff)
 	var files []reviewFile
+	var uncovered []UncoveredPath
 	for _, windowsOnly := range []bool{false, true} {
-		files = []reviewFile{}
+		files, uncovered = []reviewFile{}, nil
 		total := 0
 		for _, entry := range strings.Split(string(listing), "\x00") {
 			meta, path, ok := strings.Cut(entry, "\t")
@@ -337,15 +370,19 @@ func candidateFiles(worktree, candidate string, names []string, diff string) ([]
 			}
 			if e != nil {
 				if errors.Is(e, repository.ErrReadLimit) {
-					return nil, &reviewRefusal{"review_input_too_large", fmt.Sprintf("review input too large: candidate blob %s exceeds %d bytes; diff=%d; files, criteria, responses and total not yet measured", path, reviewBlobLimit, len(diff))}
+					return nil, nil, &reviewRefusal{"review_input_too_large", fmt.Sprintf("review input too large: candidate blob %s exceeds %d bytes; diff=%d; files, criteria, responses and total not yet measured", path, reviewBlobLimit, len(diff))}
 				}
-				return nil, errors.New("cannot read candidate file")
+				return nil, nil, errors.New("cannot read candidate file")
 			}
 			var lines string
-			if !windowsOnly {
+			isGenerated := slices.ContainsFunc(generated, func(g GeneratedPath) bool { return g.Path == path })
+			switch {
+			case isGenerated:
+				lines = boundedExcerpt(numberedWindow(content, ranges[path], generatedExcerptLimit), generatedExcerptLimit)
+			case !windowsOnly:
 				lines = numberedWindow(content, nil, reviewFileLimit)
 			}
-			if windowsOnly || len(lines) > reviewFileLimit {
+			if !isGenerated && (windowsOnly || len(lines) > reviewFileLimit) {
 				spans := ranges[path]
 				if spans == nil {
 					spans = [][2]int{}
@@ -353,7 +390,8 @@ func candidateFiles(worktree, candidate string, names []string, diff string) ([]
 				lines = numberedWindow(content, spans, reviewFileLimit)
 			}
 			if len(lines) > reviewFileLimit {
-				return nil, &reviewRefusal{"review_input_too_large", fmt.Sprintf("review input too large: hunk windows for %s exceed %d bytes; diff=%d files>=%d; criteria, responses and total not yet measured", path, reviewFileLimit, len(diff), len(lines))}
+				uncovered = append(uncovered, UncoveredPath{path, fmt.Sprintf("hunk windows exceed %d bytes", reviewFileLimit)})
+				continue
 			}
 			files = append(files, reviewFile{path, lines})
 			total += len(lines)
@@ -362,12 +400,12 @@ func candidateFiles(worktree, candidate string, names []string, diff string) ([]
 			}
 		}
 		if total <= reviewFilesLimit {
-			return files, nil
+			return files, uncovered, nil
 		}
 	}
 	err := inputTooLarge(len(diff), reviewFilesLimit+1, 0, 0, 0, files)
 	err.Message += "; aggregate Files exceeds 768 KiB; criteria, responses and total not yet measured"
-	return nil, err
+	return nil, nil, err
 }
 
 func reviewerArgs(model string) []string {
@@ -511,6 +549,9 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err erro
 	if result.Verdict == "findings" {
 		status = "outstanding-findings"
 	}
+	if result.Verdict == "partial" {
+		status = "partial-review"
+	}
 	if result.Verdict == "inconclusive" {
 		status = "inconclusive"
 	}
@@ -565,6 +606,9 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 	expected := map[string]bool{}
 	for _, p := range x.Paths {
 		expected[p] = true
+	}
+	for _, u := range x.Uncovered {
+		delete(expected, u.Path)
 	}
 	got := map[string]bool{}
 	for _, p := range v.Coverage {
@@ -656,6 +700,9 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 	}
 	if (v.Verdict == "clean" && len(v.Findings) != 0) || (v.Verdict == "findings" && len(v.Findings) == 0) {
 		return nil, errors.New("inconsistent verdict")
+	}
+	if v.Verdict == "clean" && len(x.Uncovered) > 0 {
+		v.Verdict = "partial"
 	}
 	reported := provider + "/" + model
 	if x.Config.Backend == BackendClaude || x.Config.Backend == BackendCodex {

@@ -23,6 +23,8 @@ type HostResult struct {
 	Current     bool              `json:"current"`
 	Findings    []Finding         `json:"findings"`
 	Resolutions []ResolutionCheck `json:"resolutions,omitempty"`
+	Generated   []GeneratedPath   `json:"generated,omitempty"`
+	Uncovered   []UncoveredPath   `json:"uncovered,omitempty"`
 	Rules       string            `json:"rules_digest"`
 	Config      string            `json:"config_digest"`
 	Input       string            `json:"input_digest"`
@@ -182,6 +184,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	}
 	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, Head: r.Candidate, Target: r.Target, ReviewBase: x.ReviewBase, ReviewBaseReason: x.ReviewBaseReason, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
 	v.Reason, v.Diagnostic, v.Usage = x.Reason, x.Diagnostic, x.Usage
+	v.Generated, v.Uncovered = x.Generated, x.Uncovered
 	if v.Model == "" {
 		v.Model = x.ReportedModel
 		if v.Model == "" && x.Result != nil {

@@ -19,6 +19,8 @@ A request outside the supported range is refused with `unsupported protocol vers
 
 Host review responses keep protocol version 2. The optional `review.responses` request field and `host_result.resolutions` response field are additive. Omitting responses preserves existing behavior. An older daemon refuses the unknown request field; existing protocol-2 clients continue to work. See [host responses](embedding.md#responses-to-earlier-findings).
 
+Generated and uncovered review paths keep protocol version 2. The `generated` and `uncovered` fields of `run.review` and `host_result` are additive. The review status `partial-review` and the verdict `partial` are new values; a client that does not know them must treat them as not clean. See [generated and uncovered paths](embedding.md#generated-and-uncovered-paths).
+
 Rules within one version:
 
 - Changes are additive: new response fields, new operations, and new optional request fields whose omission keeps the old behavior.
