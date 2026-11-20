@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -55,6 +56,31 @@ func findingContent(worktree, head, path string) ([]byte, error) {
 type reviewSubmodule struct {
 	Path, Old, New, Log, Diff string
 	Truncated                 bool
+}
+
+type reviewSubmoduleMetadata struct {
+	Path, Old, New string
+	Truncated      bool
+}
+
+func reviewSubmoduleHeaders(modules []reviewSubmodule) []reviewSubmoduleMetadata {
+	headers := make([]reviewSubmoduleMetadata, len(modules))
+	for i, module := range modules {
+		headers[i] = reviewSubmoduleMetadata{module.Path, module.Old, module.New, module.Truncated}
+	}
+	return headers
+}
+
+func renderReviewSubmodules(modules []reviewSubmodule) []byte {
+	var rendered bytes.Buffer
+	if len(modules) == 0 {
+		return nil
+	}
+	rendered.WriteString("\nSubmodules:\n")
+	for _, module := range modules {
+		fmt.Fprintf(&rendered, "--- %s ---\nOld: %s\nNew: %s\nTruncated: %t\nLog:\n%s\nDiff:\n%s\n", module.Path, module.Old, module.New, module.Truncated, module.Log, module.Diff)
+	}
+	return rendered.Bytes()
 }
 
 func refuseBinaryDiff(diff string) error {
@@ -233,10 +259,13 @@ func numberedWindow(content []byte, spans [][2]int, limit int) string {
 
 func inputTooLarge(diff, files, criteria, responses, total int, paths []reviewFile) *reviewRefusal {
 	ranked := append([]reviewFile(nil), paths...)
-	sort.Slice(ranked, func(i, j int) bool { return len(ranked[i].Lines) > len(ranked[j].Lines) })
+	fileBytes := func(file reviewFile) int {
+		return len("--- ") + len(file.Path) + len(" ---\n") + len(file.Lines)
+	}
+	sort.Slice(ranked, func(i, j int) bool { return fileBytes(ranked[i]) > fileBytes(ranked[j]) })
 	var largest []string
 	for _, file := range ranked[:min(5, len(ranked))] {
-		largest = append(largest, fmt.Sprintf("%s=%d", file.Path, len(file.Lines)))
+		largest = append(largest, fmt.Sprintf("%s=%d", file.Path, fileBytes(file)))
 	}
 	return &reviewRefusal{"review_input_too_large", fmt.Sprintf("review input too large: diff=%d files=%d criteria=%d responses=%d total=%d; largest paths: %s", diff, files, criteria, responses, total, strings.Join(largest, ", "))}
 }
@@ -245,13 +274,19 @@ func checkReviewInput(input []byte, diff string, files []reviewFile, criteria []
 	if len(input) <= reviewBundleLimit {
 		return nil
 	}
-	diffBytes, _ := json.Marshal(diff)
-	fileBytes, _ := json.Marshal(files)
-	responseBytes, _ := json.Marshal(responses)
-	moduleBytes, _ := json.Marshal(modules)
-	err := inputTooLarge(len(diffBytes), len(fileBytes), len(criteria), len(responseBytes), len(input), files)
+	fileBytes := 0
+	for _, file := range files {
+		fileBytes += len("--- ") + len(file.Path) + len(" ---\n") + len(file.Lines)
+	}
+	responseBytes := 0
+	if len(responses) > 0 {
+		encoded, _ := json.Marshal(responses)
+		responseBytes = len(encoded)
+	}
+	err := inputTooLarge(len(diff), fileBytes, len(bytes.TrimSpace(criteria)), responseBytes, len(input), files)
 	if len(modules) > 0 {
-		err.Message += fmt.Sprintf("; submodules=%d", len(moduleBytes))
+		metadataBytes, _ := json.Marshal(reviewSubmoduleHeaders(modules))
+		err.Message += fmt.Sprintf("; submodules=%d", len(renderReviewSubmodules(modules))+len(metadataBytes))
 	}
 	return err
 }

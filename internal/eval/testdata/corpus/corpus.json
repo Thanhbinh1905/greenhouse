@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "revision": 5,
+  "revision": 6,
   "cases": [
     "bug-offbyone-window",
     "bug-nil-before-error",
@@ -8,6 +8,7 @@
     "bug-race-word-count",
     "bug-sql-injection",
     "bug-empty-average",
+    "noise-json-raw-string",
     "bug-shell-injection",
     "bug-pagination-bounds",
     "bug-unlock-missing",

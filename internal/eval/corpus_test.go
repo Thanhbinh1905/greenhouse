@@ -274,7 +274,7 @@ func TestCorpusCheckOutputAndRevision(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Revision != 5 || c.Digest == "9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b" {
+	if c.Revision != 6 || c.Digest == "9d7a6b7eeee9a092ccedc52a37724bed453e2e400c640cfd9f42fb293440c80b" {
 		t.Fatalf("revision/digest = %d %s", c.Revision, c.Digest)
 	}
 	v, err := CheckCoverage(c)
@@ -282,7 +282,7 @@ func TestCorpusCheckOutputAndRevision(t *testing.T) {
 		t.Fatal(err)
 	}
 	out := coverageText(v)
-	for _, want := range []string{"total=166", "source: local=60 public=60 synthetic=46", "split: holdout=59 tune=107", "language: Go=74 Python=47 Rust=22 TypeScript=22"} {
+	for _, want := range []string{"total=167", "source: local=60 public=60 synthetic=47", "split: holdout=60 tune=107", "language: Go=75 Python=47 Rust=22 TypeScript=22"} {
 		if !strings.Contains(out, want) {
 			t.Fatalf("missing %q in %s", want, out)
 		}
@@ -309,13 +309,13 @@ func TestRescoreCLISelectsHoldoutOffline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Config.Split != "holdout" || len(got.Cases) != 59 || got.CostUSD != 59 || got.LatencyMillis.Total != 118 {
+	if got.Config.Split != "holdout" || len(got.Cases) != 60 || got.CostUSD != 60 || got.LatencyMillis.Total != 120 {
 		t.Fatalf("selected report = %+v", got.Config)
 	}
 	if err := rescoreReport(got, c, nil); err != nil {
 		t.Fatal(err)
 	}
-	if got.Summary.BySplit["holdout"] != 59 || got.Summary.BySplit["tune"] != 0 {
+	if got.Summary.BySplit["holdout"] != 60 || got.Summary.BySplit["tune"] != 0 {
 		t.Fatalf("summary=%+v", got.Summary)
 	}
 	if err := dispatch("rescore", []string{"-corpus", filepath.Join("testdata", "corpus"), "-split", "invalid", dir}); err == nil {

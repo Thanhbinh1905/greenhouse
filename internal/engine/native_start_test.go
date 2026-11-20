@@ -39,7 +39,7 @@ if os.environ.get('EXPECT_NATIVE_READ_ONLY'):
 lock=os.path.join(os.environ['PI_CODING_AGENT_DIR'],'auth.json.lock')
 os.mkdir(lock);os.rmdir(lock)
 assert 'PI_CODING_AGENT_SESSION_ID' not in os.environ
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'native','model':'default','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))

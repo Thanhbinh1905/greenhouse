@@ -50,7 +50,7 @@ def verdict():
     if os.path.exists(root+'/edit-'+backend):
         with open('sample.txt','w') as f: f.write(open(root+'/edit-'+backend).read())
         return 'done'
-    b=json.loads(stdin)
+    b=json.loads(stdin.split('\n\nDiff:\n',1)[0])
     v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
     if 'documentation' in b['Contract']:
         v['documentation']={'status':'not-needed','reason':'fixture changes no public behavior'}

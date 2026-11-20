@@ -289,17 +289,38 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 }
 
 func reviewFinalizationInput(x *Execution, first reviewOutcome, nearLimit bool) ([]byte, error) {
-	var original map[string]any
-	if err := json.Unmarshal(x.Input, &original); err != nil {
+	original, evidence, ok := strings.Cut(string(x.Input), "\n\nDiff:\n")
+	if !ok {
+		var legacy map[string]json.RawMessage
+		if err := json.Unmarshal(x.Input, &legacy); err != nil {
+			return nil, errors.New("decode original review input: missing diff section")
+		}
+		encoded, _ := json.Marshal(legacy)
+		original = string(encoded)
+	}
+	var metadata map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(original), &metadata); err != nil {
 		return nil, fmt.Errorf("decode original review input: %w", err)
 	}
-	input := map[string]any{"Head": original["Head"], "Paths": original["Paths"], "Contract": original["Contract"]}
+	input := map[string]any{}
+	for _, key := range []string{"Head", "Paths", "Contract"} {
+		if value := metadata[key]; len(value) > 0 {
+			var decoded any
+			if err := json.Unmarshal(value, &decoded); err != nil {
+				return nil, fmt.Errorf("decode original review %s: %w", key, err)
+			}
+			input[key] = decoded
+		}
+	}
 	input["Controller"] = "Return your verdict now. Stop exploring. No further tools or investigation. Use the evidence already gathered in this session and the supplied changed hunks. Return only the required JSON object."
 	if !nearLimit {
 		input["PreviousAnswerError"] = safeMessage(first.Answer.Diagnostic)
 	}
-	data, err := json.Marshal(input)
-	return data, err
+	header, err := json.Marshal(input)
+	if err != nil {
+		return nil, err
+	}
+	return append(append(header, []byte("\n\nDiff:\n")...), []byte(evidence)...), nil
 }
 
 func hunkContext(files []reviewFile, ranges map[string][][2]int) []reviewFile {

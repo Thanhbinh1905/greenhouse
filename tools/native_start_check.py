@@ -31,8 +31,8 @@ assert '--model' not in sys.argv
 if '--list-models' in sys.argv:
  print('provider model\\nnative default')
  sys.exit(0)
-assert '--no-session' in sys.argv
-b=json.load(sys.stdin)
+assert '--session' in sys.argv
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'native','model':'default','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))
