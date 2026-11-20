@@ -598,7 +598,8 @@ func continuePipeline(s *Store, r *Run, stage string) string {
 	p.Failed, p.Reason = "", ""
 	if err := admitPipeline(s, r); err != nil {
 		p.Status, p.Failed, p.Reason = "needs-decision", stage, "recovered; continue refused: "+err.Error()
-		r.Status, r.Stage = "needs-decision", stage
+		r.Status = "needs-decision"
+		setRunStage(r, stage)
 		return "; continue refused: " + err.Error()
 	}
 	return ""
@@ -634,7 +635,8 @@ func rerunAfterDiscard(s *Store, r *Run, actor string) error {
 		x.Resumed = statErr == nil
 		r.PriorRepairs = append(r.PriorRepairs, old)
 		r.Repair = x
-		r.Status, r.Stage = "writing", "selected-repair"
+		r.Status = "writing"
+		setRunStage(r, "selected-repair")
 		r.Events = append(r.Events, Event{Kind: "rerun", Actor: actor, Reason: "rerun selected repair after recovery discard"})
 		return nil
 	}

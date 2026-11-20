@@ -398,7 +398,8 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 	case "rethink":
 		resume = false
 		p.Status, r.Status = "rethought", "rethought"
-		next = &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: r.Submitted, Candidate: r.Submitted.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], r.Configs[len(r.Configs)-1].Settings, "rethink of "+r.ID)}, Events: []Event{{Kind: "rethink", Actor: a.Actor, Reason: "successor of " + r.ID + ": " + a.Reason, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed}}}
+		next = &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: r.Submitted, Candidate: r.Submitted.Head, Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], r.Configs[len(r.Configs)-1].Settings, "rethink of "+r.ID)}, Events: []Event{{Kind: "rethink", Actor: a.Actor, Reason: "successor of " + r.ID + ": " + a.Reason, Used: r.ReviewUsed + r.RepairUsed, Review: r.ReviewUsed, Repair: r.RepairUsed}}}
+		setRunStage(next, "intent")
 		r.Successor = next.ID
 		s.Runs[next.ID] = next
 		s.Slots[Digest([]string{r.Submitted.Repository, r.Submitted.Worktree})] = next.ID
@@ -416,7 +417,8 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 	r.Events = append(r.Events, Event{Kind: "decision", Actor: a.Actor, Reason: a.Choice + ": " + a.Reason})
 	if resume {
 		p.Status, p.Failed, p.Reason = "running", "", ""
-		r.Status, r.Stage = "running", "pipeline"
+		r.Status = "running"
+		setRunStage(r, "pipeline")
 	}
 	r.Token = opaque()
 	return next, nil

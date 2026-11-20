@@ -53,7 +53,7 @@ func hostPrepare(t *testing.T, bin, repo, home string, v map[string]any, target,
 	for _, step := range []struct {
 		op    string
 		extra map[string]any
-	}{{"apply", map[string]any{"settings": settings}}, {"prepare", map[string]any{"intent": "Review sample change", "target": target}}, {"resolve-rules", nil}} {
+	}{{"apply", map[string]any{"settings": settings}}, {"resolve-rules", nil}, {"prepare", map[string]any{"intent": "Review sample change", "target": target}}} {
 		v = hostCall(t, bin, repo, home, v, step.op, step.op+suffix, step.extra)
 		if v["outcome"] != "ok" {
 			t.Fatalf("host %s: %v", step.op, v)
@@ -76,6 +76,14 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
 	v := axi(t, bin, repo, home, string(b))
+	attachedRun := runOf(t, v)
+	attachedStartedAt := attachedRun["started_at"]
+	if _, err := time.Parse(time.RFC3339, attachedStartedAt.(string)); err != nil {
+		t.Fatalf("attached run started_at is invalid: %v", attachedRun)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, attachedRun["stage_started_at"].(string)); err != nil {
+		t.Fatalf("attached stage_started_at is invalid: %v", attachedRun)
+	}
 	invocations := installFake(t, home, "")
 	writeFixerConfig(t, home, FixerConfig{Executable: filepath.Join(filepath.Dir(home), "fake-pi"), Model: "fixture/model", Name: "Fixer", Email: "fixer@example.invalid", Checks: [][]string{{"/bin/true"}}})
 	host, _ := runOf(t, v)["host"].(map[string]any)
@@ -99,6 +107,18 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	if running, _ := first["host_result"].(map[string]any); first["outcome"] != "ok" || running["status"] != "running" || running["current"] != true {
 		t.Fatalf("a running review of the unchanged head is current: %v", first)
 	}
+	activeRun := runOf(t, first)
+	activeStageStartedAt, ok := activeRun["stage_started_at"].(string)
+	if !ok {
+		t.Fatalf("running host stage_started_at is missing: %v", activeRun)
+	}
+	if _, err := time.Parse(time.RFC3339Nano, activeStageStartedAt); err != nil || activeRun["stage"] == attachedRun["stage"] || activeStageStartedAt == attachedRun["stage_started_at"] {
+		t.Fatalf("review stage timestamp did not advance: %v", activeRun)
+	}
+	inspectedActive := axi(t, bin, repo, home, fmt.Sprintf(`{"version":2,"op":"inspect","run_id":%q,"host":{"name":"fake-host","id":"task-7","metadata":{"worker":"author-1"}}}`, first["run_id"]))
+	if runOf(t, inspectedActive)["started_at"] != attachedStartedAt || runOf(t, inspectedActive)["stage_started_at"] != activeStageStartedAt {
+		t.Fatalf("inspect by run_id changed active timestamps: attach=%v inspect=%v", first, inspectedActive)
+	}
 	if replay := hostCall(t, bin, repo, home, v, "review", "review-1", map[string]any{"grant": "round-1"}); replay["token"] != first["token"] {
 		t.Fatalf("replay must return the receipt: %v", replay)
 	}
@@ -108,6 +128,19 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	findings, _ := result["findings"].([]any)
 	if result["grant"] != "round-1" || result["head"] != head || result["target"] != target || result["review_base"] != target || result["verdict"] != "findings" || result["current"] != true || len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
 		t.Fatalf("host result must carry exact-head findings and verdict: %v", v)
+	}
+	run := runOf(t, v)
+	if _, err := time.Parse(time.RFC3339, run["started_at"].(string)); err != nil {
+		t.Fatalf("run started_at is not RFC 3339: %v", run["started_at"])
+	}
+	finishedStageStartedAt := run["stage_started_at"].(string)
+	if _, err := time.Parse(time.RFC3339Nano, finishedStageStartedAt); err != nil || finishedStageStartedAt != activeStageStartedAt || run["stage"] != activeRun["stage"] {
+		t.Fatalf("unchanged review stage timestamp changed after completion: %v", run)
+	}
+	inspected := axi(t, bin, repo, home, fmt.Sprintf(`{"version":2,"op":"inspect","run_id":%q,"host":{"name":"fake-host","id":"task-7","metadata":{"worker":"author-1"}}}`, v["run_id"]))
+	inspectedRun := runOf(t, inspected)
+	if inspected["outcome"] != "ok" || inspectedRun["started_at"] != attachedStartedAt || inspectedRun["stage_started_at"] != finishedStageStartedAt {
+		t.Fatalf("inspect by run_id changed host timestamps: attach=%v inspect=%v", v, inspected)
 	}
 	term := startTerminal(t, bin, repo, home)
 	term.waitFor(t, "Host: fake-host task-7 | grant round-1 | findings | current true")

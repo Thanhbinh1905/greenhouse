@@ -67,7 +67,7 @@ func recordAttempt(r *Run, a Attempt) {
 func pauseRun(r *Run, stage, kind, role string, config ReviewerConfig, execution string, f *BackendFailure, now time.Time) {
 	r.Pause = &BackendPause{Stage: stage, Kind: kind, Role: role, Backend: BackendOf(config), Model: config.Model, Reason: f.Reason, Message: f.Message, ResetAt: f.ResetAt, At: now.UTC().Format(time.RFC3339), Execution: execution}
 	r.Status = "paused"
-	r.Stage = stage
+	setRunStage(r, stage)
 	r.Token = opaque()
 	r.Events = append(r.Events, Event{Kind: "paused", Actor: "daemon", Reason: "backend " + f.Reason + ": " + f.Message})
 	planAutoResume(r, now)
@@ -216,7 +216,8 @@ func resumeRun(s *Store, r *Run, actor string) error {
 		var x *Repair
 		if x, err = readmitRepair(r, *r.Repair); err == nil {
 			r.Repair = x
-			r.Status, r.Stage = "writing", "selected-repair"
+			r.Status = "writing"
+			setRunStage(r, "selected-repair")
 		}
 	default:
 		err = errors.New("unsupported paused stage")
@@ -337,7 +338,8 @@ func resumePipeline(s *Store, r *Run, p *BackendPause) error {
 	pipe.Active = &Step{ID: x.ID, Stage: st.Name, Kind: p.Kind}
 	st.Status, st.Reason = "running", ""
 	pipe.Status, pipe.Failed, pipe.Reason = "running", "", ""
-	r.Status, r.Stage = "running", st.Name+"-repair"
+	r.Status = "running"
+	setRunStage(r, st.Name+"-repair")
 	return nil
 }
 
@@ -486,7 +488,8 @@ func rerunStage(s *Store, r *Run, actor string) error {
 
 func restartRun(s *Store, r *Run, source repository.Identity, actor string) *Run {
 	settings := r.Configs[len(r.Configs)-1].Settings
-	next := &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}, Host: r.Host, HostGrants: r.HostGrants}
+	next := &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}, Host: r.Host, HostGrants: r.HostGrants}
+	setRunStage(next, "intent")
 	if r.Intent != "" && r.Target != "" {
 		if err := prepareRun(s, next, r.Intent, r.Target); err != nil {
 			next.Events = append(next.Events, Event{Kind: "prepare-needed", Actor: "daemon", Reason: err.Error()})
@@ -555,7 +558,8 @@ func rerunRepair(r *Run, actor string) error {
 	x.Resumed = statErr == nil
 	r.PriorRepairs = append(r.PriorRepairs, *old)
 	r.Repair = x
-	r.Status, r.Stage = "writing", "selected-repair"
+	r.Status = "writing"
+	setRunStage(r, "selected-repair")
 	r.Events = append(r.Events, Event{Kind: "rerun", Actor: actor, Reason: "rerun selected repair after " + old.Status})
 	return nil
 }

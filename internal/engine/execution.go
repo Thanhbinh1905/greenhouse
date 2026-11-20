@@ -147,7 +147,7 @@ func admitReviewAgain(r *Run) error {
 	}
 	x.Grant = grant
 	r.Review = x
-	r.Stage = "independent-review"
+	setRunStage(r, "independent-review")
 	r.Status = "running"
 	r.ReviewUsed++
 	r.Token = opaque()
