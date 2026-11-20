@@ -82,9 +82,13 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
             os.write(master, (command + "\n").encode())
             prompt()
         end = time.monotonic() + 15
-        while time.monotonic() < end and inspect()["run"]["status"] == "running":
-            time.sleep(0.05)
         result = inspect()
+        while time.monotonic() < end and result["run"]["review_used"] == 0:
+            time.sleep(0.05)
+            result = inspect()
+        while time.monotonic() < end and result["run"]["status"] == "running":
+            time.sleep(0.05)
+            result = inspect()
         assert result["run"]["status"] == "clean-review", result
         for command in ["i", "s", "ask one-pass 4", "", "", "", "", "unslop,no-comments", "", "a"]:
             os.write(master, (command + "\n").encode())

@@ -6,6 +6,17 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 )
 
+func TestWatchCommitRefusalIsTransient(t *testing.T) {
+	v := engine.Response{Outcome: "refused", Error: "storage commit in progress; retry the read request"}
+	if !transientWatchRefusal(v) {
+		t.Fatal("commit-in-progress refusal must keep the follower connected")
+	}
+	v.Error = "unsupported protocol version"
+	if transientWatchRefusal(v) {
+		t.Fatal("permanent watch refusal must not be retried as transient")
+	}
+}
+
 func TestTerminalIgnoresOlderSnapshots(t *testing.T) {
 	current := engine.Response{Stream: "s1", Sequence: 7}
 	order := snapshotOrder{}

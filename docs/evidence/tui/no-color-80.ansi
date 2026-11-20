@@ -1,17 +1,17 @@
-Greenhouse · feature @ 9764a62                           one-pass · auto · live
+Greenhouse · feature @ 882b0e2                           one-pass · auto · live
 ───────────────────────────────────────────────────────────────────────────────
  ✓ Agent    Pi · native default model
  ✓ Intent   Fix q and x
- ✓ Target   c4d7496
+ ✓ Target   5c98330
  ✓ Rules    unslop, no-comments · used by the review
  ! Review   fixed not independently rereviewed · budget 2 of 4 used
 
- Findings · 2 outstanding findings
+ Findings · 1 outstanding finding
    P1 sample.txt:1  Sample text is wrong for the stated intent
-   P2 sample.txt:1  Sample text gives no context for readers
 
  The fix is on your branch now. Start a new run to review it independently.
  The fix passed its checks but was not independently reviewed again.
+ Repository pipeline plan: none (no .greenhouse-pipeline.json).
 
 
 

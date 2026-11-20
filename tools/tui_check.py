@@ -35,8 +35,7 @@ else:
     if open('sample.txt').read()!='repaired\\n':
         out['verdict']='findings'
         out['findings']=[
-            {'id':'wrong-text','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample text is wrong for the stated intent','action':'Rewrite the line to say repaired','rule':'','head':b['Head']},
-            {'id':'missing-context','priority':'P2','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample text gives no context for readers','action':'Add one line of context','rule':'','head':b['Head']}]
+            {'id':'wrong-text','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample text is wrong for the stated intent','action':'Rewrite the line to say repaired','rule':'','head':b['Head']}]
     if b.get('Responses'):
         out['resolutions']=[{'finding':r['finding'],'check':'confirmed','reason':'the line now reads repaired'} for r in b['Responses']]
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'native','model':'default','stopReason':'stop','content':[{'type':'text','text':json.dumps(out)}]}}))
@@ -291,7 +290,7 @@ def findings_repair(width):
         state = review_started(s)
         assert state["run"]["intent"] == "Fix q and x", "the edited intent must win over a collected one"
         f.settle()
-        s.capture("findings arrive without a keypress", r"Findings · 2 outstanding findings", r"Open findings", absent=[r"[0-9a-f]{64}"])
+        s.capture("findings arrive without a keypress", r"Findings · 1 outstanding finding", r"Open findings", absent=[r"[0-9a-f]{64}"])
         s.keys("Enter")
         s.capture("findings list with selection", r"\[ \] P1 sample.txt:1", r"0 selected")
         s.keys("Enter")
