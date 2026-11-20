@@ -278,7 +278,7 @@ func admitRepair(s *Store, r *Run, q Request) error {
 	r.Repair = x
 	r.RepairUsed++
 	r.Status = "writing"
-	r.Stage = "selected-repair"
+	setRunStage(r, "selected-repair")
 	r.Token = opaque()
 	return nil
 }

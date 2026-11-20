@@ -480,7 +480,8 @@ func admitPipeline(s *Store, r *Run) error {
 		return errors.New("trusted pipeline plan or command changed since preparation; prepare again")
 	}
 	p.Status, p.Failed, p.Reason = "running", "", ""
-	r.Status, r.Stage = "running", "pipeline"
+	r.Status = "running"
+	setRunStage(r, "pipeline")
 	r.Events = append(r.Events, Event{Kind: "pipeline", Actor: "client", Reason: "start or continue full pipeline"})
 	return nil
 }
@@ -489,7 +490,8 @@ func park(r *Run, st *StageResult, status, reason string) {
 	p := r.Pipeline
 	st.Status, st.Reason, st.Inputs, st.Candidate = status, reason, stageInputs(r, st.Name), r.Candidate
 	p.Status, p.Failed, p.Reason = "needs-decision", st.Name, reason
-	r.Status, r.Stage = "needs-decision", st.Name
+	r.Status = "needs-decision"
+	setRunStage(r, st.Name)
 	r.Token = opaque()
 }
 
@@ -652,7 +654,7 @@ func advancePipeline(s *Store, r *Run) *Step {
 		}
 		st.Runs++
 		p.Active = step
-		r.Stage = st.Name
+		setRunStage(r, st.Name)
 		r.Token = opaque()
 		return step
 	}
@@ -660,7 +662,8 @@ func advancePipeline(s *Store, r *Run) *Step {
 	if p.stage("push").Status == "not-applicable" && p.stage("pr").Status == "not-applicable" && p.stage("ci").Status == "not-applicable" {
 		readyStatus = "locally-ready"
 	}
-	p.Status, r.Status, r.Stage = readyStatus, readyStatus, readyStatus
+	p.Status, r.Status = readyStatus, readyStatus
+	setRunStage(r, readyStatus)
 	p.Outcome = "clean-pass"
 	for _, x := range p.Repairs {
 		if x.Head != "" {
@@ -799,7 +802,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 		kind = "conflict"
 	}
 	p.Active = &Step{ID: id, Stage: st.Name, Kind: kind}
-	r.Stage = st.Name + "-repair"
+	setRunStage(r, st.Name+"-repair")
 	r.Token = opaque()
 	r.Events = append(r.Events, Event{Kind: "gate-repair", Actor: x.Actor, Reason: st.Name + ": " + st.Reason, Used: used})
 	return nil
@@ -864,7 +867,8 @@ func completeStep(r *Run, o stepOutcome) error {
 			return nil
 		}
 		if retry, exhausted := deliveryRetry(st); retry {
-			r.Status, r.Stage, p.Status = "running", st.Name, "running"
+			r.Status, p.Status = "running", "running"
+			setRunStage(r, st.Name)
 			return nil
 		} else if exhausted {
 			park(r, st, "needs-decision", st.Reason+"; transport retry limit exhausted; no fixer dispatched")
