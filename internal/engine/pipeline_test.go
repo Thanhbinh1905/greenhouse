@@ -887,8 +887,21 @@ func TestUnknownCommandOutcomeHoldsRecoveryCustody(t *testing.T) {
 		t.Fatal("unknown command outcome allowed New run")
 	}
 	stopDaemon(t, home)
-	if runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"attach"}`))["status"] != "recovery-required" {
+	recoveredAttach := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+	if runOf(t, recoveredAttach)["status"] != "recovery-required" {
 		t.Fatal("restart dropped the recovery hazard")
+	}
+	hostAttach := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"posse","id":"task-retry"}}`)
+	if hostAttach["outcome"] != "refused" || !strings.Contains(hostAttach["error"].(string), "recover") {
+		t.Fatalf("host attach returned a run that cannot progress: %v", hostAttach)
+	}
+	hostReview := axi(t, bin, repo, home, `{"version":2,"op":"review","action_id":"host-review-after-interruption","host":{"name":"posse","id":"task-retry"}}`)
+	if hostReview["outcome"] != "refused" || !strings.Contains(hostReview["error"].(string), "recover") {
+		t.Fatalf("host review did not direct recovery: %v", hostReview)
+	}
+	deadReview := mutate(t, bin, repo, home, recoveredAttach, "review", "review-after-interruption", nil)
+	if deadReview["outcome"] != "refused" || !strings.Contains(deadReview["error"].(string), "recover") {
+		t.Fatalf("review request did not direct recovery: %v", deadReview)
 	}
 	linked := filepath.Join(filepath.Dir(repo), "linked")
 	git(t, repo, "worktree", "add", "-q", "-f", linked, "main")

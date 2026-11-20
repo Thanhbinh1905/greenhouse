@@ -66,7 +66,7 @@ Run `greenhouse stop` to stop the daemon for the current `GREENHOUSE_HOME`.
 - It reports when no daemon is running.
 - For older daemons, it refuses and gives [manual shutdown instructions](compatibility.md#negotiation). It never signals the process.
 
-SIGTERM handling stays available. A client exit does not shut down the daemon.
+SIGTERM handling stays available. A client exit does not shut down the daemon. Send SIGTERM only after daemon work settles. SIGTERM does not drain running executors; an interrupted daemon run requires explicit recovery after restart.
 
 ## Transcript logs
 

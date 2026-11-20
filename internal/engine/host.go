@@ -71,6 +71,9 @@ func HostLabel(h *Host) string {
 }
 
 func hostRefusal(r *Run, q Request) string {
+	if (q.Op == "attach" || q.Op == "review") && q.Host != nil && r != nil && (r.Status == "recovery-required" || r.Status == "unknown-outcome" || r.Recovery != nil) {
+		return "run cannot progress; use recover and resolve its recovery options before starting or attaching to another run"
+	}
 	if q.Host != nil && !validHost(q.Host) {
 		return "invalid host identity: name and id are required text"
 	}

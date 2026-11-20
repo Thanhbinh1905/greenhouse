@@ -772,6 +772,9 @@ func handleRequest(s *Store, q Request) Response {
 		r.Status = "cancelling"
 		r.Token = opaque()
 	} else if q.Op != "recover" && (r.Status == "running" || r.Status == "cancelling" || r.Status == "writing" || r.Status == "recovery-required") {
+		if r.Status == "recovery-required" {
+			return fail("run cannot progress; use recover and resolve its recovery options before retrying", r)
+		}
 		return fail("unsafe replacement or mutation; explicit recovery required", r)
 	}
 	paused := r
@@ -1599,12 +1602,20 @@ func Send(h string, q Request, spawn bool) (v Response, retErr error) {
 			return v, x
 		}
 		cmd := exec.Command(exe, "daemon")
+		cmd.Dir = string(filepath.Separator)
+		devNull, x := os.OpenFile(os.DevNull, os.O_RDWR, 0)
+		if x != nil {
+			return v, x
+		}
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = devNull, devNull, devNull
 		cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+h)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if x = cmd.Start(); x != nil {
+			_ = devNull.Close()
 			return v, x
 		}
 		go func() { _ = cmd.Wait() }() // The daemon's lifecycle is observed through its socket.
+		_ = devNull.Close()
 		deadline := time.Now().Add(60 * time.Second)
 		for time.Now().Before(deadline) {
 			c, e = net.DialTimeout("unix", socket, 100*time.Millisecond)
