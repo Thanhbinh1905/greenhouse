@@ -1676,6 +1676,7 @@ func finishReview(r *Run, done reviewOutcome) {
 		pauseRun(r, "independent-review", "review", "reviewer", r.Review.Config, r.Review.ID, done.Failure, time.Now())
 		return
 	}
+	r.Review.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 	r.AutoRetries = 0
 	if r.Status == "cancelling" {
 		status = "cancelled"

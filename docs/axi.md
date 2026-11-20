@@ -24,7 +24,7 @@ Git identity commands discard inherited `GIT_*` variables. The daemon therefore 
 
 `attach` creates a run only when its canonical context has no active slot. `inspect` never creates a run. Reopening retained work does not consume budget, change snapshots or execute a stage.
 
-New runs include `run.started_at`. Pipeline stages include `started_at` and `finished_at` once started, using RFC 3339 timestamps. A running stage has `started_at` but no `finished_at`; a pending stage has neither. These fields are omitted from runs and stages saved before timestamp recording was added.
+New runs include `run.started_at`. Pipeline stages include `started_at` and `finished_at` once started, using RFC 3339 timestamps. A running stage has `started_at` but no `finished_at`; a pending stage has neither. The host review execution in `run.review` uses the same timestamp fields while running and after it ends. These fields are omitted from runs, stages and reviews saved before timestamp recording was added.
 
 ## Operations
 

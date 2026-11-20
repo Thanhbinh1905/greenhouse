@@ -65,6 +65,8 @@ type TokenUsage struct {
 }
 
 type Execution struct {
+	StartedAt    string                   `json:"started_at,omitempty"`
+	FinishedAt   string                   `json:"finished_at,omitempty"`
 	Source       repository.Identity      `json:"source"`
 	ID           string                   `json:"id"`
 	Full         bool                     `json:"full,omitempty"`
@@ -146,6 +148,7 @@ func admitReviewAgain(r *Run) error {
 		return e
 	}
 	x.Grant = grant
+	x.StartedAt = time.Now().UTC().Format(time.RFC3339)
 	r.Review = x
 	r.Stage = "independent-review"
 	r.Status = "running"

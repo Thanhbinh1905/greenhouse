@@ -99,6 +99,10 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	if running, _ := first["host_result"].(map[string]any); first["outcome"] != "ok" || running["status"] != "running" || running["current"] != true {
 		t.Fatalf("a running review of the unchanged head is current: %v", first)
 	}
+	activeReview := runOf(t, first)["review"].(map[string]any)
+	if _, err := time.Parse(time.RFC3339, activeReview["started_at"].(string)); err != nil || activeReview["finished_at"] != nil {
+		t.Fatalf("running host review timestamps are invalid: %v", activeReview)
+	}
 	if replay := hostCall(t, bin, repo, home, v, "review", "review-1", map[string]any{"grant": "round-1"}); replay["token"] != first["token"] {
 		t.Fatalf("replay must return the receipt: %v", replay)
 	}
@@ -108,6 +112,25 @@ func TestEmbeddedHostOwnsDelivery(t *testing.T) {
 	findings, _ := result["findings"].([]any)
 	if result["grant"] != "round-1" || result["head"] != head || result["target"] != target || result["review_base"] != target || result["verdict"] != "findings" || result["current"] != true || len(findings) != 1 || findings[0].(map[string]any)["head"] != head {
 		t.Fatalf("host result must carry exact-head findings and verdict: %v", v)
+	}
+	run := runOf(t, v)
+	if _, err := time.Parse(time.RFC3339, run["started_at"].(string)); err != nil {
+		t.Fatalf("run started_at is not RFC 3339: %v", run["started_at"])
+	}
+	review := run["review"].(map[string]any)
+	for _, key := range []string{"started_at", "finished_at"} {
+		value, ok := review[key].(string)
+		if !ok {
+			t.Fatalf("host review %s is missing: %v", key, review)
+		}
+		if _, err := time.Parse(time.RFC3339, value); err != nil {
+			t.Fatalf("host review %s is not RFC 3339: %v", key, review)
+		}
+	}
+	inspected := axi(t, bin, repo, home, fmt.Sprintf(`{"version":2,"op":"inspect","run_id":%q,"host":%s}`, v["run_id"], `{"name":"fake-host","id":"task-7","metadata":{"worker":"author-1"}}`))
+	inspectedReview := runOf(t, inspected)["review"].(map[string]any)
+	if inspected["outcome"] != "ok" || runOf(t, inspected)["started_at"] != run["started_at"] || inspectedReview["started_at"] != review["started_at"] || inspectedReview["finished_at"] != review["finished_at"] {
+		t.Fatalf("inspect by run_id changed host timestamps: attach=%v inspect=%v", v, inspected)
 	}
 	term := startTerminal(t, bin, repo, home)
 	term.waitFor(t, "Host: fake-host task-7 | grant round-1 | findings | current true")
