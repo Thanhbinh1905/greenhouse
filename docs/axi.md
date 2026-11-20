@@ -152,6 +152,6 @@ A host such as Posse can embed Greenhouse as its reviewer. Requests with `host` 
 
 - The host owns author repair, candidate custody, publication, CI and cap decisions.
 - Each `review` needs a host `grant`.
-- `host_result` reports the exact-head verdict and findings.
+- `host_result` reports the exact-head verdict and findings, plus any `generated` and `uncovered` paths. A review with uncovered paths and no findings settles as `status: "partial-review"` with `verdict: "partial"`, never as clean. See [generated and uncovered paths](embedding.md#generated-and-uncovered-paths).
 
 Other clients can only observe a host run. Another host can replace it with `attach` or `new` once the run is idle: not running, awaiting recovery, scheduled for automatic resume, or holding a candidate. See the [embedding contract](embedding.md).

@@ -250,7 +250,7 @@ func TestReviewInputWindowsAndAggregate(t *testing.T) {
 	}
 	head := commitReviewFixture(t, repo, "change two hunks")
 	diff := git(t, repo, "diff", target, head, "--")
-	files, err := candidateFiles(repo, head, names, diff)
+	files, _, err := candidateFiles(repo, head, names, diff, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestReviewInputUnevenFilesFitAggregate(t *testing.T) {
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	head := commitReviewFixture(t, repo, "uneven additions")
 	diff := git(t, repo, "diff", target, head, "--")
-	files, err := candidateFiles(repo, head, names, diff)
+	files, _, err := candidateFiles(repo, head, names, diff, nil)
 	if err != nil {
 		t.Fatalf("files fit aggregate budget: %v", err)
 	}

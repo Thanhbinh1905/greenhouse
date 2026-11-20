@@ -77,7 +77,7 @@ Run inspection includes `run.started_at` and `run.stage_started_at` for new runs
 }
 ```
 
-`verdict` is `clean`, `findings` or `inconclusive`, and is empty until the review settles. `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`.
+`verdict` is `clean`, `findings`, `inconclusive` or `partial`, and is empty until the review settles. `partial` comes with `status: "partial-review"`; see [generated and uncovered paths](#generated-and-uncovered-paths). `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`.
 
 For new reviews, the ID is the lowercase SHA-256 hex digest of the JSON array `[origin, file, rule, normalized_code]`. Greenhouse reads lines `start` through `end` (inclusive) from `file` at the reviewed `head`. For each line, it joins `strings.Fields(line)` with one ASCII space, which trims and collapses Unicode whitespace. It drops blank lines and joins the remaining lines with a newline (`\n`). JSON encoding uses Go's `encoding/json.Marshal`. Line numbers, head, explanation, priority, and action are excluded. Shifting lines or rewording explanations preserves the ID; changing normalized code changes it. Findings with the same ID keep the first finding in reviewer order, including its priority and explanation. Stored reviews retain their IDs; executions admitted before this rule retain the legacy identity calculation.
 
@@ -91,9 +91,9 @@ A backend pause, such as an exhausted quota, keeps the review's grant and gives 
 
 ## Review input and admission refusals
 
-The reviewer receives a JSON metadata header followed by plain-text `Diff`, `Files`, and optional submodule log and diff sections. Submodule pin metadata remains in the JSON header. The file bodies are not JSON-string escaped: source quotes and backslashes remain as written in the candidate. `Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
+The reviewer receives a JSON metadata header followed by plain-text `Diff`, `Files`, and optional submodule log and diff sections. Submodule pin metadata remains in the JSON header. The file bodies are not JSON-string escaped: source quotes and backslashes remain as written in the candidate. `Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. [Generated and uncovered paths](#generated-and-uncovered-paths) are the exceptions. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
 
-Small files are numbered before applying the review context window. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. Windows that still exceed either limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
+Small files are numbered before applying the review context window. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. A file whose windows still exceed 64 KiB becomes an uncovered path. Windows that still exceed the combined limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
 
 A gitlink has a synthetic `Files` entry: `1: Subproject commit <new pin>`. Findings on that path use line 1. Finding identities normalize this synthetic content using the same `code-v1` calculation as text. `Submodules` contains `Path`, `Old`, `New`, `Log`, `Diff`, and `Truncated`. Pins come from the review base and candidate trees. Logs and diffs each retain at most 128 KiB; `Truncated` and an omission marker identify shortened ranges. Added or removed gitlinks have no two-pin range.
 
@@ -103,11 +103,38 @@ The complete rendered reviewer input, including the JSON metadata header and pla
 
 | `error_code` | Meaning |
 |---|---|
-| `review_input_too_large` | The bundle, candidate blob, or numbered hunk windows exceed a limit. The rendered-input error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. The `diff` and `files` values count their literal plain-text representation, including file headings and numbering. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The check also reports the encoded `submodules` metadata and plain-text range bytes when present. |
+| `review_input_too_large` | The bundle, a candidate blob, or the combined hunk windows exceed a limit. The rendered-input error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. The `diff` and `files` values count their literal plain-text representation, including file headings and numbering. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The check also reports the encoded `submodules` metadata and plain-text range bytes when present. |
 | `unsupported_binary_diff` | A binary patch cannot be reviewed. The error names the path. |
 | `submodule_unavailable` | A submodule pin is unavailable locally. The error names the path and both pins. |
 
 These fields are additive in existing protocol versions. Retrying the same input cannot resolve these refusals.
+
+## Generated and uncovered paths
+
+A path the target commit marks as generated is reviewed in short form. Greenhouse reads the `linguist-generated` attribute from the `.gitattributes` files of the target commit (`run.target`). An optional `greenhouse-generator` attribute names the files that produce it, as comma-separated repository paths:
+
+```gitattributes
+internal/store/migrations/*.sql linguist-generated greenhouse-generator=tools/migrate/gen.go,tools/migrate/gen_test.go
+```
+
+The candidate's own `.gitattributes`, the worktree and the merge base are not consulted. An attribute that also applies without the target's files, such as one set in `.git/info/attributes` or a global or system attributes file, is ignored. A candidate therefore cannot exempt its own files.
+
+For a generated path, the reviewer gets:
+
+- its diffstat in the `Generated` header entry: `Path`, `Added`, `Removed` and `Generators`;
+- its `Diff` section with the hunks replaced by `[generated: hunks omitted; see Generated]`;
+- a `Files` excerpt of its hunk windows, at most 4 KiB and ending with `...` when shortened;
+- the candidate content of each generator that exists, as a `Files` entry of at most 64 KiB.
+
+The path stays in `Paths`, so coverage must still include it, and the verdict can be `clean`. `run.review.generated` and `host_result.generated` list each generated path with `path`, `added`, `removed` and `generators`.
+
+A changed file whose hunk windows exceed 64 KiB and that is not generated becomes an uncovered path instead of refusing the review. Greenhouse omits its hunks and content, replaces its `Diff` hunks with `[uncovered: hunks omitted; see Uncovered]`, lists it in the `Uncovered` header, and removes it from `Paths`. The other files are reviewed as usual. When uncovered paths exist:
+
+- a reviewer verdict of `clean` becomes `verdict: "partial"` with `status: "partial-review"`;
+- a `findings` verdict keeps `status: "outstanding-findings"`;
+- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes`.
+
+A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
 
 ## Per-review budget and finalization
 
@@ -475,6 +502,8 @@ Then the host repeats the review round with a new grant.
 `TestEmbeddedHostOwnsDelivery` drives a fake host through the daemon, AXI and terminal with an isolated HOME, real Git and a fake reviewer. It proves two grants buy exactly two reviewer invocations and no fixer, a Greenhouse `limit` of 1 does not stop the host's second round, the successor keeps usage, and no candidate ref, private worktree, lease or remote ref appears.
 
 `TestHostReusesSettledWorktree` proves host A can finish a review and host B can attach, create an independent run, and review the same worktree without changing host A's run. `TestCrossHostReplacementSafety` covers refusal during active execution, custody, and unknown outcomes. `TestHostOwnershipBoundaries` covers standalone takeover and a second host, and `TestHostReviewResumesUnderItsGrant` covers a paused review that resumes under its grant.
+
+`TestReviewTrustedGeneratedFile`, `TestReviewUndeclaredLargeFileIsPartial` and `TestReviewCandidateCannotDeclareItsOwnFileGenerated` drive 300 KB files through the CLI: a target-declared generated file gets a clean verdict, an undeclared one gives `partial-review`, and a declaration in the candidate's `.gitattributes` or `.git/info/attributes` gets no exemption.
 
 `TestHostFindingIdentityAcrossRounds` exercises two host review rounds through the daemon with real Git and a fake reviewer. It checks that shifted code and reworded explanations preserve the ID, while edited code changes it.
 
