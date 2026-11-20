@@ -44,6 +44,8 @@ Every host request carries `host`:
 
 `prepare` resolves the requested target to a commit and stores it as `run.target`. The review diff uses `git merge-base <target> <candidate>`, reported as `run.review_base` in `inspect` and `review_base` in `host_result`. Pipeline sync and PR creation keep using `target`. If the histories are unrelated, the diff uses `target` and `review_base_reason` explains the fallback.
 
+Run inspection includes `run.started_at` for new runs. Pipeline stages expose `started_at` and `finished_at` in RFC 3339 format: an active stage has only `started_at`, and a stage not yet started has neither field. Older stored runs remain readable and omit timestamps that were not recorded.
+
 `host_result` is present once a host run has a review:
 
 ```json

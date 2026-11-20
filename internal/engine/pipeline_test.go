@@ -406,6 +406,24 @@ func TestFullPipelineCommandStagesDispatchNoAgent(t *testing.T) {
 	if run["status"] != "needs-decision" || stageOf(t, done, "push")["status"] != "unconfigured" {
 		t.Fatalf("pipeline passed without trusted delivery settings: %v", run["pipeline"])
 	}
+	if _, err := time.Parse(time.RFC3339, run["started_at"].(string)); err != nil {
+		t.Fatalf("run started_at is not RFC 3339: %v", run["started_at"])
+	}
+	for _, name := range []string{"intent", "sync", "review", "test", "lint"} {
+		stage := stageOf(t, done, name)
+		if _, err := time.Parse(time.RFC3339, stage["started_at"].(string)); err != nil {
+			t.Fatalf("stage %s started_at is not RFC 3339: %v", name, stage)
+		}
+		if _, err := time.Parse(time.RFC3339, stage["finished_at"].(string)); err != nil {
+			t.Fatalf("stage %s finished_at is not RFC 3339: %v", name, stage)
+		}
+	}
+	for _, name := range []string{"docs", "push", "pr", "ci"} {
+		stage := stageOf(t, done, name)
+		if stage["started_at"] != nil || stage["finished_at"] != nil {
+			t.Fatalf("unstarted stage %s has timestamps: %v", name, stage)
+		}
+	}
 	want := map[string]string{"intent": "passed", "sync": "passed", "review": "passed", "test": "passed", "docs": "not-applicable", "lint": "passed", "push": "unconfigured", "pr": "pending", "ci": "pending"}
 	for name, status := range want {
 		if got := stageOf(t, done, name)["status"]; got != status {

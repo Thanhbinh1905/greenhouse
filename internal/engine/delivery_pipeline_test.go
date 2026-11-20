@@ -754,8 +754,13 @@ func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "branch main") {
 		t.Fatalf("second run on the same branch was not refused with a clear reason: %v", refused)
 	}
-	if runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`))["status"] != "running" {
+	running := runOf(t, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`))
+	if running["status"] != "running" {
 		t.Fatal("first pipeline finished before the second started; runs did not overlap")
+	}
+	active := stageOf(t, map[string]any{"run": running}, "test")
+	if _, err := time.Parse(time.RFC3339, active["started_at"].(string)); err != nil || active["finished_at"] != nil {
+		t.Fatalf("running stage timestamps are invalid: %v", active)
 	}
 	_ = os.Remove(filepath.Join(root, "sleep-test")) // Best-effort test fixture cleanup.
 

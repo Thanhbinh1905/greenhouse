@@ -40,18 +40,20 @@ type CommandPlan struct {
 	Grants         []PlanGrant       `json:"grants,omitempty"`
 }
 type StageResult struct {
-	Checks    []forge.CheckState `json:"checks,omitempty"`
-	Name      string             `json:"name"`
-	URL       string             `json:"url,omitempty"`
-	Head      string             `json:"head,omitempty"`
-	Number    int                `json:"number,omitempty"`
-	Status    string             `json:"status"`
-	Inputs    string             `json:"inputs,omitempty"`
-	Candidate string             `json:"candidate,omitempty"`
-	Reason    string             `json:"reason,omitempty"`
-	Commands  []CheckResult      `json:"commands,omitempty"`
-	Runs      int                `json:"runs"`
-	Repairs   int                `json:"repairs"`
+	StartedAt  string             `json:"started_at,omitempty"`
+	FinishedAt string             `json:"finished_at,omitempty"`
+	Checks     []forge.CheckState `json:"checks,omitempty"`
+	Name       string             `json:"name"`
+	URL        string             `json:"url,omitempty"`
+	Head       string             `json:"head,omitempty"`
+	Number     int                `json:"number,omitempty"`
+	Status     string             `json:"status"`
+	Inputs     string             `json:"inputs,omitempty"`
+	Candidate  string             `json:"candidate,omitempty"`
+	Reason     string             `json:"reason,omitempty"`
+	Commands   []CheckResult      `json:"commands,omitempty"`
+	Runs       int                `json:"runs"`
+	Repairs    int                `json:"repairs"`
 }
 type Step struct {
 	ID    string `json:"id"`
@@ -585,6 +587,8 @@ func advancePipeline(s *Store, r *Run) *Step {
 		switch st.Name {
 		case "intent":
 			st.Status, st.Inputs, st.Reason = "passed", in, "intent, exact target and command plan loaded"
+			st.StartedAt = time.Now().UTC().Format(time.RFC3339)
+			st.FinishedAt = st.StartedAt
 			st.Runs++
 			continue
 		case "sync":
@@ -642,6 +646,7 @@ func advancePipeline(s *Store, r *Run) *Step {
 			step.Kind = "commands"
 		}
 		st.Status, st.Inputs, st.Candidate, st.Reason = "running", in, r.Candidate, ""
+		st.StartedAt, st.FinishedAt = time.Now().UTC().Format(time.RFC3339), ""
 		if step.Kind != "delivery" {
 			st.Commands = nil
 		}
@@ -788,6 +793,7 @@ func admitGateRepair(r *Run, st *StageResult, actor string, selected []Finding) 
 		added.Budget = "repair"
 	}
 	st.Repairs++
+	st.StartedAt, st.FinishedAt = time.Now().UTC().Format(time.RFC3339), ""
 	kind := "repair"
 	if st.Name == "sync" {
 		kind = "conflict"
@@ -814,6 +820,7 @@ func admitConflictRepair(r *Run, q Request) error {
 	p.Gate = ""
 	p.Status, p.Failed, p.Reason = "running", "", ""
 	st.Status = "running"
+	st.StartedAt, st.FinishedAt = time.Now().UTC().Format(time.RFC3339), ""
 	r.Status = "running"
 	return nil
 }
@@ -826,6 +833,11 @@ func completeStep(r *Run, o stepOutcome) error {
 	step := *p.Active
 	p.Active = nil
 	st := p.stage(step.Stage)
+	defer func() {
+		if st.StartedAt != "" && st.Status != "running" && st.Status != "paused" && st.FinishedAt == "" {
+			st.FinishedAt = time.Now().UTC().Format(time.RFC3339)
+		}
+	}()
 	cancelling := r.Status == "cancelling"
 	switch step.Kind {
 	case "commands", "sync":
