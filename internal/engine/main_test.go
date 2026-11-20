@@ -70,12 +70,48 @@ func TestAutoStartedDaemonDoesNotInheritClientWorkingDirectory(t *testing.T) {
 	if err := os.Mkdir(clientDir, 0700); err != nil {
 		t.Fatal(err)
 	}
+	stdinPath := filepath.Join(filepath.Dir(home), "client-stdin")
+	stdoutPath := filepath.Join(filepath.Dir(home), "client-stdout")
+	stderrPath := filepath.Join(filepath.Dir(home), "client-stderr")
+	stdin, err := os.Create(stdinPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := stdin.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	stdout, err := os.Create(stdoutPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := stdout.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	stderr, err := os.Create(stderrPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := stderr.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if _, err := stdin.WriteString(`{"version":1,"op":"attach","path":"` + repo + `"}`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stdin.Seek(0, 0); err != nil {
+		t.Fatal(err)
+	}
 	cmd := exec.Command(bin, "axi")
 	cmd.Dir = clientDir
 	cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+home)
-	cmd.Stdin = strings.NewReader(`{"version":1,"op":"attach","path":"` + repo + `"}`)
-	if output, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("attach from temporary client directory: %v: %s", err, output)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("attach from temporary client directory: %v", err)
 	}
 	pidBytes, err := os.ReadFile(filepath.Join(home, "pid"))
 	if err != nil {
@@ -93,10 +129,27 @@ func TestAutoStartedDaemonDoesNotInheritClientWorkingDirectory(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	for _, fd := range []string{"0", "1", "2"} {
+		target, err := os.Readlink(filepath.Join("/proc", pid, "fd", fd))
+		if err != nil {
+			t.Fatalf("read daemon fd %s: %v", fd, err)
+		}
+		if target != os.DevNull {
+			t.Fatalf("daemon fd %s points to %s, want %s", fd, target, os.DevNull)
+		}
+	}
 	for _, entry := range entries {
 		target, err := os.Readlink(filepath.Join("/proc", pid, "fd", entry.Name()))
-		if err == nil && (target == clientDir || strings.HasPrefix(target, clientDir+string(os.PathSeparator))) {
+		if err != nil {
+			continue
+		}
+		if target == clientDir || strings.HasPrefix(target, clientDir+string(os.PathSeparator)) {
 			t.Fatalf("auto-started daemon holds fd %s under client directory: %s", entry.Name(), target)
+		}
+		for _, callerFile := range []string{stdinPath, stdoutPath, stderrPath} {
+			if target == callerFile {
+				t.Fatalf("auto-started daemon inherited caller fd %s: %s", entry.Name(), target)
+			}
 		}
 	}
 }
