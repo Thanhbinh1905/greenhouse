@@ -22,7 +22,7 @@ if '--list-models' in sys.argv:
     print('provider model')
     print('native default')
     sys.exit(0)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 if any('read,edit,write' in a for a in sys.argv):
     open('sample.txt','w').write('repaired\\n')
     out={'responses':[{'finding':f['id'],'response':'fixed','reason':'rewrote the selected line'} for f in b.get('Selected') or []]}

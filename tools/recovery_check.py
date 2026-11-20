@@ -49,7 +49,7 @@ if '--list-models' in sys.argv:
  print('provider model')
  print('fixture model')
  sys.exit(0)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 f={"id":"fixture","priority":"P2","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Fixture finding","action":"Repair the sample","rule":"","head":b["Head"]}
 v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"],"findings":[f]}
 print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
@@ -57,7 +57,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
 '''
 FIXER = '''#!/usr/bin/python3
 import json,sys
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 with open("sample.txt", "w") as f: f.write("repaired\\n")
 answer={"responses":[{"finding":f["id"],"response":"fixed","reason":"repaired the sample"} for f in b["Selected"]]}
 print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(answer)}]}}))

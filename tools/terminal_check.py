@@ -172,7 +172,7 @@ if sys.argv[1:] == ['--list-models']:
     print('provider model context')
     print('fixture model 128K')
     sys.exit(0)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[],"documentation":{"status":"not-needed","reason":"fixture changes no public behavior"}}
 if open("sample.txt").read()!="repaired\\n":
     v["verdict"]="findings"
@@ -185,7 +185,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
 ''')
     reviewer.chmod(0o700)
     fixer = root / "resp-fixer"
-    fixer.write_text("#!/usr/bin/python3\nimport json,sys\nb=json.load(sys.stdin)\nopen('sample.txt','w').write('repaired\\n')\n" + respond_fixed())
+    fixer.write_text("#!/usr/bin/python3\nimport json,sys\nb=json.JSONDecoder().raw_decode(sys.stdin.read())[0]\nopen('sample.txt','w').write('repaired\\n')\n" + respond_fixed())
     fixer.chmod(0o700)
     gate = root / "resp-gate"
     gate.write_text("#!/bin/sh\necho ok\n")
@@ -267,7 +267,7 @@ if '--list-models' in sys.argv:
  print('fixture model')
  sys.exit(0)
 with open(os.path.join(os.path.dirname(__file__), "review-calls"), "a") as calls: calls.write("review\\n")
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 f={"id":"fixture","priority":"P2","origin":"correctness","file":"sample.txt","start":1,"end":1,"explanation":"Fixture finding","action":"Inspect fixture","rule":"","head":b["Head"]}
 v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"],"findings":[f]}
 print(json.dumps({"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"model","stopReason":"stop","content":[{"type":"text","text":json.dumps(v)}]}}))
@@ -280,7 +280,7 @@ print(json.dumps({"type":"agent_settled","aborted":False}))
     fixer = root / "fake-fixer"
     fixer.write_text('''#!/usr/bin/python3
 import json,sys
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 with open("sample.txt", "w") as f: f.write("repaired\\n")
 ''' + respond_fixed())
     fixer.chmod(0o700)
@@ -328,7 +328,7 @@ if sys.argv[1:] == ['--list-models']:
     print('fixture model 128K')
     sys.exit(0)
 root=os.path.dirname(__file__)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 mode=open(root+"/full-review-mode").read() if os.path.exists(root+"/full-review-mode") else "clean"
 resolutions=[{"finding":r["finding"],"check":"confirmed","reason":"checked against the candidate"} for r in b.get("Responses") or []]
 v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"],"findings":[],"documentation":{"status":"not-needed","reason":"fixture changes no public behavior"}}
@@ -358,7 +358,7 @@ print("ok "+name)
     full_fixer.write_text('''#!/usr/bin/python3
 import json,sys,os
 root=os.path.dirname(__file__)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 if os.path.exists(root+"/fix-then-review"):
     open(root+"/full-review-mode","w").write("findings")
 if os.path.exists(root+"/fix-cleans"):
