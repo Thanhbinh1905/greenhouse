@@ -8,6 +8,8 @@ import sys
 import tempfile
 import time
 
+from daemon_cleanup import sweep_daemons
+
 binary = str(Path(sys.argv[1]).resolve())
 evidence = Path(sys.argv[2])
 evidence.mkdir(parents=True, exist_ok=True)
@@ -101,7 +103,8 @@ class Fixture:
         end = time.monotonic() + timeout
         while time.monotonic() < end:
             state = self.axi()
-            if state["run"]["status"] not in statuses:
+            handback = state["run"].get("repair", {}).get("handback")
+            if state["run"]["status"] not in statuses and handback != "handback-in-progress":
                 return state
             time.sleep(0.1)
         raise AssertionError(f"run did not settle: {state['run']['status']}")
@@ -461,4 +464,7 @@ try:
     line_mode()
     print(f"PASS: TUI at 56, 80 and 100 columns by 24 rows: missing agent, one Run collecting intent from a synthetic agent session with history isolation, no-match question, ambiguity choice, edited intent with Esc, moved head, live progress, resize while running, cancel versus detach and reattach, findings selection, repair and handback, details and help, settings draft with Apply and Save, decision, daemon loss and resync, NO_COLOR, piped stdin and TERM=dumb line mode; fixture {root}")
 finally:
-    tmux("kill-server", check=False)
+    try:
+        tmux("kill-server", check=False)
+    finally:
+        sweep_daemons(root)

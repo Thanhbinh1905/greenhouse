@@ -24,6 +24,8 @@ import termios
 import threading
 import time
 
+from daemon_cleanup import stop_expected_daemons, sweep_daemons
+
 binary = str(Path(sys.argv[1]).resolve())
 evidence = Path(sys.argv[2])
 
@@ -77,6 +79,7 @@ sys.exit(p.returncode)
 
 def fixture(width):
     root = Path(tempfile.mkdtemp(prefix=f"gh-recovery-{width}-", dir=os.environ["TMPDIR"]))
+    fixture_roots.append(root)
     repo, state, bindir = root / "repo", root / "state", root / "bin"
     for d in (repo, bindir):
         d.mkdir()
@@ -227,13 +230,15 @@ def scenario(width, choice):
         assert choice == "new-run" or answered, run["events"]
         assert "unknown choice" in (evidence / f"terminal-{width}-recovery-action.log").read_text()
     finally:
-        try:
-            pid = json.loads((root / "state" / "pid").read_text())
-            os.kill(pid, 15)
-        except (OSError, ValueError):
-            pass
+        if sys.exc_info()[0] is None:
+            stop_expected_daemons(root)
 
 
-for width, choice in [(56, "adopt"), (80, "discard"), (100, "new-run")]:
-    scenario(width, choice)
+fixture_roots = []
+try:
+    for width, choice in [(56, "adopt"), (80, "discard"), (100, "new-run")]:
+        scenario(width, choice)
+finally:
+    sweep_daemons(fixture_roots)
+
 print("PASS: recovery screen before and after adopt (56), discard (80) and new-run (100) in real PTYs")

@@ -5,7 +5,6 @@ import os
 from pathlib import Path
 import pty
 import select
-import signal
 import struct
 import subprocess
 import sys
@@ -13,6 +12,8 @@ import tempfile
 import termios
 import threading
 import time
+
+from daemon_cleanup import stop_expected_daemons, sweep_daemons
 
 binary = str(Path(sys.argv[1]).resolve())
 root = Path(tempfile.mkdtemp(prefix="gh-pty-", dir=os.environ["TMPDIR"]))
@@ -560,7 +561,9 @@ open("sample.txt","w").write("repaired\\n")
     forge.shutdown()
     print(f"PASS: resolution responses, snapshot and confinement, 56-, 80-, and 100-column PTY configuration migration, repository trust, value sources, repository Save, transcript logs, backend quota pause, auto-resume cancel, agent switch and rerun, selected repair, check, dirty handback refusal, safe handback, full pipeline stages, repair, failure diagnostics, ask/cap decisions, final-fix, accepted risk and AXI parity; fixture {root}")
 finally:
-    provider.shutdown()
-    pidfile = root / "state" / "pid"
-    if pidfile.exists():
-        os.kill(json.loads(pidfile.read_text()), signal.SIGTERM)
+    try:
+        provider.shutdown()
+        if sys.exc_info()[0] is None:
+            stop_expected_daemons(root)
+    finally:
+        sweep_daemons(root)

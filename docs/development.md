@@ -16,9 +16,10 @@ python3 tools/recovery_check.py "$TMPDIR/greenhouse" docs/evidence/recovery
 python3 tools/events_check.py "$TMPDIR/greenhouse" docs/evidence/events
 python3 tools/tui_check.py "$TMPDIR/greenhouse" docs/evidence/tui
 python3 tools/notices.py "$TMPDIR/greenhouse" --check
+GREENHOUSE_TEST_BINARY="$TMPDIR/greenhouse" python3 tools/daemon_cleanup_test.py
 ```
 
-Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. Logs are under the selected evidence directory.
+Integration fixtures use private state homes and temporary Git repositories, and build the executable with the race detector. Logs are under the selected evidence directory. Each PTY check scans `/proc` for daemons whose `GREENHOUSE_HOME` is under its fixture roots. The final sweep sends SIGTERM, then SIGKILL to survivors, and fails if it finds any fixture daemon. `daemon_cleanup_test.py` tests the sweep after a forced failure and with a planted daemon.
 
 Restart fixtures seed synthetic usage and interrupted-writer state only while their daemon is stopped. They are not review evidence.
 
