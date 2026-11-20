@@ -20,11 +20,14 @@ import termios
 import threading
 import time
 
+from daemon_cleanup import stop_expected_daemons, sweep_daemons
+
 binary = str(Path(sys.argv[1]).resolve())
 evidence = Path(sys.argv[2])
 before = len(sys.argv) > 3 and sys.argv[3] == "before"
 prefix = "before" if before else "after"
 host = {"name": "fake-host", "id": "task-7"}
+terminals = []
 
 
 class ModelHandler(BaseHTTPRequestHandler):
@@ -49,6 +52,7 @@ def git(cwd, env, *args):
 
 def fixture(width):
     root = Path(tempfile.mkdtemp(prefix=f"gh-events-{width}-", dir=os.environ["TMPDIR"]))
+    fixture_roots.append(root)
     state = root / "state"
     state.mkdir(mode=0o700)
     env = dict(os.environ, TERM="dumb", HOME=str(root), GREENHOUSE_HOME=str(state), GIT_CONFIG_NOSYSTEM="1",
@@ -124,6 +128,7 @@ class Terminal:
         self.master, slave = pty.openpty()
         fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", 40, width, 0, 0))
         self.child = subprocess.Popen([binary], stdin=slave, stdout=slave, stderr=slave, env=env, cwd=repo, start_new_session=True)
+        terminals.append(self)
         os.close(slave)
         self.captured = bytearray()
 
@@ -161,6 +166,7 @@ class Terminal:
         self.child.wait(timeout=10)
         self.drain(0.2)
         os.close(self.master)
+        terminals.remove(self)
         text = self.text()
         destination = evidence / f"{prefix}-{self.width}-{name}.log"
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -206,5 +212,26 @@ def check(width):
     print(f"{width} columns: host run followed and terminal mutation refused")
 
 
-for width in [56, 80, 100]:
-    check(width)
+fixture_roots = []
+try:
+    for width in [56, 80, 100]:
+        check(width)
+        stop_expected_daemons(fixture_roots[-1:])
+finally:
+    try:
+        provider.shutdown()
+    finally:
+        try:
+            for terminal in terminals:
+                if terminal.child.poll() is None:
+                    terminal.child.terminate()
+                    try:
+                        terminal.child.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        terminal.child.kill()
+                        terminal.child.wait()
+                if terminal.master >= 0:
+                    os.close(terminal.master)
+            terminals.clear()
+        finally:
+            sweep_daemons(fixture_roots)
