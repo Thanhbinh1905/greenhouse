@@ -17,6 +17,13 @@ func follow(h, path, stream string, after uint64, updates chan liveUpdate, stop 
 		u := liveUpdate{state: "live"}
 		if err == nil && v.Outcome == "ok" {
 			stream, after, u.view = v.Stream, v.Sequence, &v
+		} else if transientWatchRefusal(v) {
+			select {
+			case <-stop:
+				return
+			case <-time.After(50 * time.Millisecond):
+			}
+			continue
 		} else {
 			stream, u.state = "", "reconnecting (daemon unavailable)"
 		}
@@ -37,6 +44,10 @@ func follow(h, path, stream string, after uint64, updates chan liveUpdate, stop 
 			}
 		}
 	}
+}
+
+func transientWatchRefusal(v engine.Response) bool {
+	return v.Outcome == "refused" && v.Error == "storage commit in progress; retry the read request"
 }
 
 type snapshotOrder map[string]bool

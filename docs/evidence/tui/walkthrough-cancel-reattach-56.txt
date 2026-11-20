@@ -2,18 +2,18 @@
 
 ## 1. reattach shows the running review
 +--------------------------------------------------------+
-|Greenhouse · feature @ 566a380   one-pass · auto · live |
+|Greenhouse · feature @ c9db376   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
 | ✓ Intent   Fix q and x handling in sample so every re… |
-| ✓ Target   6dc9c07                                     |
+| ✓ Target   5336a23                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
 | ⠸ Review   running · budget 1 of 4 used                |
 |                                                        |
 | ⠸ Independent review · Pi · ≥0s                        |
 |                                                        |
-|                                                        |
-|                                                        |
+| Repository pipeline plan: none (no .greenhouse-        |
+| pipeline.json).                                        |
 |                                                        |
 |                                                        |
 |                                                        |
@@ -32,16 +32,16 @@ $ keys 'x' 'x'
 
 ## 2. cancelled after x x; rerun offered
 +--------------------------------------------------------+
-|Greenhouse · feature @ 566a380   one-pass · auto · live |
+|Greenhouse · feature @ c9db376   one-pass · auto · live |
 |─────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                   |
 | ✓ Intent   Fix q and x handling in sample so every re… |
-| ✓ Target   6dc9c07                                     |
+| ✓ Target   5336a23                                     |
 | ✓ Rules    unslop, no-comments · loaded                |
 | ! Review   cancelled · budget 1 of 4 used              |
 |                                                        |
-|                                                        |
-|                                                        |
+| Repository pipeline plan: none (no .greenhouse-        |
+| pipeline.json).                                        |
 |                                                        |
 |                                                        |
 |                                                        |
