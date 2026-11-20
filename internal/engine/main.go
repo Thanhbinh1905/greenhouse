@@ -69,6 +69,7 @@ type Event struct {
 	To     string `json:"to,omitempty"`
 }
 type Run struct {
+	StartedAt     string              `json:"started_at,omitempty"`
 	Intent        string              `json:"intent,omitempty"`
 	Reviewer      *ReviewerConfig     `json:"reviewer,omitempty"`
 	SelectedDiff  string              `json:"selected_diff,omitempty"`
@@ -690,7 +691,7 @@ func handleRequest(s *Store, q Request) Response {
 			}
 		}
 		if r == nil && q.Op == "attach" {
-			r = &Run{ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "created", Actor: "client"}}, Host: q.Host}
+			r = &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "created", Actor: "client"}}, Host: q.Host}
 			s.Runs[r.ID] = r
 			s.Slots[slot] = r.ID
 		}
@@ -998,7 +999,7 @@ func handleRequest(s *Store, q Request) Response {
 		if !crossHostNew {
 			findings = append(findings, r.Findings...)
 		}
-		next := &Run{Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
+		next := &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), Findings: findings, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: id, Candidate: id.Head, Stage: "intent", Status: "unconfigured", Configs: []Snapshot{initialSnapshot(s, id)}, Events: []Event{{Kind: "new", Actor: "client", Reason: "replaces " + prior}}}
 		if q.Host != nil {
 			hostSuccessor(r, next, q.Host)
 		}
