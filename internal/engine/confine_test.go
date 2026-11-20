@@ -108,7 +108,7 @@ if '--list-models' in sys.argv:
  print('fixture model 128K')
  sys.exit(0)
 ` + probeScript + `
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 cwd=os.getcwd()
 result={'home':write(ROOT+'/review-escape'),'repo':write(REPO+'/review-escape'),'snapshot':write(cwd+'/sample.txt'),'blocked':connect(BLOCKED),'provider':connect(ALLOWED)}
 EXTRA

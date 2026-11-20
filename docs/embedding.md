@@ -91,7 +91,7 @@ A backend pause, such as an exhausted quota, keeps the review's grant and gives 
 
 ## Review input and admission refusals
 
-`Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
+The reviewer receives a JSON metadata header followed by plain-text `Diff`, `Files`, and optional submodule log and diff sections. Submodule pin metadata remains in the JSON header. The file bodies are not JSON-string escaped: source quotes and backslashes remain as written in the candidate. `Diff` contains the complete admitted diff, and `Paths` contains every changed path, including deletions and gitlinks. Coverage must include every path. `Files` contains candidate content for paths that still exist. Each included line retains its candidate line number.
 
 Small files are numbered before applying the review context window. Larger files use the union of candidate hunk ranges with three extra context lines, clamped to the file. `...` marks omitted lines. Each file receives at most 64 KiB. If their combined content exceeds 768 KiB, Greenhouse uses hunk windows for all files. Windows that still exceed either limit are refused. A finding's `start` and `end` must remain within one changed hunk, including when the displayed window omits surrounding lines. The read-only snapshot supplies additional context. Candidate blob reads stop at 16 MiB; a blob above that limit or hunk windows that cannot fit are refused.
 
@@ -99,11 +99,11 @@ A gitlink has a synthetic `Files` entry: `1: Subproject commit <new pin>`. Findi
 
 For two-pin ranges, Greenhouse resolves submodule objects locally through the initialized worktree, its `.git` file, or the common Git directory's `modules/<name>` repository. The name comes from the candidate `.gitmodules`. Added or removed gitlinks need no local submodule objects. Admission never fetches or initializes a submodule.
 
-The complete JSON bundle must fit within 2 MiB. Admission refusals retain `outcome: "refused"` and `error`, and add `error_code` and `retryable: false`:
+The complete rendered reviewer input, including the JSON metadata header and plain-text evidence sections, must fit within 2 MiB. Admission refusals retain `outcome: "refused"` and `error`, and add `error_code` and `retryable: false`:
 
 | `error_code` | Meaning |
 |---|---|
-| `review_input_too_large` | The bundle, candidate blob, or numbered hunk windows exceed a limit. The bundle error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The bundle check also reports `submodules` bytes when present. |
+| `review_input_too_large` | The bundle, candidate blob, or numbered hunk windows exceed a limit. The rendered-input error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. The `diff` and `files` values count their literal plain-text representation, including file headings and numbering. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The check also reports the encoded `submodules` metadata and plain-text range bytes when present. |
 | `unsupported_binary_diff` | A binary patch cannot be reviewed. The error names the path. |
 | `submodule_unavailable` | A submodule pin is unavailable locally. The error names the path and both pins. |
 

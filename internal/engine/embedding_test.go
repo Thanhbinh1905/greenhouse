@@ -234,7 +234,7 @@ with open(root+'/reviewer-pid.tmp','w') as f: f.write(str(os.getpid()))
 os.rename(root+'/reviewer-pid.tmp',root+'/reviewer-pid')
 while not os.path.exists(root+'/release-review'):
  time.sleep(0.01)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'recovery','priority':'P2','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Fixture finding','action':'Inspect the fixture','rule':'','head':b['Head']}]}
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
 print(json.dumps({'type':'agent_settled','aborted':False}))

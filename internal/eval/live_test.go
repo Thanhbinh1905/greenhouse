@@ -29,7 +29,8 @@ if "--list-models" in sys.argv:
     print("provider model context")
     print("fake m1 128K")
     sys.exit(0)
-b = json.load(sys.stdin)
+raw = sys.stdin.read()
+b = json.loads(raw.split("\n\nDiff:\n", 1)[0]) if "\n\nDiff:\n" in raw else json.loads(raw)
 if "--no-tools" in sys.argv:
     assert sys.argv[sys.argv.index("--model") + 1] == "fake/judge"
     v = {"expected": b["expected"][0]["id"], "verdict": "detects", "rationale": 'The finding says "SQL injection" at the query.'}

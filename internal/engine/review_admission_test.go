@@ -112,18 +112,19 @@ func TestGitlinkReview(t *testing.T) {
 				Input struct {
 					Files      []reviewFile
 					Diff       string
-					Submodules []reviewSubmodule
+					Submodules []reviewSubmoduleMetadata
 				}
+				Raw string `json:"raw"`
 			}
 			b, _ = os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
 			if err := json.Unmarshal(b, &captured); err != nil {
 				t.Fatal(err)
 			}
 			c := captured.Input
-			if len(c.Submodules) != 1 || c.Submodules[0].Old != old || c.Submodules[0].New != pin || !strings.Contains(c.Submodules[0].Log, "new implementation") || !strings.Contains(c.Submodules[0].Diff, "+new") || !strings.Contains(c.Diff, "Subproject commit "+pin) {
+			if len(c.Submodules) != 1 || c.Submodules[0].Old != old || c.Submodules[0].New != pin || !strings.Contains(captured.Raw, "new implementation") || !strings.Contains(captured.Raw, "+new") || !strings.Contains(c.Diff, "Subproject commit "+pin) {
 				t.Fatalf("missing range: %+v", c)
 			}
-			if mode == "truncated" && (!c.Submodules[0].Truncated || !strings.Contains(c.Submodules[0].Diff, "[submodule range truncated]") || len(c.Submodules[0].Log)+len(c.Submodules[0].Diff) > 256*1024+100) {
+			if mode == "truncated" && (!c.Submodules[0].Truncated || !strings.Contains(captured.Raw, "[submodule range truncated]") || len(captured.Raw) > 2*1024*1024) {
 				t.Fatal("submodule range was not bounded and marked")
 			}
 			wantFiles := 1
@@ -220,7 +221,7 @@ func TestReviewInputTooLarge(t *testing.T) {
 	if response["outcome"] != "refused" || response["error_code"] != "review_input_too_large" || response["retryable"] != false {
 		t.Fatal(response)
 	}
-	for _, field := range []string{"diff=", "files=", "criteria=", "responses=", "total=2097153", "large.go="} {
+	for _, field := range []string{"diff=13", "files=517", "criteria=2", "responses=0", "total=2097153", "large.go="} {
 		if !strings.Contains(v.Error, field) {
 			t.Fatalf("missing size contributor %s: %s", field, v.Error)
 		}
@@ -357,7 +358,7 @@ sys.exit(0)
 				Input struct {
 					Paths      []string
 					Files      []reviewFile
-					Submodules []reviewSubmodule
+					Submodules []reviewSubmoduleMetadata
 				}
 			}
 			if err := json.Unmarshal(data, &capture); err != nil {
@@ -367,7 +368,7 @@ sys.exit(0)
 			if mode == "removed" {
 				want.Old, want.New = pin, ""
 			}
-			if len(capture.Input.Submodules) != 1 || capture.Input.Submodules[0] != want {
+			if len(capture.Input.Submodules) != 1 || capture.Input.Submodules[0] != (reviewSubmoduleMetadata{Path: want.Path, Old: want.Old, New: want.New, Truncated: want.Truncated}) {
 				t.Fatalf("%s gitlink metadata: got %+v, want %+v", mode, capture.Input.Submodules, want)
 			}
 			if strings.Join(capture.Input.Paths, ",") != ".gitmodules,deps/lib" {

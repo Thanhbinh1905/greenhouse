@@ -40,7 +40,7 @@ if sys.argv[1:] == ['--list-models']:
     sys.exit(0)
 root=os.path.dirname(__file__)
 with open(root+'/review-invocations','a') as f: f.write('review\n')
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 with open(root+'/review-input.json','w') as f: json.dump(b,f,separators=(',',':'))
 mode=open(root+'/review-mode').read().strip() if os.path.exists(root+'/review-mode') else 'clean'
 v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}

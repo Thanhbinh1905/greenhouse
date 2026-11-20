@@ -141,7 +141,8 @@ func seededReview(seeded []SeededFinding, args []string, input []byte, stdout io
 		Head  string
 		Paths []string
 	}
-	if err := json.Unmarshal(input, &in); err != nil {
+	header, _, _ := bytes.Cut(input, []byte("\n\nDiff:\n"))
+	if err := json.Unmarshal(header, &in); err != nil {
 		return 2, err
 	}
 	var provider, model string

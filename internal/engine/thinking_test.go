@@ -14,7 +14,7 @@ if '--list-models' in sys.argv:
  print('fixture   model  128K     16K      yes       no')
  sys.exit(0)
 root=os.path.dirname(__file__)
-b=json.load(sys.stdin)
+b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
 with open(root+'/models.json','w') as f: f.write(open(os.environ['PI_CODING_AGENT_DIR']+'/models.json').read())
 v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','thinkingLevel':'medium','content':[{'type':'text','text':json.dumps(v)}]}}))

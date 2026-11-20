@@ -73,8 +73,15 @@ if '--list-models' in sys.argv:
  sys.exit(0)
 root=os.path.dirname(__file__)
 with open(root+'/invocations','a') as f: f.write('invoked\n')
-b=json.load(sys.stdin)
-with open(root+'/captured.json','w') as f: json.dump({'args':sys.argv[1:],'input':b,'env':[k for k in os.environ if k.startswith(('PI_','POSSE_','HERDR_'))]},f)
+raw=sys.stdin.read()
+nl=chr(10)
+header,evidence=raw.split(nl+nl+'Diff:'+nl,1)
+b=json.loads(header)
+b['Diff'],evidence=evidence.split(nl+'Files:'+nl,1)
+file_text=evidence.split(nl+'Submodules:'+nl,1)[0]
+sections=file_text.split('--- ')[1:]
+b['Files']=[{'Path':section.split(' ---'+nl,1)[0],'Lines':section.split(' ---'+nl,1)[1]} for section in sections]
+with open(root+'/captured.json','w') as f: json.dump({'args':sys.argv[1:],'input':b,'raw':raw,'env':[k for k in os.environ if k.startswith(('PI_','POSSE_','HERDR_'))]},f)
 MODE
 v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'model-id','priority':'P2','origin':'policy','file':'sample.txt','start':1,'end':1,'explanation':'Changed prose is redundant','action':'Remove repetition','rule':'unslop/plain-prose','head':b['Head']}]}
 print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
@@ -249,12 +256,12 @@ func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, "old.txt"), []byte("gone\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nb\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "keep.go"), []byte("package sample\nconst config = `old`\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	target := commit("base")
 	_ = os.Remove(filepath.Join(repo, "old.txt")) // Best-effort test cleanup.
-	if err := os.WriteFile(filepath.Join(repo, "keep.txt"), []byte("a\nchanged\nc"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "keep.go"), []byte("package sample\nconst config = `{"+`"key": "value"`+`}`+"`\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	commit("candidate")
@@ -271,17 +278,22 @@ sys.exit(0)
 	waitReview(t, bin, repo, home)
 	captured, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
 	var c struct {
-		Input struct {
-			Files    []map[string]string
-			Contract string
-		} `json:"input"`
+		Input map[string]json.RawMessage `json:"input"`
+		Raw   string                     `json:"raw"`
 	}
 	if err := json.Unmarshal(captured, &c); err != nil {
 		t.Fatal(err)
 	}
-	want := []map[string]string{{"Path": "keep.txt", "Lines": "1: a\n2: changed\n3: c\n"}}
-	if !reflect.DeepEqual(c.Input.Files, want) || !strings.Contains(c.Input.Contract, "[omitted]") || !strings.Contains(c.Input.Contract, "Submodules") {
-		t.Fatalf("delivered files = %v contract = %s", c.Input.Files, c.Input.Contract)
+	var contract string
+	if err := json.Unmarshal(c.Input["Contract"], &contract); err != nil {
+		t.Fatal(err)
+	}
+	want := "--- keep.go ---\n1: package sample\n2: const config = `{" + `"key": "value"` + `}` + "`\n"
+	if !strings.Contains(c.Raw, want) || !strings.Contains(contract, "[omitted]") || !strings.Contains(contract, "Submodules") {
+		t.Fatalf("reviewer input omitted source or contract details: raw=%s contract=%s", c.Raw, contract)
+	}
+	if strings.Contains(c.Raw, `\"key\"`) {
+		t.Fatalf("reviewer input escaped source quotes: %s", c.Raw)
 	}
 }
 

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "id": "noise-json-raw-string",
+  "category": "noise",
+  "description": "A Go raw string contains JSON quotes that are not literal backslashes in the source.",
+  "intent": "Keep the fixture's JSON raw string unchanged.",
+  "rules": [],
+  "expected": [],
+  "noise": [
+    {
+      "file": "main_test.go",
+      "start": 3,
+      "end": 3,
+      "note": "The JSON quotes are source characters inside a Go raw string, not escaped literal backslashes."
+    }
+  ],
+  "split": "holdout",
+  "stratum": "tiny-change",
+  "tags": ["Go"],
+  "source": {
+    "kind": "synthetic",
+    "derivation": "Reproduces issue 51's false literal-backslashes finding using a Go raw string containing JSON."
+  }
+}
