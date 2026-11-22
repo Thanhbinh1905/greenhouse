@@ -106,6 +106,7 @@ The complete rendered reviewer input, including the JSON metadata header and pla
 | `review_input_too_large` | The bundle, a candidate blob, or the combined hunk windows exceed a limit. The rendered-input error lists byte contributors: `diff`, `files`, `criteria`, `responses`, and `total`, plus the largest available paths. The `diff` and `files` values count their literal plain-text representation, including file headings and numbering. Earlier read or window refusals name the path and limit, and identify sizes not yet measured. The check also reports the encoded `submodules` metadata and plain-text range bytes when present. |
 | `unsupported_binary_diff` | A binary patch cannot be reviewed. The error names the path. |
 | `submodule_unavailable` | A submodule pin is unavailable locally. The error names the path and both pins. |
+| `prompt_exceeds_context` | The prompt does not fit the reviewer model's context window, and omitting another changed path would leave nothing to review. The error names the estimated and allowed tokens. See [model context window](#model-context-window). |
 
 These fields are additive in existing protocol versions. Retrying the same input cannot resolve these refusals.
 
@@ -135,6 +136,22 @@ A changed file whose hunk windows exceed 64 KiB and that is not generated become
 - `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes`.
 
 A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
+
+### Model context window
+
+Before it calls the reviewer, Greenhouse estimates the rendered prompt at one token per 3 bytes. Real pi reviews measured about 3.4 bytes per token, so the estimate errs high. Half of the model's context window is allowed for the prompt; the other half stays free for exploration and the answer.
+
+The context window comes from the backend:
+
+| Backend | Context window |
+|---|---|
+| pi | the `context` column of `pi --list-models` for the selected model; 128,000 tokens when pi reports none or no model is selected |
+| claude | 200,000 tokens |
+| codex | 272,000 tokens |
+
+When the prompt exceeds the allowed size, Greenhouse makes the largest changed paths uncovered, one at a time, until the prompt fits. A path's size is its `Diff` section plus its `Files` content. Generated paths are kept. Each omitted path gets the reason `prompt exceeds model context (N tokens > M)`, where `N` is the estimate for the full prompt and `M` is the allowed size. The review then follows the uncovered rules above. If it still does not fit when the only paths left to review are generated ones or a single path, admission is refused with `prompt_exceeds_context` and the model is never called.
+
+A backend can still overflow its context while it explores. When pi exits non-zero after a `compaction_start` event with reason `overflow`, the review ends `inconclusive` with `reason: "context_overflow"`. A retry of the same input overflows again; the host should not retry it unchanged.
 
 ## Per-review budget and finalization
 
@@ -502,6 +519,8 @@ Then the host repeats the review round with a new grant.
 `TestEmbeddedHostOwnsDelivery` drives a fake host through the daemon, AXI and terminal with an isolated HOME, real Git and a fake reviewer. It proves two grants buy exactly two reviewer invocations and no fixer, a Greenhouse `limit` of 1 does not stop the host's second round, the successor keeps usage, and no candidate ref, private worktree, lease or remote ref appears.
 
 `TestHostReusesSettledWorktree` proves host A can finish a review and host B can attach, create an independent run, and review the same worktree without changing host A's run. `TestCrossHostReplacementSafety` covers refusal during active execution, custody, and unknown outcomes. `TestHostOwnershipBoundaries` covers standalone takeover and a second host, and `TestHostReviewResumesUnderItsGrant` covers a paused review that resumes under its grant.
+
+`TestReviewPromptThatFitsTheContextWindow`, `TestReviewPromptOverTheContextWindowIsPartial`, `TestReviewPromptThatCannotFitIsRefused` and `TestReviewBackendContextOverflowIsTyped` drive a fake pi that declares a small context window through the CLI: a prompt that fits is reviewed in full, a larger one becomes `partial-review`, one that cannot fit is refused before the model runs, and a pi overflow exit reports `context_overflow`.
 
 `TestReviewTrustedGeneratedFile`, `TestReviewUndeclaredLargeFileIsPartial` and `TestReviewCandidateCannotDeclareItsOwnFileGenerated` drive 300 KB files through the CLI: a target-declared generated file gets a clean verdict, an undeclared one gives `partial-review`, and a declaration in the candidate's `.gitattributes` or `.git/info/attributes` gets no exemption.
 
