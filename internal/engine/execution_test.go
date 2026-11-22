@@ -311,7 +311,7 @@ func TestReviewCancellationAndMalformedOutput(t *testing.T) {
 		})
 	}
 }
-func TestReviewerContractDefinesPrioritiesAndBlockingGate(t *testing.T) {
+func TestReviewerContractDefinesPrioritiesAndActionability(t *testing.T) {
 	for priority, definition := range map[string]string{
 		"P0": "data loss, a security compromise, or a crash on a common path",
 		"P1": "wrong behavior under normal use",
@@ -322,8 +322,8 @@ func TestReviewerContractDefinesPrioritiesAndBlockingGate(t *testing.T) {
 			t.Errorf("review contract does not define %s by effect", priority)
 		}
 	}
-	if !strings.Contains(reviewContract, "Only P0 and P1 findings block") {
-		t.Fatal("review contract does not state the blocking gate")
+	if !strings.Contains(reviewContract, "P0, P1, and P2 findings with valid actions are actionable and must be resolved") || !strings.Contains(reviewContract, "P3 findings are informational and do not block") {
+		t.Fatal("review contract does not define actionable and informational findings")
 	}
 }
 
@@ -374,7 +374,7 @@ sys.exit(0)
 	if !strings.Contains(c.Raw, want) || !strings.Contains(contract, "[omitted]") || !strings.Contains(contract, "Submodules") {
 		t.Fatalf("reviewer input omitted source or contract details: raw=%s contract=%s", c.Raw, contract)
 	}
-	for _, definition := range []string{"P0 means data loss", "P1 means wrong behavior", "P2 means an edge case", "P3 means style or maintainability", "Only P0 and P1 findings block"} {
+	for _, definition := range []string{"P0 means data loss", "P1 means wrong behavior", "P2 means an edge case", "P3 means style or maintainability", "P0, P1, and P2 findings with valid actions are actionable and must be resolved", "P3 findings are informational and do not block"} {
 		if !strings.Contains(contract, definition) {
 			t.Errorf("pi reviewer contract lacks %q", definition)
 		}

@@ -94,7 +94,7 @@ func TestOnePassReviewThroughClaudeAndCodex(t *testing.T) {
 				t.Fatalf("calls: %v", calls)
 			}
 			input, _ := calls[0]["input"].(string)
-			for _, definition := range []string{"P0 means data loss", "P1 means wrong behavior", "P2 means an edge case", "P3 means style or maintainability", "Only P0 and P1 findings block"} {
+			for _, definition := range []string{"P0 means data loss", "P1 means wrong behavior", "P2 means an edge case", "P3 means style or maintainability", "P0, P1, and P2 findings with valid actions are actionable and must be resolved", "P3 findings are informational and do not block"} {
 				if !strings.Contains(input, definition) {
 					t.Errorf("%s reviewer input lacks %q", c.backend, definition)
 				}
