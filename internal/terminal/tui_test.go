@@ -535,12 +535,12 @@ func TestFindingsRepairSendsSelectedIDs(t *testing.T) {
 	v.Run.Review = &engine.Execution{Result: &engine.Verdict{Findings: v.Run.Findings}}
 	client := &recordingClient{}
 	m := newTestTUI(v, client, "claude")
-	press(m, "enter", "space", "r")
+	press(m, "enter", "down", "space", "r")
 	if len(client.mutations()) != 0 || m.screen != screenConfirm {
 		t.Fatal("repair sent without its confirmation")
 	}
 	press(m, "enter")
-	if got := client.mutations(); len(got) != 1 || got[0].Op != "repair" || !slices.Equal(got[0].Selected, []string{"f1"}) {
+	if got := client.mutations(); len(got) != 1 || got[0].Op != "repair" || !slices.Equal(got[0].Selected, []string{"f2"}) {
 		t.Fatalf("repair request: %+v", got)
 	}
 	without := v
@@ -550,18 +550,6 @@ func TestFindingsRepairSendsSelectedIDs(t *testing.T) {
 	press(m, "f", "space", "r")
 	if len(client.mutations()) != 0 {
 		t.Fatal("repair sent while the controller does not allow it")
-	}
-}
-
-func TestP2FindingCannotBeSelectedForPipelineRepair(t *testing.T) {
-	v := ready(tuiState("outstanding-findings", "apply", "save", "resolve-rules", "repair", "new"))
-	v.Run.Findings = []engine.Finding{{ID: "f1", Priority: "P1", File: "a.go", Start: 3, Explanation: "broken", Action: "fix", Head: v.Run.Candidate}, {ID: "f2", Priority: "P2", File: "b.go", Start: 9, Explanation: "also broken", Action: "fix", Head: v.Run.Candidate}}
-	v.Run.Review = &engine.Execution{Result: &engine.Verdict{Findings: v.Run.Findings}}
-	client := &recordingClient{}
-	m := newTestTUI(v, client, "claude")
-	press(m, "enter", "down", "space", "r")
-	if len(client.mutations()) != 0 || m.screen != screenFindings {
-		t.Fatal("P2 finding blocked the pipeline for a repair")
 	}
 }
 

@@ -125,7 +125,7 @@ func Outstanding(r *Run) (actionable, informational []Finding) {
 	for _, f := range r.Findings {
 		switch {
 		case resolved[f.ID]:
-		case f.Priority != "P0" && f.Priority != "P1" || !ValidText(f.Action):
+		case f.Priority == "P3" || !ValidText(f.Action):
 			informational = append(informational, f)
 		default:
 			actionable = append(actionable, f)
