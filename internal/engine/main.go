@@ -102,6 +102,7 @@ type Run struct {
 	Inherited      *Inheritance        `json:"inherited,omitempty"`
 	Host           *Host               `json:"host,omitempty"`
 	HostFindings   []Finding           `json:"host_findings,omitempty"`
+	HostCarried    []CarriedFinding    `json:"host_carried_findings,omitempty"`
 	HostResponses  *Repair             `json:"host_responses,omitempty"`
 	HostGrants     []string            `json:"host_grants,omitempty"`
 
@@ -835,6 +836,11 @@ func handleRequest(s *Store, q Request) Response {
 		}
 		if err := prepareRun(s, r, q.Intent, q.Target); err != nil {
 			return fail(err.Error(), r)
+		}
+		if r.Host != nil && len(r.HostFindings) > 0 {
+			if err := classifyHostFindings(r); err != nil {
+				return fail(err.Error(), r)
+			}
 		}
 		r.Token = opaque()
 	} else if q.Op == "rerun-from-start" {

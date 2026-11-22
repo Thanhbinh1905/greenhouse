@@ -192,7 +192,7 @@ Each response has:
 - `response`: `fixed` or `disputed`.
 - `reason`: required for `disputed`; optional for `fixed`. A non-empty reason must contain non-whitespace text, valid UTF-8, at most 8,192 bytes, and no control characters except tabs and newlines.
 
-A host may respond to a subset of the findings. A successor created with `new` by the same host inherits the latest settled findings. This lets the host respond after committing an author repair. A completed review replaces that set, including when its findings array is empty. A failed, cancelled, stale, or inconclusive review does not replace it.
+A host may respond to a subset of the findings. A successor created with `new` by the same host carries the latest settled findings forward. During `prepare`, Greenhouse compares each carried finding's file and line range with changed hunks in the current diff from `merge-base(target, candidate)` to the candidate. A finding remains outstanding only when that range is still in a changed hunk; otherwise it is dropped. A new review can raise it again. `inspect.run.host_carried_findings` and `host_result.carried_findings` report each carried finding as kept or dropped with a reason. A completed review replaces the carried set, including when its findings array is empty. A failed, cancelled, stale, or inconclusive review does not replace it.
 
 Greenhouse refuses unknown finding IDs, duplicate IDs, other response values, invalid reasons, and any non-empty `authority` value. Deferral remains a standalone decision operation. Responses require protocol 2 and the owning host's `review` request. Standalone clients, other hosts, and other operations cannot submit responses. Validation failure consumes no grant and leaves the run token unchanged.
 
