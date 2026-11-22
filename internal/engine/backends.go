@@ -879,28 +879,44 @@ func agentReply(x *Execution, stdout, stderr []byte) (agentAnswer, error) {
 }
 
 type lineWatch struct {
-	w       io.Writer
-	partial []byte
-	stalls  int
-	cancel  func()
+	w          io.Writer
+	partial    []byte
+	discarding bool
+	stalls     int
+	cancel     func()
 }
 
 func (l *lineWatch) Write(p []byte) (int, error) {
-	l.partial = append(l.partial, p...)
-	for {
-		i := bytes.IndexByte(l.partial, '\n')
+	original := p
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
 		if i < 0 {
+			if !l.discarding {
+				if len(l.partial)+len(p) > maxWatchedLineBytes {
+					l.partial = l.partial[:0]
+					l.discarding = true
+				} else {
+					l.partial = append(l.partial, p...)
+				}
+			}
 			break
 		}
-		if bytes.Contains(l.partial[:i], []byte("waiting for network")) {
-			l.stalls++
-			if l.stalls >= 3 {
-				l.cancel()
+		if !l.discarding {
+			if len(l.partial)+i <= maxWatchedLineBytes {
+				l.partial = append(l.partial, p[:i]...)
+				if bytes.Contains(l.partial, []byte("waiting for network")) {
+					l.stalls++
+					if l.stalls >= 3 {
+						l.cancel()
+					}
+				}
+				l.partial = l.partial[:0]
 			}
 		}
-		l.partial = l.partial[i+1:]
+		l.discarding = false
+		p = p[i+1:]
 	}
-	return l.w.Write(p)
+	return l.w.Write(original)
 }
 
 func stallWatch(w io.Writer, backend string, cancel func()) io.Writer {

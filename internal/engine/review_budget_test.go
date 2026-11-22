@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestReviewDropsOnlyOutOfRangeFinding(t *testing.T) {
@@ -476,5 +478,103 @@ func TestFinalReviewAnswerMetadata(t *testing.T) {
 		if got.Provider != wantProvider || got.Model != wantModel || got.Tokens != 12 {
 			t.Fatalf("metadata merge: got %+v, want provider=%s model=%s tokens=12", got, wantProvider, wantModel)
 		}
+	}
+}
+
+func TestReviewToolCallBudgetStopsExploration(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `if '--no-tools' not in sys.argv:
+ with open(root+'/explored.json','w') as f: json.dump(b,f)
+ for turn in range(300):
+  for call in range(2):
+   print(json.dumps({'type':'tool_execution_start','toolCallId':'%d-%d'%(turn,call),'toolName':'read','args':{'path':'sample.txt'}}),flush=True)
+  print(json.dumps({'type':'turn_end'}),flush=True)
+  time.sleep(0.1)
+ sys.exit(0)
+`)
+	start := time.Now()
+	mutate(t, bin, repo, home, v, "review", "tool-budget", nil)
+	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	if review["status"] != "outstanding-findings" || review["finalization"] != true || time.Since(start) > 10*time.Second {
+		t.Fatalf("spent tool-call budget must finalize: status=%v finalization=%v elapsed=%s", review["status"], review["finalization"], time.Since(start))
+	}
+	if !strings.Contains(review["log"].(string), "tool-call budget 6 spent") {
+		t.Fatalf("log must name the spent budget: %v", review["log"])
+	}
+	var explored struct{ ToolCallBudget int }
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(home), "explored.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &explored); err != nil || explored.ToolCallBudget != 6 {
+		t.Fatalf("review input must carry the budget: %s %v", data, err)
+	}
+}
+
+func TestLineWatchBoundsPartialLine(t *testing.T) {
+	output := runner.NewBuffer(32)
+	cancelled := false
+	watch := &lineWatch{w: output, cancel: func() { cancelled = true }}
+	if _, err := watch.Write([]byte(strings.Repeat("x", 64*1024+1))); err != nil {
+		t.Fatal(err)
+	}
+	if len(watch.partial) > 64*1024 {
+		t.Fatalf("partial line retained %d bytes, want at most 65536", len(watch.partial))
+	}
+	if !output.Exceeded() {
+		t.Fatal("oversized stdout must reach the bounded output writer")
+	}
+	for range 3 {
+		if _, err := watch.Write([]byte("\nwaiting for network\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !cancelled {
+		t.Fatal("stall events after an oversized line must still be observed")
+	}
+}
+
+func TestToolCallBudgetScalesWithChangedPaths(t *testing.T) {
+	for _, c := range []struct{ paths, want int }{{1, 6}, {3, 6}, {11, 13}, {14, 16}, {38, 40}, {140, 40}} {
+		if got := toolCallBudget(c.paths); got != c.want {
+			t.Fatalf("%d changed paths: budget %d, want %d", c.paths, got, c.want)
+		}
+	}
+}
+
+func TestToolCallWatchBoundsPartialLine(t *testing.T) {
+	output := runner.NewBuffer(32)
+	cancelled := false
+	watch := &toolCallWatch{w: output, budget: 1, cancel: func() { cancelled = true }}
+	oversized := []byte(`{"type":"tool_execution_start","padding":"` + strings.Repeat("x", 64*1024) + `"}`)
+	if _, err := watch.Write(oversized); err != nil {
+		t.Fatal(err)
+	}
+	if len(watch.partial) > 64*1024 {
+		t.Fatalf("partial line retained %d bytes, want at most 65536", len(watch.partial))
+	}
+	if !output.Exceeded() {
+		t.Fatal("oversized stdout must reach the bounded output writer")
+	}
+	if _, err := watch.Write([]byte(strings.Repeat("y", 64*1024))); err != nil {
+		t.Fatal(err)
+	}
+	if len(watch.partial) > 64*1024 {
+		t.Fatalf("continued partial line retained %d bytes, want at most 65536", len(watch.partial))
+	}
+	if _, err := watch.Write([]byte("\n{\"type\":\"turn_end\"}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("oversized event must not count as a tool call")
+	}
+	if _, err := watch.Write([]byte("{\"type\":\"tool_execution_start\"}\n{\"type\":\"turn_end\"}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !cancelled {
+		t.Fatal("valid events after an oversized line must still count")
+	}
+	if output.Len() > 32 {
+		t.Fatalf("bounded output retained %d bytes, want at most 32", output.Len())
 	}
 }
