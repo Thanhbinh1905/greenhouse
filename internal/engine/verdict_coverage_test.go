@@ -7,9 +7,8 @@ import (
 
 func TestIncompleteCoverageAndUnsettledResponse(t *testing.T) {
 	t.Parallel()
-	x := &Execution{Rules: InputIdentity{Candidate: "head"}, Paths: []string{"f"}}
+	x := &Execution{Config: ReviewerConfig{Model: "fixture/model"}, Rules: InputIdentity{Candidate: "head"}, Paths: []string{"f"}}
 	for _, body := range []string{
-		`{"head":"head","verdict":"clean","coverage":[],"findings":[]}`,
 		`{"head":"other","verdict":"clean","coverage":["f"],"findings":[]}`,
 		`{"head":"head","verdict":"clean","coverage":["f","f"],"findings":[]}`,
 		`{"head":"head","verdict":"clean","coverage":["f"],"findings":null}`,
@@ -17,6 +16,10 @@ func TestIncompleteCoverageAndUnsettledResponse(t *testing.T) {
 		if _, err := parseReview(verdictEvents(t, body), x); err == nil {
 			t.Fatal(body)
 		}
+	}
+	v, err := parseReview(verdictEvents(t, `{"head":"head","verdict":"clean","coverage":[],"findings":[]}`), x)
+	if err != nil || v.Verdict != "partial" || len(v.Uncovered) != 1 || v.Uncovered[0].Path != "f" || v.Uncovered[0].Reason != "not covered by reviewer within budget" {
+		t.Fatalf("missing coverage did not become partial: verdict=%+v err=%v", v, err)
 	}
 	events := verdictEvents(t, `{"head":"head","verdict":"clean","coverage":["f"],"findings":[]}`)
 	events = []byte(strings.Replace(string(events), `"aborted":false`, `"aborted":true`, 1))

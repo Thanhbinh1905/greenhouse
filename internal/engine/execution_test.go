@@ -147,6 +147,72 @@ func waitReviewWithFindings(t *testing.T, bin, repo, home string) map[string]any
 	return nil
 }
 
+func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
+	for _, test := range []struct {
+		name, answer, wantVerdict, wantStatus, wantReason string
+	}{
+		{"clean", `v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"][:-1],"findings":[]}`, "partial", "partial-review", ""},
+		{"findings", `v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"][:-1],"findings":[{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]}`, "findings", "outstanding-findings", ""},
+		{"malformed", `v={"head":b["Head"],"verdict":"unexpected","coverage":b["Paths"][:-1],"findings":[]}`, "", "inconclusive", "invalid_output"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			bin, repo, home := fixture(t)
+			target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+			for path, content := range map[string]string{"alpha.txt": "first file\n", "sample.txt": "review me\n"} {
+				if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			git(t, repo, "add", "alpha.txt", "sample.txt")
+			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+			v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
+			installFake(t, home, "")
+			scriptPath := filepath.Join(filepath.Dir(home), "fake-pi")
+			script, err := os.ReadFile(scriptPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defaultAnswer := "v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'model-id','priority':'P2','origin':'policy','file':'sample.txt','start':1,'end':1,'explanation':'Changed prose is redundant','action':'Remove repetition','rule':'unslop/plain-prose','head':b['Head']}]}"
+			if !strings.Contains(string(script), defaultAnswer) {
+				t.Fatal("fake reviewer answer template not found")
+			}
+			if err := os.WriteFile(scriptPath, []byte(strings.Replace(string(script), defaultAnswer, test.answer, 1)), 0700); err != nil {
+				t.Fatal(err)
+			}
+			settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop", "no-comments"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+			v = mutate(t, bin, repo, home, v, "apply", "fixture-model", settings)
+			q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Review files", "target": target}
+			b, _ := json.Marshal(q)
+			v = axi(t, bin, repo, home, string(b))
+			v = mutate(t, bin, repo, home, v, "resolve-rules", "rules", nil)
+			mutate(t, bin, repo, home, v, "review", "review", nil)
+			done := waitReview(t, bin, repo, home)
+			run := runOf(t, done)
+			if run["status"] != test.wantStatus {
+				t.Fatalf("unexpected review status: %v", done)
+			}
+			review := run["review"].(map[string]any)
+			if test.wantReason != "" {
+				if review["reason"] != test.wantReason {
+					t.Fatalf("reason = %v, want %s", review["reason"], test.wantReason)
+				}
+				return
+			}
+			result := review["result"].(map[string]any)
+			if result["verdict"] != test.wantVerdict {
+				t.Fatalf("verdict = %v, want %s", result["verdict"], test.wantVerdict)
+			}
+			if test.name == "findings" && len(result["findings"].([]any)) == 0 {
+				t.Fatal("findings verdict lost its findings")
+			}
+			uncovered := result["uncovered"].([]any)
+			if len(uncovered) != 1 || uncovered[0].(map[string]any)["path"] != "sample.txt" || uncovered[0].(map[string]any)["reason"] != "not covered by reviewer within budget" {
+				t.Fatalf("unexpected uncovered paths: %v", uncovered)
+			}
+		})
+	}
+}
+
 func TestExecutableReviewPersistenceAndReplay(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)

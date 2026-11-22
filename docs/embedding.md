@@ -133,7 +133,8 @@ A changed file whose hunk windows exceed 64 KiB and that is not generated become
 
 - a reviewer verdict of `clean` becomes `verdict: "partial"` with `status: "partial-review"`;
 - a `findings` verdict keeps `status: "outstanding-findings"`;
-- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes`.
+- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes` or `not covered by reviewer within budget`.
+- A well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial; a findings verdict retains its findings and outstanding-findings status.
 
 A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
 
