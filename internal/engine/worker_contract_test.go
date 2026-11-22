@@ -362,6 +362,18 @@ func TestWorkerPipelineWaitsForCancellationCleanup(t *testing.T) {
 	}
 }
 
+func TestWorkerPrepareRejectsOversizedIntentWithReason(t *testing.T) {
+	t.Parallel()
+	bin, repo, home := fixture(t)
+	before := axi(t, bin, repo, home, `{"version":2,"op":"attach"}`)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	request, _ := json.Marshal(map[string]any{"version": 2, "op": "prepare", "run_id": before["run_id"], "input_id": before["input_id"], "gate_id": before["gate_id"], "expected": before["token"], "action_id": "oversized-intent", "intent": strings.Repeat("x", 8193), "target": target})
+	got := axi(t, bin, repo, home, string(request))
+	if got["outcome"] != "refused" || got["error_code"] != "intent_too_long" || got["retryable"] != false || !strings.Contains(fmt.Sprint(got["error"]), "8192-byte limit") {
+		t.Fatalf("oversized intent refusal missing reason, limit, or stable code: %v", got)
+	}
+}
+
 func TestWorkerPipelineRejectsInvalidIntent(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)
