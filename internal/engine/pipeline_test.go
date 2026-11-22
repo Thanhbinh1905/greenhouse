@@ -33,7 +33,7 @@ func TestConventionalPullTitle(t *testing.T) {
 
 const fullReviewer = `#!/usr/bin/python3
 import json,sys,os
-if sys.argv[1:] == ['--list-models']:
+if '--list-models' in sys.argv:
     print('provider model context')
     print('fixture model 128K')
     print('openai gpt-5.6-luna 128K')
