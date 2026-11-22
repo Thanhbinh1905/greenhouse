@@ -308,8 +308,11 @@ func classifyPi(exit int, stdout, stderr []byte) *BackendFailure {
 	if exit != 0 && bytes.Contains(stderr, []byte("No API key found")) {
 		return &BackendFailure{Reason: "auth", Message: safeMessage(strings.SplitN(string(stderr), "\n", 2)[0])}
 	}
-	message := ""
+	message, overflow := "", false
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
+		if field(event, "type") == "compaction_start" && field(event, "reason") == "overflow" {
+			overflow = true
+		}
 		if field(event, "type") != "message_end" {
 			return
 		}
@@ -325,6 +328,9 @@ func classifyPi(exit int, stdout, stderr []byte) *BackendFailure {
 			}
 		}
 	})
+	if exit != 0 && overflow {
+		return &BackendFailure{Reason: "context_overflow", Message: "pi exceeded the model context window and started compaction; the same input cannot fit", diagnosticOnly: true}
+	}
 	if message == "" {
 		return nil
 	}

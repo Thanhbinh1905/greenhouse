@@ -290,3 +290,21 @@ func checkReviewInput(input []byte, diff string, files []reviewFile, criteria []
 	}
 	return err
 }
+
+const promptBytesPerToken = 3
+
+var defaultContextTokens = map[string]int{BackendPi: 128_000, BackendClaude: 200_000, BackendCodex: 272_000}
+
+func promptTokens(input []byte) int {
+	return (len(input) + promptBytesPerToken - 1) / promptBytesPerToken
+}
+
+func promptTokenLimit(cfg ReviewerConfig) int {
+	window := defaultContextTokens[cfg.Backend]
+	if cfg.Backend == BackendPi && cfg.Model != "" {
+		if catalog, err := nativeModelCatalog(cfg.Executable); err == nil && catalog[cfg.Model] > 0 {
+			window = catalog[cfg.Model]
+		}
+	}
+	return window / 2
+}
