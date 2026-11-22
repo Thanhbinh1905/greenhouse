@@ -82,7 +82,7 @@ Greenhouse classifies a failed backend run from the CLI's exit code and output. 
 
 Greenhouse stops a Codex run after three "waiting for network" lines. The review or repair then ends cancelled or failed, not paused.
 
-Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repair. Its `reason` may still name a cause, such as `model_mismatch`, `crash` or `missing_binary`. The recorded outputs are in [`testdata/backends/`](../testdata/backends/).
+Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repair. Its `reason` may still name a cause, such as `model_mismatch`, `crash` or `missing_binary`. A pi run that exits non-zero after a `compaction_start` event with reason `overflow` reports `context_overflow`; see [model context window](embedding.md#model-context-window). The recorded outputs are in [`testdata/backends/`](../testdata/backends/).
 
 ### Timeouts and cancellation
 

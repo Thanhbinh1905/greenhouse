@@ -234,9 +234,6 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	covered := slices.DeleteFunc(slices.Clone(names), func(name string) bool {
-		return slices.ContainsFunc(uncovered, func(u UncoveredPath) bool { return u.Path == name })
-	})
 	files = hunkContext(files, changedRanges(string(diff)))
 	if files, e = generatorFiles(r.Submitted.Worktree, r.Candidate, generated, files); e != nil {
 		return nil, e
@@ -255,41 +252,89 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if len(generated) > 0 {
 		contract += generatedContract
 	}
-	if len(uncovered) > 0 {
-		contract += uncoveredContract
-	}
 	snap, e := repository.SnapshotOf(r.Submitted.Worktree, r.Candidate)
 	if e != nil {
 		return nil, e
 	}
 	var responses []ResolutionResponse
 	var checked []reviewResponse
+	resolution := ""
 	if responder, pending := pendingResponses(r); (full || r.Host != nil) && responder != nil && len(pending) > 0 {
 		responses, checked = pending, reviewResponses(responder)
-		contract += resolutionContract
+		resolution = resolutionContract
 	}
 	duration, e := reviewBudget()
 	if e != nil {
 		return nil, e
 	}
 	budget := duration.String()
-	bundle := struct {
-		Intent, Target, Head, Diff string
-		ReviewBudget               string
-		ChangedHunks               map[string][][2]int
-		Paths                      []string
-		Files                      []reviewFile
-		Submodules                 []reviewSubmodule `json:",omitempty"`
-		Generated                  []GeneratedPath   `json:",omitempty"`
-		Uncovered                  []UncoveredPath   `json:",omitempty"`
-		Snapshot                   struct{ Commit, Tree, Digest string }
-		Responses                  []reviewResponse `json:",omitempty"`
-		Criteria                   json.RawMessage
-		Contract                   string
-	}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, changedRanges(string(diff)), covered, files, submodules, generated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, rules.Bytes(), contract}
-	input, e := renderReviewInput(bundle, reviewedDiff, files, submodules)
+	isUncovered := func(name string) bool {
+		return slices.ContainsFunc(uncovered, func(u UncoveredPath) bool { return u.Path == name })
+	}
+	render := func() ([]byte, error) {
+		covered := slices.DeleteFunc(slices.Clone(names), isUncovered)
+		instructions := contract
+		if len(uncovered) > 0 {
+			instructions += uncoveredContract
+		}
+		bundle := struct {
+			Intent, Target, Head, Diff string
+			ReviewBudget               string
+			ChangedHunks               map[string][][2]int
+			Paths                      []string
+			Files                      []reviewFile
+			Submodules                 []reviewSubmodule `json:",omitempty"`
+			Generated                  []GeneratedPath   `json:",omitempty"`
+			Uncovered                  []UncoveredPath   `json:",omitempty"`
+			Snapshot                   struct{ Commit, Tree, Digest string }
+			Responses                  []reviewResponse `json:",omitempty"`
+			Criteria                   json.RawMessage
+			Contract                   string
+		}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, changedRanges(string(diff)), covered, files, submodules, generated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, rules.Bytes(), instructions + resolution}
+		return renderReviewInput(bundle, reviewedDiff, files, submodules)
+	}
+	input, e := render()
 	if e != nil {
 		return nil, e
+	}
+	allowed := promptTokenLimit(cfg)
+	if measured := promptTokens(input); measured > allowed {
+		weight := map[string]int{}
+		var candidates []string
+		for _, name := range names {
+			if isUncovered(name) || slices.ContainsFunc(generated, func(g GeneratedPath) bool { return g.Path == name }) {
+				continue
+			}
+			if reviewedDiff != "" {
+				rest, e := omitDiffHunks(r.Submitted.Worktree, base, r.Candidate, reviewedDiff, name, "")
+				if e != nil {
+					return nil, e
+				}
+				weight[name] = len(reviewedDiff) - len(rest)
+			}
+			if i := slices.IndexFunc(files, func(f reviewFile) bool { return f.Path == name }); i >= 0 {
+				weight[name] += len(files[i].Lines)
+			}
+			candidates = append(candidates, name)
+		}
+		slices.SortStableFunc(candidates, func(a, b string) int { return weight[b] - weight[a] })
+		reason := fmt.Sprintf("prompt exceeds model context (%d tokens > %d)", measured, allowed)
+		for omitted := 0; promptTokens(input) > allowed; omitted++ {
+			if omitted == len(candidates) || len(uncovered)+1 >= len(names) {
+				return nil, &reviewRefusal{"prompt_exceeds_context", fmt.Sprintf("prompt exceeds model context (%d tokens > %d) after omitting %d changed paths; nothing reviewable fits", promptTokens(input), allowed, omitted)}
+			}
+			name := candidates[omitted]
+			uncovered = append(uncovered, UncoveredPath{name, reason})
+			files = slices.DeleteFunc(files, func(f reviewFile) bool { return f.Path == name })
+			if reviewedDiff != "" {
+				if reviewedDiff, e = omitDiffHunks(r.Submitted.Worktree, base, r.Candidate, reviewedDiff, name, "[uncovered: hunks omitted; see Uncovered]"); e != nil {
+					return nil, e
+				}
+			}
+			if input, e = render(); e != nil {
+				return nil, e
+			}
+		}
 	}
 	if e := checkReviewInput(input, reviewedDiff, files, rules.Bytes(), checked, submodules); e != nil {
 		return nil, e
