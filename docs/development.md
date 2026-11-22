@@ -122,6 +122,49 @@ Each case directory holds:
 
 On this corpus, `openai/gpt-5.6-luna` through Pi stays the recommended default reviewer. One run of `claude-sonnet-5-5` through the Claude backend matched or beat it on recall and precision at about 20 times the cost, so it is the recommended reviewer `fallback`. `xai` answered `402` (no credits), and `google`, `openrouter` and `meta` had no credentials.
 
+### Real posse PR regression set
+
+[`tools/posse_review_regression.json`](../tools/posse_review_regression.json) pins the ten exact PR heads, merge-base targets and expected outcomes from the t167 benchmark. `tools/posse_review_regression.py` runs the cases through the built Greenhouse AXI CLI with reviewer Pi, builtin `unslop` and `no-comments`, and one fresh state home per repetition. It records each exact-head host result as JSON. Runs make paid model calls.
+
+Clone posse and fetch every pinned head and target commit before running; all worktrees, homes and result files must stay in private scratch:
+
+```sh
+git clone https://github.com/Thanhbinh1905/posse.git "$TMPDIR/posse"
+python3 - "$TMPDIR/posse" <<'PY'
+import json, subprocess, sys
+from pathlib import Path
+repo = Path(sys.argv[1])
+cases = json.loads(Path("tools/posse_review_regression.json").read_text())
+for sha in sorted({value for case in cases for value in (case["head"], case["target"])}):
+    subprocess.run(["git", "-C", str(repo), "fetch", "--no-tags", "origin", sha], check=True)
+PY
+go build -o "$TMPDIR/greenhouse" ./cmd/greenhouse
+python3 tools/posse_review_regression.py \
+  --binary "$TMPDIR/greenhouse" --source "$TMPDIR/posse" \
+  --out "$TMPDIR/posse-regression" --runs 2
+```
+
+The expected finding checks require the expected priority, path and overlapping candidate line range. PR 1146 checks specifically for the historical P1 at `scripts/preflight.sh:44-45`; a different finding elsewhere in that file is reported separately and does not satisfy or fail that location-specific check. A clean case requires a clean verdict; an inconclusive result is not clean.
+
+The first current-main baseline used `9b9ba69` (after t170), two runs per PR, Pi reviewer `openai/gpt-5.6-luna`, default three-minute review budget, and isolated host-mode homes. The 20 reviews cost $1.02781 total, with a median of $0.04738 per review. Results:
+
+| PR | Expected | Run 1 | Run 2 | Match |
+|---:|---|---|---|---:|
+| 1131 | P1 at `plan_blobs.go:94` (#1129) | clean | P2 `queries.sql:370-373` | 0/2 |
+| 1156 | P1 at `greenhouse_watch.go:159` (#1145) | clean | clean | 0/2 |
+| 1168 | P1 at `validation_summary.go:72-93` (#1157) | P1 `review_pass_next_step.go:129-131`, P1 `review_verdict.go:191-192`, P2 `validation_summary.go:101-106` | P1 `validation_summary.go:105-110` | 0/2 |
+| 1146 | no P1 at `preflight.sh:44-45` | clean | P1 `preflight.sh:68-71` | 2/2 at the specified range |
+| 1152 | clean | P1 `review_rounds.go:175-176` | clean | 1/2 |
+| 1159 | clean | P1 `watch_runtime.go:1261-1266` | clean | 1/2 |
+| 1164 | clean | clean | clean | 2/2 |
+| 1165 | clean | P3 `ci-test-results.md:3` | clean | 1/2 |
+| 1167 | clean | inconclusive (`review_budget`) | inconclusive (`review_budget`) | 0/2 |
+| 1158 | clean | P1 `watch_runtime.go:1096-1104` | P2 `watch_runtime.go:1096-1104` | 0/2 |
+
+The three intended defects were not detected at their expected locations. PR 1168's finding at `validation_summary.go:105-110` overlaps neither the expected lines nor the recorded t167 defect, so it receives no credit. The specified 1146 false P1 was absent in both runs; the separate P1 at lines 68-71 is outside that expected range. Five of twelve runs on the six clean cases returned clean, and only PR 1164 was clean in both runs. PR 1167 was inconclusive twice.
+
+There was no prompt or criteria change: this baseline did not improve recall, and the six clean cases did not stay clean across both runs. The regression set and baseline are added without changing reviewer behavior.
+
 ## Fixer evaluation
 
 `go run ./cmd/eval fix-run` measures selected-finding repair with a real model through the product's one-pass repair path. Like the review evaluation, it is development-only, and `go test ./...` never calls a model.
