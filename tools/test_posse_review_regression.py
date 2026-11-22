@@ -34,8 +34,9 @@ class RegressionCasesTest(unittest.TestCase):
         no_p1 = {"kind": "no-p1", "path": "preflight.sh", "start": 44, "end": 45}
         other_range = {"file": "preflight.sh", "start": 68, "end": 71, "priority": "P1"}
         target_range = {"file": "preflight.sh", "start": 45, "end": 48, "priority": "P1"}
-        self.assertTrue(matches(no_p1, {"findings": [other_range]}))
-        self.assertFalse(matches(no_p1, {"findings": [target_range]}))
+        self.assertTrue(matches(no_p1, {"verdict": "findings", "findings": [other_range]}))
+        self.assertFalse(matches(no_p1, {"verdict": "findings", "findings": [target_range]}))
+        self.assertFalse(matches(no_p1, {"verdict": "partial", "findings": []}))
 
 
 if __name__ == "__main__":

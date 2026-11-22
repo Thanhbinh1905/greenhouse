@@ -18,6 +18,8 @@ def matches(expected, result):
     if expected["kind"] == "clean":
         return result.get("verdict") == "clean"
     if expected["kind"] == "no-p1":
+        if result.get("verdict") not in {"clean", "findings"}:
+            return False
         return not any(
             item.get("priority") == "P1" and item.get("file") == expected["path"]
             and item.get("start", 0) <= expected["end"] and item.get("end", 0) >= expected["start"]
