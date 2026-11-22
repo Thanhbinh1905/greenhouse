@@ -426,7 +426,7 @@ The response includes the refreshed envelope fields, `rules`, `rules_ready`, and
 }
 ```
 
-The response includes the refreshed envelope fields and the retained `run.intent`, `run.target`, and `run.candidate`.
+The response includes the refreshed envelope fields and the retained `run.intent`, `run.target`, and `run.candidate`. Intents longer than 8192 bytes are refused with `error_code: "intent_too_long"`, `retryable: false`, and an error naming the byte limit. The limit remains 8 KiB as a bounded-input limit, not as a proxy for model context. Issue 61 tracks token-based prompt estimation as the appropriate guard against prompt overflow; this limit is not raised in anticipation of that separate check.
 
 ```json
 {
