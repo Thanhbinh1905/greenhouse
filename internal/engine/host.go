@@ -172,14 +172,21 @@ func classifyHostFindings(r *Run) error {
 	if err != nil {
 		return err
 	}
-	diff, err := repository.Read(r.Submitted.Worktree, "diff", "--unified=0", base, r.Candidate, "--")
+	diff, err := repository.Read(r.Submitted.Worktree, reviewDiffArgs(base, r.Candidate, "--unified=0")...)
 	if err != nil {
 		return errors.New("cannot classify carried host findings against current diff")
 	}
 	ranges := changedRanges(string(diff))
-	kept := make([]Finding, 0, len(r.HostFindings))
-	r.HostCarried = make([]CarriedFinding, 0, len(r.HostFindings))
-	for _, finding := range r.HostFindings {
+	findings := append([]Finding(nil), r.HostFindings...)
+	if len(r.HostCarried) > 0 {
+		findings = make([]Finding, 0, len(r.HostCarried))
+		for _, carried := range r.HostCarried {
+			findings = append(findings, carried.Finding)
+		}
+	}
+	kept := make([]Finding, 0, len(findings))
+	carriedFindings := make([]CarriedFinding, 0, len(findings))
+	for _, finding := range findings {
 		inside := false
 		for _, span := range ranges[finding.File] {
 			if finding.Start >= span[0] && finding.End <= span[1] {
@@ -194,8 +201,9 @@ func classifyHostFindings(r *Run) error {
 		} else {
 			item.Reason = "finding file or lines are outside changed hunks of the current target diff"
 		}
-		r.HostCarried = append(r.HostCarried, item)
+		carriedFindings = append(carriedFindings, item)
 	}
+	r.HostCarried = carriedFindings
 	r.HostFindings = kept
 	return nil
 }

@@ -443,60 +443,68 @@ func TestHostSuccessorDropsFindingsOutsideCurrentTargetDiff(t *testing.T) {
 	bin, repo, home := fixture(t)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "-b", "candidate")
-	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("introduced defect\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("introduced defect\nsecond line\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	git(t, repo, "add", "sample.txt")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
-	installFake(t, home, `print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps({'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'ignored','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Defect','action':'Fix it','rule':'','head':b['Head']}]})}]}}))
-print(json.dumps({'type':'agent_settled','aborted':False}))`)
+	installFake(t, home, `original_dumps=json.dumps
+
+def add_second_finding(value, *args, **kwargs):
+ if isinstance(value, dict) and value.get('verdict')=='findings':
+  value['findings'].append(dict(value['findings'][0], start=2, end=2, explanation='Defect two'))
+ return original_dumps(value, *args, **kwargs)
+json.dumps=add_second_finding`)
 	v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`), base, "-old-target")
 	hostCall(t, bin, repo, home, v, "review", "old-target-review", map[string]any{"grant": "old-target"})
 	v = hostSettleWithFindings(t, bin, repo, home)
-	if len(v["host_result"].(map[string]any)["findings"].([]any)) != 1 {
-		t.Fatalf("first review did not raise finding: %v", v["host_result"])
+	if len(v["host_result"].(map[string]any)["findings"].([]any)) != 2 {
+		t.Fatalf("first review did not raise both findings: %v", v["host_result"])
 	}
 	git(t, repo, "checkout", "main")
-	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("introduced defect\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("introduced defect\nsecond line\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	git(t, repo, "add", "sample.txt")
-	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "target introduces reviewed line")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "target introduces reviewed lines")
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "candidate")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "merge", "--no-edit", "main")
-	if err := os.WriteFile(filepath.Join(repo, "other.txt"), []byte("another candidate change\n"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("introduced defect\ncandidate changed line\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	git(t, repo, "add", "other.txt")
-	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "unrelated candidate change")
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "change second candidate line")
 	v = hostSettle(t, bin, repo, home)
 	v = hostCall(t, bin, repo, home, v, "new", "merged-target-successor", nil)
+	externalDiff := filepath.Join(filepath.Dir(home), "external-diff")
+	if err := os.WriteFile(externalDiff, []byte(`#!/bin/sh
+printf '%s\n' 'diff --git a/sample.txt b/sample.txt' '--- a/sample.txt' '+++ b/sample.txt' '@@ -0,0 +1 @@' '+external diff output'
+`), 0700); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "config", "diff.external", externalDiff)
 	v = hostPrepare(t, bin, repo, home, v, target, "-new-target")
 	run := runOf(t, v)
-	if run["host_findings"] != nil {
-		t.Fatalf("finding on target-introduced code must not carry into successor: %v", run["host_findings"])
+	findings, ok := run["host_findings"].([]any)
+	if !ok || len(findings) != 1 || findings[0].(map[string]any)["start"] != float64(2) {
+		t.Fatalf("only the finding in the real current diff should remain: %v", run["host_findings"])
 	}
 	carried, ok := run["host_carried_findings"].([]any)
-	if !ok || len(carried) != 1 {
-		t.Fatalf("inspect must explain the carried finding disposition: %v", run["host_carried_findings"])
+	if !ok || len(carried) != 2 {
+		t.Fatalf("inspect must explain every carried finding: %v", run["host_carried_findings"])
 	}
-	item := carried[0].(map[string]any)
-	if item["kept"] != false || !strings.Contains(item["reason"].(string), "outside changed hunks") {
-		t.Fatalf("finding should be reported as dropped with its reason: %v", item)
+	if carried[0].(map[string]any)["kept"] != false || !strings.Contains(carried[0].(map[string]any)["reason"].(string), "outside changed hunks") || carried[1].(map[string]any)["kept"] != true {
+		t.Fatalf("classification must use the prepared diff, not external diff output: %v", carried)
 	}
-	if strings.TrimSpace(git(t, repo, "diff", target, "HEAD", "--", "sample.txt")) != "" {
-		t.Fatal("reproduction requires the finding's line to be outside the current diff")
+	v = hostCall(t, bin, repo, home, v, "prepare", "-repeat-prepare", map[string]any{"intent": "Review sample change", "target": target})
+	if v["outcome"] != "ok" {
+		t.Fatalf("repeat prepare: %v", v)
 	}
-	hostCall(t, bin, repo, home, v, "review", "new-target-review", map[string]any{"grant": "new-target"})
-	v = hostSettle(t, bin, repo, home)
-	result := v["host_result"].(map[string]any)
-	findings, _ := result["findings"].([]any)
-	if result["status"] != "clean-review" || len(findings) != 0 {
-		t.Fatalf("the dropped finding must not block the new review: %v", result)
-	}
-	if carried, ok := result["carried_findings"].([]any); !ok || len(carried) != 1 || carried[0].(map[string]any)["kept"] != false {
-		t.Fatalf("host result must report the dropped carried finding: %v", result)
+	run = runOf(t, v)
+	carried, ok = run["host_carried_findings"].([]any)
+	if !ok || len(carried) != 2 || carried[0].(map[string]any)["kept"] != false {
+		t.Fatalf("repeated prepare must retain every carried disposition: %v", run["host_carried_findings"])
 	}
 }
 

@@ -419,7 +419,7 @@ func prepareRun(s *Store, r *Run, intent, requested string) error {
 	if err != nil {
 		return err
 	}
-	diff, err := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
+	diff, err := repository.Read(r.Submitted.Worktree, reviewDiffArgs(base, r.Candidate)...)
 	if err != nil {
 		return errors.New("cannot capture complete bounded diff")
 	}

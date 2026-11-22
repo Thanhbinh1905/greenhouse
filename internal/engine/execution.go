@@ -173,7 +173,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	diff, e := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
+	diff, e := repository.Read(r.Submitted.Worktree, reviewDiffArgs(base, r.Candidate)...)
 	if e != nil {
 		if errors.Is(e, repository.ErrReadLimit) {
 			return nil, &reviewRefusal{"review_input_too_large", "review input too large: diff exceeds 1048576 bytes; files, criteria, responses and total not yet measured"}
@@ -761,6 +761,12 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 }
 
 var hunkHeader = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@`)
+
+func reviewDiffArgs(base, candidate string, options ...string) []string {
+	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary"}
+	args = append(args, options...)
+	return append(args, base, candidate, "--")
+}
 
 func changedRanges(diff string) map[string][][2]int {
 	ranges := map[string][][2]int{}
