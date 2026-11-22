@@ -209,10 +209,10 @@ func classifyHostFindings(r *Run) error {
 }
 
 func latestHostFindings(r *Run) []Finding {
-	findings := append([]Finding(nil), r.HostFindings...)
 	if x := r.Review; x != nil && x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings") {
-		findings = append([]Finding(nil), x.Result.Findings...)
+		return append([]Finding(nil), x.Result.Findings...)
 	}
+	findings := append([]Finding(nil), r.HostFindings...)
 	for _, carried := range r.HostCarried {
 		if !carried.Kept || slices.ContainsFunc(findings, func(f Finding) bool {
 			return f.ID == carried.Finding.ID || f.File == carried.Finding.File && f.Start <= carried.Finding.End && carried.Finding.Start <= f.End
@@ -256,8 +256,9 @@ func hostResult(r *Run, current bool) *HostResult {
 		v.Verdict, v.Findings = x.Result.Verdict, append([]Finding(nil), x.Result.Findings...)
 		v.Resolutions = x.Result.Resolutions
 	}
+	settled := x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings")
 	for _, carried := range r.HostCarried {
-		if !carried.Kept || slices.ContainsFunc(v.Findings, func(f Finding) bool {
+		if settled || !carried.Kept || slices.ContainsFunc(v.Findings, func(f Finding) bool {
 			return f.ID == carried.Finding.ID || f.File == carried.Finding.File && f.Start <= carried.Finding.End && carried.Finding.Start <= f.End
 		}) {
 			continue

@@ -452,7 +452,10 @@ func TestHostSuccessorDropsFindingsOutsideCurrentTargetDiff(t *testing.T) {
 
 def add_second_finding(value, *args, **kwargs):
  if isinstance(value, dict) and value.get('verdict')=='findings':
-  value['findings'].append(dict(value['findings'][0], start=2, end=2, explanation='Defect two'))
+  if os.path.exists(root+'/clean-review'):
+   value['verdict'], value['findings'] = 'clean', []
+  else:
+   value['findings'].append(dict(value['findings'][0], start=2, end=2, explanation='Defect two'))
  return original_dumps(value, *args, **kwargs)
 json.dumps=add_second_finding`)
 	v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`), base, "-old-target")
@@ -505,6 +508,23 @@ printf '%s\n' 'diff --git a/sample.txt b/sample.txt' '--- a/sample.txt' '+++ b/s
 	carried, ok = run["host_carried_findings"].([]any)
 	if !ok || len(carried) != 2 || carried[0].(map[string]any)["kept"] != false {
 		t.Fatalf("repeated prepare must retain every carried disposition: %v", run["host_carried_findings"])
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "clean-review"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	hostCall(t, bin, repo, home, v, "review", "clean-successor-review", map[string]any{"grant": "clean-successor"})
+	v = hostSettle(t, bin, repo, home)
+	result := v["host_result"].(map[string]any)
+	findings, _ = result["findings"].([]any)
+	if result["status"] != "clean-review" || len(findings) != 0 {
+		t.Fatalf("a clean review must replace the carried findings: %v", result)
+	}
+	if carried, ok = result["carried_findings"].([]any); !ok || len(carried) != 2 {
+		t.Fatalf("host result must retain the prior disposition record: %v", result)
+	}
+	v = hostCall(t, bin, repo, home, v, "new", "after-clean-review", nil)
+	if findings, _ = runOf(t, v)["host_findings"].([]any); len(findings) != 0 {
+		t.Fatalf("the next successor must not resurrect replaced findings: %v", findings)
 	}
 }
 
