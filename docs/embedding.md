@@ -132,9 +132,9 @@ The path stays in `Paths`, so coverage must still include it, and the verdict ca
 A changed file whose hunk windows exceed 64 KiB and that is not generated becomes an uncovered path instead of refusing the review. Greenhouse omits its hunks and content, replaces its `Diff` hunks with `[uncovered: hunks omitted; see Uncovered]`, lists it in the `Uncovered` header, and removes it from `Paths`. The other files are reviewed as usual. When uncovered paths exist:
 
 - a reviewer verdict of `clean` becomes `verdict: "partial"` with `status: "partial-review"`;
-- a `findings` verdict keeps `status: "outstanding-findings"`;
-- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes` or `not covered by reviewer within budget`.
-- A well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial; a findings verdict retains its findings and outstanding-findings status.
+- a `findings` verdict keeps `status: "outstanding-findings"` when the review finishes within budget;
+- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`. A path excluded because its hunk windows exceed the input limit or because of the prompt limit keeps that reason; when the review budget expires, every otherwise-unreviewed path has reason `review_budget`;
+- a well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial. A findings verdict retains its findings and outstanding-findings status unless the review budget expires after covering at least one path, in which case it settles as partial.
 
 A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
 

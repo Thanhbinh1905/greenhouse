@@ -86,6 +86,72 @@ sys.exit(0)
 	}
 }
 
+func TestReviewBudgetAfterPartialCoverageSettlesPartial(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	writeFixtureFile(t, repo, "oversized.txt", strings.Repeat("changed content\n", 6000))
+	for i := 0; i < 12; i++ {
+		writeFixtureFile(t, repo, fmt.Sprintf("path-%02d.txt", i), strings.Repeat(fmt.Sprintf("content %d\n", i), 800))
+	}
+	commitReviewFixture(t, repo, "large change")
+	v := prepareReviewAdmission(t, bin, repo, home, target)
+	installFake(t, home, `coverage=b['Paths'][:1]
+findings=[{'id':'reported','priority':'P2','origin':'correctness','file':coverage[0],'start':1,'end':1,'explanation':'A reported issue','action':'Correct it','rule':'','head':b['Head']}] if coverage else []
+v={'head':b['Head'],'verdict':'findings' if findings else 'clean','coverage':coverage,'findings':findings}
+print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
+print(json.dumps({'type':'agent_settled','aborted':False}))
+sys.stdout.flush()
+time.sleep(30)
+`)
+	var cfg map[string]any
+	data, err := os.ReadFile(filepath.Join(home, "backends.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg["review_budget"] = "10s"
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), cfg)
+	mutate(t, bin, repo, home, v, "review", "partial-budget", nil)
+	settled := runOf(t, waitReview(t, bin, repo, home))
+	review := settled["review"].(map[string]any)
+	if review["status"] != "partial-review" {
+		calls, _ := os.ReadFile(filepath.Join(filepath.Dir(home), "invocations"))
+		t.Fatalf("budget exhaustion after partial coverage must settle partial: status=%v reason=%v finalization=%v diagnostic=%v log=%v calls=%q", review["status"], review["reason"], review["finalization"], review["diagnostic"], review["log"], calls)
+	}
+	result := review["result"].(map[string]any)
+	if result["verdict"] != "partial" {
+		t.Fatalf("budget exhaustion must yield a partial verdict: %v", result)
+	}
+	if findings := result["findings"].([]any); len(findings) != 1 {
+		t.Fatalf("findings raised before budget exhaustion must be retained: %v", findings)
+	}
+	uncovered := result["uncovered"].([]any)
+	if len(uncovered) != 12 {
+		t.Fatalf("every unreviewed changed path must be listed: %v", uncovered)
+	}
+	reasons := map[string]bool{}
+	for _, item := range uncovered {
+		entry := item.(map[string]any)
+		reason := entry["reason"].(string)
+		reasons[reason] = true
+		if reason != "hunk windows exceed 65536 bytes" && !strings.HasPrefix(reason, "prompt exceeds model context (") && reason != "review_budget" {
+			t.Fatalf("unexpected uncovered reason: %v", entry)
+		}
+	}
+	if !reasons["review_budget"] || !reasons["hunk windows exceed 65536 bytes"] {
+		t.Fatalf("uncovered paths must include the budget and hunk-window reasons: %v", uncovered)
+	}
+	promptReason := false
+	for reason := range reasons {
+		promptReason = promptReason || strings.HasPrefix(reason, "prompt exceeds model context (")
+	}
+	if !promptReason {
+		t.Fatalf("large input must leave paths uncovered by the prompt budget: %v", uncovered)
+	}
+}
+
 func TestReviewBudgetForcesFinalization(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `if '--no-tools' not in sys.argv: time.sleep(30)

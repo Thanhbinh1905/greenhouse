@@ -256,7 +256,13 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		}
 		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stdout, stderr)
 		_ = appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
-		result := reviewFrom(x, code, out, stderr, err, executorStop(turn))
+		stopErr := executorStop(turn)
+		result := reviewFrom(x, code, out, stderr, err, stopErr)
+		if (errors.Is(stopErr, context.DeadlineExceeded) || calls != nil && calls.spent.Load()) && result.Result == nil {
+			if completed := reviewFrom(x, 0, out, stderr, nil, nil); completed.Result != nil {
+				result = completed
+			}
+		}
 		if errors.Is(err, runner.ErrWriterTreeUnknown) {
 			result.Answer.Reason = "writer_tree_unknown"
 		}
@@ -283,13 +289,27 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 				return first, confinement
 			}
 			final, _ := run(ctx, args, data, 0)
+			if errors.Is(ctx.Err(), context.DeadlineExceeded) && final.Result == nil && first.Result != nil {
+				final.Status, final.Result = first.Status, first.Result
+			}
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
 			if ctx.Err() != nil && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
-				final.Status = "inconclusive"
-				final.Answer.Reason = "review_budget"
-				final.Answer.Diagnostic = "review wall-time budget exhausted"
+				if final.Result == nil || len(final.Result.Coverage) == 0 {
+					final.Status, final.Result = "inconclusive", nil
+					final.Answer.Reason = "review_budget"
+					final.Answer.Diagnostic = "review wall-time budget exhausted"
+				} else if len(final.Result.Uncovered) > 0 {
+					for i := range final.Result.Uncovered {
+						if final.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
+							final.Result.Uncovered[i].Reason = "review_budget"
+						}
+					}
+					final.Result.Verdict, final.Status = "partial", "partial-review"
+					final.Answer.Reason = ""
+					final.Answer.Diagnostic = ""
+				}
 			}
 			return final, confinement
 		}
