@@ -820,7 +820,17 @@ func handleRequest(s *Store, q Request) Response {
 		r.AutoRetries = 0
 		r.Token = opaque()
 	} else if q.Op == "prepare" {
-		if ownReviews(r) != 0 || !ValidText(q.Intent) || r.Pipeline != nil && r.Pipeline.Worktree != "" {
+		if ownReviews(r) != 0 || r.Pipeline != nil && r.Pipeline.Worktree != "" {
+			return fail("immutable review intent required before dispatch", r)
+		}
+		if len(q.Intent) > 8192 {
+			v := fail("intent exceeds 8192-byte limit", r)
+			v.ErrorCode = "intent_too_long"
+			retryable := false
+			v.Retryable = &retryable
+			return v
+		}
+		if !ValidText(q.Intent) {
 			return fail("immutable review intent required before dispatch", r)
 		}
 		if err := prepareRun(s, r, q.Intent, q.Target); err != nil {
