@@ -10,7 +10,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"reflect"
 	"regexp"
 	"slices"
 	"strconv"
@@ -48,6 +47,7 @@ type DocAssessment struct {
 }
 type Verdict struct {
 	Diagnostics      []string          `json:"diagnostics,omitempty"`
+	Uncovered        []UncoveredPath   `json:"uncovered,omitempty"`
 	ReportedProvider string            `json:"reported_provider,omitempty"`
 	ReportedModel    string            `json:"reported_model,omitempty"`
 	Head             string            `json:"head"`
@@ -174,7 +174,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	diff, e := repository.Read(r.Submitted.Worktree, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, r.Candidate, "--")
+	diff, e := repository.Read(r.Submitted.Worktree, reviewDiffArgs(base, r.Candidate)...)
 	if e != nil {
 		if errors.Is(e, repository.ErrReadLimit) {
 			return nil, &reviewRefusal{"review_input_too_large", "review input too large: diff exceeds 1048576 bytes; files, criteria, responses and total not yet measured"}
@@ -643,6 +643,7 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		}
 	}
 	var v Verdict
+	v.Uncovered = append([]UncoveredPath(nil), x.Uncovered...)
 	d := json.NewDecoder(strings.NewReader(text))
 	d.DisallowUnknownFields()
 	if d.Decode(&v) != nil || d.Decode(new(any)) != io.EOF {
@@ -665,9 +666,17 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		}
 		got[p] = true
 	}
-	if !reflect.DeepEqual(expected, got) {
-		return nil, errors.New("incomplete coverage")
+	for path := range got {
+		if !expected[path] {
+			return nil, errors.New("coverage includes an unreviewed path")
+		}
 	}
+	for path := range expected {
+		if !got[path] {
+			v.Uncovered = append(v.Uncovered, UncoveredPath{Path: path, Reason: "not covered by reviewer within budget"})
+		}
+	}
+	slices.SortFunc(v.Uncovered, func(a, b UncoveredPath) int { return strings.Compare(a.Path, b.Path) })
 	var input AgentInput
 	if len(x.Rules.Content) > 0 {
 		if err := json.Unmarshal(x.Rules.Content, &input); err != nil {
@@ -749,7 +758,7 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 	if (v.Verdict == "clean" && len(v.Findings) != 0) || (v.Verdict == "findings" && len(v.Findings) == 0) {
 		return nil, errors.New("inconsistent verdict")
 	}
-	if v.Verdict == "clean" && len(x.Uncovered) > 0 {
+	if v.Verdict == "clean" && len(v.Uncovered) > 0 {
 		v.Verdict = "partial"
 	}
 	reported := provider + "/" + model
@@ -759,11 +768,18 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 	if provider == "" || model == "" || (x.Config.Model != "" && reported != x.Config.Model) {
 		return nil, errors.New("actual model identity does not match configured exact model")
 	}
+	x.Uncovered = append([]UncoveredPath(nil), v.Uncovered...)
 	v.ReportedProvider, v.ReportedModel = provider, model
 	return &v, nil
 }
 
 var hunkHeader = regexp.MustCompile(`^@@ -([0-9]+)(?:,([0-9]+))? \+([0-9]+)(?:,([0-9]+))? @@`)
+
+func reviewDiffArgs(base, candidate string, options ...string) []string {
+	args := []string{"diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary"}
+	args = append(args, options...)
+	return append(args, base, candidate, "--")
+}
 
 func changedRanges(diff string) map[string][][2]int {
 	ranges := map[string][][2]int{}

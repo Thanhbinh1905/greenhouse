@@ -133,7 +133,8 @@ A changed file whose hunk windows exceed 64 KiB and that is not generated become
 
 - a reviewer verdict of `clean` becomes `verdict: "partial"` with `status: "partial-review"`;
 - a `findings` verdict keeps `status: "outstanding-findings"`;
-- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes`.
+- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes` or `not covered by reviewer within budget`.
+- A well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial; a findings verdict retains its findings and outstanding-findings status.
 
 A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
 
@@ -193,7 +194,7 @@ Each response has:
 - `response`: `fixed` or `disputed`.
 - `reason`: required for `disputed`; optional for `fixed`. A non-empty reason must contain non-whitespace text, valid UTF-8, at most 8,192 bytes, and no control characters except tabs and newlines.
 
-A host may respond to a subset of the findings. A successor created with `new` by the same host inherits the latest settled findings. This lets the host respond after committing an author repair. A completed review replaces that set, including when its findings array is empty. A failed, cancelled, stale, or inconclusive review does not replace it.
+A host may respond to a subset of the findings. A successor created with `new` by the same host carries the latest settled findings forward. During `prepare`, Greenhouse compares each carried finding's file and line range with changed hunks in the current diff from `merge-base(target, candidate)` to the candidate. A finding remains outstanding only when that range is still in a changed hunk; otherwise it is dropped. A new review can raise it again. `inspect.run.host_carried_findings` and `host_result.carried_findings` report each carried finding as kept or dropped with a reason. A completed review replaces the carried set, including when its findings array is empty. A failed, cancelled, stale, or inconclusive review does not replace it.
 
 Greenhouse refuses unknown finding IDs, duplicate IDs, other response values, invalid reasons, and any non-empty `authority` value. Deferral remains a standalone decision operation. Responses require protocol 2 and the owning host's `review` request. Standalone clients, other hosts, and other operations cannot submit responses. Validation failure consumes no grant and leaves the run token unchanged.
 
@@ -445,7 +446,7 @@ The response includes the refreshed envelope fields, `rules`, `rules_ready`, and
 }
 ```
 
-The response includes the refreshed envelope fields and the retained `run.intent`, `run.target`, and `run.candidate`.
+The response includes the refreshed envelope fields and the retained `run.intent`, `run.target`, and `run.candidate`. Intents longer than 8192 bytes are refused with `error_code: "intent_too_long"`, `retryable: false`, and an error naming the byte limit. The limit remains 8 KiB as a bounded-input limit, not as a proxy for model context. Issue 61 tracks token-based prompt estimation as the appropriate guard against prompt overflow; this limit is not raised in anticipation of that separate check.
 
 ```json
 {
