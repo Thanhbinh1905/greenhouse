@@ -311,6 +311,22 @@ func TestReviewCancellationAndMalformedOutput(t *testing.T) {
 		})
 	}
 }
+func TestReviewerContractDefinesPrioritiesAndBlockingGate(t *testing.T) {
+	for priority, definition := range map[string]string{
+		"P0": "data loss, a security compromise, or a crash on a common path",
+		"P1": "wrong behavior under normal use",
+		"P2": "an edge case or degraded behavior with a workaround",
+		"P3": "style or maintainability",
+	} {
+		if !strings.Contains(reviewContract, priority+" means "+definition) {
+			t.Errorf("review contract does not define %s by effect", priority)
+		}
+	}
+	if !strings.Contains(reviewContract, "Only P0 and P1 findings block") {
+		t.Fatal("review contract does not state the blocking gate")
+	}
+}
+
 func TestReviewDeliversNumberedCandidateFiles(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)
@@ -357,6 +373,11 @@ sys.exit(0)
 	want := "--- keep.go ---\n1: package sample\n2: const config = `{" + `"key": "value"` + `}` + "`\n"
 	if !strings.Contains(c.Raw, want) || !strings.Contains(contract, "[omitted]") || !strings.Contains(contract, "Submodules") {
 		t.Fatalf("reviewer input omitted source or contract details: raw=%s contract=%s", c.Raw, contract)
+	}
+	for _, definition := range []string{"P0 means data loss", "P1 means wrong behavior", "P2 means an edge case", "P3 means style or maintainability", "Only P0 and P1 findings block"} {
+		if !strings.Contains(contract, definition) {
+			t.Errorf("pi reviewer contract lacks %q", definition)
+		}
 	}
 	if strings.Contains(c.Raw, `\"key\"`) {
 		t.Fatalf("reviewer input escaped source quotes: %s", c.Raw)
