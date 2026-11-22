@@ -1,14 +1,17 @@
 package engine
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
@@ -236,7 +239,8 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 	deadline, _ := ctx.Deadline()
 	exploration, stopExploring := context.WithDeadline(ctx, time.Now().Add(time.Until(deadline)*4/5))
 	defer stopExploring()
-	run := func(turn context.Context, args []string, input []byte) (reviewOutcome, []byte) {
+	spent := false
+	run := func(turn context.Context, args []string, input []byte, budget int) (reviewOutcome, []byte) {
 		exe, argv, err := runner.ConfinedCommand(policy, x.Config.Executable, args)
 		if err != nil {
 			return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable"}, nil
@@ -244,7 +248,13 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
 		turn, stopTurn := context.WithCancel(turn)
 		defer stopTurn()
-		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stallWatch(out, x.Config.Backend, stopTurn), stderr)
+		stdout := stallWatch(out, x.Config.Backend, stopTurn)
+		var calls *toolCallWatch
+		if budget > 0 && s.backend == BackendPi {
+			calls = &toolCallWatch{w: stdout, budget: budget, cancel: stopTurn}
+			stdout = calls
+		}
+		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stdout, stderr)
 		_ = appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
 		result := reviewFrom(x, code, out, stderr, err, executorStop(turn))
 		if errors.Is(err, runner.ErrWriterTreeUnknown) {
@@ -254,20 +264,25 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			result.Status = "inconclusive"
 			result.Log += "; " + reason
 		}
+		if calls != nil && calls.spent.Load() {
+			spent = true
+			result.Log += fmt.Sprintf("; tool-call budget %d spent", budget)
+		}
 		return result, out.Bytes()
 	}
-	first, stdout := run(exploration, s.args, x.Input)
+	first, stdout := run(exploration, s.args, x.Input, x.ToolCallBudget)
 	nearLimit := errors.Is(exploration.Err(), context.DeadlineExceeded) && ctx.Err() == nil
-	if ctx.Err() == nil && first.Answer.Reason != "writer_tree_unknown" && (nearLimit || first.Answer.Reason == "invalid_output") {
+	stopped := nearLimit || spent
+	if ctx.Err() == nil && first.Answer.Reason != "writer_tree_unknown" && (stopped || first.Answer.Reason == "invalid_output") {
 		args, ok := s.finalArgs(stdout)
 		if ok {
-			data, inputErr := reviewFinalizationInput(x, first, nearLimit)
+			data, inputErr := reviewFinalizationInput(x, first, stopped)
 			if inputErr != nil {
 				first.Status = "inconclusive"
 				first.Log += "; finalization input invalid: " + inputErr.Error()
 				return first, confinement
 			}
-			final, _ := run(ctx, args, data)
+			final, _ := run(ctx, args, data, 0)
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
@@ -366,4 +381,43 @@ func hunkContext(files []reviewFile, ranges map[string][][2]int) []reviewFile {
 		files[i].Lines = excerpt.String()
 	}
 	return files
+}
+
+func toolCallBudget(paths int) int {
+	return min(max(2+2*paths, 6), 40)
+}
+
+type toolCallWatch struct {
+	w       io.Writer
+	partial []byte
+	calls   int
+	budget  int
+	spent   atomic.Bool
+	cancel  func()
+}
+
+func (t *toolCallWatch) Write(p []byte) (int, error) {
+	t.partial = append(t.partial, p...)
+	for {
+		i := bytes.IndexByte(t.partial, '\n')
+		if i < 0 {
+			break
+		}
+		var event struct {
+			Type string `json:"type"`
+		}
+		if line := t.partial[:i]; bytes.Contains(line, []byte("tool_execution_start")) || bytes.Contains(line, []byte("turn_end")) {
+			_ = json.Unmarshal(line, &event)
+		}
+		switch event.Type {
+		case "tool_execution_start":
+			t.calls++
+		case "turn_end":
+			if t.calls >= t.budget && !t.spent.Swap(true) {
+				t.cancel()
+			}
+		}
+		t.partial = t.partial[i+1:]
+	}
+	return t.w.Write(p)
 }

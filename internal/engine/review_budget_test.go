@@ -478,3 +478,41 @@ func TestFinalReviewAnswerMetadata(t *testing.T) {
 		}
 	}
 }
+
+func TestReviewToolCallBudgetStopsExploration(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `if '--no-tools' not in sys.argv:
+ with open(root+'/explored.json','w') as f: json.dump(b,f)
+ for turn in range(300):
+  for call in range(2):
+   print(json.dumps({'type':'tool_execution_start','toolCallId':'%d-%d'%(turn,call),'toolName':'read','args':{'path':'sample.txt'}}),flush=True)
+  print(json.dumps({'type':'turn_end'}),flush=True)
+  time.sleep(0.1)
+ sys.exit(0)
+`)
+	start := time.Now()
+	mutate(t, bin, repo, home, v, "review", "tool-budget", nil)
+	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	if review["status"] != "outstanding-findings" || review["finalization"] != true || time.Since(start) > 10*time.Second {
+		t.Fatalf("spent tool-call budget must finalize: status=%v finalization=%v elapsed=%s", review["status"], review["finalization"], time.Since(start))
+	}
+	if !strings.Contains(review["log"].(string), "tool-call budget 6 spent") {
+		t.Fatalf("log must name the spent budget: %v", review["log"])
+	}
+	var explored struct{ ToolCallBudget int }
+	data, err := os.ReadFile(filepath.Join(filepath.Dir(home), "explored.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &explored); err != nil || explored.ToolCallBudget != 6 {
+		t.Fatalf("review input must carry the budget: %s %v", data, err)
+	}
+}
+
+func TestToolCallBudgetScalesWithChangedPaths(t *testing.T) {
+	for _, c := range []struct{ paths, want int }{{1, 6}, {3, 8}, {11, 24}, {14, 30}, {140, 40}} {
+		if got := toolCallBudget(c.paths); got != c.want {
+			t.Fatalf("%d changed paths: budget %d, want %d", c.paths, got, c.want)
+		}
+	}
+}
