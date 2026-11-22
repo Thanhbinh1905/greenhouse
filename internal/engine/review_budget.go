@@ -387,37 +387,62 @@ func toolCallBudget(paths int) int {
 	return min(max(2+paths, 6), 40)
 }
 
+const maxWatchedLineBytes = 64 * 1024
+
 type toolCallWatch struct {
-	w       io.Writer
-	partial []byte
-	calls   int
-	budget  int
-	spent   atomic.Bool
-	cancel  func()
+	w          io.Writer
+	partial    []byte
+	discarding bool
+	calls      int
+	budget     int
+	spent      atomic.Bool
+	cancel     func()
 }
 
 func (t *toolCallWatch) Write(p []byte) (int, error) {
-	t.partial = append(t.partial, p...)
-	for {
-		i := bytes.IndexByte(t.partial, '\n')
+	original := p
+	for len(p) > 0 {
+		i := bytes.IndexByte(p, '\n')
 		if i < 0 {
+			if !t.discarding {
+				if len(t.partial)+len(p) > maxWatchedLineBytes {
+					t.partial = t.partial[:0]
+					t.discarding = true
+				} else {
+					t.partial = append(t.partial, p...)
+				}
+			}
 			break
 		}
-		var event struct {
-			Type string `json:"type"`
-		}
-		if line := t.partial[:i]; bytes.Contains(line, []byte("tool_execution_start")) || bytes.Contains(line, []byte("turn_end")) {
-			_ = json.Unmarshal(line, &event)
-		}
-		switch event.Type {
-		case "tool_execution_start":
-			t.calls++
-		case "turn_end":
-			if t.calls >= t.budget && !t.spent.Swap(true) {
-				t.cancel()
+		if !t.discarding {
+			if len(t.partial)+i > maxWatchedLineBytes {
+				t.partial = t.partial[:0]
+			} else {
+				t.partial = append(t.partial, p[:i]...)
+				t.observe(t.partial)
+				t.partial = t.partial[:0]
 			}
 		}
-		t.partial = t.partial[i+1:]
+		t.discarding = false
+		p = p[i+1:]
 	}
-	return t.w.Write(p)
+	return t.w.Write(original)
+}
+
+func (t *toolCallWatch) observe(line []byte) {
+	var event struct {
+		Type string `json:"type"`
+	}
+	if !bytes.Contains(line, []byte("tool_execution_start")) && !bytes.Contains(line, []byte("turn_end")) {
+		return
+	}
+	_ = json.Unmarshal(line, &event)
+	switch event.Type {
+	case "tool_execution_start":
+		t.calls++
+	case "turn_end":
+		if t.calls >= t.budget && !t.spent.Swap(true) {
+			t.cancel()
+		}
+	}
 }

@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestReviewDropsOnlyOutOfRangeFinding(t *testing.T) {
@@ -509,10 +511,70 @@ func TestReviewToolCallBudgetStopsExploration(t *testing.T) {
 	}
 }
 
+func TestLineWatchBoundsPartialLine(t *testing.T) {
+	output := runner.NewBuffer(32)
+	cancelled := false
+	watch := &lineWatch{w: output, cancel: func() { cancelled = true }}
+	if _, err := watch.Write([]byte(strings.Repeat("x", 64*1024+1))); err != nil {
+		t.Fatal(err)
+	}
+	if len(watch.partial) > 64*1024 {
+		t.Fatalf("partial line retained %d bytes, want at most 65536", len(watch.partial))
+	}
+	if !output.Exceeded() {
+		t.Fatal("oversized stdout must reach the bounded output writer")
+	}
+	for range 3 {
+		if _, err := watch.Write([]byte("\nwaiting for network\n")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if !cancelled {
+		t.Fatal("stall events after an oversized line must still be observed")
+	}
+}
+
 func TestToolCallBudgetScalesWithChangedPaths(t *testing.T) {
 	for _, c := range []struct{ paths, want int }{{1, 6}, {3, 6}, {11, 13}, {14, 16}, {38, 40}, {140, 40}} {
 		if got := toolCallBudget(c.paths); got != c.want {
 			t.Fatalf("%d changed paths: budget %d, want %d", c.paths, got, c.want)
 		}
+	}
+}
+
+func TestToolCallWatchBoundsPartialLine(t *testing.T) {
+	output := runner.NewBuffer(32)
+	cancelled := false
+	watch := &toolCallWatch{w: output, budget: 1, cancel: func() { cancelled = true }}
+	oversized := []byte(`{"type":"tool_execution_start","padding":"` + strings.Repeat("x", 64*1024) + `"}`)
+	if _, err := watch.Write(oversized); err != nil {
+		t.Fatal(err)
+	}
+	if len(watch.partial) > 64*1024 {
+		t.Fatalf("partial line retained %d bytes, want at most 65536", len(watch.partial))
+	}
+	if !output.Exceeded() {
+		t.Fatal("oversized stdout must reach the bounded output writer")
+	}
+	if _, err := watch.Write([]byte(strings.Repeat("y", 64*1024))); err != nil {
+		t.Fatal(err)
+	}
+	if len(watch.partial) > 64*1024 {
+		t.Fatalf("continued partial line retained %d bytes, want at most 65536", len(watch.partial))
+	}
+	if _, err := watch.Write([]byte("\n{\"type\":\"turn_end\"}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if cancelled {
+		t.Fatal("oversized event must not count as a tool call")
+	}
+	if _, err := watch.Write([]byte("{\"type\":\"tool_execution_start\"}\n{\"type\":\"turn_end\"}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !cancelled {
+		t.Fatal("valid events after an oversized line must still count")
+	}
+	if output.Len() > 32 {
+		t.Fatalf("bounded output retained %d bytes, want at most 32", output.Len())
 	}
 }
