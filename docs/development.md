@@ -144,9 +144,9 @@ python3 tools/posse_review_regression.py \
   --out "$TMPDIR/posse-regression" --runs 2
 ```
 
-The expected finding checks require the expected priority, path and overlapping candidate line range. PR 1146 checks specifically for the historical P1 at `scripts/preflight.sh:44-45`; a different finding elsewhere in that file is reported separately and does not satisfy or fail that location-specific check. A clean case requires a clean verdict; an inconclusive result is not clean.
+The expected finding checks require the expected priority, path and overlapping candidate line range. PR 1146 checks specifically for the historical P1 at `scripts/preflight.sh:44-45`; PR 1241 rejects P0-P2 findings overlapping `internal/taskplan/plan.go:891-899`. Findings outside those ranges remain in the recorded result. A clean case requires a clean verdict; an inconclusive result is not clean.
 
-The first current-main baseline used `9b9ba69` (after t170), two runs per PR, Pi reviewer `openai/gpt-5.6-luna`, default three-minute review budget, and isolated host-mode homes. The 20 reviews cost $1.02781 total, with a median of $0.04738 per review. Results:
+The current-main baseline used `9b9ba69` (after t170), two runs per PR, Pi reviewer `openai/gpt-5.6-luna`, default three-minute review budget, and isolated host-mode homes. The 22 reviews cost $1.18476 total, with a median of $0.05359 per review. Results:
 
 | PR | Expected | Run 1 | Run 2 | Match |
 |---:|---|---|---|---:|
@@ -160,10 +160,11 @@ The first current-main baseline used `9b9ba69` (after t170), two runs per PR, Pi
 | 1165 | clean | P3 `ci-test-results.md:3` | clean | 1/2 |
 | 1167 | clean | inconclusive (`review_budget`) | inconclusive (`review_budget`) | 0/2 |
 | 1158 | clean | P1 `watch_runtime.go:1096-1104` | P2 `watch_runtime.go:1096-1104` | 0/2 |
+| 1241 | no P0-P2 at `internal/taskplan/plan.go:891-899` | P1 `task_dependants.go:137-145` | P1 `task_dependants.go:137-143`, P2 `decisions.go:411-435` | 2/2 at the specified range |
 
 The three intended defects were not detected at their expected locations. PR 1168's finding at `validation_summary.go:105-110` overlaps neither the expected lines nor the recorded t167 defect, so it receives no credit. The specified 1146 false P1 was absent in both runs; the separate P1 at lines 68-71 is outside that expected range. Five of twelve runs on the six clean cases returned clean, and only PR 1164 was clean in both runs. PR 1167 was inconclusive twice.
 
-There was no prompt or criteria change: this baseline did not improve recall, and the six clean cases did not stay clean across both runs. The regression set and baseline are added without changing reviewer behavior.
+PR 1241 did not repeat the reported false-positive finding in either run; both runs found other defects outside `internal/taskplan/plan.go:891-899`. There was no prompt or criteria change: the three missed defects remain undetected, and the six clean cases did not stay clean across both runs. The regression set and baseline are updated without changing reviewer behavior.
 
 ## Fixer evaluation
 

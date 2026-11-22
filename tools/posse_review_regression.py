@@ -17,11 +17,12 @@ def matches(expected, result):
     findings = result.get("findings") or []
     if expected["kind"] == "clean":
         return result.get("verdict") == "clean"
-    if expected["kind"] == "no-p1":
+    if expected["kind"] in {"no-p1", "no-p0-p2"}:
         if result.get("verdict") not in {"clean", "findings"}:
             return False
+        priorities = {"P1"} if expected["kind"] == "no-p1" else {"P0", "P1", "P2"}
         return not any(
-            item.get("priority") == "P1" and item.get("file") == expected["path"]
+            item.get("priority") in priorities and item.get("file") == expected["path"]
             and item.get("start", 0) <= expected["end"] and item.get("end", 0) >= expected["start"]
             for item in findings
         )
