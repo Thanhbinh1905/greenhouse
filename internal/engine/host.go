@@ -4,12 +4,20 @@ import (
 	"encoding/json"
 	"errors"
 	"slices"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 type Host struct {
 	Name     string            `json:"name"`
 	ID       string            `json:"id"`
 	Metadata map[string]string `json:"metadata,omitempty"`
+}
+
+type CarriedFinding struct {
+	Finding Finding `json:"finding"`
+	Kept    bool    `json:"kept"`
+	Reason  string  `json:"reason"`
 }
 
 type HostResult struct {
@@ -22,6 +30,7 @@ type HostResult struct {
 	Verdict     string            `json:"verdict,omitempty"`
 	Current     bool              `json:"current"`
 	Findings    []Finding         `json:"findings"`
+	Carried     []CarriedFinding  `json:"carried_findings,omitempty"`
 	Resolutions []ResolutionCheck `json:"resolutions,omitempty"`
 	Generated   []GeneratedPath   `json:"generated,omitempty"`
 	Uncovered   []UncoveredPath   `json:"uncovered,omitempty"`
@@ -158,11 +167,53 @@ func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error
 	return nil
 }
 
-func latestHostFindings(r *Run) []Finding {
-	if x := r.Review; x != nil && x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings") {
-		return x.Result.Findings
+func classifyHostFindings(r *Run) error {
+	base, _, err := repository.ReviewDiffBase(r.Submitted.Worktree, r.Target, r.Candidate)
+	if err != nil {
+		return err
 	}
-	return r.HostFindings
+	diff, err := repository.Read(r.Submitted.Worktree, "diff", "--unified=0", base, r.Candidate, "--")
+	if err != nil {
+		return errors.New("cannot classify carried host findings against current diff")
+	}
+	ranges := changedRanges(string(diff))
+	kept := make([]Finding, 0, len(r.HostFindings))
+	r.HostCarried = make([]CarriedFinding, 0, len(r.HostFindings))
+	for _, finding := range r.HostFindings {
+		inside := false
+		for _, span := range ranges[finding.File] {
+			if finding.Start >= span[0] && finding.End <= span[1] {
+				inside = true
+				break
+			}
+		}
+		item := CarriedFinding{Finding: finding, Kept: inside}
+		if inside {
+			item.Reason = "finding lines remain inside a changed hunk of the current target diff"
+			kept = append(kept, finding)
+		} else {
+			item.Reason = "finding file or lines are outside changed hunks of the current target diff"
+		}
+		r.HostCarried = append(r.HostCarried, item)
+	}
+	r.HostFindings = kept
+	return nil
+}
+
+func latestHostFindings(r *Run) []Finding {
+	findings := append([]Finding(nil), r.HostFindings...)
+	if x := r.Review; x != nil && x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings") {
+		findings = append([]Finding(nil), x.Result.Findings...)
+	}
+	for _, carried := range r.HostCarried {
+		if !carried.Kept || slices.ContainsFunc(findings, func(f Finding) bool {
+			return f.ID == carried.Finding.ID || f.File == carried.Finding.File && f.Start <= carried.Finding.End && carried.Finding.Start <= f.End
+		}) {
+			continue
+		}
+		findings = append(findings, carried.Finding)
+	}
+	return findings
 }
 
 func hostSuccessor(r *Run, next *Run, host *Host) {
@@ -174,6 +225,7 @@ func hostSuccessor(r *Run, next *Run, host *Host) {
 	next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 	next.Inherited = &Inheritance{From: r.ID, Review: r.ReviewUsed, Repair: r.RepairUsed}
 	next.HostFindings = append([]Finding(nil), latestHostFindings(r)...)
+	next.HostCarried = make([]CarriedFinding, 0, len(next.HostFindings))
 	next.HostGrants = append([]string(nil), r.HostGrants...)
 }
 
@@ -185,6 +237,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, Head: r.Candidate, Target: r.Target, ReviewBase: x.ReviewBase, ReviewBaseReason: x.ReviewBaseReason, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
 	v.Reason, v.Diagnostic, v.Usage = x.Reason, x.Diagnostic, x.Usage
 	v.Generated, v.Uncovered = x.Generated, x.Uncovered
+	v.Carried = append([]CarriedFinding(nil), r.HostCarried...)
 	if v.Model == "" {
 		v.Model = x.ReportedModel
 		if v.Model == "" && x.Result != nil {
@@ -192,8 +245,20 @@ func hostResult(r *Run, current bool) *HostResult {
 		}
 	}
 	if x.Result != nil {
-		v.Verdict, v.Findings = x.Result.Verdict, x.Result.Findings
+		v.Verdict, v.Findings = x.Result.Verdict, append([]Finding(nil), x.Result.Findings...)
 		v.Resolutions = x.Result.Resolutions
+	}
+	for _, carried := range r.HostCarried {
+		if !carried.Kept || slices.ContainsFunc(v.Findings, func(f Finding) bool {
+			return f.ID == carried.Finding.ID || f.File == carried.Finding.File && f.Start <= carried.Finding.End && carried.Finding.Start <= f.End
+		}) {
+			continue
+		}
+		finding := carried.Finding
+		finding.Head = r.Candidate
+		v.Findings = append(v.Findings, finding)
+		v.Verdict = "findings"
+		v.Status = "outstanding-findings"
 	}
 	return v
 }
