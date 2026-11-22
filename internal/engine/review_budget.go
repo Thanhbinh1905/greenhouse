@@ -384,7 +384,7 @@ func hunkContext(files []reviewFile, ranges map[string][][2]int) []reviewFile {
 }
 
 func toolCallBudget(paths int) int {
-	return min(max(2+2*paths, 6), 40)
+	return min(max(2+paths, 6), 40)
 }
 
 type toolCallWatch struct {

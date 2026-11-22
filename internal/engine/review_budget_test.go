@@ -510,7 +510,7 @@ func TestReviewToolCallBudgetStopsExploration(t *testing.T) {
 }
 
 func TestToolCallBudgetScalesWithChangedPaths(t *testing.T) {
-	for _, c := range []struct{ paths, want int }{{1, 6}, {3, 8}, {11, 24}, {14, 30}, {140, 40}} {
+	for _, c := range []struct{ paths, want int }{{1, 6}, {3, 6}, {11, 13}, {14, 16}, {38, 40}, {140, 40}} {
 		if got := toolCallBudget(c.paths); got != c.want {
 			t.Fatalf("%d changed paths: budget %d, want %d", c.paths, got, c.want)
 		}
