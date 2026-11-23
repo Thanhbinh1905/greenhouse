@@ -61,7 +61,8 @@ Every host request carries `host`:
 
 1. `attach` with `host`, then `apply` the rules and reviewer model, `resolve-rules`, and `prepare` the intent and target branch or commit.
 2. `review` with `grant` set to the host's identity for this review authorization, for example its review round ID. Greenhouse refuses a review without a grant and refuses a grant this run or its predecessors already used. Replaying the same `action_id` returns the recorded receipt.
-3. Follow the run with `watch`, then read `host_result`.
+3. To accept the current settled review head, send `accept-head` with a reason. Greenhouse records the candidate and review ID in `run.host_acceptances` and `host_result.accepted_heads`; only that exact head is accepted.
+4. Follow the run with `watch`, then read `host_result`.
 
 `prepare` resolves the requested target to a commit and stores it as `run.target`. The review diff uses `git merge-base <target> <candidate>`, reported as `run.review_base` in `inspect` and `review_base` in `host_result`. Pipeline sync and PR creation keep using `target`. If the histories are unrelated, the diff uses `target` and `review_base_reason` explains the fallback.
 
@@ -255,7 +256,7 @@ Complete request:
 }
 ```
 
-The reviewer receives each response with its prior finding through the same `Responses` input and resolution contract used after standalone repairs. Greenhouse does not edit the worktree or require an uncommitted edit for a host's `fixed` claim. The reviewer checks the committed candidate independently.
+The reviewer receives each response with its prior finding through the same `Responses` input and resolution contract used after standalone repairs. Every host rereview also receives earlier findings on overlapping code through `PriorFindings`, even without host responses. Each item reports whether it is open, fixed by a later commit, fixed, or disputed. A blocking finding that conflicts with an earlier finding appears under `conflicts` in the review and `host_result`. The finding does not remain outstanding. After the host accepts a review head with `accept-head`, rereviews compare finding lines with each accepted head. They dismiss findings on byte-identical lines unless the reviewer marks `target_introduced`. `host_result.dismissal_reasons` explains these dismissals as out of scope and unchanged since the accepted head. Greenhouse does not edit the worktree or require an uncommitted edit for a host's `fixed` claim. The reviewer checks the committed candidate independently.
 
 A settled `host_result` includes `resolutions` when the review checked responses:
 

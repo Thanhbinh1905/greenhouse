@@ -14,6 +14,13 @@ type Host struct {
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 
+type HostAcceptance struct {
+	Candidate string `json:"candidate"`
+	Review    string `json:"review"`
+	Actor     string `json:"actor"`
+	Reason    string `json:"reason"`
+}
+
 type CarriedFinding struct {
 	Finding Finding `json:"finding"`
 	Kept    bool    `json:"kept"`
@@ -21,25 +28,28 @@ type CarriedFinding struct {
 }
 
 type HostResult struct {
-	Host        Host              `json:"host"`
-	Grant       string            `json:"grant"`
-	Review      string            `json:"review_id"`
-	Head        string            `json:"head"`
-	Target      string            `json:"target"`
-	Status      string            `json:"status"`
-	Verdict     string            `json:"verdict,omitempty"`
-	Current     bool              `json:"current"`
-	Findings    []Finding         `json:"findings"`
-	Dismissed   []Finding         `json:"dismissed_findings,omitempty"`
-	Carried     []CarriedFinding  `json:"carried_findings,omitempty"`
-	Resolutions []ResolutionCheck `json:"resolutions,omitempty"`
-	Generated   []GeneratedPath   `json:"generated,omitempty"`
-	Uncovered   []UncoveredPath   `json:"uncovered,omitempty"`
-	Rules       string            `json:"rules_digest"`
-	Config      string            `json:"config_digest"`
-	Input       string            `json:"input_digest"`
-	Backend     string            `json:"backend"`
-	Model       string            `json:"model"`
+	Host             Host              `json:"host"`
+	Grant            string            `json:"grant"`
+	Review           string            `json:"review_id"`
+	AcceptedHeads    []HostAcceptance  `json:"accepted_heads,omitempty"`
+	Head             string            `json:"head"`
+	Target           string            `json:"target"`
+	Status           string            `json:"status"`
+	Verdict          string            `json:"verdict,omitempty"`
+	Current          bool              `json:"current"`
+	Findings         []Finding         `json:"findings"`
+	Dismissed        []Finding         `json:"dismissed_findings,omitempty"`
+	Carried          []CarriedFinding  `json:"carried_findings,omitempty"`
+	Resolutions      []ResolutionCheck `json:"resolutions,omitempty"`
+	Conflicts        []FindingConflict `json:"conflicts,omitempty"`
+	DismissalReasons map[string]string `json:"dismissal_reasons,omitempty"`
+	Generated        []GeneratedPath   `json:"generated,omitempty"`
+	Uncovered        []UncoveredPath   `json:"uncovered,omitempty"`
+	Rules            string            `json:"rules_digest"`
+	Config           string            `json:"config_digest"`
+	Input            string            `json:"input_digest"`
+	Backend          string            `json:"backend"`
+	Model            string            `json:"model"`
 
 	Reason           string     `json:"reason,omitempty"`
 	Diagnostic       string     `json:"diagnostic,omitempty"`
@@ -60,7 +70,7 @@ var hostOwned = map[string]string{
 	"migrate":          "saved configuration",
 }
 
-var hostActions = []string{"attach", "inspect", "apply", "resolve-rules", "prepare", "review", "cancel", "resume", "rerun", "recover", "new"}
+var hostActions = []string{"attach", "inspect", "apply", "resolve-rules", "prepare", "review", "accept-head", "cancel", "resume", "rerun", "recover", "new"}
 
 func validHost(h *Host) bool {
 	if h == nil || !ValidText(h.Name) || !ValidText(h.ID) || len(h.Name) > 128 || len(h.ID) > 256 || len(h.Metadata) > 16 {
@@ -136,6 +146,22 @@ func hostReplaceable(r *Run) bool {
 	return true
 }
 
+func acceptHostHead(r *Run, reason string) error {
+	if r.Host == nil || !ValidText(reason) {
+		return errors.New("host head acceptance requires a host and reason")
+	}
+	if r.Review == nil || r.Review.Result == nil || r.Review.Rules.Candidate != r.Candidate || r.Review.Status != "clean-review" && r.Review.Status != "outstanding-findings" {
+		return errors.New("host can accept only the current settled review head")
+	}
+	if slices.ContainsFunc(r.HostAcceptances, func(acceptance HostAcceptance) bool { return acceptance.Candidate == r.Candidate }) {
+		return errors.New("candidate head already accepted")
+	}
+	r.HostAcceptances = append(r.HostAcceptances, HostAcceptance{Candidate: r.Candidate, Review: r.Review.ID, Actor: r.Host.Name, Reason: reason})
+	r.Events = append(r.Events, Event{Kind: "host-accept-head", Actor: r.Host.Name, Reason: r.Candidate + ": " + reason})
+	r.Token = opaque()
+	return nil
+}
+
 func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error {
 	if !ValidText(grant) || len(grant) > 256 {
 		return errors.New("host review requires grant: the host's review authorization identity")
@@ -161,6 +187,13 @@ func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error
 	if err := admitReviewAgain(r); err != nil {
 		r.HostResponses = previous
 		return err
+	}
+	if response != nil {
+		for _, answer := range response.Responses {
+			if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == answer.Finding }); i >= 0 {
+				r.HostHistory[i].State = answer.Response
+			}
+		}
 	}
 	r.Review.Grant = grant
 	r.HostGrants = append(r.HostGrants, grant)
@@ -234,6 +267,13 @@ func hostSuccessor(r *Run, next *Run, host *Host) {
 	next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 	next.Inherited = &Inheritance{From: r.ID, Review: r.ReviewUsed, Repair: r.RepairUsed}
 	next.HostFindings = append([]Finding(nil), latestHostFindings(r)...)
+	next.HostAcceptances = append([]HostAcceptance(nil), r.HostAcceptances...)
+	next.HostHistory = append([]PriorFinding(nil), r.HostHistory...)
+	for _, finding := range next.HostFindings {
+		if !slices.ContainsFunc(next.HostHistory, func(prior PriorFinding) bool { return prior.ID == finding.ID }) {
+			next.HostHistory = append(next.HostHistory, PriorFinding{Finding: finding, State: "open"})
+		}
+	}
 	next.HostCarried = make([]CarriedFinding, 0, len(next.HostFindings))
 	next.HostGrants = append([]string(nil), r.HostGrants...)
 }
@@ -243,7 +283,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	if x == nil {
 		return nil
 	}
-	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, Head: r.Candidate, Target: r.Target, ReviewBase: x.ReviewBase, ReviewBaseReason: x.ReviewBaseReason, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
+	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, AcceptedHeads: append([]HostAcceptance(nil), r.HostAcceptances...), Head: r.Candidate, Target: r.Target, ReviewBase: x.ReviewBase, ReviewBaseReason: x.ReviewBaseReason, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
 	v.Reason, v.Diagnostic, v.Usage = x.Reason, x.Diagnostic, x.Usage
 	v.Generated, v.Uncovered = x.Generated, x.Uncovered
 	v.Carried = append([]CarriedFinding(nil), r.HostCarried...)
@@ -256,6 +296,8 @@ func hostResult(r *Run, current bool) *HostResult {
 	if x.Result != nil {
 		v.Verdict, v.Findings = x.Result.Verdict, append([]Finding(nil), x.Result.Findings...)
 		v.Dismissed = append([]Finding(nil), x.Result.Dismissed...)
+		v.Conflicts = append([]FindingConflict(nil), x.Result.Conflicts...)
+		v.DismissalReasons = x.Result.DismissalReasons
 		v.Resolutions = x.Result.Resolutions
 	}
 	settled := x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings")
@@ -284,7 +326,10 @@ func hostView(v *Response, r *Run, current, actionable bool) {
 	if actionable && r.Intent != "" && r.Target != "" && r.Reviewer != nil && v.RulesReady && !slices.Contains(actions, "review") {
 		actions = append(actions, "review")
 	}
+	if actionable && r.Review != nil && r.Review.Result != nil && (r.Review.Status == "clean-review" || r.Review.Status == "outstanding-findings") && !slices.ContainsFunc(r.HostAcceptances, func(acceptance HostAcceptance) bool { return acceptance.Candidate == r.Candidate }) {
+		actions = append(actions, "accept-head")
+	}
 	v.Actions = actions
-	v.Blocked = append(v.Blocked, "owned by host "+HostLabel(r.Host)+": the host owns author repair, candidate custody, publication, CI and cap decisions")
+	v.Blocked = append(v.Blocked, "owned by host "+HostLabel(r.Host)+": the host owns review outcomes, author repair, candidate custody, publication, CI and cap decisions")
 	v.HostResult = hostResult(r, current)
 }
