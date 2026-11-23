@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -23,24 +22,130 @@ func init() {
 	}
 }
 
+func processDescendants(root int) (map[int]byte, error) {
+	descendants := make(map[int]byte)
+	queue := []int{root}
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		tasks := filepath.Join("/proc", strconv.Itoa(pid), "task")
+		threads, err := os.ReadDir(tasks)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		children := make(map[int]struct{})
+		for _, thread := range threads {
+			data, err := os.ReadFile(filepath.Join(tasks, thread.Name(), "children"))
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			for _, field := range strings.Fields(string(data)) {
+				child, err := strconv.Atoi(field)
+				if err != nil {
+					return nil, err
+				}
+				children[child] = struct{}{}
+			}
+		}
+		for child := range children {
+			if _, seen := descendants[child]; seen {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(child), "stat"))
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			end := strings.LastIndexByte(string(data), ')')
+			if end < 0 {
+				return nil, errors.New("invalid process stat")
+			}
+			fields := strings.Fields(string(data[end+1:]))
+			if len(fields) < 1 || len(fields[0]) != 1 {
+				return nil, errors.New("invalid process stat fields")
+			}
+			descendants[child] = fields[0][0]
+			queue = append(queue, child)
+		}
+	}
+	return descendants, nil
+}
+
+func freezeChildTree() ([]int, bool) {
+	known := make(map[int]byte)
+	stableScans := 0
+	var latest map[int]byte
+	for {
+		descendants, err := processDescendants(os.Getpid())
+		if err != nil {
+			return processIDs(known, false), false
+		}
+		latest = descendants
+		newProcess := false
+		allStopped := true
+		for pid, state := range descendants {
+			if _, seen := known[pid]; !seen {
+				newProcess = true
+			}
+			known[pid] = state
+			if state != 'T' && state != 't' && state != 'Z' && state != 'X' {
+				allStopped = false
+				if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
+					return processIDs(known, false), false
+				}
+			}
+		}
+		if newProcess || !allStopped {
+			stableScans = 0
+		} else {
+			stableScans++
+		}
+		if stableScans >= 2 {
+			return processIDs(latest, true), true
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func processIDs(processes map[int]byte, stoppedOnly bool) []int {
+	pids := make([]int, 0, len(processes))
+	for pid, state := range processes {
+		if state == 'Z' || state == 'X' || (stoppedOnly && state != 'T' && state != 't') {
+			continue
+		}
+		pids = append(pids, pid)
+	}
+	return pids
+}
+
 func reapChildTree() bool {
-	children := filepath.Join("/proc/self/task", fmt.Sprint(os.Getpid()), "children")
 	deadline := time.Now().Add(3 * time.Second)
 	for time.Now().Before(deadline) {
-		data, err := os.ReadFile(children)
+		descendants, err := processDescendants(os.Getpid())
 		if err != nil {
 			return false
 		}
-		pids := strings.Fields(string(data))
-		if len(pids) == 0 {
+		if len(descendants) == 0 {
+			var status syscall.WaitStatus
+			for {
+				pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+				if err != nil || pid <= 0 {
+					break
+				}
+			}
 			return true
 		}
-		killFailed := false
-		for _, child := range pids {
-			if pid, err := strconv.Atoi(child); err == nil {
-				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-					killFailed = true
-				}
+		for pid := range descendants {
+			if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+				return false
 			}
 		}
 		var status syscall.WaitStatus
@@ -50,10 +155,7 @@ func reapChildTree() bool {
 				break
 			}
 		}
-		if killFailed {
-			return false
-		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(time.Millisecond)
 	}
 	return false
 }

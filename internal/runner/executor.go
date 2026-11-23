@@ -216,9 +216,17 @@ func runChild(args []string) (result int) {
 		stopped, stopReason = true, "timeout"
 	}
 	killErr := error(nil)
+	freezeComplete := true
+	var frozen []int
 	if stopped {
+		frozen, freezeComplete = freezeChildTree()
 		if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 			killErr = err
+		}
+		for _, pid := range frozen {
+			if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+				killErr = errors.Join(killErr, err)
+			}
 		}
 		childErr = <-done
 	}
@@ -236,7 +244,7 @@ func runChild(args []string) (result int) {
 	case childErr != nil:
 		code = 127
 	}
-	if killErr != nil {
+	if killErr != nil || !freezeComplete {
 		return 254
 	}
 	if record != "-" {

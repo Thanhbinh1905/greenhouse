@@ -170,10 +170,10 @@ func TestRepairRunnerStopsDescendantsOnCancellation(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
 	defer cancel()
-	_, _, _ = runBounded(ctx, root, script, nil, nil, "")
+	code, log, runErr := runBounded(ctx, root, script, nil, nil, "")
 	time.Sleep(1200 * time.Millisecond)
 	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("cancelled descendant remained able to write: %v", err)
+		t.Fatalf("cancelled descendant remained able to write: %v (code=%d log=%s err=%v)", err, code, log, runErr)
 	}
 }
 
