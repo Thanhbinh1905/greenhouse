@@ -36,6 +36,9 @@ func interactive() bool {
 }
 
 func Run(h, path string) error {
+	if _, err := repository.Resolve(path); err != nil {
+		return errors.New("no committed changes to review. Commit changes on this branch and run greenhouse again")
+	}
 	if interactive() {
 		return tuiTerminal(h, path)
 	}
@@ -53,10 +56,15 @@ func tuiTerminal(h, path string) error {
 	if v.Run == nil {
 		return errors.New(v.Error)
 	}
+	agents := engine.InstalledAgents()
+	if initialRunPending(v) && len(agents) == 0 {
+		_, err := fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Install Pi, Claude Code or Codex and sign in, then run greenhouse again.")
+		return err
+	}
 	updates := make(chan liveUpdate, 1)
 	stop := make(chan struct{})
 	go follow(h, path, v.Stream, v.Sequence, updates, stop)
-	m := newTUI(daemonClient{h, path}, v, engine.InstalledAgents(), repository.SuggestTarget(path), updates)
+	m := newTUI(daemonClient{h, path}, v, agents, repository.SuggestTarget(path), updates)
 	final, err := tea.NewProgram(m, tea.WithAltScreen()).Run()
 	close(stop)
 	if err != nil {
@@ -115,16 +123,15 @@ type tuiModel struct {
 	failed     bool
 	farewell   string
 
-	plan       runPlan
-	seq        *runSeq
-	collector  collector
-	candidates []*sessionintent.Session
-	question   string
-
-	setupStep   int
-	agentPick   int
-	setupValues [3]string
-	input       textinput.Model
+	plan         runPlan
+	intentSource string
+	seq          *runSeq
+	collector    collector
+	fallback     func(worktree, target, head string) (string, string, error)
+	setupStep    int
+	agentPick    int
+	setupValues  [3]string
+	input        textinput.Model
 
 	selected  map[string]bool
 	expanded  bool
@@ -159,13 +166,25 @@ func newTUI(client tuiClient, v engine.Response, agents []string, suggestion str
 	input := textinput.New()
 	input.Prompt = "> "
 	input.Cursor.SetMode(cursor.CursorStatic)
-	m := &tuiModel{client: client, updates: updates, live: "live", fresh: true, agents: agents, suggestion: suggestion, width: 80, height: 24, screen: screenHome, input: input, selected: map[string]bool{}, order: snapshotOrder{}, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot)), now: time.Now, collector: localCollector}
+	m := &tuiModel{client: client, updates: updates, live: "live", fresh: true, agents: agents, suggestion: suggestion, width: 80, height: 24, screen: screenHome, input: input, selected: map[string]bool{}, order: snapshotOrder{}, spin: spinner.New(spinner.WithSpinner(spinner.MiniDot)), now: time.Now, collector: localCollector, fallback: inferCommitIntent}
 	m.setView(v, false)
 	return m
 }
 
 func (m *tuiModel) Init() tea.Cmd {
-	return tea.Batch(m.waitUpdate(), m.tick())
+	return tea.Batch(m.waitUpdate(), m.tick(), m.initialRun())
+}
+
+func (m *tuiModel) initialRun() tea.Cmd {
+	if initialRunPending(m.v) && primaryAction(m.v, m.agents).ID == "run" {
+		return m.start(primaryAction(m.v, m.agents))
+	}
+	return nil
+}
+
+func initialRunPending(v engine.Response) bool {
+	r := v.Run
+	return r != nil && r.Intent == "" && r.Target == "" && r.Reviewer == nil && r.ReviewUsed == 0 && r.RepairUsed == 0 && r.Review == nil && r.Pipeline == nil
 }
 
 func (m *tuiModel) waitUpdate() tea.Cmd {
@@ -211,6 +230,9 @@ func (m *tuiModel) setView(v engine.Response, seen bool) {
 	}
 	m.order.adopt(v, m.v)
 	m.v = v
+	if m.intentSource == "" && v.Run != nil {
+		m.intentSource = storedIntentSource(v.Run.Intent)
+	}
 	if key := activeExecution(v.Run); key != m.runKey {
 		m.runKey, m.runSince, m.runFromTop = key, m.now(), seen
 	}
@@ -368,7 +390,7 @@ func (m *tuiModel) runAnswered(msg responseMsg) tea.Cmd {
 	}
 	switch msg.op {
 	case "apply":
-		m.plan.agent = ""
+		m.plan.agent = m.current().ReviewerBackend
 	case "prepare":
 		m.plan.target, m.plan.intent = "", ""
 	case "review", "pipeline":
@@ -467,8 +489,6 @@ func (m *tuiModel) key(k tea.KeyMsg) tea.Cmd {
 		return m.pageKey(key)
 	case screenConfirm:
 		return m.confirmKey(key)
-	case screenIntent:
-		return m.intentKey(key)
 	}
 	return nil
 }
@@ -520,6 +540,12 @@ func (m *tuiModel) homeKey(key string) tea.Cmd {
 		return m.openSettings(0)
 	case "f":
 		m.openFindings()
+	case "e":
+		if r := m.v.Run; r != nil && r.Intent != "" && !busy(r) && len(m.agents) > 0 {
+			m.openSetup(1)
+		} else {
+			m.say("There is no editable review intent right now.")
+		}
 	case "d":
 		if m.v.Decision != nil && slices.Contains(m.v.Actions, "decide") {
 			m.openDecision()
@@ -672,8 +698,6 @@ func (m *tuiModel) editDone(accept bool) tea.Cmd {
 		}
 	case screenDecision:
 		return m.decisionText(accept, value)
-	case screenIntent:
-		return m.intentTyped(accept, value)
 	case screenRecovery:
 		if !accept {
 			m.editing = false
@@ -780,7 +804,7 @@ func (m *tuiModel) savePlan() {
 	agent := m.agents[m.agentPick]
 	m.plan.agent, m.plan.target = agent, m.setupValues[2]
 	if intent := m.setupValues[1]; intent != intentBody(m.planIntent()) {
-		m.plan.intent = intent
+		m.plan.intent, m.intentSource = intent, "edited by you"
 	}
 	m.home("Saved for Run. Nothing has run yet.")
 }

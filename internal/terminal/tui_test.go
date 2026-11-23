@@ -209,6 +209,41 @@ func firstRun() engine.Response {
 	return v
 }
 
+func TestRunExplainsMissingCommittedChanges(t *testing.T) {
+	root := t.TempDir()
+	err := Run(root, root)
+	if err == nil || err.Error() != "no committed changes to review. Commit changes on this branch and run greenhouse again" {
+		t.Fatalf("missing-change guidance = %v", err)
+	}
+}
+
+func TestLaunchAutomaticallyStartsInitialReview(t *testing.T) {
+	client := fakeController(firstRun())
+	m := newTestTUI(firstRun(), client, "pi")
+	m.collector = collectedFor(t, &sessionintent.Session{Agent: "pi", ID: "session", Requests: []string{"Improve file handling"}})
+	for _, msg := range run(m.Init()) {
+		drive(m, msg)
+	}
+	if got := client.mutations(); strings.Join(ops(got), ",") != "prepare,resolve-rules,review" || m.v.Run.Status != "running" {
+		t.Fatalf("launch did not start review: %v, status %s", ops(got), m.v.Run.Status)
+	}
+}
+
+func TestInitialRunChoosesFirstInstalledAgentAndItsDefaultModel(t *testing.T) {
+	v := firstRun()
+	v.Run.Configs[0].Settings.ReviewerModel = "openai/fixed-model"
+	client := fakeController(v)
+	m := newTestTUI(v, client, "claude", "pi")
+	m.collector = collectedFor(t, &sessionintent.Session{Agent: "pi", ID: "session", Requests: []string{"Improve file handling"}})
+	for _, msg := range run(m.Init()) {
+		drive(m, msg)
+	}
+	got := client.mutations()
+	if strings.Join(ops(got), ",") != "apply,prepare,resolve-rules,review" || got[0].Settings.ReviewerBackend != "claude" || got[0].Settings.ReviewerModel != "" {
+		t.Fatalf("initial run did not use native model: %+v", got)
+	}
+}
+
 func TestOneRunCollectsIntentPreparesLoadsRulesAndStartsReview(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi", "claude")
@@ -263,41 +298,69 @@ func TestEditedAgentAndTypedIntentAreUsedByRun(t *testing.T) {
 	}
 }
 
-func TestRunAsksOnceWhenNoSessionMatchesOrSeveralDo(t *testing.T) {
+func TestRunInfersIntentWhenNoSessionMatchesOrOffersEdit(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")
 	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
 		return sessionintent.Match{}, sessionintent.ErrNoIntent
 	}
-	press(m, "enter")
-	if m.screen != screenIntent || len(client.mutations()) != 0 || !strings.Contains(m.View(), "What should this change do?") {
-		t.Fatalf("no-match did not ask: %s\n%s", m.screen, m.View())
-	}
-	press(m, "esc")
-	if m.seq != nil || len(client.mutations()) != 0 {
-		t.Fatal("Esc at the question did not stop Run")
+	m.fallback = func(worktree, target, head string) (string, string, error) {
+		return "typed answer", "commit messages and branch feature", nil
 	}
 	press(m, "enter")
-	press(m, typed("typed answer")...)
-	press(m, "enter")
+	if m.screen != screenHome || m.seq != nil {
+		t.Fatalf("no-match did not automatically infer intent: %s\n%s", m.screen, m.View())
+	}
 	if got := client.mutations(); len(got) != 3 || got[0].Intent != "typed answer" {
-		t.Fatalf("typed answer not used: %+v", got)
+		t.Fatalf("inferred intent not used: %+v", got)
+	}
+	if !strings.Contains(m.View(), "Source: commit messages and branch feature") {
+		t.Fatalf("intent source not displayed:\n%s", m.View())
 	}
 
 	client = fakeController(firstRun())
 	m = newTestTUI(firstRun(), client, "pi")
 	a := &sessionintent.Session{Agent: "pi", ID: "aaaaaaaa1", Requests: []string{"first"}}
-	b := &sessionintent.Session{Agent: "codex", ID: "bbbbbbbb2", Requests: []string{"second"}}
 	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
-		return sessionintent.Match{Candidates: []*sessionintent.Session{a, b}}, nil
+		return sessionintent.Match{Candidates: []*sessionintent.Session{a}}, nil
 	}
 	press(m, "enter")
-	if m.screen != screenIntent || !strings.Contains(m.View(), "second") {
-		t.Fatalf("ambiguity not shown:\n%s", m.View())
+	if got := client.mutations(); len(got) != 3 || got[0].Intent != intentText(a) {
+		t.Fatalf("highest-ranked session was not used: %+v", got)
 	}
-	press(m, "down", "enter")
-	if got := client.mutations(); len(got) != 3 || got[0].Intent != intentText(b) {
-		t.Fatalf("chosen session not used: %+v", got)
+}
+
+func TestLongInferredIntentWrapsAndKeepsItsSourceVisible(t *testing.T) {
+	v := tuiState("running", "cancel")
+	v.Run.Intent = "Commit messages and branch feature: " + strings.Repeat("handle sample data carefully ", 4)
+	m := newTestTUI(v, &recordingClient{}, "pi")
+	m.intentSource = "commit messages + branch feature"
+	view := m.View()
+	if !strings.Contains(view, "carefully") || !strings.Contains(view, "Source: commit messages + branch feature") {
+		t.Fatalf("intent or source was truncated:\n%s", view)
+	}
+}
+
+func TestSavedIntentCanBeEditedForANewRun(t *testing.T) {
+	v := ready(tuiState("outstanding-findings", "apply", "prepare", "new", "rerun-from-start"))
+	v.Run.Intent, v.Run.Target = "old intent", strings.Repeat("b", 40)
+	client := &recordingClient{}
+	m := newTestTUI(v, client, "pi")
+	if !strings.Contains(m.footer(80), "e edit intent") {
+		t.Fatalf("edit-intent action missing from footer: %s", m.footer(80))
+	}
+	press(m, "e")
+	if m.screen != screenSetup || m.input.Value() != "old intent" {
+		t.Fatalf("intent editor not opened: screen=%s value=%q", m.screen, m.input.Value())
+	}
+	m.input.SetValue("new intent")
+	press(m, "enter", "enter", "enter")
+	if m.plan.intent != "new intent" || m.intentSource != "edited by you" {
+		t.Fatalf("edited intent not retained for a new run: %q from %q", m.plan.intent, m.intentSource)
+	}
+	press(m, "enter")
+	if got := client.mutations(); len(got) == 0 || got[0].Op != "prepare" || got[0].Intent != "new intent" {
+		t.Fatalf("next run did not use the edited intent: %+v", got)
 	}
 }
 
@@ -681,19 +744,17 @@ func TestOlderActionResponseDoesNotReplaceNewerWatchState(t *testing.T) {
 	}
 }
 
-func TestOversizedCollectedIntentAsksInsteadOfTruncating(t *testing.T) {
+func TestOversizedCollectedIntentFallsBackWithoutTruncating(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")
 	long := &sessionintent.Session{Agent: "claude", ID: "long", Requests: []string{strings.Repeat("requirement text ", 600), "Final requirement: keep the retry limit at five."}}
 	m.collector = collectedFor(t, long)
-	press(m, "enter")
-	if len(client.mutations()) != 0 || m.screen != screenIntent || !strings.Contains(strings.Join(strings.Fields(m.View()), " "), "too long") {
-		t.Fatalf("oversized intent was dispatched or not explained:\n%s", m.View())
+	m.fallback = func(worktree, target, head string) (string, string, error) {
+		return "bounded commit intent", "commit messages and branch feature", nil
 	}
-	press(m, typed("bounded intent")...)
 	press(m, "enter")
-	if got := client.mutations(); len(got) != 3 || got[0].Intent != "bounded intent" {
-		t.Fatalf("bounded answer not used: %v", ops(got))
+	if got := client.mutations(); len(got) != 3 || got[0].Intent != "bounded commit intent" {
+		t.Fatalf("oversized session intent did not fall back: %v", ops(got))
 	}
 }
 

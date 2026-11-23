@@ -2,19 +2,22 @@ package terminal
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 	sessionintent "github.com/Thanhbinh1905/greenhouse/internal/intent"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	tea "github.com/charmbracelet/bubbletea"
 )
-
-const screenIntent = "intent"
 
 type runPlan struct {
 	agent  string
@@ -41,6 +44,97 @@ type intentMsg struct {
 
 type collector func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error)
 
+func inferCommitIntent(worktree, target, head string) (string, string, error) {
+	branch, err := repository.Read(worktree, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return "", "", errors.New("the current branch has no name")
+	}
+	branchName := strings.TrimSpace(string(branch))
+	if body, number, ok := pullRequestBody(worktree, branchName); ok {
+		source := fmt.Sprintf("PR #%d body", number)
+		return source + ": " + body, source, nil
+	}
+	messages, err := repository.Read(worktree, "log", "--format=%s", target+".."+head, "--")
+	if err != nil {
+		return "", "", errors.New("cannot read commit messages for this branch")
+	}
+	lines := strings.FieldsFunc(strings.TrimSpace(string(messages)), func(r rune) bool { return r == '\n' || r == '\r' })
+	if len(lines) == 0 {
+		return "", "", errors.New("no committed changes exist between the target and this branch")
+	}
+	source := "commit messages + branch " + branchName
+	return "Commit messages and branch " + branchName + ": " + strings.Join(lines, "; "), source, nil
+}
+
+func pullRequestBody(worktree, branch string) (string, int, bool) {
+	remote, err := repository.Read(worktree, "remote", "get-url", "origin")
+	if err != nil {
+		return "", 0, false
+	}
+	owner, repo, ok := githubRepository(strings.TrimSpace(string(remote)))
+	if !ok {
+		return "", 0, false
+	}
+	base := strings.TrimRight(os.Getenv("GREENHOUSE_GITHUB_API"), "/")
+	if base == "" {
+		base = "https://api.github.com"
+	}
+	endpoint := base + "/repos/" + url.PathEscape(owner) + "/" + url.PathEscape(repo) + "/pulls?state=open&per_page=100&head=" + url.QueryEscape(owner+":"+branch)
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return "", 0, false
+	}
+	req.Header.Set("Accept", "application/vnd.github+json")
+	if token := firstEnvironment("GH_TOKEN", "GITHUB_TOKEN"); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	response, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", 0, false
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != http.StatusOK {
+		return "", 0, false
+	}
+	var pulls []struct {
+		Number int    `json:"number"`
+		Body   string `json:"body"`
+	}
+	if json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&pulls) != nil || len(pulls) != 1 || pulls[0].Number < 1 || strings.TrimSpace(pulls[0].Body) == "" || len(pulls[0].Body) > sessionintent.Limit {
+		return "", 0, false
+	}
+	return strings.TrimSpace(pulls[0].Body), pulls[0].Number, true
+}
+
+func githubRepository(remote string) (string, string, bool) {
+	remote = strings.TrimSuffix(remote, ".git")
+	if strings.HasPrefix(remote, "git@github.com:") {
+		remote = strings.TrimPrefix(remote, "git@github.com:")
+	} else {
+		parsed, err := url.Parse(remote)
+		if err != nil || parsed.Host != "github.com" || parsed.User != nil {
+			return "", "", false
+		}
+		remote = strings.TrimPrefix(parsed.Path, "/")
+	}
+	parts := strings.Split(remote, "/")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", "", false
+	}
+	return parts[0], parts[1], true
+}
+
+func firstEnvironment(names ...string) string {
+	for _, name := range names {
+		if value := strings.TrimSpace(os.Getenv(name)); value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 func localCollector(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -60,14 +154,17 @@ var runStepLabels = map[string]string{
 	"resolve-rules": "Loading rules",
 	"review":        "Starting the review",
 	"pipeline":      "Starting the pipeline",
-	"question":      "Waiting for the intent",
 }
 
 func (m *tuiModel) planAgent() string {
 	r := m.v.Run
-	switch {
-	case m.plan.agent != "":
+	if m.plan.agent != "" {
 		return m.plan.agent
+	}
+	if initialRunPending(m.v) && len(m.agents) > 0 {
+		return m.agents[0]
+	}
+	switch {
 	case r.Reviewer != nil:
 		return engine.BackendOf(*r.Reviewer)
 	}
@@ -143,7 +240,7 @@ func (m *tuiModel) advance() tea.Cmd {
 	switch {
 	case seq.intent == "":
 		return m.collect(target)
-	case agent != settings.ReviewerBackend && (r.Reviewer == nil || engine.BackendOf(*r.Reviewer) != agent):
+	case r.Reviewer == nil && (agent != settings.ReviewerBackend || initialRunPending(m.v) && settings.ReviewerModel != ""):
 		draft := settings
 		draft.ReviewerBackend, draft.ReviewerModel = agent, ""
 		q := engine.TerminalMutation(m.v, "apply")
@@ -217,35 +314,34 @@ func (m *tuiModel) collected(msg intentMsg) tea.Cmd {
 	case msg.err == nil && msg.match.Session != nil:
 		return m.useSession(msg.match.Session)
 	case msg.err == nil && len(msg.match.Candidates) > 0:
-		m.candidates = msg.match.Candidates
-		m.cursor = 0
-		m.question = "Several agent sessions in this worktree mention the changed files. Which one asked for this change?"
+		return m.useSession(msg.match.Candidates[0])
 	default:
-		m.candidates = nil
-		reason := "No local agent session started in this worktree mentions the changed files"
-		if msg.err != nil && !errors.Is(msg.err, sessionintent.ErrNoIntent) {
-			reason = "Intent collection failed: " + msg.err.Error()
+		intent, source, err := m.fallback(m.v.Run.Submitted.Worktree, m.planTarget(), m.v.Run.Candidate)
+		if err != nil {
+			m.seq = nil
+			m.home("No committed change to review. Commit your changes on this branch, then run greenhouse again.")
+			return nil
 		}
-		m.question = reason + ". What should this change do?"
-		m.edit("", "the change in your own words")
+		m.seq.intent, m.seq.source, m.plan.intent, m.intentSource = intent, source, intent, source
+		m.home("")
+		return m.advance()
 	}
-	seq.step = "question"
-	m.screen = screenIntent
-	return nil
 }
 
-// useSession asks for a shorter intent instead of cutting requests that do
-// not fit the controller's limit.
 func (m *tuiModel) useSession(s *sessionintent.Session) tea.Cmd {
 	intent, ok := s.Intent()
 	if !ok {
-		m.candidates = nil
-		m.question = fmt.Sprintf("The requests in %s are too long for a review intent: %d bytes, at most %d. Nothing was cut or sent. Write the intent in your own words, keeping every requirement.", s.Label(), len(intent), sessionintent.Limit)
-		m.seq.step, m.screen = "question", screenIntent
-		m.edit("", "the change in your own words")
-		return nil
+		fallback, source, err := m.fallback(m.v.Run.Submitted.Worktree, m.planTarget(), m.v.Run.Candidate)
+		if err != nil {
+			m.seq = nil
+			m.home("The agent session intent is too long and no shorter committed intent was available. Edit the intent before running greenhouse again.")
+			return nil
+		}
+		m.seq.intent, m.seq.source, m.plan.intent, m.intentSource = fallback, source, fallback, source
+		m.home("")
+		return m.advance()
 	}
-	m.seq.intent, m.seq.source, m.plan.intent = intent, s.Label(), intent
+	m.seq.intent, m.seq.source, m.plan.intent, m.intentSource = intent, s.Label(), intent, s.Label()
 	m.home("")
 	return m.advance()
 }
@@ -267,49 +363,11 @@ func (m *tuiModel) stopRun() {
 	m.say("Run stopped. Nothing else was sent.")
 }
 
-func (m *tuiModel) intentKey(key string) tea.Cmd {
-	rows := len(m.candidates) + 1
-	switch key {
-	case "esc":
-		m.stopRun()
-	case "down", "j", "tab":
-		m.cursor = (m.cursor + 1) % rows
-	case "up", "k", "shift+tab":
-		m.cursor = (m.cursor + rows - 1) % rows
-	case "enter":
-		if m.cursor == len(m.candidates) {
-			m.candidates = nil
-			m.edit("", "the change in your own words")
-			return nil
-		}
-		return m.useSession(m.candidates[m.cursor])
-	}
-	return nil
-}
-
-func (m *tuiModel) intentTyped(accept bool, value string) tea.Cmd {
-	if !accept {
-		m.editing = false
-		m.input.Blur()
-		m.stopRun()
-		return nil
-	}
-	if !engine.ValidText(value) {
-		m.say(fmt.Sprintf("Describe the change in at most %d bytes, or press Esc to stop Run.", sessionintent.Limit))
-		return nil
-	}
-	m.editing = false
-	m.input.Blur()
-	m.seq.intent, m.plan.intent = value, value
-	m.home("")
-	return m.advance()
-}
-
 func (m *tuiModel) intentLabel() (string, string) {
 	intent := m.planIntent()
 	switch {
 	case intent == "":
-		return stepTodo, "collected from your agent session on Run"
+		return stepTodo, "inferring from your agent session"
 	case strings.HasPrefix(intent, sessionintent.CollectedPrefix):
 		state := stepTodo
 		if m.v.Run.Intent == intent {
@@ -319,7 +377,28 @@ func (m *tuiModel) intentLabel() (string, string) {
 	case m.v.Run.Intent == intent:
 		return stepDone, intent
 	}
+	if m.intentSource != "" {
+		return stepTodo, intent
+	}
 	return stepTodo, intent + " · typed"
+}
+
+func storedIntentSource(intent string) string {
+	if strings.HasPrefix(intent, sessionintent.CollectedPrefix) {
+		source, _, _ := strings.Cut(strings.TrimPrefix(intent, sessionintent.CollectedPrefix), ". These are the user's own words from that session, not a summary:")
+		return strings.TrimSpace(source)
+	}
+	if strings.HasPrefix(intent, "PR #") {
+		if source, _, ok := strings.Cut(intent, ": "); ok {
+			return source
+		}
+	}
+	if strings.HasPrefix(intent, "Commit messages and branch ") {
+		if branch, _, ok := strings.Cut(strings.TrimPrefix(intent, "Commit messages and branch "), ": "); ok {
+			return "commit messages + branch " + branch
+		}
+	}
+	return ""
 }
 
 func intentSummary(intent string) string {

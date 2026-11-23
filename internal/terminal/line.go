@@ -14,6 +14,7 @@ import (
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func call(h string, q engine.Request) (engine.Response, error) {
@@ -248,6 +249,27 @@ func terminalPrompt(format string, args ...any) {
 		fmt.Print(" ")
 	}
 }
+func runInitialSequence(m *tuiModel) bool {
+	var process func(tea.Cmd)
+	process = func(cmd tea.Cmd) {
+		if cmd == nil {
+			return
+		}
+		switch msg := cmd().(type) {
+		case tea.BatchMsg:
+			for _, child := range msg {
+				process(child)
+			}
+		case intentMsg:
+			process(m.collected(msg))
+		case responseMsg:
+			process(m.runAnswered(msg))
+		}
+	}
+	process(m.runReview())
+	return m.seq == nil && !busy(m.v.Run)
+}
+
 func lineTerminal(h, path string) error {
 	q := engine.Request{Version: engine.MaxVersion, Op: "attach", Path: path}
 	v, e := call(h, q)
@@ -256,6 +278,19 @@ func lineTerminal(h, path string) error {
 	}
 	if e = protocolRefusal(v); e != nil {
 		return e
+	}
+	agents := engine.InstalledAgents()
+	if slices.Contains(v.Actions, "prepare") && v.Run.Reviewer == nil && len(agents) == 0 {
+		_, _ = fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Install Pi, Claude Code or Codex and sign in, then run greenhouse again.")
+		return nil
+	}
+	if initialRunPending(v) && primaryAction(v, agents).ID == "run" {
+		m := newTUI(daemonClient{h, path}, v, agents, repository.SuggestTarget(path), nil)
+		if runInitialSequence(m) && m.message != "" {
+			_, _ = fmt.Fprintln(os.Stdout, m.message)
+			return nil
+		}
+		v = m.v
 	}
 	lines := make(chan string)
 	go func() {

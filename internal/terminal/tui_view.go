@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	sessionintent "github.com/Thanhbinh1905/greenhouse/internal/intent"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
@@ -122,6 +123,9 @@ func (m *tuiModel) footer(w int) string {
 			keys = append(keys, "x cancel")
 		}
 		keys = append(keys, "a actions", "s settings")
+		if m.v.Run != nil && m.v.Run.Intent != "" && !busy(m.v.Run) {
+			keys = append(keys, "e edit intent")
+		}
 		if m.v.Run != nil && len(m.v.Run.Findings) > 0 {
 			keys = append(keys, "f findings")
 		}
@@ -145,8 +149,6 @@ func (m *tuiModel) footer(w int) string {
 			keys = append(keys, "space select", "r repair selected")
 		}
 		keys = append(keys, "esc back")
-	case screenIntent:
-		keys = []string{"⏎ choose", "↑↓ move", "esc stop run"}
 	case screenDecision, screenRecovery:
 		keys = []string{"⏎ next", "↑↓ move", "esc back"}
 		if m.decision.step == 1 && m.screen == screenDecision {
@@ -169,9 +171,7 @@ func (m *tuiModel) footer(w int) string {
 			keys = []string{"⏎ confirm", "esc back"}
 		}
 	}
-	if m.editing && m.screen == screenIntent {
-		keys = []string{"⏎ continue run", "esc stop run"}
-	} else if m.editing {
+	if m.editing {
 		keys = []string{"⏎ accept", "esc back"}
 	} else if busy(m.v.Run) {
 		keys = append(keys, "q detach")
@@ -214,8 +214,6 @@ func (m *tuiModel) body(w, room int) []string {
 		return m.pageView(w, room)
 	case screenConfirm:
 		return m.confirmView(w)
-	case screenIntent:
-		return m.intentView(w, room)
 	}
 	return m.homeView(w, room)
 }
@@ -243,10 +241,21 @@ func (m *tuiModel) homeView(w, room int) []string {
 	var steps []string
 	for _, s := range m.homeSteps() {
 		row := fmt.Sprintf(" %s %-8s %s", m.icon(s.State), s.Name, s.Text)
-		if s.Name == focused {
-			row = styleFocus.Render(fit(fmt.Sprintf("▸%s %-8s %s", ansi.Strip(m.icon(s.State)), s.Name, s.Text), w))
+		if s.Name == "Intent" && ansi.StringWidth(row) > w {
+			wrapped := wrap(row, w)
+			if s.Name == focused && len(wrapped) > 0 {
+				wrapped[0] = styleFocus.Render("▸" + strings.TrimLeft(wrapped[0], " "))
+			}
+			steps = append(steps, wrapped...)
+		} else {
+			if s.Name == focused {
+				row = styleFocus.Render(fit(fmt.Sprintf("▸%s %-8s %s", ansi.Strip(m.icon(s.State)), s.Name, s.Text), w))
+			}
+			steps = append(steps, fit(row, w))
 		}
-		steps = append(steps, fit(row, w))
+		if s.Name == "Intent" && m.intentSource != "" {
+			steps = append(steps, fit("          Source: "+m.intentSource, w))
+		}
 	}
 	var progress []string
 	if m.seq != nil {
@@ -844,6 +853,9 @@ func (m *tuiModel) confirmView(w int) []string {
 
 func (m *tuiModel) homeSteps() []tuiStep {
 	steps := setupSteps(m.v, m.agents, m.suggestion)
+	if m.v.Run.Intent != "" && m.intentSource != "" && !strings.HasPrefix(m.v.Run.Intent, sessionintent.CollectedPrefix) {
+		steps[1].Text = m.v.Run.Intent
+	}
 	if !slices.Contains(m.v.Actions, "prepare") || len(m.agents) == 0 && m.v.Run.Reviewer == nil {
 		return steps
 	}
@@ -872,35 +884,6 @@ func (m *tuiModel) homeSteps() []tuiStep {
 		steps[2].Text = "no default branch found; choose a target"
 	}
 	return steps
-}
-
-func (m *tuiModel) intentView(w, room int) []string {
-	out := []string{styleBold.Render(" Which intent should Run use?"), ""}
-	out = append(out, wrapIndent(m.question, w, " ")...)
-	out = append(out, "")
-	if m.editing {
-		out = append(out, " "+m.input.View(), "")
-		for _, line := range wrapIndent("Enter continues Run; Esc stops it. Nothing was sent yet.", w, " ") {
-			out = append(out, styleDim.Render(line))
-		}
-		return out
-	}
-	var rows []string
-	for i, c := range m.candidates {
-		row := c.Label() + ": " + c.FirstLine()
-		if i == m.cursor {
-			rows = append(rows, styleFocus.Render(fit(" ▸ "+row+" ", w)))
-		} else {
-			rows = append(rows, fit("   "+row, w))
-		}
-	}
-	other := "Type the intent myself"
-	if m.cursor == len(m.candidates) {
-		rows = append(rows, styleFocus.Render(" ▸ "+other+" "))
-	} else {
-		rows = append(rows, "   "+other)
-	}
-	return append(out, m.list(rows, m.cursor, room-len(out))...)
 }
 
 func agentName(backend, model string) string {
