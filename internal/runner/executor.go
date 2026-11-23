@@ -218,7 +218,7 @@ func runChild(args []string) (result int) {
 	}
 	killErr := error(nil)
 	freezeComplete := true
-	var frozen []int
+	var frozen []processHandle
 	if stopped {
 		if err := syscall.Kill(child.Process.Pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
 			killErr = err
@@ -230,11 +230,8 @@ func runChild(args []string) (result int) {
 				killErr = errors.Join(killErr, err)
 			}
 		}
-		for _, pid := range frozen {
-			if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-				killErr = errors.Join(killErr, err)
-			}
-		}
+		ops := systemPIDFDOps()
+		killErr = errors.Join(killErr, killProcessHandles(frozen, ops.signal, ops.close))
 		if !freezeComplete {
 			reapExitedChildren()
 			return 254

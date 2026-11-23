@@ -8,10 +8,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 var ErrWriterTreeUnknown = errors.New("writer descendant cleanup could not be verified")
@@ -81,27 +84,69 @@ func processDescendants(root int) (map[int]byte, error) {
 	return descendants, nil
 }
 
-func freezeChildTree(deadline time.Time) ([]int, bool) {
-	return freezeChildTreeWith(deadline, processDescendants, syscall.Kill)
+type processHandle struct {
+	pid   int
+	pidfd int
 }
 
-func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error), signal func(int, syscall.Signal) error) ([]int, bool) {
-	known := make(map[int]byte)
+type pidfdOperations struct {
+	open   func(int) (int, error)
+	signal func(int, syscall.Signal) error
+	close  func(int) error
+}
+
+func systemPIDFDOps() pidfdOperations {
+	return pidfdOperations{
+		open: func(pid int) (int, error) { return unix.PidfdOpen(pid, 0) },
+		signal: func(pidfd int, signal syscall.Signal) error {
+			return unix.PidfdSendSignal(pidfd, signal, nil, 0)
+		},
+		close: unix.Close,
+	}
+}
+
+func freezeChildTree(deadline time.Time) ([]processHandle, bool) {
+	return freezeChildTreeWith(deadline, processDescendants, systemPIDFDOps())
+}
+
+func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error), ops pidfdOperations) ([]processHandle, bool) {
+	known := make(map[int]processHandle)
 	stableScans := 0
 	for time.Now().Before(deadline) {
 		descendants, err := scan(os.Getpid())
 		if err != nil {
-			return processIDs(known, false), false
+			return processHandles(known), false
 		}
 		newProcess := false
 		for pid, state := range descendants {
-			if _, seen := known[pid]; !seen {
+			handle, seen := known[pid]
+			if seen && state != 'Z' && state != 'X' {
+				err := ops.signal(handle.pidfd, 0)
+				if errors.Is(err, syscall.ESRCH) {
+					if closeErr := ops.close(handle.pidfd); closeErr != nil {
+						return processHandles(known), false
+					}
+					delete(known, pid)
+					seen = false
+				} else if err != nil {
+					return processHandles(known), false
+				}
+			}
+			if !seen {
+				pidfd, err := ops.open(pid)
+				if errors.Is(err, syscall.ESRCH) {
+					continue
+				}
+				if err != nil {
+					return processHandles(known), false
+				}
+				handle = processHandle{pid: pid, pidfd: pidfd}
+				known[pid] = handle
 				newProcess = true
 			}
-			known[pid] = state
 			if state != 'T' && state != 't' && state != 'Z' && state != 'X' {
-				if err := signal(pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
-					return processIDs(known, false), false
+				if err := ops.signal(handle.pidfd, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
+					return processHandles(known), false
 				}
 			}
 		}
@@ -111,22 +156,33 @@ func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error
 			stableScans++
 		}
 		if stableScans >= 2 {
-			return processIDs(known, false), true
+			return processHandles(known), true
 		}
 		time.Sleep(time.Millisecond)
 	}
-	return processIDs(known, false), false
+	return processHandles(known), false
 }
 
-func processIDs(processes map[int]byte, stoppedOnly bool) []int {
-	pids := make([]int, 0, len(processes))
-	for pid, state := range processes {
-		if state == 'Z' || state == 'X' || (stoppedOnly && state != 'T' && state != 't') {
-			continue
-		}
-		pids = append(pids, pid)
+func processHandles(processes map[int]processHandle) []processHandle {
+	handles := make([]processHandle, 0, len(processes))
+	for _, handle := range processes {
+		handles = append(handles, handle)
 	}
-	return pids
+	sort.Slice(handles, func(i, j int) bool { return handles[i].pid < handles[j].pid })
+	return handles
+}
+
+func killProcessHandles(handles []processHandle, signal func(int, syscall.Signal) error, closeFD func(int) error) error {
+	var result error
+	for _, handle := range handles {
+		if err := signal(handle.pidfd, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			result = errors.Join(result, err)
+		}
+		if err := closeFD(handle.pidfd); err != nil {
+			result = errors.Join(result, err)
+		}
+	}
+	return result
 }
 
 func reapExitedChildren() {
