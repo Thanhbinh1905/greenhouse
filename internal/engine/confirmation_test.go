@@ -86,6 +86,18 @@ func TestBlockingFindingStaysBlockingWhenTheSecondPassDoesNotSettle(t *testing.T
 	}
 }
 
+func TestBlockingFindingStaysBlockingWhenTheSecondPassDoesNotCoverItsFile(t *testing.T) {
+	run, _ := runConfirmation(t,
+		"verdict([finding('P1','Line one is wrong')])",
+		"{'head':b['Head'],'verdict':'clean','coverage':[],'findings':[]}")
+	result := reviewResult(t, run)
+	f := result["findings"].([]any)[0].(map[string]any)
+	c := f["confirmation"].(map[string]any)
+	if f["priority"] != "P1" || c["status"] != "unconfirmed" || result["dismissed"] != nil || run["status"] != "outstanding-findings" {
+		t.Fatalf("finding=%v status=%v", f, run["status"])
+	}
+}
+
 func TestNonBlockingFindingsAreNotConfirmed(t *testing.T) {
 	run, calls := runConfirmation(t, "verdict([finding('P2','Edge case')])", "verdict([])")
 	f := reviewResult(t, run)["findings"].([]any)[0].(map[string]any)

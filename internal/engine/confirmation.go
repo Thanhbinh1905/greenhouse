@@ -127,6 +127,9 @@ func confirmFinding(ctx context.Context, x *Execution, dir, tree string, f Findi
 		}
 	}
 	switch {
+	case match == nil && !slices.Contains(outcome.Result.Coverage, f.File):
+		c.Status, c.Evidence = "unconfirmed", fmt.Sprintf("confirmation pass did not cover %s", f.File)
+		return c, f.Priority, outcome
 	case match == nil:
 		c.Status, c.Evidence = "dropped", fmt.Sprintf("confirmation pass found no defect at %s:%d-%d", f.File, f.Start, f.End)
 		return c, f.Priority, outcome
