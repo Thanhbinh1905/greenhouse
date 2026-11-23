@@ -101,7 +101,33 @@ func TestAutoRepairsFindingsWithinCombinedCap(t *testing.T) {
 	}
 }
 
-func TestAskBlocksP1AndKeepsP2Informational(t *testing.T) {
+func TestP2OnlyReviewPassesAndRemainsListed(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, root, v := authorityFixture(t, "ask", 6, repairPlan)
+	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("p2"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	done := waitPipeline(t, bin, repo, home)
+	run := runOf(t, done)
+	pipeline := run["pipeline"].(map[string]any)
+	if run["status"] != "locally-ready" || run["decision"] != nil || pipeline["outcome"] != "clean-pass" {
+		t.Fatalf("P2-only review blocked pipeline or withheld clean pass: %v", run)
+	}
+	findings, _ := run["findings"].([]any)
+	if len(findings) != 1 {
+		t.Fatalf("P2 finding was not retained: %v", findings)
+	}
+	finding := findings[0].(map[string]any)
+	if finding["priority"] != "P2" || finding["action"] != "Improve edge case handling" {
+		t.Fatalf("P2 finding lost its priority or action: %v", finding)
+	}
+	if review := stageOf(t, done, "review"); review["status"] != "passed" {
+		t.Fatalf("P2-only review did not pass: %v", review)
+	}
+}
+
+func TestAskBlocksOnlyP1AndKeepsP2Actionable(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "ask", 6, repairPlan)
 	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("mixed"), 0600); err != nil {
@@ -114,16 +140,24 @@ func TestAskBlocksP1AndKeepsP2Informational(t *testing.T) {
 	parked := waitPipeline(t, bin, repo, home)
 	d := decisionIn(t, parked)
 	findings := runOf(t, parked)["findings"].([]any)
-	if d["kind"] != "findings" || len(strs(d["findings"])) != 1 || len(findings) != 3 || parked["gate_id"] != d["id"] {
-		t.Fatalf("ask must block only on P0/P1 findings: %v %v", d, findings)
+	if d["kind"] != "findings" || len(strs(d["findings"])) != 2 || len(findings) != 3 || parked["gate_id"] != d["id"] {
+		t.Fatalf("ask must block on P1 and offer P2 for the same repair round: %v %v", d, findings)
 	}
+	var p1ID string
 	for _, f := range findings {
 		finding := f.(map[string]any)
-		if finding["priority"] == "P1" && !has(strs(d["findings"]), finding["id"].(string)) {
-			t.Fatal("P1 finding did not create a blocking question")
+		id := finding["id"].(string)
+		if finding["priority"] == "P1" {
+			p1ID = id
+			if !has(strs(d["findings"]), id) {
+				t.Fatal("P1 finding did not create a blocking question")
+			}
 		}
-		if (finding["priority"] == "P2" || finding["priority"] == "P3") && has(strs(d["findings"]), finding["id"].(string)) {
-			t.Fatalf("%s finding created a blocking question", finding["priority"])
+		if finding["priority"] == "P2" && !has(strs(d["findings"]), id) {
+			t.Fatal("P2 finding was not offered as an optional repair target")
+		}
+		if finding["priority"] == "P3" && has(strs(d["findings"]), id) {
+			t.Fatal("P3 finding was offered for repair")
 		}
 	}
 	if !has(strs(parked["actions"]), "decide") || has(strs(parked["actions"]), "pipeline") {
@@ -138,11 +172,11 @@ func TestAskBlocksP1AndKeepsP2Informational(t *testing.T) {
 	if refused := decide(t, bin, repo, home, parked, "bad-choice", "accept-head", nil); refused["outcome"] != "refused" {
 		t.Fatal("decision accepted a choice it does not offer")
 	}
-	answered := decide(t, bin, repo, home, parked, "authorize", "repair", nil)
+	answered := decide(t, bin, repo, home, parked, "authorize", "repair", map[string]any{"selected": []string{p1ID}})
 	if answered["outcome"] != "ok" {
 		t.Fatal(answered)
 	}
-	if replay := decide(t, bin, repo, home, parked, "authorize", "repair", nil); replay["token"] != answered["token"] || replay["outcome"] != "ok" {
+	if replay := decide(t, bin, repo, home, parked, "authorize", "repair", map[string]any{"selected": []string{p1ID}}); replay["token"] != answered["token"] || replay["outcome"] != "ok" {
 		t.Fatalf("duplicate action did not return its receipt: %v", replay)
 	}
 	if stale := decide(t, bin, repo, home, parked, "authorize-again", "repair", nil); stale["outcome"] != "refused" {
@@ -169,8 +203,14 @@ func TestAskBlocksP1AndKeepsP2Informational(t *testing.T) {
 	if answer["actor"] != "axi" || answer["reason"] != "operator reviewed the repair option" || answer["action"] != "authorize" {
 		t.Fatalf("decision provenance: %v", answer)
 	}
-	if review := stageOf(t, done, "review"); !strings.Contains(review["reason"].(string), "2 informational") {
-		t.Fatalf("informational finding not visible: %v", review)
+	if review := stageOf(t, done, "review"); !strings.Contains(review["reason"].(string), "2 nonblocking") {
+		t.Fatalf("nonblocking findings not visible: %v", review)
+	}
+	for _, item := range run["findings"].([]any) {
+		finding := item.(map[string]any)
+		if finding["priority"] == "P2" && finding["action"] != "Fix the sample" {
+			t.Fatalf("P2 finding was changed or hidden by the repair: %v", finding)
+		}
 	}
 }
 

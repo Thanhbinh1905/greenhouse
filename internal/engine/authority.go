@@ -292,7 +292,11 @@ func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 	p := r.Pipeline
 	actionable, _ := Outstanding(r)
-	actionable = blockingFindings(actionable)
+	blocking := blockingFindings(actionable)
+	if len(blocking) == 0 {
+		st.Status, st.Reason = "passed", "no blocking findings remain"
+		return advancePipeline(s, r)
+	}
 	repairable := repairableFindings(r, actionable)
 	b := budgetOf(r)
 	if g := p.FinalFix; g != nil && g.RepairAllowed && g.Repair == 0 && len(repairable) > 0 {
@@ -301,13 +305,13 @@ func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 		}
 	}
 	if b.Total+2 > b.Limit {
-		return capDecision(s, r, st, fmt.Sprintf("%d actionable findings remain and no room for a repair and its rereview", len(actionable)))
+		return capDecision(s, r, st, fmt.Sprintf("%d blocking findings remain and no room for a repair and its rereview", len(blocking)))
 	}
 	options := []string{"repair", "rethink", "discard"}
-	reason := fmt.Sprintf("%d actionable findings await authorization", len(actionable))
+	reason := fmt.Sprintf("%d blocking findings await authorization", len(blocking))
 	if len(repairable) == 0 {
 		options = options[1:]
-		reason = fmt.Sprintf("%d actionable findings need the author: no trusted fixer or no finding in a changed path", len(actionable))
+		reason = fmt.Sprintf("%d blocking findings need the author: no trusted fixer or no blocking finding in a changed path", len(blocking))
 	} else if mode := r.Configs[len(r.Configs)-1].Settings.Mode; mode != "ask" {
 		actor := "auto"
 		if mode == "yolo" {
@@ -324,7 +328,11 @@ func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 			reason = "repair refused: " + err.Error()
 		}
 	}
-	openDecision(r, st, "needs-decision", Decision{Kind: "findings", Findings: FindingIDs(actionable), Options: options, Reason: reason})
+	grouped := blocking
+	if len(repairable) > 0 {
+		grouped = repairable
+	}
+	openDecision(r, st, "needs-decision", Decision{Kind: "findings", Findings: FindingIDs(grouped), Options: options, Reason: reason})
 	return nil
 }
 
@@ -393,7 +401,6 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 		review.Reason = fmt.Sprintf("review risk accepted by %s for this exact candidate and configuration (%d findings); not a clean pass", a.Actor, len(actionable))
 	case "final-fix":
 		actionable, _ := Outstanding(r)
-		actionable = blockingFindings(actionable)
 		g := &FinalFix{Decision: d.ID, Actor: a.Actor, Reason: a.Reason, Candidate: r.Candidate, ReviewUsed: r.ReviewUsed, RepairUsed: r.RepairUsed, RepairAllowed: len(repairableFindings(r, actionable)) > 0}
 		p.FinalFix = g
 		if !g.RepairAllowed {

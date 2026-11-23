@@ -49,6 +49,9 @@ if mode=='docs-missing':
 if mode=='findings':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample is wrong','action':'Fix the sample','rule':'','head':b['Head']}]
+if mode=='p2':
+    v['verdict']='findings'
+    v['findings']=[{'id':'x','priority':'P2','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample has a workaround edge case','action':'Improve edge case handling','rule':'','head':b['Head']}]
 if mode=='mixed':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':p,'origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':e,'action':'Fix the sample','rule':'','head':b['Head']} for p,e in [('P1','Sample is wrong'),('P2','Sample is vague'),('P3','Sample could be shorter')]]

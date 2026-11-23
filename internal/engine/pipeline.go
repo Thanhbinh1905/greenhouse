@@ -907,21 +907,21 @@ func completeStep(r *Run, o stepOutcome) error {
 		case "clean-review", "outstanding-findings":
 			recordReview(r, x)
 			actionable, informational := Outstanding(r)
+			blocking := blockingFindings(actionable)
 			for _, f := range actionable {
 				if f.Priority != "P0" && f.Priority != "P1" {
 					informational = append(informational, f)
 				}
 			}
-			actionable = blockingFindings(actionable)
 			st.Status, st.Reason = "passed", "independent review clean with complete coverage"
-			if len(o.Result.Findings) > 0 && len(actionable) == 0 {
-				st.Reason = "independent review reported only informational findings"
+			if len(o.Result.Findings) > 0 && len(blocking) == 0 {
+				st.Reason = "independent review reported only nonblocking findings"
 			}
 			if len(informational) > 0 {
-				st.Reason += fmt.Sprintf("; %d informational findings remain visible", len(informational))
+				st.Reason += fmt.Sprintf("; %d nonblocking findings remain visible", len(informational))
 			}
-			if len(actionable) > 0 {
-				st.Status, st.Reason = "needs-decision", fmt.Sprintf("outstanding actionable findings: %d; omission from a review resolves a finding only after a committed repair addressed it", len(actionable))
+			if len(blocking) > 0 {
+				st.Status, st.Reason = "needs-decision", fmt.Sprintf("outstanding blocking findings: %d; omission from a review resolves a finding only after a committed repair addressed it", len(blocking))
 			}
 		default:
 			st.Status, st.Reason = "failed", "review "+o.Status+"; no automatic retry"
