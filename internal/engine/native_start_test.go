@@ -9,6 +9,7 @@ import (
 )
 
 func TestFreshInstalledAgentReview(t *testing.T) {
+	t.Parallel()
 	bin, repo, state := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "-b", "feature")
@@ -79,6 +80,7 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 }
 
 func TestFreshMissingAgentAndLogin(t *testing.T) {
+	t.Parallel()
 	for _, kind := range []string{"missing-agent", "missing-login"} {
 		t.Run(kind, func(t *testing.T) {
 			bin, repo, state := fixture(t)
@@ -126,6 +128,7 @@ func TestFreshMissingAgentAndLogin(t *testing.T) {
 }
 
 func TestNativeClaudeAndCodexDefaultModels(t *testing.T) {
+	t.Parallel()
 	for _, backend := range []string{BackendClaude, BackendCodex} {
 		t.Run(backend+"-review", func(t *testing.T) {
 			bin, repo, state, root, v := onePassWith(t, backend, "")

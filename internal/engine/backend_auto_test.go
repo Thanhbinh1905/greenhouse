@@ -47,6 +47,7 @@ func waitStatus(t *testing.T, bin, repo, home string, want ...string) map[string
 }
 
 func TestAgentArgsRejectsInvalidDisabledMCPJSON(t *testing.T) {
+	t.Parallel()
 	if _, err := agentArgs(ReviewerConfig{Backend: BackendCodex, DisabledMCP: "{"}, "reviewer", "{}", "prompt"); err == nil {
 		t.Fatal("invalid disabled MCP configuration must not produce runnable arguments")
 	}

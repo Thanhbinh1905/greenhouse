@@ -43,6 +43,7 @@ func reviewResult(t *testing.T, run map[string]any) map[string]any {
 }
 
 func TestBlockingFindingIsConfirmedByASecondPass(t *testing.T) {
+	t.Parallel()
 	run, calls := runConfirmation(t,
 		"verdict([finding('P1','Line one is wrong')])",
 		"verdict([finding('P1','Line one is wrong because the parser rejects it')])")
@@ -58,6 +59,7 @@ func TestBlockingFindingIsConfirmedByASecondPass(t *testing.T) {
 }
 
 func TestBlockingFindingTheSecondPassCannotReproduceIsDropped(t *testing.T) {
+	t.Parallel()
 	run, calls := runConfirmation(t, "verdict([finding('P1','Line one is wrong')])", "verdict([])")
 	result := reviewResult(t, run)
 	if calls != 2 || run["status"] != "clean-review" || result["verdict"] != "clean" || len(result["findings"].([]any)) != 0 {
@@ -71,6 +73,7 @@ func TestBlockingFindingTheSecondPassCannotReproduceIsDropped(t *testing.T) {
 }
 
 func TestBlockingFindingTheSecondPassRatesLowerIsDemoted(t *testing.T) {
+	t.Parallel()
 	run, _ := runConfirmation(t, "verdict([finding('P1','Line one is wrong')])", "verdict([finding('P2','Only an edge case')])")
 	f := reviewResult(t, run)["findings"].([]any)[0].(map[string]any)
 	c := f["confirmation"].(map[string]any)
@@ -80,6 +83,7 @@ func TestBlockingFindingTheSecondPassRatesLowerIsDemoted(t *testing.T) {
 }
 
 func TestBlockingFindingStaysBlockingWhenTheSecondPassDoesNotSettle(t *testing.T) {
+	t.Parallel()
 	run, calls := runConfirmation(t,
 		"verdict([finding('P1','Line one is wrong')])",
 		"{'head':b['Head'],'verdict':'inconclusive','coverage':[],'findings':[]}")
@@ -91,6 +95,7 @@ func TestBlockingFindingStaysBlockingWhenTheSecondPassDoesNotSettle(t *testing.T
 }
 
 func TestBlockingFindingStaysBlockingWhenTheSecondPassDoesNotCoverItsFile(t *testing.T) {
+	t.Parallel()
 	run, _ := runConfirmation(t,
 		"verdict([finding('P1','Line one is wrong')])",
 		"{'head':b['Head'],'verdict':'clean','coverage':[],'findings':[]}")
@@ -103,6 +108,7 @@ func TestBlockingFindingStaysBlockingWhenTheSecondPassDoesNotCoverItsFile(t *tes
 }
 
 func TestBlockingFindingIsNotDemotedByAPassThatDoesNotCoverItsFile(t *testing.T) {
+	t.Parallel()
 	run, _ := runConfirmation(t,
 		"verdict([finding('P1','Line one is wrong')])",
 		"{'head':b['Head'],'verdict':'findings','coverage':[],'findings':[finding('P2','Only an edge case')]}")
@@ -114,6 +120,7 @@ func TestBlockingFindingIsNotDemotedByAPassThatDoesNotCoverItsFile(t *testing.T)
 }
 
 func TestNonBlockingFindingsAreNotConfirmed(t *testing.T) {
+	t.Parallel()
 	run, calls := runConfirmation(t, "verdict([finding('P2','Edge case')])", "verdict([])")
 	f := reviewResult(t, run)["findings"].([]any)[0].(map[string]any)
 	if calls != 1 || f["confirmation"] != nil {
@@ -122,6 +129,7 @@ func TestNonBlockingFindingsAreNotConfirmed(t *testing.T) {
 }
 
 func TestConfirmationArgsFollowTheAdmittedExecutionMode(t *testing.T) {
+	t.Parallel()
 	config := ReviewerConfig{Backend: BackendClaude, Model: "fixture/model"}
 	schema := verdictSchema(false, false)
 	got, err := confirmationArgs(&Execution{Config: config})
@@ -137,6 +145,7 @@ func TestConfirmationArgsFollowTheAdmittedExecutionMode(t *testing.T) {
 }
 
 func TestDismissedFindingLeavesTheRunLedger(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
@@ -164,6 +173,7 @@ func TestDismissedFindingLeavesTheRunLedger(t *testing.T) {
 }
 
 func TestConfirmationPassesKeepTheirOwnExecutorRecords(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, confirmationFake("verdict([finding('P1','Line one is wrong')])", "verdict([finding('P1','Line one is wrong')])"))
 	mutate(t, bin, repo, home, v, "review", "review", nil)
@@ -176,6 +186,7 @@ func TestConfirmationPassesKeepTheirOwnExecutorRecords(t *testing.T) {
 }
 
 func TestMarkUnconfirmedKeepsBlockingFindingsBlocking(t *testing.T) {
+	t.Parallel()
 	done := reviewOutcome{Status: "outstanding-findings", Result: &Verdict{Findings: []Finding{{Priority: "P1"}, {Priority: "P2"}, {Priority: "P0", Confirmation: &Confirmation{Status: "confirmed"}}}}}
 	markUnconfirmed(&done)
 	findings := done.Result.Findings
