@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "id": "posse-pr-1168-r1",
+  "category": "bug",
+  "description": "Pinned external posse regression case pr-1168, repetition 1.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "validation-summary-latest-disposition",
+      "file": "internal/app/validation_summary.go",
+      "start": 72,
+      "end": 93,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "When task.GatedSHA is empty, the review-round scan takes the first round's head and never replaces it with the latest accepted or disposed head, so the PR validation summary can name an older head and omit accepted findings and the quote."
+    },
+    {
+      "id": "validation-summary-accepted-without-quote",
+      "file": "internal/app/validation_summary.go",
+      "start": 101,
+      "end": 106,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "Accepted findings are omitted from the PR validation summary when the disposition has no quote."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "580fc46b37ca1a3c4099fb16126ab91731eaa766",
+    "target": "5a6f32bf8bdf16624af0d59da5f9f09194db3f90",
+    "files": [
+      "internal/app/greenhouse.go",
+      "internal/app/pr_stewardship.go",
+      "internal/app/pull_request.go",
+      "internal/app/pull_requests_test.go",
+      "internal/app/read.go",
+      "internal/app/review_pass_next_step.go",
+      "internal/app/review_policy_test.go",
+      "internal/app/review_status.go",
+      "internal/app/review_verdict.go",
+      "internal/app/validation_summary.go",
+      "internal/app/validation_summary_test.go"
+    ],
+    "derivation": "Exact posse head and target from t167. Expected defect is documented in issue 1157."
+  }
+}

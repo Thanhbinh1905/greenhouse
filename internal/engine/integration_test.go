@@ -33,6 +33,10 @@ var fixtureBuildBin string
 var fixtureBuildErr error
 
 func TestMain(m *testing.M) {
+	if err := os.Setenv("GREENHOUSE_TEST_PARENT_PID", fmt.Sprint(os.Getpid())); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	code := m.Run()
 	if fixtureBuildDir != "" {
 		if err := os.RemoveAll(fixtureBuildDir); err != nil {
@@ -57,7 +61,11 @@ func sharedFixtureBinary(t *testing.T) string {
 		}
 		command := filepath.Join(filepath.Dir(source), "..", "..", "cmd", "greenhouse")
 		fixtureBuildBin = filepath.Join(fixtureBuildDir, "greenhouse")
-		c := exec.Command("go", "build", "-race", "-o", fixtureBuildBin, command)
+		args := []string{"build", "-o", fixtureBuildBin}
+		if raceEnabled {
+			args = append(args, "-race")
+		}
+		c := exec.Command("go", append(args, command)...)
 		if b, err := c.CombinedOutput(); err != nil {
 			fixtureBuildErr = fmt.Errorf("build: %s %w", b, err)
 		}
@@ -68,8 +76,22 @@ func sharedFixtureBinary(t *testing.T) string {
 	return fixtureBuildBin
 }
 
+func withoutEnv(env []string, key string) []string {
+	prefix := key + "="
+	filtered := env[:0]
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
+}
+
 func registerDaemonCleanup(t *testing.T, home string) {
 	t.Helper()
+	if os.Getenv("GREENHOUSE_TEST_CRASH_DAEMON") == "1" {
+		return
+	}
 	if _, loaded := daemonCleanupHomes.LoadOrStore(home, struct{}{}); loaded {
 		return
 	}
@@ -112,6 +134,7 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	c.Dir = repo
 	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
 	c.Env = append(c.Env, env...)
+	c.Env = append(withoutEnv(c.Env, "GREENHOUSE_TEST_PARENT_PID"), "GREENHOUSE_TEST_PARENT_PID="+fmt.Sprint(os.Getpid()))
 	fixturePath := os.Getenv("PATH")
 	for _, entry := range env {
 		if strings.HasPrefix(entry, "PATH=") {
@@ -150,6 +173,50 @@ func waitProcessExit(t *testing.T, pid int) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("process %d remained alive after cleanup", pid)
+}
+
+func TestDaemonExitsWhenTestProcessDies(t *testing.T) {
+	if os.Getenv("GREENHOUSE_TEST_CRASH_DAEMON") == "1" {
+		bin := os.Getenv("GREENHOUSE_TEST_DAEMON_BIN")
+		cmd := exec.Command(bin, "axi")
+		cmd.Dir = os.Getenv("GREENHOUSE_TEST_REPO")
+		cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+os.Getenv("GREENHOUSE_HOME"))
+		cmd.Stdin = strings.NewReader(`{"version":1,"op":"attach"}`)
+		if output, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("start daemon: %v: %s", err, output)
+		}
+		pid, err := os.ReadFile(filepath.Join(os.Getenv("GREENHOUSE_HOME"), "pid"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(os.Getenv("GREENHOUSE_TEST_PID_FILE"), pid, 0600); err != nil {
+			t.Fatal(err)
+		}
+		panic("simulated test panic")
+	}
+
+	bin, repo, home := fixture(t)
+	cmd := exec.Command(os.Args[0], "-test.run=^TestDaemonExitsWhenTestProcessDies$")
+	pidFile := filepath.Join(filepath.Dir(home), "daemon-pid")
+	cmd.Env = append(withoutEnv(os.Environ(), "GREENHOUSE_TEST_PARENT_PID"),
+		"GREENHOUSE_TEST_CRASH_DAEMON=1",
+		"GREENHOUSE_TEST_DAEMON_BIN="+bin,
+		"GREENHOUSE_TEST_REPO="+repo,
+		"GREENHOUSE_TEST_PID_FILE="+pidFile,
+		"GREENHOUSE_HOME="+home,
+	)
+	if output, err := cmd.CombinedOutput(); err == nil || !strings.Contains(string(output), "simulated test panic") {
+		t.Fatalf("helper did not panic as expected: %v: %s", err, output)
+	}
+	b, err := os.ReadFile(pidFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pid int
+	if err := json.Unmarshal(b, &pid); err != nil {
+		t.Fatal(err)
+	}
+	waitProcessExit(t, pid)
 }
 
 func TestFixtureStopsDaemonOnCleanup(t *testing.T) {

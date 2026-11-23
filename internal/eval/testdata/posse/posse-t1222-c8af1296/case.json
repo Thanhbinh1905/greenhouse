@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "id": "posse-t1222-c8af1296",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head c8af1296.",
+  "intent": "feat(review): add the insert-only Verdict record and review provider interface (Phase 1 G-1)\n\nDone when: An insert-only Verdict table and a review provider interface exist as specified in docs/research/2026-11-13-direction-2-design.md sections 2.3 and 2.8 (step G-1), with an additive migration only.; The built-in reviewer writes a Verdict row through the interface as provider `builtin` beside its existing rows, with no change to review, publish or merge behaviour (existing review, publish and merge tests pass unchanged).; Tests cover the Verdict record's head and target binding, insert-only enforcement, and the `inconclusive` rule (an inconclusive verdict never qualifies, even with zero findings).",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-f91a0722",
+      "file": "internal/store/review_verdicts.go",
+      "start": 212,
+      "end": 212,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "A valid Review Task with no review_rounds can submit ReviewChangesRequested without Findings; recordReviewVerdictTx explicitly permits that case, and existing tests exercise it. recordBuiltinVerdictsTx then dereferences input.Findings.BlockAt and panics while recording the verdict."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "c8af1296427d8ab0b9f0430ca12769e8ba9225d8",
+    "target": "261ec957ac644eb1bc2bd3acd3b29784e738c7fd",
+    "files": [
+      "internal/store/migrations/00096_verdicts.sql",
+      "internal/store/review_provider.go",
+      "internal/store/review_verdicts.go",
+      "internal/store/review_verdicts_test.go",
+      "internal/store/sqlc/models.go",
+      "internal/store/store_test.go",
+      "internal/store/task_pane_shell_migration_compat_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "posse-t1222-41abce87",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head 41abce87.",
+  "intent": "fix(skills): do not require code-change skills from a Review Round Worker\n\nDone when: A Review Round Worker can signal done without invoking `posse-no-comments` or `posse-deslop`; a Change Worker still must invoke them. Tests cover both.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-16d9437c",
+      "file": "internal/app/skill_uses.go",
+      "start": 72,
+      "end": 74,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "For a workspace Change Task, WorktreePath is the workspace sandbox root rather than a Git repository; `git -C <root> diff ...` therefore fails and this function treats the Task as changed. As a result, unchanged workspace Change Tasks can be considered to require posse-deslop and posse-no-comments, contrary to the new conditional behavior and the test's unchanged-Task contract."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "41abce87042653a4a63b6887ec71c93b618ee609",
+    "target": "9ff0a9a110099ec5bca7b88268438188c8e5fb32",
+    "files": [
+      "internal/app/skill_uses.go",
+      "internal/app/skill_uses_test.go",
+      "internal/app/task_plan.go",
+      "internal/app/tasks.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

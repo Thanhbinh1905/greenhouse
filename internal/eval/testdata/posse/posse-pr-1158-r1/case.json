@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "id": "posse-pr-1158-r1",
+  "category": "clean",
+  "description": "Pinned external posse regression case pr-1158, repetition 1.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "f352b9ce6c586cc606d0200d5ee97ddeda54f661",
+    "target": "a90e7175ae724ff3fef8858627b0069542657bb0",
+    "files": [
+      "docs/spec.md",
+      "internal/app/ingest.go",
+      "internal/app/lead_test.go",
+      "internal/app/parked.go",
+      "internal/app/parked_test.go",
+      "internal/app/read.go",
+      "internal/app/restore.go",
+      "internal/app/restore_test.go",
+      "internal/app/service.go",
+      "internal/app/watch_repair.go",
+      "internal/app/watch_runtime.go",
+      "internal/app/watch_systemd_linux.go",
+      "internal/app/watch_systemd_other.go",
+      "internal/store/store.go"
+    ],
+    "derivation": "Exact posse head and target from t167. No finding was expected in t167."
+  }
+}

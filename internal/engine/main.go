@@ -16,12 +16,14 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
+	"golang.org/x/sys/unix"
 )
 
 type executorDuration string
@@ -1115,13 +1117,47 @@ func Daemon(h string) (retErr error) {
 	signals := make(chan os.Signal, 1)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	defer signal.Stop(signals)
-	go func() {
-		select {
-		case <-signals:
-			_ = l.Close() // Closing the listener unblocks Accept during shutdown.
-		case <-signalDone:
+	parentPIDText := os.Getenv("GREENHOUSE_TEST_PARENT_PID")
+	if parentPIDText != "" {
+		parentPID, err := strconv.Atoi(parentPIDText)
+		if err != nil || parentPID <= 0 {
+			return errors.New("invalid test parent pid")
 		}
-	}()
+		parentFD, err := unix.PidfdOpen(parentPID, 0)
+		if err != nil {
+			return fmt.Errorf("open test parent pidfd: %w", err)
+		}
+		go func() {
+			defer func() { _ = unix.Close(parentFD) }()
+			for {
+				select {
+				case <-signals:
+					_ = l.Close()
+					return
+				case <-signalDone:
+					return
+				default:
+				}
+				fds := []unix.PollFd{{Fd: int32(parentFD), Events: unix.POLLIN}}
+				if _, err := unix.Poll(fds, 100); err != nil && !errors.Is(err, syscall.EINTR) {
+					_ = l.Close()
+					return
+				}
+				if fds[0].Revents&unix.POLLIN != 0 {
+					_ = l.Close()
+					return
+				}
+			}
+		}()
+	} else {
+		go func() {
+			select {
+			case <-signals:
+				_ = l.Close()
+			case <-signalDone:
+			}
+		}()
+	}
 	type completion struct {
 		finalization                bool
 		run, execution, status, log string
