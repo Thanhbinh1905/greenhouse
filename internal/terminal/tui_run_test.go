@@ -131,7 +131,7 @@ func TestReviewStepFailsOnlyWhenAFindingBlocks(t *testing.T) {
 		state    string
 		text     string
 	}{
-		{"P2", stepDone, "1 finding, none blocking"},
+		{"P2", stepDone, "1 finding (none blocking)"},
 		{"P1", stepFailed, "1 outstanding finding"},
 	} {
 		v := tuiState("outstanding-findings")
@@ -140,5 +140,17 @@ func TestReviewStepFailsOnlyWhenAFindingBlocks(t *testing.T) {
 		if got.State != tc.state || !strings.HasPrefix(got.Text, tc.text) {
 			t.Fatalf("%s: state=%v text=%q", tc.priority, got.State, got.Text)
 		}
+	}
+}
+
+func TestPipelinePlanLineHiddenForOnePassWithoutPlan(t *testing.T) {
+	v := tuiState("outstanding-findings")
+	v.Repository = &engine.RepositoryStatus{PipelineStatus: "absent"}
+	if showPipelinePlan(v) {
+		t.Fatal("absent plan shown for a one-pass run")
+	}
+	v.Repository.PipelineStatus = "trusted"
+	if !showPipelinePlan(v) {
+		t.Fatal("present plan hidden")
 	}
 }

@@ -282,7 +282,7 @@ func (m *tuiModel) homeView(w, room int) []string {
 	var findings []string
 	if r := m.v.Run; len(r.Findings) > 0 && !busy(r) {
 		actionable, informational := engine.Outstanding(r)
-		findings = append(findings, "", styleBold.Render(" Findings")+" · "+findingCount(len(actionable), len(informational)))
+		findings = append(findings, "", styleBold.Render(" Findings")+" · "+findingCount(actionable, informational))
 		for _, f := range append(actionable, informational...) {
 			findings = append(findings, fit("   "+findingRow(f), w))
 		}
@@ -562,7 +562,7 @@ func (m *tuiModel) findingsView(w, room int) []string {
 			rows = append(rows, fit("   "+row, w))
 		}
 	}
-	title := " Findings · " + findingCount(len(actionable), len(informational))
+	title := " Findings · " + findingCount(actionable, informational)
 	if canRepair {
 		title += fmt.Sprintf(" · %d selected", selected)
 	}

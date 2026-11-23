@@ -140,7 +140,9 @@ func statePage(v engine.Response, live string, details bool) string {
 	}
 	if o := v.Repository; o != nil {
 		fmt.Fprintln(&page, engine.OverrideLine(o))
-		fmt.Fprintln(&page, engine.PipelinePlanLine(o))
+		if showPipelinePlan(v) {
+			fmt.Fprintln(&page, engine.PipelinePlanLine(o))
+		}
 	}
 	for _, cfg := range v.Config {
 		if cfg.Status == "retired" {

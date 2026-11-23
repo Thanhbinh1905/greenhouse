@@ -307,9 +307,9 @@ func reviewStep(v engine.Response) tuiStep {
 	case r.Status == "clean-review":
 		return tuiStep{name, stepDone, "clean · " + budget}
 	case r.Status == "outstanding-findings" && !blocks(actionable):
-		return tuiStep{name, stepDone, plural(len(actionable)+len(informational), "finding") + ", none blocking · " + budget}
+		return tuiStep{name, stepDone, findingCount(actionable, informational) + " · " + budget}
 	case r.Status == "outstanding-findings":
-		return tuiStep{name, stepFailed, findingCount(len(actionable), len(informational)) + " · " + budget}
+		return tuiStep{name, stepFailed, findingCount(actionable, informational) + " · " + budget}
 	case r.Status == "unconfigured":
 		return tuiStep{name, stepTodo, "not started · " + budget}
 	}
@@ -325,12 +325,20 @@ func blocks(findings []engine.Finding) bool {
 	return false
 }
 
-func findingCount(actionable, informational int) string {
-	text := plural(actionable, "outstanding finding")
-	if informational > 0 {
-		text += fmt.Sprintf(", %d informational", informational)
+func findingCount(actionable, informational []engine.Finding) string {
+	if !blocks(actionable) {
+		return plural(len(actionable)+len(informational), "finding") + " (none blocking)"
+	}
+	text := plural(len(actionable), "outstanding finding")
+	if len(informational) > 0 {
+		text += fmt.Sprintf(", %d informational", len(informational))
 	}
 	return text
+}
+
+func showPipelinePlan(v engine.Response) bool {
+	r := v.Run
+	return v.Repository != nil && (v.Repository.PipelineStatus != "absent" || r.Pipeline != nil || r.Configs[len(r.Configs)-1].Settings.Preset == "full")
 }
 
 func plural(n int, noun string) string {
@@ -418,7 +426,7 @@ func stateNotes(v engine.Response, agents []string, fresh bool) []string {
 	if trustable(v) {
 		notes = append(notes, engine.OverrideLine(v.Repository)+".")
 	}
-	if v.Repository != nil {
+	if showPipelinePlan(v) {
 		notes = append(notes, engine.PipelinePlanLine(v.Repository)+".")
 	}
 	return notes
