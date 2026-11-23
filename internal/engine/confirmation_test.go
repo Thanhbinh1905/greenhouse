@@ -147,7 +147,7 @@ func TestDismissedFindingLeavesTheRunLedger(t *testing.T) {
 	installFake(t, home, confirmationFake("verdict([finding('P1','Line one is wrong')])", "verdict([] if os.path.exists(root+'/drop') else [finding('P1','Line one is wrong')])"))
 	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
 	v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, string(b)), target, "")
-	v = hostCall(t, bin, repo, home, v, "review", "review-1", map[string]any{"grant": "round-1"})
+	hostCall(t, bin, repo, home, v, "review", "review-1", map[string]any{"grant": "round-1"})
 	v = hostSettle(t, bin, repo, home)
 	if findings, _ := runOf(t, v)["findings"].([]any); len(findings) != 1 {
 		t.Fatalf("first review should keep the confirmed finding: %v", v)
