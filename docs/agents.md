@@ -6,7 +6,7 @@ Install and sign in to the agent with that CLI's own instructions. Greenhouse us
 
 ## Discovery and Prepare
 
-Greenhouse discovers `pi`, `claude` and `codex` on PATH and ignores relative PATH entries. Prepare binds the selected executable. Model and agent choices stay ordinary Greenhouse preferences.
+Greenhouse discovers `pi`, `claude` and `codex` on PATH and ignores relative PATH entries. The interactive launch then keeps only signed-in agents: Claude must report `loggedIn` from `claude auth status`, Codex must pass `codex login status`, and Pi must list at least one model with `pi --list-models`. Each probe has a short timeout and runs offline-safe. Prepare binds the selected executable. Model and agent choices stay ordinary Greenhouse preferences.
 
 An auto-started daemon inherits the environment of the client that starts it. Put the agent executables on that client's PATH. Later clients cannot change the running daemon's PATH; stop the daemon after its work settles and start it from a client with the required PATH.
 

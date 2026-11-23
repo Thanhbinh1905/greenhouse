@@ -500,7 +500,7 @@ func recoverRun(s *Store, r *Run, source repository.Identity, a Answer) (*Run, e
 		if r.Repair != nil && r.Repair.Handback != "handed-back" {
 			r.Repair.Handback = "released"
 		}
-		next := restartRun(s, r, source, a.Actor)
+		next := restartRun(s, r, source, a.Actor, Request{})
 		next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 		if p := r.Pipeline; p != nil {
 			next.Inherited = &Inheritance{From: r.ID, GateRepairs: p.RepairUsed, FinalFix: p.FinalFix}
