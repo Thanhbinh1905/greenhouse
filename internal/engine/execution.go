@@ -70,6 +70,7 @@ type Verdict struct {
 	Documentation    *DocAssessment    `json:"documentation,omitempty"`
 	Resolutions      []ResolutionCheck `json:"resolutions,omitempty"`
 	Conflicts        []FindingConflict `json:"conflicts,omitempty"`
+	DismissalReasons map[string]string `json:"dismissal_reasons,omitempty"`
 }
 type TokenUsage struct {
 	InputTokens       int     `json:"input_tokens"`
@@ -274,6 +275,11 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 			if !slices.Contains(acceptedHeads, acceptance.Candidate) {
 				acceptedHeads = append(acceptedHeads, acceptance.Candidate)
 			}
+		}
+	}
+	for _, acceptance := range r.HostAcceptances {
+		if !slices.Contains(acceptedHeads, acceptance.Candidate) {
+			acceptedHeads = append(acceptedHeads, acceptance.Candidate)
 		}
 	}
 	if len(generated) > 0 {
@@ -851,6 +857,10 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 		unchangedSinceAcceptance := (f.Priority == "P0" || f.Priority == "P1") && len(f.Conflicts) == 0 && !f.TargetIntroduced && findingUnchangedSinceAccepted(x, *f)
 		if unchangedSinceAcceptance {
 			v.Dismissed = append(v.Dismissed, *f)
+			if v.DismissalReasons == nil {
+				v.DismissalReasons = map[string]string{}
+			}
+			v.DismissalReasons[f.ID] = "out of scope: byte-identical finding code since accepted head"
 			continue
 		}
 		if len(f.Conflicts) > 0 {
