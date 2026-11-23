@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "id": "posse-t1222-e86dccac",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head e86dccac.",
+  "intent": "feat(review): enforce the Greenhouse Verdict gate for Tasks admitted with review_provider = greenhouse (Phase 1 G-4, part 2)\n\nDone when: A Task admitted with `review_provider = greenhouse` follows docs/research/2026-11-13-direction-2-design.md sections 2.2, 2.3 and 2.7. It gets no Review Task, no Private Candidate and no `posse validate` stage. Posse requests a Greenhouse Verdict for the head through the G-2 adapter. Under `full-pipeline` it refuses to push a head without a current passing Verdict (AC-D5). Merge requires PR head = gated_sha, a passing Verdict for that head, and green forge CI at that head.; Greenhouse findings reach the author through the existing fix-round flow and count toward the frozen round cap. Re-review after a fix binds the new head. `inconclusive` and a missing Verdict never pass.; A Workspace Task gets one host review per changed Member, and the gate requires a passing Verdict for every changed Member head.; AC-D2 passes as an E2E test with the real `greenhouse` binary and a fake reviewer: a change merges with a Greenhouse Verdict bound to the merged head, and the Lead ran no review command.; Tasks admitted with `builtin` behave exactly as today. Every existing review test passes unchanged.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-03812dd3",
+      "file": "internal/app/review_provider.go",
+      "start": 16,
+      "end": 31,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "For a workspace task, taskUsesGreenhouseReviewProvider(..., \"\") returns true when any admitted Member uses Greenhouse. Callers treat this task-wide result as if every Member were Greenhouse: startReviewRound refuses all built-in Review Tasks and signal skips the normal review-cap/carry reconciliation. A workspace with one Greenhouse Member and one builtin Member, which the admitted plan format explicitly supports, therefore cannot run the builtin review flow for the builtin Member."
+    },
+    {
+      "id": "t1222-fbe4c479",
+      "file": "internal/store/review_provider.go",
+      "start": 102,
+      "end": 115,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "GreenhouseGatePass selects the newest Greenhouse verdict for a repository without filtering to mode='gate'. A later parallel/shadow verdict therefore makes an earlier passing gate verdict fail Qualifies because its mode is parallel, even when both verdicts are for the same exact head. The merge and publication barriers can consequently reject a valid passing gate after a shadow review is recorded."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "e86dccac507a58ba54f1dc40c8559ab6f03736bf",
+    "target": "4e65be165eba45f26cc2fced4d43c4326ad0cf58",
+    "files": [
+      "docs/spec.md",
+      "internal/app/greenhouse.go",
+      "internal/app/ops.go",
+      "internal/app/publish.go",
+      "internal/app/pull_request.go",
+      "internal/app/pull_requests_test.go",
+      "internal/app/review_actions.go",
+      "internal/app/review_provider.go",
+      "internal/app/review_rounds.go",
+      "internal/app/review_rounds_test.go",
+      "internal/app/review_verdict.go",
+      "internal/app/task_plan.go",
+      "internal/app/tasks.go",
+      "internal/app/validation_candidate.go",
+      "internal/app/validation_candidate_test.go",
+      "internal/app/validation_continuity.go",
+      "internal/config/config_test.go",
+      "internal/e2e/greenhouse_contract_test.go",
+      "internal/store/greenhouse_verdicts.go",
+      "internal/store/greenhouse_verdicts_test.go",
+      "internal/store/migrations/00099_provider_findings.sql",
+      "internal/store/provider_findings.go",
+      "internal/store/review_actions.go",
+      "internal/store/review_provider.go",
+      "internal/store/snapshot.go",
+      "internal/store/sqlc/models.go",
+      "internal/store/validation_state.go",
+      "internal/store/validation_state_test.go",
+      "internal/taskplan/plan.go",
+      "internal/taskplan/plan_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

@@ -12,9 +12,9 @@ import (
 
 const judgeSystem = "You are an evaluation judge. Decide whether one code review finding identifies one specific planted defect. Judge only the defect named, not the location. Return only the requested JSON."
 
-const judgeInstructions = `Input is JSON with "expected", the planted defects at the finding's location (id, file, start, end, defect), and "finding", one reviewer finding (file, start, end, priority, explanation, action).
+const judgeInstructions = `Input is JSON with "expected", the known defect claims for this file (id, kind, file, start, end, defect), and "finding", one reviewer finding (file, start, end, priority, explanation, action).
 Return only this JSON object: {"expected":"<id from expected>","verdict":"detects|different-defect","rationale":"<one sentence>"}.
-Use "detects" only when the finding describes the same root cause as that planted defect. A finding that shares identifiers, lines or wording but describes another root cause is "different-defect"; then name the closest expected id.
+Use "detects" only when the finding describes the same root cause as the named claim. A claim with kind "avoid" is a known false-positive claim; matching it identifies a false positive. A finding that describes another root cause is "different-defect"; name the closest claim id.
 The rationale is one sentence that quotes at least 12 consecutive characters of the finding's explanation or action verbatim inside double quotes.`
 
 type judgeOptions struct {
@@ -28,11 +28,16 @@ type judgeVerdict struct {
 	Rationale string `json:"rationale"`
 }
 
+type judgeCandidate struct {
+	Expected
+	Kind string `json:"kind"`
+}
+
 type judgeTask struct {
 	caseID   string
 	finding  int
 	f        Finding
-	eligible []Expected
+	eligible []judgeCandidate
 }
 
 func judgeOnce(o judgeOptions, t judgeTask) (judgeVerdict, Usage, error) {
@@ -47,6 +52,7 @@ func judgeOnce(o judgeOptions, t judgeTask) (judgeVerdict, Usage, error) {
 	}
 	type expected struct {
 		ID     string `json:"id"`
+		Kind   string `json:"kind"`
 		File   string `json:"file"`
 		Start  int    `json:"start"`
 		End    int    `json:"end"`
@@ -58,7 +64,7 @@ func judgeOnce(o judgeOptions, t judgeTask) (judgeVerdict, Usage, error) {
 		Finding      Finding    `json:"finding"`
 	}{Instructions: judgeInstructions, Finding: t.f}
 	for _, e := range t.eligible {
-		in.Expected = append(in.Expected, expected{e.ID, e.File, e.Start, e.End, e.Defect})
+		in.Expected = append(in.Expected, expected{e.ID, e.Kind, e.File, e.Start, e.End, e.Defect})
 	}
 	input, _ := json.Marshal(in)
 	cmd := exec.Command(o.Pi, "--print", "--mode", "json", "--no-session", "--no-tools", "--no-extensions", "--no-mcp", "--no-skills", "--no-context-files", "--no-prompt-templates", "--no-themes", "--no-approve", "--offline", "--model", o.Model, "--system-prompt", judgeSystem)
@@ -109,8 +115,13 @@ func judgeReport(r *Report, c *Corpus, o judgeOptions) (*Adjudications, error) {
 		for n, f := range rec.Findings {
 			t := judgeTask{caseID: rec.ID, finding: n, f: f}
 			for _, e := range k.Expected {
-				if locates(e, f) {
-					t.eligible = append(t.eligible, e)
+				if locatesCase(k, e, f) {
+					t.eligible = append(t.eligible, judgeCandidate{Expected: e, Kind: "expected"})
+				}
+			}
+			for _, e := range k.Avoid {
+				if locatesCase(k, e, f) {
+					t.eligible = append(t.eligible, judgeCandidate{Expected: e, Kind: "avoid"})
 				}
 			}
 			if len(t.eligible) > 0 {

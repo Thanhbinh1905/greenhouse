@@ -28,6 +28,7 @@ All runs below are scored from adjudication records against corpus revision 4 (s
 | [09-gpt-6-luna-r2](09-gpt-6-luna-r2/report.md) | same as 08, repeated | rev 2 | 89% (8/9) | 85% | 85% | 0 | 0/16 | $0.0045 | 4.2s | met |
 | [10-claude-sonnet-5.5-r1](10-claude-sonnet-5.5-r1/report.md) | Claude backend, `claude-sonnet-5-5` | rev 4 | 100% (9/9) | 100% | 87% | 0 | 0/16 | $0.2710 | 5.8s | met |
 | [11-snapshot-confinement](11-snapshot-confinement/report.md) | full-tree snapshot, resolution responses, Landlock confinement, `openai/gpt-5.6-luna` | rev 4 | 100% (9/9) | 100% | 81% | 0 | 0/16 | n/a | 12.1s | met |
+| [13-posse-regression](13-posse-regression/README.md) | pinned external posse heads, builds `ed45ead` and `c68b760`, defect-level adjudication | rev 9 | 6/54 and 5/54 over two passes | see README | see README | see README | see README | $4.12 and $2.80 | see README | not met |
 
 Priority accuracy was 100% in every run that produced findings, except 06 (91%).
 
@@ -83,6 +84,10 @@ Run 11 repeats the default reviewer, `openai/gpt-5.6-luna` through Pi, after t68
 - Its three false positives: a duration overflow in `policy-needless-comments` (P2, real but not planted), the recurring nil `*Item` speculation in `noise-legacy-context` (P2), and a `no-comments` finding on the helper's doc comment in `clean-extract-helper` (P2). None blocks, so the bar holds. Runs 04 and 05 raised no clean-case finding.
 - Mean latency rose from 8.5s (run 05) to 12.1s. The reviewer can now open files outside the diff.
 - Pi reported a cost of 0 for every message (`totalFromProvider: false`), because the provider entry Greenhouse writes carries no prices. Token usage is in each `events.jsonl`.
+
+## Posse PR regression
+
+[Run 13](13-posse-regression/README.md) reviews 33 pinned posse cases on two builds, two passes each, and matches findings to expected defects by the defect they describe, including findings outside the reported line range. The `ed45ead` build detects 6 of 54 expected defect opportunities and `c68b760` detects 5 of 54. Neither build reported the historical false P1 on PR 1146 or the false P0-P2 on t1241 at their target lines.
 
 ## Reasoning restored
 

@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "id": "posse-pr-1131-r2",
+  "category": "bug",
+  "description": "Pinned external posse regression case pr-1131, repetition 2.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "brief-plan-externalization",
+      "file": "internal/store/plan_blobs.go",
+      "start": 94,
+      "end": 94,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "Inputs with role brief are excluded from blob externalization, so selected Briefs larger than 64 KiB remain base64 inline in tasks.plan_json and task_plan_revisions."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "9129acb6072d9150aad9a3bb2710b6383f189593",
+    "target": "bcfa3f667804ec32e786ccb59eeeff59f175b52f",
+    "files": [
+      "docs/spec.md",
+      "internal/app/ingest.go",
+      "internal/app/launch_delivery.go",
+      "internal/app/ops.go",
+      "internal/app/orphans.go",
+      "internal/app/recovery.go",
+      "internal/app/service.go",
+      "internal/app/tasks.go",
+      "internal/app/teardown_panes.go",
+      "internal/store/migrations/00100_task_plan_input_blobs.sql",
+      "internal/store/migrations/00101_batched_task_plan_input_migration.sql",
+      "internal/store/plan_blobs.go",
+      "internal/store/plan_input_migration.go",
+      "internal/store/queries.sql",
+      "internal/store/snapshot.go",
+      "internal/store/sqlc/models.go",
+      "internal/store/sqlc/querier.go",
+      "internal/store/sqlc/queries.sql.go",
+      "internal/store/store.go",
+      "internal/store/store_test.go",
+      "internal/store/task_pane_shell_migration_compat_test.go",
+      "internal/store/task_plan.go",
+      "internal/store/task_plan_test.go",
+      "internal/store/workflow.go",
+      "internal/taskplan/plan.go",
+      "internal/taskplan/plan_test.go"
+    ],
+    "derivation": "Exact posse head and target from t167. Expected defect is documented in issue 1129."
+  }
+}

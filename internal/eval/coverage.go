@@ -75,6 +75,13 @@ func caseLanguages(k Case) map[string]bool {
 			}
 		}
 	}
+	if k.Source.Kind == "external" {
+		for _, p := range k.Source.Files {
+			if lang := extensions[filepath.Ext(p)]; lang != "" {
+				found[lang] = true
+			}
+		}
+	}
 	return found
 }
 
@@ -93,7 +100,11 @@ func CheckCoverage(c *Corpus) (Coverage, error) {
 		}
 
 		if k.Source.Kind != "synthetic" {
-			key := k.Source.Repo + ":" + k.Source.Commit
+			commit := k.Source.Commit
+			if k.Source.Kind == "external" {
+				commit = k.Source.Target + ":" + k.Source.Head
+			}
+			key := k.Source.Repo + ":" + commit
 			if split, ok := commitSplits[key]; ok && split != k.Split {
 				return v, fmt.Errorf("source commit %s crosses splits", key)
 			}

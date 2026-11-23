@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "id": "posse-pr-1159-r2",
+  "category": "clean",
+  "description": "Pinned external posse regression case pr-1159, repetition 2.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "ecd14c7c36f374ef358d934fb1bd8e8dd89c6169",
+    "target": "48c433722dc88692a38b4d73eb679da94af74300",
+    "files": [
+      "internal/app/watch_executable.go",
+      "internal/app/watch_process.go",
+      "internal/app/watch_repair.go",
+      "internal/app/watch_runtime.go",
+      "internal/app/watch_supervision_commands_test.go",
+      "internal/store/migrations/20261120173211_watch_runtime_executable_metadata.sql",
+      "internal/store/project_runtime_test.go",
+      "internal/store/project_watch_runtime.go",
+      "internal/store/sqlc/models.go",
+      "internal/store/task_pane_shell_migration_compat_test.go",
+      "internal/store/vocabulary_migration_compat_test.go"
+    ],
+    "derivation": "Exact posse head and target from t167. No finding was expected in t167."
+  }
+}

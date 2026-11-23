@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "id": "posse-t1222-9de124d7",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head 9de124d7.",
+  "intent": "fix(review): queue the target refresh instruction itself when review start finds candidate_target_moved\n\nDone when: The acceptance case of #995 passes as an E2E test: one refresh instruction is queued, a repeated review start does not queue a duplicate, and review starts after the next done Signal.; A done Notice does not suggest posse review start while the candidate's frozen target is stale.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-4d90ec70",
+      "file": "internal/app/tasks.go",
+      "start": 1509,
+      "end": 1510,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "fullPipelineCandidateTargetStale skips promoted candidates, so a promoted candidate whose frozen target has moved is reported with `next_action=posse review start` on a done Signal. Review admission later detects the stale target, but the Notice still incorrectly directs the Lead to start Review instead of refreshing the candidate first."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "9de124d7e78f84c1fad8bf8018f61f1393596c5a",
+    "target": "fa815f7a47d4fbef2a1d2fc2ae499defca70d0f2",
+    "files": [
+      "internal/app/review_rounds.go",
+      "internal/app/tasks.go",
+      "internal/e2e/review_validation_actions_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}
