@@ -7,6 +7,7 @@ import (
 )
 
 func TestNativeModelCatalog(t *testing.T) {
+	t.Parallel()
 	root := t.TempDir()
 	pi := filepath.Join(root, "pi")
 	if err := os.WriteFile(pi, []byte("#!/bin/sh\nprintf 'provider model\nnative chosen\n'\n"), 0700); err != nil {

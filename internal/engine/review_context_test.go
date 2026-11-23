@@ -48,6 +48,7 @@ func proseOf(size int) string {
 }
 
 func TestReviewPromptThatFitsTheContextWindow(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	writeFixtureFile(t, repo, "notes.txt", proseOf(20*1024))
@@ -67,6 +68,7 @@ func TestReviewPromptThatFitsTheContextWindow(t *testing.T) {
 var contextReason = regexp.MustCompile(`^prompt exceeds model context \((\d+) tokens > (\d+)\)$`)
 
 func TestReviewPromptOverTheContextWindowIsPartial(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	writeFixtureFile(t, repo, "notes.txt", proseOf(40*1024))
@@ -105,6 +107,7 @@ func TestReviewPromptOverTheContextWindowIsPartial(t *testing.T) {
 }
 
 func TestReviewPromptThatCannotFitIsRefused(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	writeFixtureFile(t, repo, "sample.txt", "review me\n")
@@ -129,6 +132,7 @@ const contextOverflowFake = `print(json.dumps({'type':'compaction_start','reason
 sys.exit(255)`
 
 func TestReviewBackendContextOverflowIsTyped(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	writeFixtureFile(t, repo, "sample.txt", "review me\n")

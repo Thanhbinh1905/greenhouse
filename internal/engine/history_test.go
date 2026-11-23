@@ -87,6 +87,7 @@ func TestLargeLegacyHistoryDoesNotEnterHotState(t *testing.T) {
 }
 
 func TestHistorySaveCostIsBounded(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	s, err := load(home)
 	if err != nil {
@@ -169,6 +170,7 @@ func TestHistorySaveCostIsBounded(t *testing.T) {
 }
 
 func TestMigrationPreservesActiveCustodyAndTrust(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	s, err := load(home)
 	if err != nil {
@@ -212,6 +214,7 @@ func TestMigrationPreservesActiveCustodyAndTrust(t *testing.T) {
 }
 
 func TestUncommittedReceiptIsNotReplayed(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	s, err := load(home)
 	if err != nil {
@@ -238,6 +241,7 @@ func TestUncommittedReceiptIsNotReplayed(t *testing.T) {
 }
 
 func TestFailedStateCommitPreservesCommittedHistory(t *testing.T) {
+	t.Parallel()
 	home := t.TempDir()
 	s, err := load(home)
 	if err != nil {

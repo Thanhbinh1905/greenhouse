@@ -15,6 +15,7 @@ import (
 )
 
 func TestSafeRemoteRejectsCredentialAndAliasInputs(t *testing.T) {
+	t.Parallel()
 	for _, remote := range []string{"origin", "https://user:secret@example.invalid/acme/garden.git", "https://example.invalid/garden.git?token=secret"} {
 		if safeRemote(remote) {
 			t.Errorf("accepted unsafe remote %q", remote)

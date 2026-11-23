@@ -30,6 +30,7 @@ func prepareReviewAdmission(t *testing.T, bin, repo, home, target string) map[st
 }
 
 func TestGitlinkReview(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"only", "mixed", "missing", "uninitialized", "truncated", "binary"} {
 		t.Run(mode, func(t *testing.T) {
 			bin, repo, home := fixture(t)
@@ -167,6 +168,7 @@ func mustJSON(t *testing.T, v any) string {
 }
 
 func TestReviewInputLargeFile(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	content := strings.Repeat("unchanged candidate line\n", 60000)
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte(content), 0600); err != nil {
@@ -229,6 +231,7 @@ func TestReviewInputTooLarge(t *testing.T) {
 }
 
 func TestReviewInputWindowsAndAggregate(t *testing.T) {
+	t.Parallel()
 	_, repo, _ := fixture(t)
 	var names []string
 	for i := 0; i < 20; i++ {
@@ -270,6 +273,7 @@ func TestReviewInputWindowsAndAggregate(t *testing.T) {
 }
 
 func TestReviewBinaryRefusal(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	if err := os.WriteFile(filepath.Join(repo, "image.bin"), []byte{0, 1, 2, 3}, 0600); err != nil {
@@ -310,6 +314,7 @@ func TestReviewInputUnevenFilesFitAggregate(t *testing.T) {
 }
 
 func TestReviewAddedAndRemovedGitlinksWithoutLocalObjects(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"removed", "added"} {
 		t.Run(mode, func(t *testing.T) {
 			bin, repo, home := fixture(t)

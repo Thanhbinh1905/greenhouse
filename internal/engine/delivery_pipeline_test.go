@@ -24,6 +24,7 @@ func startPipelineWithTitle(t *testing.T, bin, repo, home string, v map[string]a
 }
 
 func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
+	t.Parallel()
 	var bare, prBranch, prTitle, prBody string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -93,6 +94,7 @@ func TestFullPipelineReachesCIReadyWithLocalForge(t *testing.T) {
 }
 
 func TestPipelineWithoutFullPresetRefusesWithoutCrashingDaemon(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, prepared := prepareFixture(t)
 	refused := mutate(t, bin, repo, home, prepared, "pipeline", "needs-full-preset", nil)
 	if refused["outcome"] != "refused" || !strings.Contains(refused["error"].(string), "prepare under the full preset first") {
@@ -129,6 +131,7 @@ func TestPipelineStartPersistsDerivedTitleAndRejectsChanges(t *testing.T) {
 }
 
 func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
+	t.Parallel()
 	var bare, hookStarted, hookRelease, hookFinished, hookLog string
 	var mu sync.Mutex
 	exists, prHead, prTitle, prBody := false, "", "", ""
@@ -317,6 +320,7 @@ func TestInterruptedPRMutationReconcilesWithoutDuplicateDelivery(t *testing.T) {
 }
 
 func TestFullPipelineReportsMissingAndStaleChecksThroughAXI(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct{ name, payload, want string }{
 		{"missing", `{"total_count":0,"check_runs":[]}`, "ci-ready"},
 		{"stale", `{"total_count":1,"check_runs":[{"name":"fixture-ci","status":"completed","conclusion":"success","head_sha":"stale-head"}]}`, "needs-decision"},
@@ -391,6 +395,7 @@ func TestFullPipelineReportsMissingAndStaleChecksThroughAXI(t *testing.T) {
 }
 
 func TestFullPipelineWaitsForRequiredCheckToAppear(t *testing.T) {
+	t.Parallel()
 	var bare, branch string
 	var checks atomic.Int32
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -453,6 +458,7 @@ func TestFullPipelineWaitsForRequiredCheckToAppear(t *testing.T) {
 }
 
 func TestFullPipelineTransportExhaustionDoesNotDispatchFixer(t *testing.T) {
+	t.Parallel()
 	var bare string
 	var requests int
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -494,6 +500,7 @@ func TestFullPipelineTransportExhaustionDoesNotDispatchFixer(t *testing.T) {
 }
 
 func TestFullPipelineRepairsFailedCIWithinBound(t *testing.T) {
+	t.Parallel()
 	var bare string
 	var ciCalls, prCreates, prUpdates int
 	branchName := ""
@@ -621,19 +628,19 @@ func TestTransportRetryBudgetIsBounded(t *testing.T) {
 	}
 }
 
+var forgeAPIs sync.Map
+
 func setForgeAPI(t *testing.T, value string) {
 	t.Helper()
-	previous, had := os.LookupEnv("GREENHOUSE_GITHUB_API")
-	if err := os.Setenv("GREENHOUSE_GITHUB_API", value); err != nil {
-		t.Fatal(err)
+	forgeAPIs.Store(t, value)
+	t.Cleanup(func() { forgeAPIs.Delete(t) })
+}
+
+func forgeEnv(t *testing.T) []string {
+	if value, ok := forgeAPIs.Load(t); ok {
+		return []string{"GREENHOUSE_GITHUB_API=" + value.(string)}
 	}
-	t.Cleanup(func() {
-		if had {
-			_ = os.Setenv("GREENHOUSE_GITHUB_API", previous) // Restore test environment.
-		} else {
-			_ = os.Unsetenv("GREENHOUSE_GITHUB_API") // Restore test environment.
-		}
-	})
+	return nil
 }
 func assertDeliveryReady(t *testing.T, state map[string]any) {
 	t.Helper()
@@ -661,6 +668,7 @@ func verifyDeliveryEvidence(t *testing.T, home, bare string, run map[string]any)
 }
 
 func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
+	t.Parallel()
 	var bare string
 	var mu sync.Mutex
 	branches := map[int]string{}

@@ -133,6 +133,7 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	c := exec.Command(bin, "axi")
 	c.Dir = repo
 	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
+	c.Env = append(c.Env, forgeEnv(t)...)
 	c.Env = append(c.Env, env...)
 	c.Env = append(withoutEnv(c.Env, "GREENHOUSE_TEST_PARENT_PID"), "GREENHOUSE_TEST_PARENT_PID="+fmt.Sprint(os.Getpid()))
 	fixturePath := os.Getenv("PATH")
@@ -220,6 +221,7 @@ func TestDaemonExitsWhenTestProcessDies(t *testing.T) {
 }
 
 func TestFixtureStopsDaemonOnCleanup(t *testing.T) {
+	t.Parallel()
 	var pid int
 	t.Run("daemon", func(t *testing.T) {
 		bin, repo, home := fixture(t)
@@ -236,6 +238,7 @@ func TestFixtureStopsDaemonOnCleanup(t *testing.T) {
 }
 
 func TestFixtureStopsSecondaryDaemonOnCleanup(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	secondaryHome := filepath.Join(filepath.Dir(home), "secondary-state")
 	var pid int

@@ -127,6 +127,7 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 }
 
 func TestReviewDiffBase(t *testing.T) {
+	t.Parallel()
 	repo := t.TempDir()
 	git(t, repo, "init", "-b", "main")
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "--allow-empty", "-m", "target")

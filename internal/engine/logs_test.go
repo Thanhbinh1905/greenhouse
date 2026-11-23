@@ -83,6 +83,7 @@ func TestStepCompletionClassifiesExecutorErrors(t *testing.T) {
 }
 
 func TestStandaloneLogFollowOnlyWaitsForActiveStep(t *testing.T) {
+	t.Parallel()
 	for _, active := range []struct{ stage, step, status string }{
 		{"independent-review", "review", "running"},
 		{"selected-repair", "repair", "writing"},
@@ -115,6 +116,7 @@ func TestSnapshotTailRedactsBeforeTruncation(t *testing.T) {
 }
 
 func TestRecoveredCommandsRedactSnapshotOutput(t *testing.T) {
+	t.Parallel()
 	plan := &Pipeline{Plan: CommandPlan{Test: [][]string{{"test"}}}}
 	result, complete := recordedCommands(plan, "test", []runner.ObservedExecutor{{ExecutorEvidence: runner.ExecutorEvidence{State: "exited"}, Stdout: []byte("token=abcdefgh1234567890\n")}})
 	if !complete || strings.Contains(result.Commands[0].Output, "abcdefgh1234567890") || !strings.Contains(result.Commands[0].Output, "[REDACTED]") {
