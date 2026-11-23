@@ -14,6 +14,7 @@ import (
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 func call(h string, q engine.Request) (engine.Response, error) {
@@ -130,11 +131,18 @@ func statePage(v engine.Response, live string, details bool) string {
 	fmt.Fprintf(&page, "Events: %s\n", live)
 	fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), engine.SourceSummary(engine.FieldSources(s)))
 	if r.Target != "" {
-		fmt.Fprintf(&page, "Target: %s\nIntent: %s\nScope: committed target-to-candidate diff; dirty files excluded\n", r.Target, r.Intent)
+		target := targetDisplay(r.Submitted.Worktree, r.Target, repository.SuggestTarget(r.Submitted.Worktree))
+		fmt.Fprintf(&page, "Target: %s\nIntent: %s\n", target, r.Intent)
+		if r.IntentSource != "" {
+			fmt.Fprintf(&page, "Intent source: %s\n", r.IntentSource)
+		}
+		fmt.Fprintln(&page, "Scope: committed target-to-candidate diff; dirty files excluded")
 	}
 	if o := v.Repository; o != nil {
 		fmt.Fprintln(&page, engine.OverrideLine(o))
-		fmt.Fprintln(&page, engine.PipelinePlanLine(o))
+		if showPipelinePlan(v) {
+			fmt.Fprintln(&page, engine.PipelinePlanLine(o))
+		}
 	}
 	for _, cfg := range v.Config {
 		if cfg.Status == "retired" {
@@ -248,6 +256,27 @@ func terminalPrompt(format string, args ...any) {
 		fmt.Print(" ")
 	}
 }
+func runInitialSequence(m *tuiModel) bool {
+	var process func(tea.Cmd)
+	process = func(cmd tea.Cmd) {
+		if cmd == nil {
+			return
+		}
+		switch msg := cmd().(type) {
+		case tea.BatchMsg:
+			for _, child := range msg {
+				process(child)
+			}
+		case intentMsg:
+			process(m.collected(msg))
+		case responseMsg:
+			process(m.runAnswered(msg))
+		}
+	}
+	process(m.runReview())
+	return m.seq == nil && !busy(m.v.Run)
+}
+
 func lineTerminal(h, path string) error {
 	q := engine.Request{Version: engine.MaxVersion, Op: "attach", Path: path}
 	v, e := call(h, q)
@@ -256,6 +285,22 @@ func lineTerminal(h, path string) error {
 	}
 	if e = protocolRefusal(v); e != nil {
 		return e
+	}
+	if initialRunPending(v) && !hasCommittedChange(path, repository.SuggestTarget(path), v.Run.Candidate) {
+		return errors.New(noCommittedChangeError)
+	}
+	agents := engine.SignedInAgents()
+	if slices.Contains(v.Actions, "prepare") && v.Run.Reviewer == nil && len(agents) == 0 {
+		_, _ = fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Sign in with `pi` then /login, `claude auth login` or `codex login`, then run greenhouse again.")
+		return nil
+	}
+	if initialRunPending(v) && primaryAction(v, agents).ID == "run" {
+		m := newTUI(daemonClient{h, path}, v, agents, repository.SuggestTarget(path), nil)
+		if runInitialSequence(m) && m.message != "" {
+			_, _ = fmt.Fprintln(os.Stdout, m.message)
+			return nil
+		}
+		v = m.v
 	}
 	lines := make(chan string)
 	go func() {
@@ -440,7 +485,7 @@ func lineTerminal(h, path string) error {
 			q.Op = "resolve-conflict"
 		}
 		if op == "p" {
-			agents := engine.InstalledAgents()
+			agents := engine.SignedInAgents()
 			if len(agents) == 0 {
 				message = "No supported agent installed. Install pi, claude or codex on PATH and use its native login."
 				continue

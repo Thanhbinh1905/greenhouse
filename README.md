@@ -37,9 +37,11 @@ cd /path/to/your/feature-branch
 /path/to/greenhouse
 ```
 
-Commit your changes first, since Greenhouse reviews what is committed. Press Enter on **Run review** and watch it go.
+Commit changes first. Greenhouse reviews committed changes. On launch, it starts the first review without asking for setup.
 
-You don't have to explain the change again. Greenhouse finds your recent session with the agent in this worktree and uses your own words as the intent. If it can't find one, or finds several, it simply asks. The [terminal guide](docs/terminal.md) covers the keys and the details.
+Greenhouse infers intent from an agent session in this worktree, the open pull request body, or commit messages and the branch name, in that order. The source appears on screen. Press `e` to edit the intent before your next run.
+
+The target uses the upstream branch or the default branch: `origin/HEAD`, `main` or `master`. Greenhouse loads built-in rules and uses the first installed agent's default model. If the branch has no commits or no agent is installed, Greenhouse says what to do. See the [terminal guide](docs/terminal.md) for controls.
 
 ## What happens next
 

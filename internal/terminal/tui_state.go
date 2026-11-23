@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 // tuiAction is one thing the terminal can offer. Op names the controller
@@ -232,7 +233,7 @@ func setupSteps(v engine.Response, agents []string, suggestion string) []tuiStep
 	}
 	switch {
 	case r.Target != "":
-		steps = append(steps, tuiStep{"Target", stepDone, targetLabel(r.Target)})
+		steps = append(steps, tuiStep{"Target", stepDone, targetDisplay(r.Submitted.Worktree, r.Target, suggestion)})
 	case suggestion != "":
 		steps = append(steps, tuiStep{"Target", stepTodo, "suggested " + targetLabel(suggestion)})
 	default:
@@ -265,6 +266,18 @@ func targetLabel(target string) string {
 	return target
 }
 
+func targetDisplay(worktree, commit, preferred string) string {
+	if preferred == "" {
+		return targetLabel(commit)
+	}
+	resolved, err := repository.CommittedTarget(worktree, preferred)
+	if err != nil || resolved != commit || len(preferred) == 40 || len(preferred) == 64 {
+		return targetLabel(commit)
+	}
+	name := strings.TrimPrefix(preferred, "refs/remotes/")
+	return name + " @ " + targetLabel(commit)
+}
+
 func reviewStep(v engine.Response) tuiStep {
 	r := v.Run
 	limit := r.Configs[len(r.Configs)-1].Settings.Limit
@@ -293,20 +306,39 @@ func reviewStep(v engine.Response) tuiStep {
 		return tuiStep{name, stepFailed, "stopped at " + r.Pipeline.Failed + " · " + budget}
 	case r.Status == "clean-review":
 		return tuiStep{name, stepDone, "clean · " + budget}
+	case r.Status == "outstanding-findings" && !blocks(actionable):
+		return tuiStep{name, stepDone, findingCount(actionable, informational) + " · " + budget}
 	case r.Status == "outstanding-findings":
-		return tuiStep{name, stepFailed, findingCount(len(actionable), len(informational)) + " · " + budget}
+		return tuiStep{name, stepFailed, findingCount(actionable, informational) + " · " + budget}
 	case r.Status == "unconfigured":
 		return tuiStep{name, stepTodo, "not started · " + budget}
 	}
 	return tuiStep{name, stepWaiting, statusWords(r.Status) + " · " + budget}
 }
 
-func findingCount(actionable, informational int) string {
-	text := plural(actionable, "outstanding finding")
-	if informational > 0 {
-		text += fmt.Sprintf(", %d informational", informational)
+func blocks(findings []engine.Finding) bool {
+	for _, f := range findings {
+		if f.Priority == "P0" || f.Priority == "P1" {
+			return true
+		}
+	}
+	return false
+}
+
+func findingCount(actionable, informational []engine.Finding) string {
+	if !blocks(actionable) {
+		return plural(len(actionable)+len(informational), "finding") + " (none blocking)"
+	}
+	text := plural(len(actionable), "outstanding finding")
+	if len(informational) > 0 {
+		text += fmt.Sprintf(", %d informational", len(informational))
 	}
 	return text
+}
+
+func showPipelinePlan(v engine.Response) bool {
+	r := v.Run
+	return v.Repository != nil && (v.Repository.PipelineStatus != "absent" || r.Pipeline != nil || r.Configs[len(r.Configs)-1].Settings.Preset == "full")
 }
 
 func plural(n int, noun string) string {
@@ -383,7 +415,7 @@ func stateNotes(v engine.Response, agents []string, fresh bool) []string {
 	}
 	actionable, _ := engine.Outstanding(r)
 	if r.Status == "outstanding-findings" && len(actionable) > 0 && r.Repair == nil && r.RepairUsed == 0 && !slices.Contains(v.Actions, "repair") && r.Host == nil {
-		notes = append(notes, "Selected repair is unavailable: it needs a trusted fixer.json with checks and findings on changed files.")
+		notes = append(notes, "Repair: add fixer.json to enable (docs/repair.md).")
 	}
 	if x := r.Repair; x != nil && x.Status == "fixed-not-independently-rereviewed" {
 		notes = append(notes, "The fix passed its checks but was not independently reviewed again.")
@@ -394,7 +426,7 @@ func stateNotes(v engine.Response, agents []string, fresh bool) []string {
 	if trustable(v) {
 		notes = append(notes, engine.OverrideLine(v.Repository)+".")
 	}
-	if v.Repository != nil {
+	if showPipelinePlan(v) {
 		notes = append(notes, engine.PipelinePlanLine(v.Repository)+".")
 	}
 	return notes

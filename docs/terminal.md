@@ -4,13 +4,11 @@ Run `greenhouse` with no arguments inside a committed Git worktree. On a termina
 
 ## Run a review
 
-From a feature branch with committed changes, run `greenhouse`. The screen shows the branch, the agent it will use, the suggested Git target and one highlighted action, **Run review**. Press Enter.
-
-Run collects the intent, saves it with the target, loads the selected rules and starts one independent review. Each step is a separate controller action. A refused or failed step stops Run and says why; Run never retries it.
+From a feature branch with committed changes, run `greenhouse`. It starts the first review automatically in both the interactive screen and the line client. The screen shows the selected agent, intent and source, target, rules and review progress. Each setup step remains a separate controller action. A refused or failed step stops the launch flow; it is not retried.
 
 Dirty files are excluded from review.
 
-Opening, resizing, navigating and detaching only attach and follow events. Nothing runs and no budget is used.
+After the initial review has started, opening, resizing, navigating and detaching only attach and follow events. Nothing runs and no budget is used.
 
 ### Where the intent comes from
 
@@ -18,10 +16,11 @@ Run reads the intent from your own agent history: Claude Code, Codex and Pi sess
 
 - Run keeps your requests from that session word for word, redacts secrets, drops tool output, and labels the result with the agent, session and time.
 - The intent is never a summary and never comes from the diff.
-- When no session matches, Run asks what the change should do. When several sessions match equally, it asks which one.
-- When the requests exceed the 8192-byte intent limit, Run asks for a shorter intent. It never cuts them.
+- When no session matches, Greenhouse uses the open pull request body if available (read with the signed-in `gh` CLI, else `GH_TOKEN` or `GITHUB_TOKEN`), otherwise the branch's commit messages and name.
+- When several sessions match, Greenhouse uses the highest-ranked session, breaking ties by recency.
+- If the session requests exceed the 8192-byte intent limit, Greenhouse falls through to the pull request or commit-based intent. It never cuts session text.
 
-To skip collection, Tab to the Intent row and type the intent before Run. Tab to Agent or Target to change them. Changing the agent changes the reviewer only and keeps the fixer settings.
+The intent and its source appear on the Intent row. Press `e` on the home screen to edit the intent before a later run. Tab to Agent or Target when setup is available. Changing the agent changes the reviewer only and keeps the fixer settings. The first installed agent uses its native default model.
 
 ## Interactive screen
 
