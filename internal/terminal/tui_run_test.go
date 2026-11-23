@@ -154,3 +154,14 @@ func TestPipelinePlanLineHiddenForOnePassWithoutPlan(t *testing.T) {
 		t.Fatal("present plan hidden")
 	}
 }
+
+func TestInferCommitIntentRejectsOptionLikeTarget(t *testing.T) {
+	repo := intentRepo(t)
+	out := filepath.Join(t.TempDir(), "injected")
+	if _, _, err := inferCommitIntent(repo, "--output="+out, "HEAD"); err == nil {
+		t.Fatal("option-like target was accepted")
+	}
+	if matches, _ := filepath.Glob(out + "*"); len(matches) > 0 {
+		t.Fatalf("git ran the target as an option and wrote %v", matches)
+	}
+}
