@@ -13,7 +13,8 @@ func TestFreezeChildTreeDoesNotWaitForStoppedState(t *testing.T) {
 	started := time.Now()
 	deadline := started.Add(100 * time.Millisecond)
 	ops := pidfdOperations{
-		open: func(pid int) (int, error) { return pid + 10000, nil },
+		owned: func(int) bool { return true },
+		open:  func(pid int) (int, error) { return pid + 10000, nil },
 		signal: func(fd int, signal syscall.Signal) error {
 			if fd != childPID+10000 {
 				t.Fatalf("signal fd %d, want %d", fd, childPID+10000)
@@ -55,6 +56,7 @@ func TestFreezeChildTreeKillsDescendantThatDisappearsFromLatestScan(t *testing.T
 	}
 	var closed []int
 	ops := pidfdOperations{
+		owned: func(int) bool { return true },
 		open: func(pid int) (int, error) {
 			if pid != childPID {
 				t.Fatalf("opened pidfd for unexpected PID %d", pid)
@@ -106,6 +108,7 @@ func TestFreezeChildTreeReopensPidfdAfterPIDReuse(t *testing.T) {
 	}
 	var closed []int
 	ops := pidfdOperations{
+		owned: func(int) bool { return true },
 		open: func(int) (int, error) {
 			nextFD++
 			return nextFD, nil
@@ -152,6 +155,7 @@ func TestFreezeChildTreeReturnsKnownProcessesAtDeadline(t *testing.T) {
 	calls := 0
 	deadline := time.Now().Add(25 * time.Millisecond)
 	ops := pidfdOperations{
+		owned:  func(int) bool { return true },
 		open:   func(pid int) (int, error) { return pid + 10000, nil },
 		signal: func(int, syscall.Signal) error { return nil },
 		close:  func(int) error { return nil },
@@ -168,5 +172,32 @@ func TestFreezeChildTreeReturnsKnownProcessesAtDeadline(t *testing.T) {
 	}
 	if calls < 2 {
 		t.Fatalf("freeze stopped scanning too early: %d scans", calls)
+	}
+}
+
+func TestFreezeChildTreeIgnoresPIDReusedBeforePidfdOpen(t *testing.T) {
+	const reusedPID = 4567
+	var signals []int
+	var closed []int
+	ops := pidfdOperations{
+		open: func(int) (int, error) { return 200, nil },
+		signal: func(fd int, _ syscall.Signal) error {
+			signals = append(signals, fd)
+			return nil
+		},
+		close: func(fd int) error {
+			closed = append(closed, fd)
+			return nil
+		},
+		owned: func(int) bool { return false },
+	}
+	handles, complete := freezeChildTreeWith(time.Now().Add(100*time.Millisecond), func(int) (map[int]byte, error) {
+		return map[int]byte{reusedPID: 'R'}, nil
+	}, ops)
+	if !complete || len(handles) != 0 {
+		t.Fatalf("unowned process was tracked: complete=%v handles=%v", complete, handles)
+	}
+	if len(signals) != 0 || len(closed) == 0 {
+		t.Fatalf("unowned process was signalled or its pidfd leaked: signals=%v closed=%v", signals, closed)
 	}
 }

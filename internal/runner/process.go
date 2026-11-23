@@ -93,6 +93,7 @@ type pidfdOperations struct {
 	open   func(int) (int, error)
 	signal func(int, syscall.Signal) error
 	close  func(int) error
+	owned  func(int) bool
 }
 
 func systemPIDFDOps() pidfdOperations {
@@ -102,7 +103,38 @@ func systemPIDFDOps() pidfdOperations {
 			return unix.PidfdSendSignal(pidfd, signal, nil, 0)
 		},
 		close: unix.Close,
+		owned: isRunnerDescendant,
 	}
+}
+
+func isRunnerDescendant(pid int) bool {
+	self := os.Getpid()
+	for range 4096 {
+		if pid == self {
+			return true
+		}
+		if pid <= 1 {
+			return false
+		}
+		data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
+		if err != nil {
+			return false
+		}
+		end := strings.LastIndexByte(string(data), ')')
+		if end < 0 {
+			return false
+		}
+		fields := strings.Fields(string(data[end+1:]))
+		if len(fields) < 2 {
+			return false
+		}
+		parent, err := strconv.Atoi(fields[1])
+		if err != nil {
+			return false
+		}
+		pid = parent
+	}
+	return false
 }
 
 func freezeChildTree(deadline time.Time) ([]processHandle, bool) {
@@ -139,6 +171,12 @@ func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error
 				}
 				if err != nil {
 					return processHandles(known), false
+				}
+				if !ops.owned(pid) {
+					if closeErr := ops.close(pidfd); closeErr != nil {
+						return processHandles(known), false
+					}
+					continue
 				}
 				handle = processHandle{pid: pid, pidfd: pidfd}
 				known[pid] = handle
