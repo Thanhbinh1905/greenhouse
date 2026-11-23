@@ -233,7 +233,7 @@ func setupSteps(v engine.Response, agents []string, suggestion string) []tuiStep
 	}
 	switch {
 	case r.Target != "":
-		steps = append(steps, tuiStep{"Target", stepDone, targetLabel(r.Target)})
+		steps = append(steps, tuiStep{"Target", stepDone, targetDisplay(r.Submitted.Worktree, r.Target, suggestion)})
 	case suggestion != "":
 		steps = append(steps, tuiStep{"Target", stepTodo, "suggested " + targetLabel(suggestion)})
 	default:

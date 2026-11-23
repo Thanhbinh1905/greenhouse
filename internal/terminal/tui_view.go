@@ -254,7 +254,7 @@ func (m *tuiModel) homeView(w, room int) []string {
 			steps = append(steps, fit(row, w))
 		}
 		if s.Name == "Intent" && m.intentSource != "" {
-			steps = append(steps, fit("          Source: "+m.intentSource, w))
+			steps = append(steps, fit("            Source: "+m.intentSource, w))
 		}
 	}
 	var progress []string
