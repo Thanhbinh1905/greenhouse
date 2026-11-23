@@ -3,7 +3,7 @@
 The external corpus pins 33 posse cases: the t167 set (ten PRs plus t1241) and eleven t1222 heads whose Greenhouse findings t1236 adjudicated TRUE. Corpus revision 9 expects 27 defects per pass. Each build ran two passes through the real `greenhouse axi` CLI with Pi reviewer `openai/gpt-5.6-luna`, scored by the Pi judge on the defect each finding describes.
 
 - Builds: `ed45ead` (shared daemon at the time of the run) and `c68b760` (main). Each pass ran `cmd/eval` from a worktree at that commit; the evaluator binary was identical.
-- Layout: `ed45ead/run-1`, `ed45ead/run-2`, `c68b760/run-1`, `c68b760/run-2`, each with `report.md`, `report.json`, `adjudications.json` and per-case inputs and event streams.
+- Layout: `ed45ead/run-1`, `ed45ead/run-2`, `c68b760/run-1`, `c68b760/run-2`, each with `report.md`, `report.json` and `adjudications.json`. The raw per-case files (`input.json`, `events.jsonl`) were not committed because of their size (213 MB); rescoring uses `adjudications.json`.
 - PRs 1131, 1146, 1152, 1156, 1158, 1159, 1164, 1165, 1167, 1168 and t1241 run twice per pass (`-r1`, `-r2`), so each of their defects has 4 opportunities per build. The t1222 cases have 2.
 
 ## Recall

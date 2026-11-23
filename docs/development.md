@@ -141,7 +141,7 @@ for pass in 1 2; do
 done
 ```
 
-These runs make paid reviewer and judge calls. The [recorded baseline](evidence/review-eval/13-posse-regression/README.md) includes both runs, exact inputs, model events, adjudications, and scores. External cases are scored by the root cause described in each finding, not solely by overlap with the expected line range. The `avoid` records capture the false P1 on PR 1146 and the false P0-P2 claim on t1241.
+These runs make paid reviewer and judge calls. The [recorded baseline](evidence/review-eval/13-posse-regression/README.md) includes each run's report, adjudications, and scores. External cases are scored by the root cause described in each finding, not solely by overlap with the expected line range. The `avoid` records capture the false P1 on PR 1146 and the false P0-P2 claim on t1241.
 
 ## Fixer evaluation
 
