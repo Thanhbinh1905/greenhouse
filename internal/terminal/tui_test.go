@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"slices"
@@ -693,6 +694,7 @@ func TestRunNeverSendsAfterEventLoss(t *testing.T) {
 	m.collector = func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error) {
 		return sessionintent.Match{}, sessionintent.ErrNoIntent
 	}
+	m.fallback = func(string, string, string) (string, string, error) { return "", "", errors.New("no committed intent") }
 	press(m, "enter")
 	drive(m, reconnecting)
 	press(m, typed("answer")...)
