@@ -188,6 +188,7 @@ func recordReview(r *Run, x *Execution) {
 			r.Findings = append(r.Findings, f)
 		}
 	}
+	dismissFindings(r, x.Result.Dismissed)
 	for i := range p.Resolutions {
 		if res := &p.Resolutions[i]; res.Reopened == "" && reported[res.Finding] {
 			res.Reopened = x.ID

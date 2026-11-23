@@ -516,7 +516,6 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 		return reviewOutcome{Status: "inconclusive", Log: "candidate snapshot unavailable: " + e.Error()}
 	}
 	defer repository.RemoveSnapshot(tree)
-	ctx = runner.WithExecutor(ctx, x.ID, Home)
 	done, confinement := runBoundedReview(ctx, x, dir, tree)
 	done = confirmBlockingFindings(ctx, x, dir, tree, done)
 	done.Confinement = &confinement

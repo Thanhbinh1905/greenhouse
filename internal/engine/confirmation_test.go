@@ -1,8 +1,10 @@
 package engine
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -129,5 +131,53 @@ func TestConfirmationArgsFollowTheAdmittedExecutionMode(t *testing.T) {
 	got, gotErr := confirmationArgs(&Execution{Config: config})
 	if err != nil || gotErr != nil || Digest(got) != Digest(want) {
 		t.Fatalf("native execution args = %v, %v", got, gotErr)
+	}
+}
+
+func TestDismissedFindingLeavesTheRunLedger(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	installFake(t, home, confirmationFake("verdict([finding('P1','Line one is wrong')])", "verdict([] if os.path.exists(root+'/drop') else [finding('P1','Line one is wrong')])"))
+	b, _ := json.Marshal(map[string]any{"version": 2, "op": "attach", "host": fakeHost})
+	v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, string(b)), target, "")
+	v = hostCall(t, bin, repo, home, v, "review", "review-1", map[string]any{"grant": "round-1"})
+	v = hostSettle(t, bin, repo, home)
+	if findings, _ := runOf(t, v)["findings"].([]any); len(findings) != 1 {
+		t.Fatalf("first review should keep the confirmed finding: %v", v)
+	}
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "drop"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	hostCall(t, bin, repo, home, v, "review", "review-2", map[string]any{"grant": "round-2"})
+	v = hostSettle(t, bin, repo, home)
+	result := v["host_result"].(map[string]any)
+	if findings, _ := runOf(t, v)["findings"].([]any); len(findings) != 0 || len(result["dismissed_findings"].([]any)) != 1 || result["verdict"] != "clean" {
+		t.Fatalf("a dismissed finding must leave the run ledger: %v", v)
+	}
+}
+
+func TestConfirmationPassesKeepTheirOwnExecutorRecords(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, confirmationFake("verdict([finding('P1','Line one is wrong')])", "verdict([finding('P1','Line one is wrong')])"))
+	mutate(t, bin, repo, home, v, "review", "review", nil)
+	id := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)["id"].(string)
+	verdict, _ := filepath.Glob(filepath.Join(home, "executors", id+".*.lease"))
+	confirmation, _ := filepath.Glob(filepath.Join(home, "executors", id+"-confirm-*.lease"))
+	if len(verdict) != 1 || len(confirmation) != 1 {
+		t.Fatalf("verdict records %v, confirmation records %v", verdict, confirmation)
+	}
+}
+
+func TestMarkUnconfirmedKeepsBlockingFindingsBlocking(t *testing.T) {
+	done := reviewOutcome{Status: "outstanding-findings", Result: &Verdict{Findings: []Finding{{Priority: "P1"}, {Priority: "P2"}, {Priority: "P0", Confirmation: &Confirmation{Status: "confirmed"}}}}}
+	markUnconfirmed(&done)
+	findings := done.Result.Findings
+	if findings[0].Confirmation == nil || findings[0].Confirmation.Status != "unconfirmed" || findings[0].Priority != "P1" || findings[1].Confirmation != nil || findings[2].Confirmation.Status != "confirmed" {
+		t.Fatalf("unexpected findings: %+v", findings)
 	}
 }

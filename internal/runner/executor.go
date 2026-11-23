@@ -52,9 +52,6 @@ type executorSequence struct {
 type executorKey struct{}
 
 func WithExecutor(ctx context.Context, base string, resolveHome func() (string, error)) context.Context {
-	if seq, _ := ctx.Value(executorKey{}).(*executorSequence); seq != nil && seq.base == base {
-		return ctx
-	}
 	return context.WithValue(ctx, executorKey{}, &executorSequence{base: base, resolveHome: resolveHome})
 }
 

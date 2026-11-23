@@ -75,7 +75,7 @@ func confirmBlockingFindings(ctx context.Context, x *Execution, dir, tree string
 			continue
 		}
 		pass := *x
-		pass.Full, pass.Responses, pass.Args, pass.Uncovered = false, nil, args, slices.Clone(x.Uncovered)
+		pass.ID, pass.Full, pass.Responses, pass.Args, pass.Uncovered = fmt.Sprintf("%s-confirm-%d", x.ID, i+1), false, nil, args, slices.Clone(x.Uncovered)
 		confirmation, priority, outcome := confirmFinding(ctx, &pass, filepath.Join(dir, fmt.Sprintf("confirm-%d", i+1)), tree, f)
 		done.Answer.Usage = addUsage(done.Answer.Usage, outcome.Answer.Usage)
 		done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
@@ -141,4 +141,21 @@ func confirmFinding(ctx context.Context, x *Execution, dir, tree string, f Findi
 	}
 	c.Status, c.Evidence = "demoted", match.Explanation
 	return c, match.Priority, outcome
+}
+
+func markUnconfirmed(done *reviewOutcome) {
+	if done.Status != "outstanding-findings" || done.Result == nil {
+		return
+	}
+	for i, f := range done.Result.Findings {
+		if (f.Priority == "P0" || f.Priority == "P1") && f.Confirmation == nil {
+			done.Result.Findings[i].Confirmation = &Confirmation{Status: "unconfirmed", Reported: f.Priority, Evidence: "the controller restarted before a confirmation pass completed"}
+		}
+	}
+}
+
+func dismissFindings(r *Run, dismissed []Finding) {
+	for _, d := range dismissed {
+		r.Findings = slices.DeleteFunc(r.Findings, func(f Finding) bool { return f.ID == d.ID })
+	}
 }
