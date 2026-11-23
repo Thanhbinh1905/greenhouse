@@ -326,6 +326,71 @@ func TestBoundedReviewDiffDoesNotExceedLimitWhenMarkingPaths(t *testing.T) {
 	}
 }
 
+func TestReviewAdmissionOmitsUncoveredFilesFromReviewerInput(t *testing.T) {
+	bin, repo, home := fixture(t)
+	var names []string
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("large-%02d.txt", i)
+		names = append(names, name)
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(strings.Repeat("old line\n", 8000)), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	target := commitReviewFixture(t, repo, "add large base files")
+	for _, name := range names {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte("new line\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commitReviewFixture(t, repo, "shrink files and add sample")
+	diff := git(t, repo, reviewDiffArgs(target, "HEAD")...)
+	if len(diff) <= 1024*1024 {
+		t.Fatalf("fixture diff is only %d bytes", len(diff))
+	}
+	v := prepareReviewAdmission(t, bin, repo, home, target)
+	v = mutate(t, bin, repo, home, v, "review", "omit-uncovered-files", nil)
+	if v["outcome"] != "ok" {
+		t.Fatalf("large diff admission: code=%v error=%v", v["error_code"], v["error"])
+	}
+	_ = waitReview(t, bin, repo, home)
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured struct {
+		Input struct {
+			Paths     []string
+			Files     []reviewFile
+			Uncovered []UncoveredPath
+		}
+	}
+	if err := json.Unmarshal(b, &captured); err != nil {
+		t.Fatal(err)
+	}
+	uncovered := map[string]bool{}
+	for _, path := range captured.Input.Uncovered {
+		uncovered[path.Path] = true
+	}
+	if len(uncovered) == 0 {
+		t.Fatal("large diff did not leave any paths uncovered")
+	}
+	hasDiffBound := false
+	for _, path := range captured.Input.Uncovered {
+		hasDiffBound = hasDiffBound || path.Reason == "diff_bound"
+	}
+	if !hasDiffBound {
+		t.Fatalf("diff-bound paths were not listed: %+v", captured.Input.Uncovered)
+	}
+	for _, file := range captured.Input.Files {
+		if uncovered[file.Path] {
+			t.Fatalf("uncovered path %s was included in reviewer Files", file.Path)
+		}
+	}
+}
+
 func TestReviewInputLargeFile(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)

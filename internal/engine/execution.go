@@ -276,6 +276,9 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		if e != nil {
 			return nil, e
 		}
+		files = slices.DeleteFunc(files, func(file reviewFile) bool {
+			return slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == file.Path })
+		})
 	}
 	for _, g := range generated {
 		if strings.Contains(reviewedDiff, "diff --git a/"+g.Path+" b/"+g.Path+"\n[generated: hunks omitted; see Generated]") {
@@ -498,7 +501,7 @@ func boundedReviewDiff(worktree, base, candidate string, names []string, generat
 		args := append([]string{"--literal-pathspecs"}, reviewDiffArgs(base, candidate)...)
 		section, err := repository.ReadBounded(worktree, remaining-len(marker), append(args, name)...)
 		if errors.Is(err, repository.ErrReadLimit) && !isGenerated {
-			uncovered = append(uncovered, UncoveredPath{name, "diff exceeds 1 MiB review limit"})
+			uncovered = append(uncovered, UncoveredPath{name, "diff_bound"})
 			output.WriteString(marker)
 			continue
 		}
