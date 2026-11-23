@@ -166,7 +166,7 @@ func fakeController(v engine.Response) *recordingClient {
 		case "apply":
 			run.Configs = append(run.Configs, engine.Snapshot{Settings: *q.Settings})
 		case "prepare":
-			run.Intent, run.Target, run.Reviewer = q.Intent, strings.Repeat("b", 40), &engine.ReviewerConfig{Backend: run.Configs[len(run.Configs)-1].Settings.ReviewerBackend}
+			run.Intent, run.IntentSource, run.Target, run.Reviewer = q.Intent, q.IntentSource, strings.Repeat("b", 40), &engine.ReviewerConfig{Backend: run.Configs[len(run.Configs)-1].Settings.ReviewerBackend}
 			next.Actions = append(next.Actions, "review")
 		case "resolve-rules":
 			next.RulesReady = true
@@ -332,12 +332,12 @@ func TestRunInfersIntentWhenNoSessionMatchesOrOffersEdit(t *testing.T) {
 
 func TestLongInferredIntentWrapsAndKeepsItsSourceVisible(t *testing.T) {
 	v := tuiState("running", "cancel")
-	v.Run.Intent = "Commit messages and branch feature: " + strings.Repeat("handle sample data carefully ", 4)
+	v.Run.Intent = strings.Repeat("handle sample data carefully ", 4)
+	v.Run.IntentSource = "commit messages + branch feature"
 	m := newTestTUI(v, &recordingClient{}, "pi")
-	m.intentSource = "commit messages + branch feature"
 	view := m.View()
-	if !strings.Contains(view, "carefully") || !strings.Contains(view, "Source: commit messages + branch feature") {
-		t.Fatalf("intent or source was truncated:\n%s", view)
+	if !strings.Contains(view, "carefully") || !strings.Contains(view, "Source: commit messages + branch feature") || strings.Contains(view, "Commit messages and branch") {
+		t.Fatalf("intent or source is unclear:\n%s", view)
 	}
 }
 

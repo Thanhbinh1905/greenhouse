@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 // tuiAction is one thing the terminal can offer. Op names the controller
@@ -263,6 +264,18 @@ func targetLabel(target string) string {
 		return target[:7]
 	}
 	return target
+}
+
+func targetDisplay(worktree, commit, preferred string) string {
+	if preferred == "" {
+		return targetLabel(commit)
+	}
+	resolved, err := repository.CommittedTarget(worktree, preferred)
+	if err != nil || resolved != commit || len(preferred) == 40 || len(preferred) == 64 {
+		return targetLabel(commit)
+	}
+	name := strings.TrimPrefix(preferred, "refs/remotes/")
+	return name + " @ " + targetLabel(commit)
 }
 
 func reviewStep(v engine.Response) tuiStep {

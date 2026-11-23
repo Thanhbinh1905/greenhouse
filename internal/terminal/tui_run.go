@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"slices"
 	"strings"
 	"time"
@@ -50,9 +51,8 @@ func inferCommitIntent(worktree, target, head string) (string, string, error) {
 		return "", "", errors.New("the current branch has no name")
 	}
 	branchName := strings.TrimSpace(string(branch))
-	if body, number, ok := pullRequestBody(worktree, branchName); ok {
-		source := fmt.Sprintf("PR #%d body", number)
-		return source + ": " + body, source, nil
+	if body, source, ok := pullRequestBody(worktree, branchName); ok {
+		return body, source, nil
 	}
 	messages, err := repository.Read(worktree, "log", "--format=%s", target+".."+head, "--")
 	if err != nil {
@@ -63,17 +63,26 @@ func inferCommitIntent(worktree, target, head string) (string, string, error) {
 		return "", "", errors.New("no committed changes exist between the target and this branch")
 	}
 	source := "commit messages + branch " + branchName
-	return "Commit messages and branch " + branchName + ": " + strings.Join(lines, "; "), source, nil
+	return strings.Join(lines, "; "), source, nil
 }
 
-func pullRequestBody(worktree, branch string) (string, int, bool) {
+func pullRequestBody(worktree, branch string) (string, string, bool) {
 	remote, err := repository.Read(worktree, "remote", "get-url", "origin")
 	if err != nil {
-		return "", 0, false
+		return "", "", false
 	}
 	owner, repo, ok := githubRepository(strings.TrimSpace(string(remote)))
 	if !ok {
-		return "", 0, false
+		return "", "", false
+	}
+	if gh, err := exec.LookPath("gh"); err == nil {
+		if body, ok := ghPullRequestBody(worktree, gh); ok {
+			return body, "open pull request body", true
+		}
+	}
+	token := firstEnvironment("GH_TOKEN", "GITHUB_TOKEN")
+	if token == "" {
+		return "", "", false
 	}
 	base := strings.TrimRight(os.Getenv("GREENHOUSE_GITHUB_API"), "/")
 	if base == "" {
@@ -84,28 +93,56 @@ func pullRequestBody(worktree, branch string) (string, int, bool) {
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return "", 0, false
+		return "", "", false
 	}
 	req.Header.Set("Accept", "application/vnd.github+json")
-	if token := firstEnvironment("GH_TOKEN", "GITHUB_TOKEN"); token != "" {
-		req.Header.Set("Authorization", "Bearer "+token)
-	}
+	req.Header.Set("Authorization", "Bearer "+token)
 	response, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", 0, false
+		return "", "", false
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode != http.StatusOK {
-		return "", 0, false
+		return "", "", false
 	}
 	var pulls []struct {
 		Number int    `json:"number"`
 		Body   string `json:"body"`
 	}
 	if json.NewDecoder(io.LimitReader(response.Body, 1<<20)).Decode(&pulls) != nil || len(pulls) != 1 || pulls[0].Number < 1 || strings.TrimSpace(pulls[0].Body) == "" || len(pulls[0].Body) > sessionintent.Limit {
-		return "", 0, false
+		return "", "", false
 	}
-	return strings.TrimSpace(pulls[0].Body), pulls[0].Number, true
+	return strings.TrimSpace(pulls[0].Body), fmt.Sprintf("PR #%d body", pulls[0].Number), true
+}
+
+func ghPullRequestBody(worktree, gh string) (string, bool) {
+	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, gh, "pr", "view", "--json", "body")
+	cmd.Dir = worktree
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return "", false
+	}
+	if err := cmd.Start(); err != nil {
+		return "", false
+	}
+	data, readErr := io.ReadAll(io.LimitReader(stdout, (1<<20)+1))
+	waitErr := cmd.Wait()
+	if readErr != nil || waitErr != nil || len(data) > 1<<20 {
+		return "", false
+	}
+	var result struct {
+		Body string `json:"body"`
+	}
+	if json.Unmarshal(data, &result) != nil {
+		return "", false
+	}
+	body := strings.TrimSpace(result.Body)
+	if body == "" || len(body) > sessionintent.Limit {
+		return "", false
+	}
+	return body, true
 }
 
 func githubRepository(remote string) (string, string, bool) {
@@ -213,7 +250,7 @@ func (m *tuiModel) runReview() tea.Cmd {
 		m.say("Choose the Git target to review against, then Run again.")
 		return nil
 	}
-	m.seq = &runSeq{intent: m.planIntent(), sent: map[string]bool{}}
+	m.seq = &runSeq{intent: m.planIntent(), source: m.intentSource, sent: map[string]bool{}}
 	m.message, m.failed = "", false
 	return tea.Batch(m.advance(), m.tick())
 }
@@ -248,7 +285,7 @@ func (m *tuiModel) advance() tea.Cmd {
 		return m.step("apply", q)
 	case r.Reviewer == nil || r.Intent != seq.intent || r.Target == "" || m.plan.target != "" && !sameTarget(r, m.plan.target):
 		q := engine.TerminalMutation(m.v, "prepare")
-		q.Intent, q.Target = seq.intent, target
+		q.Intent, q.IntentSource, q.Target = seq.intent, seq.source, target
 		return m.step("prepare", q)
 	case !m.v.RulesReady:
 		return m.step("resolve-rules", engine.TerminalMutation(m.v, "resolve-rules"))

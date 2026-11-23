@@ -131,7 +131,12 @@ func statePage(v engine.Response, live string, details bool) string {
 	fmt.Fprintf(&page, "Events: %s\n", live)
 	fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), engine.SourceSummary(engine.FieldSources(s)))
 	if r.Target != "" {
-		fmt.Fprintf(&page, "Target: %s\nIntent: %s\nScope: committed target-to-candidate diff; dirty files excluded\n", r.Target, r.Intent)
+		target := targetDisplay(r.Submitted.Worktree, r.Target, repository.SuggestTarget(r.Submitted.Worktree))
+		fmt.Fprintf(&page, "Target: %s\nIntent: %s\n", target, r.Intent)
+		if r.IntentSource != "" {
+			fmt.Fprintf(&page, "Intent source: %s\n", r.IntentSource)
+		}
+		fmt.Fprintln(&page, "Scope: committed target-to-candidate diff; dirty files excluded")
 	}
 	if o := v.Repository; o != nil {
 		fmt.Fprintln(&page, engine.OverrideLine(o))

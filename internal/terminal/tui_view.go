@@ -876,7 +876,11 @@ func (m *tuiModel) homeSteps() []tuiStep {
 	} else if m.plan.target == "" {
 		target += " (suggested)"
 	}
-	steps[2] = tuiStep{"Target", state, targetLabel(strings.TrimSuffix(target, " (suggested)"))}
+	targetText := targetLabel(strings.TrimSuffix(target, " (suggested)"))
+	if m.v.Run.Target != "" && m.plan.target == "" {
+		targetText = targetDisplay(m.v.Run.Submitted.Worktree, m.v.Run.Target, m.suggestion)
+	}
+	steps[2] = tuiStep{"Target", state, targetText}
 	if strings.HasSuffix(target, " (suggested)") {
 		steps[2].Text += " (suggested)"
 	}

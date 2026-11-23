@@ -16,7 +16,7 @@ Run reads the intent from your own agent history: Claude Code, Codex and Pi sess
 
 - Run keeps your requests from that session word for word, redacts secrets, drops tool output, and labels the result with the agent, session and time.
 - The intent is never a summary and never comes from the diff.
-- When no session matches, Greenhouse uses the open pull request body if available, otherwise the branch's commit messages and name.
+- When no session matches, Greenhouse uses the open pull request body if available (read with the signed-in `gh` CLI, else `GH_TOKEN` or `GITHUB_TOKEN`), otherwise the branch's commit messages and name.
 - When several sessions match, Greenhouse uses the highest-ranked session, breaking ties by recency.
 - If the session requests exceed the 8192-byte intent limit, Greenhouse falls through to the pull request or commit-based intent. It never cuts session text.
 

@@ -231,7 +231,10 @@ func (m *tuiModel) setView(v engine.Response, seen bool) {
 	m.order.adopt(v, m.v)
 	m.v = v
 	if m.intentSource == "" && v.Run != nil {
-		m.intentSource = storedIntentSource(v.Run.Intent)
+		m.intentSource = v.Run.IntentSource
+		if m.intentSource == "" {
+			m.intentSource = storedIntentSource(v.Run.Intent)
+		}
 	}
 	if key := activeExecution(v.Run); key != m.runKey {
 		m.runKey, m.runSince, m.runFromTop = key, m.now(), seen
