@@ -20,6 +20,7 @@ func workerCommand(t *testing.T, bin, repo, home string, args ...string) map[str
 	c := exec.Command(bin, append([]string{"axi"}, args...)...)
 	c.Dir = repo
 	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PATH="+filepath.Join(filepath.Dir(home), "native-bin")+":"+os.Getenv("PATH"), "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"), "GORACE=atexit_sleep_ms=0")
+	c.Env = append(c.Env, forgeEnv(t)...)
 	b, err := c.CombinedOutput()
 	if err != nil {
 		t.Fatalf("axi %v: %v: %s", args, err, b)
@@ -91,6 +92,7 @@ func TestWorkerLogFollowAndRedaction(t *testing.T) {
 }
 
 func TestWorkerDeliveryContract(t *testing.T) {
+	t.Parallel()
 	var bare, head string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

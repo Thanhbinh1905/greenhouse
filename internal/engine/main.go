@@ -75,6 +75,7 @@ type Run struct {
 	StartedAt       string              `json:"started_at,omitempty"`
 	StageStartedAt  string              `json:"stage_started_at,omitempty"`
 	Intent          string              `json:"intent,omitempty"`
+	IntentSource    string              `json:"intent_source,omitempty"`
 	Reviewer        *ReviewerConfig     `json:"reviewer,omitempty"`
 	SelectedDiff    string              `json:"selected_diff,omitempty"`
 	Findings        []Finding           `json:"findings,omitempty"`
@@ -115,33 +116,34 @@ type Run struct {
 	ReviewBaseReason string `json:"review_base_reason,omitempty"`
 }
 type Request struct {
-	Step     string    `json:"step,omitempty"`
-	Offset   *int64    `json:"offset,omitempty"`
-	Full     bool      `json:"full,omitempty"`
-	Follow   bool      `json:"follow,omitempty"`
-	Version  int       `json:"version"`
-	Op       string    `json:"op"`
-	Path     string    `json:"path"`
-	RunID    string    `json:"run_id"`
-	Expected string    `json:"expected"`
-	Input    string    `json:"input_id"`
-	Gate     string    `json:"gate_id"`
-	Action   string    `json:"action_id"`
-	Settings *Settings `json:"settings,omitempty"`
-	Intent   string    `json:"intent,omitempty"`
-	Target   string    `json:"target,omitempty"`
-	Title    string    `json:"title,omitempty"`
-	Reason   string    `json:"reason"`
-	Selected []string  `json:"selected,omitempty"`
-	Choice   string    `json:"choice,omitempty"`
-	Limit    int       `json:"limit,omitempty"`
-	Client   string    `json:"client,omitempty"`
-	Digest   string    `json:"digest,omitempty"`
-	After    uint64    `json:"after,omitempty"`
-	Stream   string    `json:"stream,omitempty"`
-	WaitMS   int       `json:"wait_ms,omitempty"`
-	Host     *Host     `json:"host,omitempty"`
-	Grant    string    `json:"grant,omitempty"`
+	Step         string    `json:"step,omitempty"`
+	Offset       *int64    `json:"offset,omitempty"`
+	Full         bool      `json:"full,omitempty"`
+	Follow       bool      `json:"follow,omitempty"`
+	Version      int       `json:"version"`
+	Op           string    `json:"op"`
+	Path         string    `json:"path"`
+	RunID        string    `json:"run_id"`
+	Expected     string    `json:"expected"`
+	Input        string    `json:"input_id"`
+	Gate         string    `json:"gate_id"`
+	Action       string    `json:"action_id"`
+	Settings     *Settings `json:"settings,omitempty"`
+	Intent       string    `json:"intent,omitempty"`
+	IntentSource string    `json:"intent_source,omitempty"`
+	Target       string    `json:"target,omitempty"`
+	Title        string    `json:"title,omitempty"`
+	Reason       string    `json:"reason"`
+	Selected     []string  `json:"selected,omitempty"`
+	Choice       string    `json:"choice,omitempty"`
+	Limit        int       `json:"limit,omitempty"`
+	Client       string    `json:"client,omitempty"`
+	Digest       string    `json:"digest,omitempty"`
+	After        uint64    `json:"after,omitempty"`
+	Stream       string    `json:"stream,omitempty"`
+	WaitMS       int       `json:"wait_ms,omitempty"`
+	Host         *Host     `json:"host,omitempty"`
+	Grant        string    `json:"grant,omitempty"`
 
 	Responses []ResolutionResponse `json:"responses,omitempty"`
 }
@@ -842,6 +844,7 @@ func handleRequest(s *Store, q Request) Response {
 		if err := prepareRun(s, r, q.Intent, q.Target); err != nil {
 			return fail(err.Error(), r)
 		}
+		r.IntentSource = q.IntentSource
 		if r.Host != nil && len(r.HostFindings) > 0 {
 			if err := classifyHostFindings(r); err != nil {
 				return fail(err.Error(), r)
@@ -852,7 +855,10 @@ func handleRequest(s *Store, q Request) Response {
 		if repairHeld(r.Repair) {
 			return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 		}
-		r = restartRun(s, r, id, actor)
+		if q.Intent != "" && !ValidText(q.Intent) {
+			return fail("invalid intent", r)
+		}
+		r = restartRun(s, r, id, actor, q)
 		s.Slots[slot] = r.ID
 	} else if q.Op == "review" && r.Host != nil {
 		if err := admitHostReview(r, q.Grant, q.Responses); err != nil {

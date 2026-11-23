@@ -92,7 +92,13 @@ func ReviewDiffBase(path, target, candidate string) (string, string, error) {
 }
 
 func SuggestTarget(path string) string {
-	for _, name := range []string{"refs/remotes/origin/HEAD", "main", "master", "HEAD^"} {
+	if upstream, err := Read(path, "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"); err == nil {
+		name := strings.TrimSpace(string(upstream))
+		if _, err := CommittedTarget(path, name); err == nil {
+			return name
+		}
+	}
+	for _, name := range []string{"refs/remotes/origin/HEAD", "main", "master"} {
 		if _, err := CommittedTarget(path, name); err == nil {
 			return name
 		}

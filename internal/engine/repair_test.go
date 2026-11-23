@@ -784,6 +784,7 @@ func TestExecutableSelectedRepair(t *testing.T) {
 }
 
 func TestCancelledRepairProgressWaitsForCompletion(t *testing.T) {
+	t.Parallel()
 	r := &Run{Status: "cancelling", Token: "current", Repair: &Repair{ID: "repair", Status: "fixing"}}
 	if !acceptRepairProgress(r, "repair", Repair{ID: "repair", Status: "cancelled", Writer: "stopped"}) {
 		t.Fatal("cancelled progress refused")

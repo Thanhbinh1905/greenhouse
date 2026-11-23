@@ -70,6 +70,7 @@ func reviewFileLines(c capturedReview, path string) (string, bool) {
 }
 
 func TestReviewTrustedGeneratedFile(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	writeFixtureFile(t, repo, ".gitattributes", "migrations/*.sql linguist-generated greenhouse-generator=tools/gen.go\n")
 	writeFixtureFile(t, repo, "tools/gen.go", "package tools\n\nfunc Generate() {}\n")
@@ -157,6 +158,7 @@ func hostReviewLargeFile(t *testing.T, bin, repo, home, target string) map[strin
 }
 
 func TestReviewUndeclaredLargeFileIsPartial(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	writeFixtureFile(t, repo, "migrations/baseline.sql", largeMigration())
@@ -166,6 +168,7 @@ func TestReviewUndeclaredLargeFileIsPartial(t *testing.T) {
 }
 
 func TestReviewCandidateCannotDeclareItsOwnFileGenerated(t *testing.T) {
+	t.Parallel()
 	for _, declaration := range []string{".gitattributes", ".git/info/attributes"} {
 		t.Run(declaration, func(t *testing.T) {
 			bin, repo, home := fixture(t)

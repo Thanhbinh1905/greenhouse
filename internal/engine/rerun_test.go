@@ -106,6 +106,26 @@ func TestRerunFromStartCreatesLinkedRunAndKeepsOldOne(t *testing.T) {
 	}
 }
 
+func TestRerunFromStartUsesAnEditedIntent(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := pipelineFixture(t, func(root string) map[string]any {
+		return map[string]any{"name": "Test", "email": "test@example.invalid", "test": [][]string{gateArgv(root, "test")}, "lint": [][]string{gateArgv(root, "lint")}, "not_applicable": map[string]string{"docs": "no documentation", "push": "local fixture", "pr": "local fixture", "ci": "local fixture"}, "repair_limit": 0}
+	})
+	root := filepath.Dir(home)
+	if err := os.WriteFile(filepath.Join(root, "require-test"), []byte("repaired\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	mutate(t, bin, repo, home, v, "pipeline", "start", nil)
+	old := waitPipeline(t, bin, repo, home)
+	q := map[string]any{"version": 1, "op": "rerun-from-start", "run_id": old["run_id"], "expected": old["token"], "input_id": old["input_id"], "gate_id": old["gate_id"], "action_id": "restart", "reason": "test adjustment", "intent": "Edited intent for the rerun", "intent_source": "edited by you"}
+	b, _ := json.Marshal(q)
+	v = axi(t, bin, repo, home, string(b))
+	run := runOf(t, v)
+	if v["outcome"] != "ok" || run["intent"] != "Edited intent for the rerun" || run["intent_source"] != "edited by you" || run["intent"] == runOf(t, old)["intent"] {
+		t.Fatalf("rerun from start must carry the edited intent: %v", run)
+	}
+}
+
 func stoppedRepairFixture(t *testing.T, stop string) (string, string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home, root, v := onePassWith(t, "codex", "gpt-5.6-luna")

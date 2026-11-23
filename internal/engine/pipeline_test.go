@@ -14,6 +14,7 @@ import (
 )
 
 func TestConventionalPullTitle(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ intent, want string }{
 		{"", "chore: validated candidate"},
 		{"Add a sample feature", "feat: Add a sample feature"},
@@ -1118,6 +1119,7 @@ func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {
 }
 
 func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, localPlan)
 	root := filepath.Dir(home)
 	target := runOf(t, v)["target"].(string)

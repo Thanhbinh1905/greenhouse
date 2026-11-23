@@ -49,6 +49,7 @@ func TestChangedHunkRanges(t *testing.T) {
 }
 
 func TestDeletionRangesUseCandidateAnchors(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, candidate, hunk string
 		want                  [2]int
@@ -68,6 +69,7 @@ func TestDeletionRangesUseCandidateAnchors(t *testing.T) {
 }
 
 func TestDeletionContextUsesCandidateWindow(t *testing.T) {
+	t.Parallel()
 	var numbered strings.Builder
 	for i := 0; i < 140; i++ {
 		numbered.WriteString("candidate line\n")
@@ -80,6 +82,7 @@ func TestDeletionContextUsesCandidateWindow(t *testing.T) {
 }
 
 func TestHunkContextPreservesNumberedWindows(t *testing.T) {
+	t.Parallel()
 	files := []reviewFile{{Path: "sample", Lines: "...\n2499: before\n2500: changed\n2501: after\n...\n"}}
 	got := hunkContext(files, map[string][][2]int{"sample": {{2500, 2500}}})
 	if !strings.Contains(got[0].Lines, "2500: changed\n") {

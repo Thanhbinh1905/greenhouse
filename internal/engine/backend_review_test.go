@@ -135,6 +135,7 @@ func TestReviewRefusesMismatchedReportedModel(t *testing.T) {
 }
 
 func TestNativeBackendRecoversInvalidVerdict(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ backend, model string }{{"claude", "claude-haiku-5-5"}, {"codex", "gpt-5.6-luna"}} {
 		t.Run(c.backend, func(t *testing.T) {
 			bin, repo, home, root, v := onePassWith(t, c.backend, c.model)

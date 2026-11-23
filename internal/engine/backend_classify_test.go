@@ -96,6 +96,7 @@ func TestUsageIsReadFromFailedAndSuccessfulRuns(t *testing.T) {
 }
 
 func TestDiagnosticRedactionAndBounds(t *testing.T) {
+	t.Parallel()
 	secrets := []string{"bearer-private", "key-private", "dash-private", "token-private", "secret-private", "password-private", "sk-private123", "env-private", "quoted private value"}
 	text := "Authorization: Bearer bearer-private\napi_key=key-private\napi-key: dash-private\ntoken=token-private\nsecret=secret-private\npassword=password-private\nsk-private123\nOPENAI_API_KEY=env-private\npassword=\"quoted private value\""
 	got := diagnosticExcerpt(text, false)
@@ -113,6 +114,7 @@ func TestDiagnosticRedactionAndBounds(t *testing.T) {
 }
 
 func TestBackendTokenBreakdown(t *testing.T) {
+	t.Parallel()
 	for _, backend := range []string{"claude", "codex", "pi"} {
 		t.Run(backend, func(t *testing.T) {
 			var stdout []byte
@@ -136,6 +138,7 @@ func TestBackendTokenBreakdown(t *testing.T) {
 }
 
 func TestStderrOnlyBackendClassification(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ text, reason string }{{"401 Unauthorized token=fake-secret", "auth"}, {"quota exhausted", "quota"}, {"model not found", "model_mismatch"}, {"panic: unexpected EOF", "crash"}, {"exec: codex: executable file not found", "missing_binary"}} {
 		f := classifyBackend("codex", 1, nil, []byte(c.text), time.Now())
 		if f == nil || f.Reason != c.reason {
@@ -145,6 +148,7 @@ func TestStderrOnlyBackendClassification(t *testing.T) {
 }
 
 func TestStructuredDiagnosticsExcludeReviewContent(t *testing.T) {
+	t.Parallel()
 	for _, stdout := range []string{
 		`{"type":"result","is_error":true,"result":"backend rejected password=private-value"}`,
 		`{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"backend rejected token=private-value","content":[{"type":"text","text":"private review input"}]}}`,
@@ -157,6 +161,7 @@ func TestStructuredDiagnosticsExcludeReviewContent(t *testing.T) {
 }
 
 func TestUsageAggregatesTurnsAndClaudeCacheFallback(t *testing.T) {
+	t.Parallel()
 	codex := []byte("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2,\"cached_input_tokens\":8}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":20,\"output_tokens\":3,\"cached_input_tokens\":15}}")
 	if got := agentTokenUsage("codex", codex, nil); got != (TokenUsage{InputTokens: 30, OutputTokens: 5, CachedInputTokens: 23, Tokens: 35}) {
 		t.Fatalf("multiple turns: %+v", got)
@@ -168,6 +173,7 @@ func TestUsageAggregatesTurnsAndClaudeCacheFallback(t *testing.T) {
 }
 
 func TestDiagnosticRedactsEscapedQuotedValues(t *testing.T) {
+	t.Parallel()
 	for _, text := range []string{`password="before\"private-value"`, `token='before\'private-value'`, `{"api_key":"before\"private-value"}`} {
 		if got := diagnosticExcerpt(text, false); strings.Contains(got, "private-value") {
 			t.Fatalf("quoted credential leaked: %s", got)
@@ -176,6 +182,7 @@ func TestDiagnosticRedactsEscapedQuotedValues(t *testing.T) {
 }
 
 func TestDiagnosticRedactsIncompleteValues(t *testing.T) {
+	t.Parallel()
 	for _, text := range []string{`password="private-value`, `token='private-value`, `secret=before\private-value`} {
 		if got := diagnosticExcerpt(text, true); strings.Contains(got, "private-value") {
 			t.Fatalf("incomplete credential leaked: %s", got)
@@ -184,6 +191,7 @@ func TestDiagnosticRedactsIncompleteValues(t *testing.T) {
 }
 
 func TestDiagnosticRedactsCamelCaseAPIKey(t *testing.T) {
+	t.Parallel()
 	for _, text := range []string{`apiKey=camel-private-value`, `{"apiKey":"camel-private-value"}`, `apiKey: 'camel-private-value'`} {
 		if got := diagnosticExcerpt(text, false); strings.Contains(got, "camel-private-value") {
 			t.Fatalf("apiKey credential leaked: %s", got)
@@ -192,6 +200,7 @@ func TestDiagnosticRedactsCamelCaseAPIKey(t *testing.T) {
 }
 
 func TestClassificationUsesTerminalStructuredOutcome(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ backend, failure string }{
 		{"pi", `{"type":"message_end","message":{"role":"assistant","stopReason":"error","errorMessage":"404 model not found"}}`},
 		{"codex", `{"type":"turn.failed","error":{"message":"model not found"}}`},
@@ -217,6 +226,7 @@ func TestClassificationUsesTerminalStructuredOutcome(t *testing.T) {
 }
 
 func TestClassificationUsesLatestCodexFailure(t *testing.T) {
+	t.Parallel()
 	stdout := []byte("{\"type\":\"turn.failed\",\"error\":{\"message\":\"model not found\"}}\n{\"type\":\"error\",\"message\":\"worker crashed\"}")
 	failure := classifyBackend("codex", 0, stdout, nil, time.Now())
 	if failure == nil || failure.Reason != "crash" {
@@ -225,6 +235,7 @@ func TestClassificationUsesLatestCodexFailure(t *testing.T) {
 }
 
 func TestPiAttemptUsageIncludesCachedInput(t *testing.T) {
+	t.Parallel()
 	got := agentTokenUsage(BackendPi, []byte(`{"type":"message_end","message":{"role":"assistant","usage":{"input":10,"output":5,"cacheRead":20,"totalTokens":35}}}`), nil)
 	if got.CachedInputTokens != 20 || got.Tokens != 35 {
 		t.Fatalf("Pi cache accounting: %+v", got)

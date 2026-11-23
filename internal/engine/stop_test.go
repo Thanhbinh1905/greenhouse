@@ -123,6 +123,7 @@ func TestStopRefusesBusyDaemon(t *testing.T) {
 }
 
 func TestStopUnsupportedDaemon(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	if err := os.MkdirAll(home, 0700); err != nil {
 		t.Fatal(err)

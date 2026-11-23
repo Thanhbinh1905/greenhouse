@@ -279,6 +279,7 @@ else:
 }
 
 func TestHostSuccessorInheritsFindingsFromExistingReview(t *testing.T) {
+	t.Parallel()
 	prior := &Run{
 		ID: "prior", Host: &Host{Name: "host", ID: "1"},
 		Review: &Execution{Status: "outstanding-findings", Result: &Verdict{Findings: []Finding{{ID: "existing-finding"}}}},

@@ -266,8 +266,18 @@ func TestRestartAdoptsTimedOutReview(t *testing.T) {
 	}
 	waitReview(t, bin, repo, home)
 	stopDaemonAndWait(t, home)
+	reviewID := runOf(t, v)["review"].(map[string]any)["id"].(string)
+	for deadline := time.Now().Add(10 * time.Second); time.Now().Before(deadline); time.Sleep(10 * time.Millisecond) {
+		live := false
+		for _, record := range runner.ObserveExecutors(reviewID, func() (string, error) { return home, nil }) {
+			live = live || record.State == "running"
+		}
+		if !live {
+			break
+		}
+	}
 	wantTokens := 0
-	for _, record := range runner.ObserveExecutors(runOf(t, v)["review"].(map[string]any)["id"].(string), func() (string, error) { return home, nil }) {
+	for _, record := range runner.ObserveExecutors(reviewID, func() (string, error) { return home, nil }) {
 		wantTokens += agentTokenUsage(BackendPi, record.Stdout, record.Stderr).Tokens
 	}
 	if wantTokens == 0 {

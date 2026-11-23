@@ -448,6 +448,45 @@ func InstalledAgents() []string {
 	return agents
 }
 
+func SignedInAgents() []string {
+	var agents []string
+	for _, name := range InstalledAgents() {
+		if agentSignedIn(name) {
+			agents = append(agents, name)
+		}
+	}
+	return agents
+}
+
+func agentSignedIn(name string) bool {
+	executable, err := nativeExecutable(name)
+	if err != nil {
+		return false
+	}
+	if name == BackendPi {
+		catalog, err := nativeModelCatalog(executable)
+		return err == nil && len(catalog) > 0
+	}
+	args := []string{"login", "status"}
+	if name == BackendClaude {
+		args = []string{"auth", "status"}
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	out, stderr := runner.NewBuffer(65536), runner.NewBuffer(65536)
+	code, err := runner.RunProcess(ctx, "", executable, args, nil, agentEnv(name), out, stderr)
+	if err != nil || code != 0 || out.Exceeded() {
+		return false
+	}
+	if name == BackendClaude {
+		var status struct {
+			LoggedIn bool `json:"loggedIn"`
+		}
+		return json.Unmarshal(out.Bytes(), &status) == nil && status.LoggedIn
+	}
+	return true
+}
+
 func nativeExecutable(name string) (string, error) {
 	if _, ok := executionBackends[name]; !ok {
 		return "", errors.New("choose pi, claude or codex")
