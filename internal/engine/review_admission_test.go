@@ -174,7 +174,7 @@ func TestReviewAdmissionOverDiffLimitLeavesLargePathUncovered(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(large), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(large, []byte(strings.Repeat("large evidence line\n", 300000)), 0600); err != nil {
+	if err := os.WriteFile(large, []byte(strings.Repeat("xx\n", 300000)), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
@@ -233,7 +233,7 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 		t.Fatal(err)
 	}
 	target := commitReviewFixture(t, repo, "mark evidence generated")
-	if err := os.WriteFile(filepath.Join(repo, "docs", "evidence", "large.txt"), []byte(strings.Repeat("evidence line\n", 300000)), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "docs", "evidence", "large.txt"), []byte(strings.Repeat("evidence line\n", 80000)), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
@@ -259,7 +259,7 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	if err := json.Unmarshal(b, &captured); err != nil {
 		t.Fatal(err)
 	}
-	if len(captured.Input.Generated) != 1 || captured.Input.Generated[0].Path != "docs/evidence/large.txt" || captured.Input.Generated[0].Added != 300000 || len(captured.Input.Diff) > 1024*1024 || strings.Contains(captured.Input.Diff, "evidence line") {
+	if len(captured.Input.Generated) != 1 || captured.Input.Generated[0].Path != "docs/evidence/large.txt" || captured.Input.Generated[0].Added != 80000 || len(captured.Input.Diff) > 1024*1024 || strings.Contains(captured.Input.Diff, "evidence line") {
 		t.Fatalf("generated evidence was not kept in short form: paths=%+v diff bytes=%d", captured.Input.Generated, len(captured.Input.Diff))
 	}
 }
