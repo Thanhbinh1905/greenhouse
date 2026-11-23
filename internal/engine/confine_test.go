@@ -274,7 +274,7 @@ func axiWithoutLandlock(t *testing.T, bin, repo, home, request string) map[strin
 	t.Helper()
 	c := exec.Command(os.Args[0])
 	c.Dir = repo
-	c.Env = append(os.Environ(), "GREENHOUSE_TEST_WITHOUT_LANDLOCK="+jsonText([]string{bin, "axi"}), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PATH="+filepath.Join(filepath.Dir(home), "native-bin")+":"+os.Getenv("PATH"), "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
+	c.Env = append(withoutEnv(os.Environ(), "GREENHOUSE_TEST_PARENT_PID"), "GREENHOUSE_TEST_WITHOUT_LANDLOCK="+jsonText([]string{bin, "axi"}), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PATH="+filepath.Join(filepath.Dir(home), "native-bin")+":"+os.Getenv("PATH"), "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
 	c.Stdin = strings.NewReader(request)
 	b, err := c.CombinedOutput()
 	if err != nil {
