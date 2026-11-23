@@ -75,7 +75,7 @@ func TestLineLaunchReviewsCommittedBranchWithoutInput(t *testing.T) {
 		time.Sleep(25 * time.Millisecond)
 	}
 	text := term.text()
-	for _, want := range []string{"Stage: independent-review | outstanding-findings", "Target: main @ ", "Intent: Improve sample handling", "Intent source: commit messages + branch feature", "Outstanding P2 sample.txt:1 Sample issue found", "Rule unslop | resolved", "Rule no-comments | resolved"} {
+	for _, want := range []string{"Stage: independent-review | outstanding-findings", "Target: main @ ", "Intent: Improve sample handling", "Intent source: commit messages + branch feature", "Reviewer: Pi · native default model", "Review: outstanding-findings | pi-json-v1 | fixture/default", "Reported model: fixture/default", "Outstanding P2 sample.txt:1 Sample issue found", "Rule unslop | resolved", "Rule no-comments | resolved"} {
 		if !strings.Contains(text, want) {
 			t.Fatalf("terminal did not show %q:\n%s", want, text)
 		}
