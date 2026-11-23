@@ -286,6 +286,9 @@ func lineTerminal(h, path string) error {
 	if e = protocolRefusal(v); e != nil {
 		return e
 	}
+	if initialRunPending(v) && !hasCommittedChange(path, repository.SuggestTarget(path), v.Run.Candidate) {
+		return errors.New(noCommittedChangeError)
+	}
 	agents := engine.SignedInAgents()
 	if slices.Contains(v.Actions, "prepare") && v.Run.Reviewer == nil && len(agents) == 0 {
 		_, _ = fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Sign in with `pi` then /login, `claude auth login` or `codex login`, then run greenhouse again.")

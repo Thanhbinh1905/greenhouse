@@ -120,6 +120,59 @@ func TestLineLaunchExplainsMissingCommit(t *testing.T) {
 	}
 }
 
+func TestLineLaunchRefusesAnEmptyDiffEvenWithAnOpenPullRequest(t *testing.T) {
+	root := t.TempDir()
+	repo := filepath.Join(root, "repo")
+	home := filepath.Join(root, "home")
+	stateHome, err := os.MkdirTemp("", "gh-t190-empty-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(stateHome) })
+	binDir := filepath.Join(root, "bin")
+	for _, dir := range []string{repo, home, binDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(gitPath, filepath.Join(binDir, "git")); err != nil {
+		t.Fatal(err)
+	}
+	gitTest(t, repo, "init", "-q", "-b", "main")
+	gitTest(t, repo, "config", "user.name", "Test")
+	gitTest(t, repo, "config", "user.email", "test@example.invalid")
+	writeTestFile(t, repo, "sample.txt", "base\n")
+	gitTest(t, repo, "add", "sample.txt")
+	gitTest(t, repo, "commit", "-qm", "base")
+	gitTest(t, repo, "checkout", "-qb", "feature")
+	gitTest(t, repo, "remote", "add", "origin", "git@github.com:acme/garden.git")
+	writeTestFile(t, binDir, "pi", fakeReviewAgent)
+	writeTestFile(t, binDir, "gh", "#!/bin/sh\nprintf '%s\\n' '{\"body\":\"Improve everything.\",\"state\":\"OPEN\"}'\n")
+	for _, name := range []string{"pi", "gh"} {
+		if err := os.Chmod(filepath.Join(binDir, name), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	binary := filepath.Join(root, "greenhouse")
+	if output, err := exec.Command("go", "build", "-o", binary, "../../cmd/greenhouse").CombinedOutput(); err != nil {
+		t.Fatalf("build greenhouse: %v\n%s", err, output)
+	}
+	cmd := exec.Command(binary)
+	cmd.Dir = repo
+	cmd.Env = testEnvironment("PATH="+binDir, "HOME="+home, "GREENHOUSE_HOME="+stateHome, "TERM=dumb")
+	output, err := cmd.CombinedOutput()
+	if err == nil || strings.TrimSpace(string(output)) != "no committed changes to review. Commit changes on this branch and run greenhouse again" {
+		t.Fatalf("empty-diff guidance: error=%v output=%q", err, output)
+	}
+	stop := exec.Command(binary, "stop")
+	stop.Dir, stop.Env = repo, cmd.Env
+	_ = stop.Run()
+}
+
 func TestLineLaunchExplainsMissingAgent(t *testing.T) {
 	for name, pi := range map[string]string{
 		"not installed":      "",
@@ -159,6 +212,9 @@ func explainMissingAgent(t *testing.T, pi string) {
 	writeTestFile(t, repo, "sample.txt", "committed\n")
 	gitTest(t, repo, "add", "sample.txt")
 	gitTest(t, repo, "commit", "-qm", "base")
+	gitTest(t, repo, "checkout", "-qb", "feature")
+	writeTestFile(t, repo, "sample.txt", "changed\n")
+	gitTest(t, repo, "commit", "-qam", "Improve sample handling")
 	binary := filepath.Join(root, "greenhouse")
 	build := exec.Command("go", "build", "-o", binary, "../../cmd/greenhouse")
 	if output, err := build.CombinedOutput(); err != nil {

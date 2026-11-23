@@ -37,7 +37,7 @@ func interactive() bool {
 
 func Run(h, path string) error {
 	if _, err := repository.Resolve(path); err != nil {
-		return errors.New("no committed changes to review. Commit changes on this branch and run greenhouse again")
+		return errors.New(noCommittedChangeError)
 	}
 	if interactive() {
 		return tuiTerminal(h, path)
@@ -55,6 +55,9 @@ func tuiTerminal(h, path string) error {
 	}
 	if v.Run == nil {
 		return errors.New(v.Error)
+	}
+	if initialRunPending(v) && !hasCommittedChange(path, repository.SuggestTarget(path), v.Run.Candidate) {
+		return errors.New(noCommittedChangeError)
 	}
 	agents := engine.SignedInAgents()
 	if initialRunPending(v) && len(agents) == 0 {

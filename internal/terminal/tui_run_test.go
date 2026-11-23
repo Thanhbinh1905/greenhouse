@@ -218,3 +218,29 @@ func TestInferCommitIntentStaysWithinTheIntentLimit(t *testing.T) {
 		t.Fatalf("single long subject not bounded: len=%d hidden=%d", len(long), hidden)
 	}
 }
+
+func TestHasCommittedChange(t *testing.T) {
+	repo := intentRepo(t)
+	head := strings.TrimSpace(gitOutput(t, repo, "rev-parse", "HEAD"))
+	if !hasCommittedChange(repo, "main", head) {
+		t.Fatal("a branch with a committed change reported none")
+	}
+	gitCommand(t, repo, "checkout", "-q", "main")
+	gitCommand(t, repo, "checkout", "-qb", "same")
+	same := strings.TrimSpace(gitOutput(t, repo, "rev-parse", "HEAD"))
+	if hasCommittedChange(repo, "main", same) {
+		t.Fatal("a branch equal to its target reported a change")
+	}
+	if !hasCommittedChange(repo, "", same) || !hasCommittedChange("", "main", same) {
+		t.Fatal("an unknown target or worktree must not block the launch")
+	}
+}
+
+func gitOutput(t *testing.T, repo string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", repo}, args...)...).Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(out)
+}

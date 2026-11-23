@@ -45,6 +45,29 @@ type intentMsg struct {
 
 type collector func(ctx context.Context, worktree, target, head string) (sessionintent.Match, error)
 
+const noCommittedChangeError = "no committed changes to review. Commit changes on this branch and run greenhouse again"
+
+const noCommittedChange = "No committed change to review. Commit your changes on this branch, then run greenhouse again."
+
+// hasCommittedChange reports false only when git proves the target and the
+// candidate have no changed files. Any other failure is left to the later
+// steps that report it.
+func hasCommittedChange(worktree, target, head string) bool {
+	if worktree == "" || target == "" {
+		return true
+	}
+	resolved, err := repository.CommittedTarget(worktree, target)
+	if err != nil {
+		return true
+	}
+	base, _, err := repository.ReviewDiffBase(worktree, resolved, head)
+	if err != nil {
+		return true
+	}
+	files, err := repository.Read(worktree, "diff", "--name-only", "--end-of-options", base, head, "--")
+	return err != nil || strings.TrimSpace(string(files)) != ""
+}
+
 func inferCommitIntent(worktree, target, head string) (string, string, error) {
 	branch, err := repository.Read(worktree, "symbolic-ref", "--short", "HEAD")
 	if err != nil {
@@ -284,6 +307,10 @@ func (m *tuiModel) runReview() tea.Cmd {
 		m.say("Choose the Git target to review against, then Run again.")
 		return nil
 	}
+	if !hasCommittedChange(m.v.Run.Submitted.Worktree, m.planTarget(), m.v.Run.Candidate) {
+		m.say(noCommittedChange)
+		return nil
+	}
 	m.seq = &runSeq{intent: m.planIntent(), source: m.intentSource, sent: map[string]bool{}}
 	m.message, m.failed = "", false
 	return tea.Batch(m.advance(), m.tick())
@@ -390,7 +417,7 @@ func (m *tuiModel) collected(msg intentMsg) tea.Cmd {
 		intent, source, err := m.fallback(m.v.Run.Submitted.Worktree, m.planTarget(), m.v.Run.Candidate)
 		if err != nil {
 			m.seq = nil
-			m.home("No committed change to review. Commit your changes on this branch, then run greenhouse again.")
+			m.home(noCommittedChange)
 			return nil
 		}
 		m.seq.intent, m.seq.source, m.plan.intent, m.intentSource = intent, source, intent, source
