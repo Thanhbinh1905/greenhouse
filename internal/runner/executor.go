@@ -219,19 +219,26 @@ func runChild(args []string) (result int) {
 	freezeComplete := true
 	var frozen []int
 	if stopped {
-		frozen, freezeComplete = freezeChildTree()
-		if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		if err := syscall.Kill(child.Process.Pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
 			killErr = err
+		}
+		frozen, freezeComplete = freezeChildTree()
+		if !freezeComplete {
+			if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+				killErr = errors.Join(killErr, err)
+			}
 		}
 		for _, pid := range frozen {
 			if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 				killErr = errors.Join(killErr, err)
 			}
 		}
+		if !freezeComplete {
+			return 254
+		}
 		childErr = <-done
-	}
-	if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-		killErr = errors.Join(killErr, err)
+	} else if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		killErr = err
 	}
 	reaped := reapChildTree()
 	code := 0

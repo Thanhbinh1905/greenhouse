@@ -80,13 +80,14 @@ func processDescendants(root int) (map[int]byte, error) {
 }
 
 func freezeChildTree() ([]int, bool) {
+	deadline := time.Now().Add(30 * time.Second)
 	known := make(map[int]byte)
 	stableScans := 0
 	var latest map[int]byte
-	for {
+	for time.Now().Before(deadline) {
 		descendants, err := processDescendants(os.Getpid())
 		if err != nil {
-			return processIDs(known, false), false
+			return processIDs(latest, false), false
 		}
 		latest = descendants
 		newProcess := false
@@ -99,7 +100,7 @@ func freezeChildTree() ([]int, bool) {
 			if state != 'T' && state != 't' && state != 'Z' && state != 'X' {
 				allStopped = false
 				if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
-					return processIDs(known, false), false
+					return processIDs(latest, false), false
 				}
 			}
 		}
@@ -113,6 +114,7 @@ func freezeChildTree() ([]int, bool) {
 		}
 		time.Sleep(time.Millisecond)
 	}
+	return processIDs(latest, false), false
 }
 
 func processIDs(processes map[int]byte, stoppedOnly bool) []int {
@@ -194,7 +196,7 @@ func RunProcess(ctx context.Context, dir, exe string, args []string, input []byt
 	deadline := strconv.FormatInt(expires.Add(30*time.Second).Unix(), 10)
 	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", nextExecutor(ctx), deadline, exe}, args...)...)
 	cmd.Dir = dir
-	cmd.WaitDelay = 5 * time.Second
+	cmd.WaitDelay = 35 * time.Second
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return os.ErrProcessDone
