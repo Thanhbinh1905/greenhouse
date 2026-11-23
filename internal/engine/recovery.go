@@ -142,7 +142,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 				done.Answer = finalReviewAnswer(previous.Answer, done.Answer)
 			}
 			if budgetExpired {
-				done = settleReviewBudget(done, previous, nil, budget, executorLimit)
+				done = settleReviewBudget(done, previous)
 			}
 		}
 		markUnconfirmed(&done)

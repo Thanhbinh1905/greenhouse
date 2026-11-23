@@ -190,7 +190,7 @@ func TestReviewBudgetFinalizationKeepsCompleteVerdict(t *testing.T) {
 				coverage = []string{}
 			}
 			done := reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: test.verdict, Coverage: coverage}}
-			got := settleReviewBudget(done, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
+			got := settleReviewBudget(done, reviewOutcome{})
 			if got.Status != test.status || got.Result == nil || got.Result.Verdict != test.verdict || got.Answer.Reason != "" {
 				t.Fatalf("complete verdict at budget expiry: %+v", got)
 			}
@@ -201,7 +201,7 @@ func TestReviewBudgetFinalizationKeepsCompleteVerdict(t *testing.T) {
 func TestSettleReviewBudgetMakesIncompleteVerdictPartial(t *testing.T) {
 	for _, coverage := range [][]string{{"a"}, {}} {
 		done := reviewOutcome{Status: "outstanding-findings", Result: &Verdict{Verdict: "findings", Coverage: coverage, Uncovered: []UncoveredPath{{Path: "b", Reason: "not covered by reviewer within budget"}}}}
-		got := settleReviewBudget(done, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
+		got := settleReviewBudget(done, reviewOutcome{})
 		if got.Status != "partial-review" || got.Result.Verdict != "partial" || got.Result.Uncovered[0].Reason != "review_budget" || got.Answer.Reason != "" {
 			t.Fatalf("coverage=%v incomplete verdict at budget expiry: %+v", coverage, got)
 		}
@@ -209,7 +209,7 @@ func TestSettleReviewBudgetMakesIncompleteVerdictPartial(t *testing.T) {
 }
 
 func TestSettleReviewBudgetClearsMissingVerdict(t *testing.T) {
-	got := settleReviewBudget(reviewOutcome{Status: "running"}, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
+	got := settleReviewBudget(reviewOutcome{Status: "running"}, reviewOutcome{})
 	if got.Status != "inconclusive" || got.Result != nil || got.Answer.Reason != "review_budget" {
 		t.Fatalf("missing result at budget expiry: %+v", got)
 	}
@@ -217,7 +217,7 @@ func TestSettleReviewBudgetClearsMissingVerdict(t *testing.T) {
 
 func TestReviewBudgetWithoutFinalizationKeepsCompleteVerdict(t *testing.T) {
 	for _, verdict := range []string{"clean", "findings"} {
-		done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: verdict, Coverage: []string{"a"}}}, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
+		done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: verdict, Coverage: []string{"a"}}}, reviewOutcome{})
 		want := "clean-review"
 		if verdict == "findings" {
 			want = "outstanding-findings"
@@ -239,13 +239,56 @@ func TestSettleReviewBudgetHostResultNeverDisagrees(t *testing.T) {
 		{"no result", "inconclusive", "", nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: test.result}, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
+			done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: test.result}, reviewOutcome{})
 			run := &Run{Host: &Host{Name: "host", ID: "test"}, Candidate: "head", Target: "target", Review: &Execution{ID: "review", Status: done.Status, Result: done.Result}}
 			host := hostResult(run, true)
 			if done.Status != test.status || host.Status != test.status || host.Verdict != test.verdict {
 				t.Fatalf("run status=%q host status=%q verdict=%q; want %q/%q", done.Status, host.Status, host.Verdict, test.status, test.verdict)
 			}
 		})
+	}
+}
+
+func TestSettleReviewBudgetOutcomeMatrix(t *testing.T) {
+	outcomes := map[string]reviewOutcome{
+		"none":           {},
+		"invalid":        {Status: "inconclusive", Answer: agentAnswer{Reason: "invalid_output"}},
+		"partial":        {Status: "partial-review", Result: &Verdict{Head: "exploration", Verdict: "partial", Coverage: []string{"a"}, Uncovered: []UncoveredPath{{Path: "b", Reason: "review_budget"}}, Findings: []Finding{{ID: "exploration"}}}},
+		"complete":       {Status: "outstanding-findings", Result: &Verdict{Head: "exploration", Verdict: "findings", Coverage: []string{"a"}, Findings: []Finding{{ID: "exploration"}}}},
+		"inconclusive":   {Status: "inconclusive", Result: &Verdict{Verdict: "inconclusive", Coverage: []string{"a"}, Findings: []Finding{}}},
+		"final partial":  {Status: "partial-review", Result: &Verdict{Head: "finalization", Verdict: "partial", Coverage: []string{"a", "b"}, Uncovered: []UncoveredPath{{Path: "c", Reason: "review_budget"}}, Findings: []Finding{{ID: "finalization"}}}},
+		"final complete": {Status: "clean-review", Result: &Verdict{Head: "finalization", Verdict: "clean", Coverage: []string{"a"}, Findings: []Finding{}}},
+		"timeout":        {Status: "cancelled", Answer: agentAnswer{Reason: "timeout"}},
+	}
+	finalNames := []string{"none", "invalid", "inconclusive", "final partial", "final complete", "timeout"}
+	matrix := []struct {
+		exploration string
+		statuses    []string
+		heads       []string
+	}{
+		{"none", []string{"inconclusive", "inconclusive", "inconclusive", "partial-review", "clean-review", "inconclusive"}, []string{"", "", "", "finalization", "finalization", ""}},
+		{"invalid", []string{"inconclusive", "inconclusive", "inconclusive", "partial-review", "clean-review", "inconclusive"}, []string{"", "", "", "finalization", "finalization", ""}},
+		{"partial", []string{"partial-review", "partial-review", "partial-review", "partial-review", "clean-review", "partial-review"}, []string{"exploration", "exploration", "exploration", "finalization", "finalization", "exploration"}},
+		{"complete", []string{"outstanding-findings", "outstanding-findings", "outstanding-findings", "outstanding-findings", "clean-review", "outstanding-findings"}, []string{"exploration", "exploration", "exploration", "exploration", "finalization", "exploration"}},
+	}
+	for _, row := range matrix {
+		for i, finalName := range finalNames {
+			t.Run(row.exploration+" + "+finalName, func(t *testing.T) {
+				got := settleReviewBudget(outcomes[finalName], outcomes[row.exploration])
+				if got.Status != row.statuses[i] {
+					t.Fatalf("settled status=%q; want %q", got.Status, row.statuses[i])
+				}
+				if row.heads[i] == "" {
+					if got.Result != nil {
+						t.Fatalf("settled result=%+v; want none", got.Result)
+					}
+					return
+				}
+				if got.Result == nil || got.Result.Head != row.heads[i] {
+					t.Fatalf("settled result=%+v; want %s result", got.Result, row.heads[i])
+				}
+			})
+		}
 	}
 }
 
@@ -360,7 +403,12 @@ else:
 		t.Fatal(err)
 	}
 	settled := waitReview(t, bin, repo, home)
-	reviewID := runOf(t, settled)["review"].(map[string]any)["id"].(string)
+	settledRun := runOf(t, settled)
+	settledReview := settledRun["review"].(map[string]any)
+	if settledRun["status"] != "outstanding-findings" || settledReview["status"] != "outstanding-findings" {
+		t.Fatalf("live settlement discarded the exploration verdict: run=%v review=%v", settledRun["status"], settledReview["status"])
+	}
+	reviewID := settledReview["id"].(string)
 	executors := runner.ObserveExecutors(reviewID, func() (string, error) { return home, nil })
 	if len(executors) != 2 {
 		t.Fatalf("want exploration and finalization executor records, got %d", len(executors))

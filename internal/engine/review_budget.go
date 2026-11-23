@@ -200,44 +200,76 @@ func (s reviewSession) finalArgs(stdout []byte) ([]string, bool) {
 	return nil, false
 }
 
-func settleReviewBudget(done, previous reviewOutcome, parentErr error, budget, executorLimit time.Duration) reviewOutcome {
-	if parentErr != nil || budget >= executorLimit {
-		return done
+func settleReviewBudget(done, previous reviewOutcome) reviewOutcome {
+	settled := done
+	best := done.Result
+	if moreCompleteReviewResult(previous.Result, best) {
+		best = previous.Result
 	}
-	if (done.Result == nil || done.Result.Verdict == "inconclusive") && previous.Result != nil && previous.Result.Verdict != "inconclusive" {
-		done.Status, done.Result = previous.Status, previous.Result
+	if !usableReviewResult(best) {
+		settled.Status, settled.Result = "inconclusive", nil
+		settled.Answer.Reason = "review_budget"
+		settled.Answer.Diagnostic = "review wall-time budget exhausted"
+		return settled
 	}
-	if done.Result == nil || done.Result.Verdict == "inconclusive" {
-		done.Status, done.Result = "inconclusive", nil
-		done.Answer.Reason = "review_budget"
-		done.Answer.Diagnostic = "review wall-time budget exhausted"
-		return done
-	}
-	if len(done.Result.Uncovered) > 0 {
-		for i := range done.Result.Uncovered {
-			if done.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
-				done.Result.Uncovered[i].Reason = "review_budget"
+	settled.Result = cloneReviewVerdict(best)
+	if settled.Result.Verdict == "partial" || len(settled.Result.Uncovered) > 0 {
+		for i := range settled.Result.Uncovered {
+			if settled.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
+				settled.Result.Uncovered[i].Reason = "review_budget"
 			}
 		}
-		done.Result.Verdict, done.Status = "partial", "partial-review"
+		settled.Result.Verdict, settled.Status = "partial", "partial-review"
 	} else {
-		switch done.Result.Verdict {
+		switch settled.Result.Verdict {
 		case "clean":
-			done.Status = "clean-review"
+			settled.Status = "clean-review"
 		case "findings":
-			done.Status = "outstanding-findings"
-		case "partial":
-			done.Status = "partial-review"
+			settled.Status = "outstanding-findings"
 		default:
-			done.Status, done.Result = "inconclusive", nil
-			done.Answer.Reason = "review_budget"
-			done.Answer.Diagnostic = "review wall-time budget exhausted"
-			return done
+			settled.Status, settled.Result = "inconclusive", nil
+			settled.Answer.Reason = "review_budget"
+			settled.Answer.Diagnostic = "review wall-time budget exhausted"
+			return settled
 		}
 	}
-	done.Answer.Reason = ""
-	done.Answer.Diagnostic = ""
-	return done
+	settled.Answer.Reason = ""
+	settled.Answer.Diagnostic = ""
+	return settled
+}
+
+func usableReviewResult(result *Verdict) bool {
+	return result != nil && result.Verdict != "inconclusive"
+}
+
+func moreCompleteReviewResult(candidate, current *Verdict) bool {
+	candidateRank, currentRank := reviewResultRank(candidate), reviewResultRank(current)
+	if candidateRank != currentRank {
+		return candidateRank > currentRank
+	}
+	return candidateRank > 0 && len(candidate.Coverage) > len(current.Coverage)
+}
+
+func reviewResultRank(result *Verdict) int {
+	if !usableReviewResult(result) {
+		return 0
+	}
+	if result.Verdict == "partial" || len(result.Uncovered) > 0 {
+		return 1
+	}
+	if result.Verdict == "clean" || result.Verdict == "findings" {
+		return 2
+	}
+	if len(result.Coverage) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func cloneReviewVerdict(result *Verdict) *Verdict {
+	cloned := *result
+	cloned.Uncovered = append([]UncoveredPath(nil), result.Uncovered...)
+	return &cloned
 }
 
 func addUsage(a, b TokenUsage) TokenUsage {
@@ -332,15 +364,15 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
-			if ctx.Err() != nil {
-				final = settleReviewBudget(final, first, parent.Err(), budget, runner.ProcessTimeout(parent))
+			if ctx.Err() != nil && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
+				final = settleReviewBudget(final, first)
 			}
 			return final, confinement
 		}
 		first.Log += "; finalization unavailable: backend did not report a resumable session"
 	}
-	if ctx.Err() != nil || nearLimit {
-		first = settleReviewBudget(first, reviewOutcome{}, parent.Err(), budget, runner.ProcessTimeout(parent))
+	if (ctx.Err() != nil || nearLimit) && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
+		first = settleReviewBudget(first, reviewOutcome{})
 	}
 	return first, confinement
 }
