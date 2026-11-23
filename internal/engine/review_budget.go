@@ -204,7 +204,7 @@ func settleReviewBudget(done, previous reviewOutcome, parentErr error, budget, e
 	if parentErr != nil || budget >= executorLimit {
 		return done
 	}
-	if done.Result == nil && previous.Result != nil {
+	if (done.Result == nil || done.Result.Verdict == "inconclusive") && previous.Result != nil && previous.Result.Verdict != "inconclusive" {
 		done.Status, done.Result = previous.Status, previous.Result
 	}
 	if done.Result == nil || done.Result.Verdict == "inconclusive" {

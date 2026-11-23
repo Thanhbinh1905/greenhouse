@@ -330,7 +330,8 @@ sys.exit(0)
 func TestReviewBudgetRestartKeepsCompleteVerdict(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `if '--no-tools' in sys.argv:
- print('finalization returned no verdict', flush=True)
+ v={'head':b['Head'],'verdict':'inconclusive','coverage':[],'findings':[]}
+ print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}), flush=True)
  print(json.dumps({'type':'agent_settled','aborted':False}), flush=True)
  time.sleep(30)
 else:
