@@ -30,6 +30,7 @@ type HostResult struct {
 	Verdict     string            `json:"verdict,omitempty"`
 	Current     bool              `json:"current"`
 	Findings    []Finding         `json:"findings"`
+	Dismissed   []Finding         `json:"dismissed_findings,omitempty"`
 	Carried     []CarriedFinding  `json:"carried_findings,omitempty"`
 	Resolutions []ResolutionCheck `json:"resolutions,omitempty"`
 	Generated   []GeneratedPath   `json:"generated,omitempty"`
@@ -254,6 +255,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	}
 	if x.Result != nil {
 		v.Verdict, v.Findings = x.Result.Verdict, append([]Finding(nil), x.Result.Findings...)
+		v.Dismissed = append([]Finding(nil), x.Result.Dismissed...)
 		v.Resolutions = x.Result.Resolutions
 	}
 	settled := x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings")

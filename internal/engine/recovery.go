@@ -138,6 +138,7 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 				done.Status, done.Answer.Reason, done.Answer.Diagnostic = "inconclusive", "review_budget", "review wall-time budget exhausted"
 			}
 		}
+		markUnconfirmed(&done)
 		check := reverifySnapshot(x)
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}

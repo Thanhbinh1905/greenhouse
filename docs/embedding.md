@@ -24,6 +24,23 @@ Each responsibility has one owner. Greenhouse never pushes, opens a PR, writes t
 
 P0 and P1 findings with valid actions are blocking and must be resolved or explicitly accepted before the full pipeline can pass. P2 findings with valid actions are actionable but non-blocking: they remain reported, may be included in a repair round already opened for blocking findings, and do not prevent a clean or passing verdict if left unresolved. P3 findings are informational and do not block or enter repair rounds.
 
+## Blocking finding confirmation
+
+A single review can report a P0 or P1 finding that a second look would not reproduce. Greenhouse therefore confirms each P0 and P1 finding before it blocks, in every review that gates: host reviews and the full pipeline's reviews. P2 and P3 findings are not confirmed.
+
+After the review settles with at least one P0 or P1 finding, Greenhouse runs one fresh confirmation pass per such finding. The pass receives the same evidence and the reported finding, and sits in the same read-only snapshot. It has its own [review budget](#per-review-budget-and-finalization) and adds its tokens and cost to the review's `usage`. A pass reports one of:
+
+| `confirmation.status` | Meaning | Effect |
+|---|---|---|
+| `confirmed` | The pass reports a P0 or P1 finding on overlapping lines. `evidence` carries its explanation. | The finding keeps its priority and blocks. |
+| `demoted` | The pass covers the finding's file and reports a P2 or P3 finding on overlapping lines. | The finding takes that priority and no longer blocks. |
+| `dropped` | The pass settles, covers the finding's file, and reports no finding on overlapping lines. | The finding leaves `findings` and is listed in `dismissed`. |
+| `unconfirmed` | The pass did not settle (inconclusive, paused or failed to start) or did not cover the finding's file (listed in `Uncovered` or missing from coverage). | The finding keeps its priority and blocks. |
+
+Overlap means the same file and intersecting line ranges. A confirmation pass cannot raise a finding's priority. When every blocking finding is dropped, the verdict becomes `clean`, or `partial` when paths remain uncovered.
+
+Every finding in `findings` that went through a pass carries `confirmation` with `status`, `reported_priority` and `evidence`; `run.review.result` and `host_result` show it. Dropped findings appear in `run.review.result.dismissed` and `host_result.dismissed_findings` with the same object, so a host can audit what Greenhouse discarded. A dropped finding also leaves the run's finding ledger, so it does not block later reviews. If the controller restarts after the review verdict but before its confirmation passes complete, [recovery](recovery.md) adopts the verdict and marks each unconfirmed blocking finding `unconfirmed`; it keeps blocking. A cancelled confirmation pass cancels the review.
+
 ## Host identity
 
 Every host request carries `host`:
