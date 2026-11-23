@@ -9,6 +9,62 @@ import (
 	"testing"
 )
 
+func TestFailedHostReviewAdmissionDoesNotChangeFindingHistory(t *testing.T) {
+	finding := Finding{ID: "finding-1", Priority: "P1", Origin: "correctness", File: "sample.txt", Start: 1, End: 1, Explanation: "unsafe", Action: "fix it", Head: "candidate"}
+	previousResponses := &Repair{ID: "previous"}
+	r := &Run{
+		Host:          &Host{Name: "host", ID: "task"},
+		Review:        &Execution{ID: "prior-review", Grant: "prior-grant", Status: "outstanding-findings", Result: &Verdict{Findings: []Finding{finding}}},
+		HostFindings:  []Finding{finding},
+		HostHistory:   []PriorFinding{{Finding: finding, State: "open"}},
+		HostResponses: previousResponses,
+	}
+	if err := admitHostReview(r, "next-grant", []ResolutionResponse{{Finding: finding.ID, Response: "disputed", Reason: "not a defect"}}); err == nil {
+		t.Fatal("review admission without intent and target succeeded")
+	}
+	if r.HostHistory[0].State != "open" {
+		t.Fatalf("failed admission changed prior finding state: %+v", r.HostHistory[0])
+	}
+	if r.HostResponses != previousResponses || len(r.HostGrants) != 0 {
+		t.Fatalf("failed admission changed host response state: responses=%+v grants=%v", r.HostResponses, r.HostGrants)
+	}
+}
+
+func TestHostReviewRefusalDoesNotRecordResponse(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("trust = os.Getenv(\"APP_MODE\")\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	installFake(t, home, "")
+	v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`), target, "-refusal")
+	v = hostCall(t, bin, repo, home, v, "review", "initial-review", map[string]any{"grant": "initial-review"})
+	if v["outcome"] != "ok" {
+		t.Fatalf("initial review: %v", v)
+	}
+	v = hostSettle(t, bin, repo, home)
+	findings, _ := v["host_result"].(map[string]any)["findings"].([]any)
+	if len(findings) != 1 {
+		t.Fatalf("initial review did not report the expected finding: %v", v)
+	}
+	finding := findings[0].(map[string]any)
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 1, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/changed-model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	v = hostCall(t, bin, repo, home, v, "apply", "change-reviewer-settings", map[string]any{"settings": settings})
+	if v["outcome"] != "ok" {
+		t.Fatalf("change reviewer settings: %v", v)
+	}
+	v = hostCall(t, bin, repo, home, v, "review", "refused-review", map[string]any{"grant": "refused-review", "responses": []map[string]any{{"finding": finding["id"], "response": "disputed", "reason": "not a defect"}}})
+	if v["outcome"] != "refused" {
+		t.Fatalf("review should be refused until rules are resolved: %v", v)
+	}
+	history, _ := runOf(t, v)["host_history"].([]any)
+	if len(history) != 1 || history[0].(map[string]any)["state"] != "open" {
+		t.Fatalf("refused review changed finding history: %v", history)
+	}
+}
+
 func TestHostResponsesAcrossThreeRounds(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)

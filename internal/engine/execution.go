@@ -180,6 +180,16 @@ const fullReviewContract = reviewContract + ` Also include "documentation":{"sta
 const priorFindingsContract = ` PriorFindings contains earlier findings on overlapping code, with each finding's current state. Do not raise a finding that asks to undo a change made to address an earlier finding. If a new blocking finding conflicts with an earlier finding, include "conflicts":["earlier finding id"] on the new finding. Conflicts become host decisions, not outstanding findings.`
 const acceptedHeadContract = ` AcceptedHeads lists commits whose review risk the host accepted. Do not report a blocking finding on byte-identical code from an accepted head unless the target merge introduced it; mark such a finding with "target_introduced":true.`
 
+func pipelineAcceptedHeads(acceptances []Acceptance, candidate, inputs, config string) []string {
+	var heads []string
+	for _, acceptance := range acceptances {
+		if acceptance.Candidate == candidate && acceptance.Inputs == inputs && acceptance.Config == config && !slices.Contains(heads, acceptance.Candidate) {
+			heads = append(heads, acceptance.Candidate)
+		}
+	}
+	return heads
+}
+
 func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, error) {
 	settings := r.Configs[len(r.Configs)-1].Settings
 	cfg, e := trustedAgent(settings.ReviewerBackend, settings.ReviewerModel)
@@ -271,11 +281,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	}
 	var acceptedHeads []string
 	if r.Pipeline != nil {
-		for _, acceptance := range r.Pipeline.Acceptances {
-			if !slices.Contains(acceptedHeads, acceptance.Candidate) {
-				acceptedHeads = append(acceptedHeads, acceptance.Candidate)
-			}
-		}
+		acceptedHeads = pipelineAcceptedHeads(r.Pipeline.Acceptances, r.Candidate, stageInputs(r, "review"), r.Configs[len(r.Configs)-1].ID)
 	}
 	for _, acceptance := range r.HostAcceptances {
 		if !slices.Contains(acceptedHeads, acceptance.Candidate) {

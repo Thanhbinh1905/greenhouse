@@ -181,17 +181,19 @@ func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error
 		if err != nil {
 			return err
 		}
-		for _, answer := range response.Responses {
-			if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == answer.Finding }); i >= 0 {
-				r.HostHistory[i].State = answer.Response
-			}
-		}
 	}
 	previous := r.HostResponses
 	r.HostResponses = response
 	if err := admitReviewAgain(r); err != nil {
 		r.HostResponses = previous
 		return err
+	}
+	if response != nil {
+		for _, answer := range response.Responses {
+			if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == answer.Finding }); i >= 0 {
+				r.HostHistory[i].State = answer.Response
+			}
+		}
 	}
 	r.Review.Grant = grant
 	r.HostGrants = append(r.HostGrants, grant)

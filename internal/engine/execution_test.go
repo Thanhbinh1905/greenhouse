@@ -119,6 +119,21 @@ func reviewSettledWithFindings(run map[string]any) bool {
 	return ok && len(findings) > 0 && status != "running" && status != "cancelling"
 }
 
+func TestPipelineAcceptedHeadsRequireMatchingReviewInputs(t *testing.T) {
+	const candidate, inputs, config = "candidate", "review-inputs", "config"
+	if got := pipelineAcceptedHeads([]Acceptance{{Candidate: candidate, Inputs: "other-inputs", Config: config}}, candidate, inputs, config); len(got) != 0 {
+		t.Fatalf("stale acceptance included: %v", got)
+	}
+	acceptances := []Acceptance{
+		{Candidate: candidate, Inputs: inputs, Config: config},
+		{Candidate: "other-candidate", Inputs: inputs, Config: config},
+		{Candidate: candidate, Inputs: inputs, Config: "other-config"},
+	}
+	if got := pipelineAcceptedHeads(acceptances, candidate, inputs, config); len(got) != 1 || got[0] != candidate {
+		t.Fatalf("accepted heads = %v, want only matching review", got)
+	}
+}
+
 func TestFindingBytesMatchAcceptedHead(t *testing.T) {
 	_, repo, _ := fixture(t)
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("accepted code\nother line\n"), 0600); err != nil {
