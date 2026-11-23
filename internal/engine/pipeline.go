@@ -907,8 +907,14 @@ func completeStep(r *Run, o stepOutcome) error {
 		case "clean-review", "outstanding-findings":
 			recordReview(r, x)
 			actionable, informational := Outstanding(r)
+			for _, f := range actionable {
+				if f.Priority != "P0" && f.Priority != "P1" {
+					informational = append(informational, f)
+				}
+			}
+			actionable = blockingFindings(actionable)
 			st.Status, st.Reason = "passed", "independent review clean with complete coverage"
-			if len(o.Result.Findings) > 0 {
+			if len(o.Result.Findings) > 0 && len(actionable) == 0 {
 				st.Reason = "independent review reported only informational findings"
 			}
 			if len(informational) > 0 {

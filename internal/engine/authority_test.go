@@ -101,7 +101,7 @@ func TestAutoRepairsFindingsWithinCombinedCap(t *testing.T) {
 	}
 }
 
-func TestAskGroupsActionableFindingsIntoOneDecision(t *testing.T) {
+func TestAskBlocksP1AndKeepsP2Informational(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, root, v := authorityFixture(t, "ask", 6, repairPlan)
 	if err := os.WriteFile(filepath.Join(root, "review-mode"), []byte("mixed"), 0600); err != nil {
@@ -114,12 +114,16 @@ func TestAskGroupsActionableFindingsIntoOneDecision(t *testing.T) {
 	parked := waitPipeline(t, bin, repo, home)
 	d := decisionIn(t, parked)
 	findings := runOf(t, parked)["findings"].([]any)
-	if d["kind"] != "findings" || len(strs(d["findings"])) != 2 || len(findings) != 3 || parked["gate_id"] != d["id"] {
-		t.Fatalf("ask did not group the two actionable findings into one request: %v %v", d, findings)
+	if d["kind"] != "findings" || len(strs(d["findings"])) != 1 || len(findings) != 3 || parked["gate_id"] != d["id"] {
+		t.Fatalf("ask must block only on P0/P1 findings: %v %v", d, findings)
 	}
 	for _, f := range findings {
-		if f.(map[string]any)["priority"] == "P3" && has(strs(d["findings"]), f.(map[string]any)["id"].(string)) {
-			t.Fatal("informational finding created a question")
+		finding := f.(map[string]any)
+		if finding["priority"] == "P1" && !has(strs(d["findings"]), finding["id"].(string)) {
+			t.Fatal("P1 finding did not create a blocking question")
+		}
+		if (finding["priority"] == "P2" || finding["priority"] == "P3") && has(strs(d["findings"]), finding["id"].(string)) {
+			t.Fatalf("%s finding created a blocking question", finding["priority"])
 		}
 	}
 	if !has(strs(parked["actions"]), "decide") || has(strs(parked["actions"]), "pipeline") {
@@ -158,14 +162,14 @@ func TestAskGroupsActionableFindingsIntoOneDecision(t *testing.T) {
 	if err := json.Unmarshal(input, &fix); err != nil {
 		t.Fatal(err)
 	}
-	if len(fix.Selected) != 2 {
-		t.Fatalf("fixer did not receive the grouped findings: %s", input)
+	if len(fix.Selected) != 1 || fix.Selected[0].Priority != "P1" {
+		t.Fatalf("fixer received non-blocking findings: %s", input)
 	}
 	answer := p["decisions"].([]any)[0].(map[string]any)["answer"].(map[string]any)
 	if answer["actor"] != "axi" || answer["reason"] != "operator reviewed the repair option" || answer["action"] != "authorize" {
 		t.Fatalf("decision provenance: %v", answer)
 	}
-	if review := stageOf(t, done, "review"); !strings.Contains(review["reason"].(string), "1 informational") {
+	if review := stageOf(t, done, "review"); !strings.Contains(review["reason"].(string), "2 informational") {
 		t.Fatalf("informational finding not visible: %v", review)
 	}
 }

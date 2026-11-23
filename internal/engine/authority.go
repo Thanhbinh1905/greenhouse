@@ -134,6 +134,16 @@ func Outstanding(r *Run) (actionable, informational []Finding) {
 	return actionable, informational
 }
 
+func blockingFindings(findings []Finding) []Finding {
+	var blocking []Finding
+	for _, f := range findings {
+		if f.Priority == "P0" || f.Priority == "P1" {
+			blocking = append(blocking, f)
+		}
+	}
+	return blocking
+}
+
 func repairableFindings(r *Run, findings []Finding) []Finding {
 	if _, err := trustedFixer(); err != nil {
 		return nil
@@ -267,6 +277,7 @@ func yoloActor(r *Run) (string, bool) {
 func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 	p := r.Pipeline
 	actionable, _ := Outstanding(r)
+	actionable = blockingFindings(actionable)
 	b := budgetOf(r)
 	reason = fmt.Sprintf("review cap reached (%d/%d: review %d + repair %d); %s", b.Total, b.Limit, b.Review, b.Repair, reason)
 	openDecision(r, st, "needs-decision", Decision{Kind: "cap", Findings: FindingIDs(actionable), Options: capOptions(p), Reason: reason})
@@ -281,6 +292,7 @@ func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 	p := r.Pipeline
 	actionable, _ := Outstanding(r)
+	actionable = blockingFindings(actionable)
 	repairable := repairableFindings(r, actionable)
 	b := budgetOf(r)
 	if g := p.FinalFix; g != nil && g.RepairAllowed && g.Repair == 0 && len(repairable) > 0 {
@@ -373,6 +385,7 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 		}
 	case "accept-head":
 		actionable, _ := Outstanding(r)
+		actionable = blockingFindings(actionable)
 		review := p.stage("review")
 		in := stageInputs(r, "review")
 		p.Acceptances = append(p.Acceptances, Acceptance{Decision: d.ID, Candidate: r.Candidate, Inputs: in, Config: r.Configs[len(r.Configs)-1].ID, Findings: FindingIDs(actionable), Actor: a.Actor, Reason: a.Reason})
@@ -380,6 +393,7 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 		review.Reason = fmt.Sprintf("review risk accepted by %s for this exact candidate and configuration (%d findings); not a clean pass", a.Actor, len(actionable))
 	case "final-fix":
 		actionable, _ := Outstanding(r)
+		actionable = blockingFindings(actionable)
 		g := &FinalFix{Decision: d.ID, Actor: a.Actor, Reason: a.Reason, Candidate: r.Candidate, ReviewUsed: r.ReviewUsed, RepairUsed: r.RepairUsed, RepairAllowed: len(repairableFindings(r, actionable)) > 0}
 		p.FinalFix = g
 		if !g.RepairAllowed {
