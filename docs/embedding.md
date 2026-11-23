@@ -183,7 +183,7 @@ Greenhouse enforces a wall-time budget for each reviewer attempt, including its 
 {"version": 2, "review_budget": "3m"}
 ```
 
-The shorter of this budget and `executor_timeout` applies. Reaching `executor_timeout` reports `timeout`; exhausting the shorter review budget reports `review_budget`. The controller reserves the last 20% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
+The shorter of this budget and `executor_timeout` applies. Reaching `executor_timeout` reports `timeout`; exhausting the shorter review budget reports `review_budget`. The controller reserves the last 50% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
 
 Each review also has a tool-call budget that scales with the change: 2 plus 1 call per changed path, at least 6 and at most 40. Review input carries it as `ToolCallBudget`. For Pi, the controller counts tool calls in the event stream. At the first turn end after the budget is spent, it stops exploration and runs the finalization turn, and the review log records `tool-call budget N spent`. Claude and Codex receive the budget in their input but are not stopped by it.
 
@@ -199,7 +199,7 @@ AXI `inspect` includes these execution fields:
 - `run.review.finalization`: `true` when the controller ran the finalization turn; omitted otherwise.
 - `run.review.usage`: tokens and cost from exploration plus finalization.
 - `run.attempts[].tokens` and `run.attempts[].usage`: the same aggregate for each attempt, including full-pipeline reviews.
-- `run.review.reason`: `review_budget` when the attempt exhausts its deadline; the verdict remains inconclusive.
+- `run.review.reason`: `review_budget` only when no usable verdict is available at budget expiry. A complete result keeps its `clean` or `findings` verdict; an incomplete result settles as `partial` with uncovered paths marked `review_budget`.
 
 The budget bounds wall time, not an exact token count. Tokens are the totals reported by the native backend; an interrupted request may not report usage. Cache accounting retains backend semantics. Unknown usage remains zero.
 

@@ -155,6 +155,132 @@ time.sleep(30)
 	}
 }
 
+func TestReviewFinalizationOmitsInitiallyUnreviewablePaths(t *testing.T) {
+	x := &Execution{Input: []byte("{\"Head\":\"head\",\"Paths\":[\"reviewable\",\"excluded\"],\"Contract\":\"contract\"}\n\nDiff:\nchange"), Uncovered: []UncoveredPath{{Path: "excluded", Reason: "hunk windows exceed 65536 bytes"}}}
+	input, err := reviewFinalizationInput(x, reviewOutcome{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	header, _, ok := strings.Cut(string(input), "\n\nDiff:\n")
+	if !ok {
+		t.Fatalf("finalization input lacks diff: %s", input)
+	}
+	var fields struct {
+		Paths []string
+	}
+	if err := json.Unmarshal([]byte(header), &fields); err != nil {
+		t.Fatal(err)
+	}
+	if len(fields.Paths) != 1 || fields.Paths[0] != "reviewable" {
+		t.Fatalf("finalization Paths = %v; want only reviewable paths", fields.Paths)
+	}
+}
+
+func TestReviewBudgetFinalizationKeepsCompleteVerdict(t *testing.T) {
+	for _, test := range []struct {
+		name, verdict, status string
+	}{
+		{"clean", "clean", "clean-review"},
+		{"findings", "findings", "outstanding-findings"},
+		{"empty change", "clean", "clean-review"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			coverage := []string{"a"}
+			if test.name == "empty change" {
+				coverage = []string{}
+			}
+			done := reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: test.verdict, Coverage: coverage}}
+			got := settleReviewBudget(done, nil, 3*time.Minute, 45*time.Minute)
+			if got.Status != test.status || got.Result == nil || got.Result.Verdict != test.verdict || got.Answer.Reason != "" {
+				t.Fatalf("complete verdict at budget expiry: %+v", got)
+			}
+		})
+	}
+}
+
+func TestSettleReviewBudgetMakesIncompleteVerdictPartial(t *testing.T) {
+	for _, coverage := range [][]string{{"a"}, {}} {
+		done := reviewOutcome{Status: "outstanding-findings", Result: &Verdict{Verdict: "findings", Coverage: coverage, Uncovered: []UncoveredPath{{Path: "b", Reason: "not covered by reviewer within budget"}}}}
+		got := settleReviewBudget(done, nil, 3*time.Minute, 45*time.Minute)
+		if got.Status != "partial-review" || got.Result.Verdict != "partial" || got.Result.Uncovered[0].Reason != "review_budget" || got.Answer.Reason != "" {
+			t.Fatalf("coverage=%v incomplete verdict at budget expiry: %+v", coverage, got)
+		}
+	}
+}
+
+func TestSettleReviewBudgetClearsMissingVerdict(t *testing.T) {
+	got := settleReviewBudget(reviewOutcome{Status: "running"}, nil, 3*time.Minute, 45*time.Minute)
+	if got.Status != "inconclusive" || got.Result != nil || got.Answer.Reason != "review_budget" {
+		t.Fatalf("missing result at budget expiry: %+v", got)
+	}
+}
+
+func TestReviewBudgetWithoutFinalizationKeepsCompleteVerdict(t *testing.T) {
+	for _, verdict := range []string{"clean", "findings"} {
+		done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: verdict, Coverage: []string{"a"}}}, nil, 3*time.Minute, 45*time.Minute)
+		want := "clean-review"
+		if verdict == "findings" {
+			want = "outstanding-findings"
+		}
+		if done.Status != want || done.Result.Verdict != verdict {
+			t.Fatalf("verdict %q without finalization: status=%q result=%+v", verdict, done.Status, done.Result)
+		}
+	}
+}
+
+func TestSettleReviewBudgetHostResultNeverDisagrees(t *testing.T) {
+	for _, test := range []struct {
+		name, status, verdict string
+		result                *Verdict
+	}{
+		{"complete clean", "clean-review", "clean", &Verdict{Verdict: "clean", Coverage: []string{"a"}}},
+		{"complete findings", "outstanding-findings", "findings", &Verdict{Verdict: "findings", Coverage: []string{"a"}}},
+		{"incomplete", "partial-review", "partial", &Verdict{Verdict: "partial", Coverage: []string{"a"}, Uncovered: []UncoveredPath{{Path: "b", Reason: "review_budget"}}}},
+		{"no result", "inconclusive", "", nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: test.result}, nil, 3*time.Minute, 45*time.Minute)
+			run := &Run{Host: &Host{Name: "host", ID: "test"}, Candidate: "head", Target: "target", Review: &Execution{ID: "review", Status: done.Status, Result: done.Result}}
+			host := hostResult(run, true)
+			if done.Status != test.status || host.Status != test.status || host.Verdict != test.verdict {
+				t.Fatalf("run status=%q host status=%q verdict=%q; want %q/%q", done.Status, host.Status, host.Verdict, test.status, test.verdict)
+			}
+		})
+	}
+}
+
+func TestReviewFinalizationGetsHalfOfReviewBudget(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `if '--no-tools' not in sys.argv:
+ time.sleep(30)
+`)
+	scriptPath := filepath.Join(filepath.Dir(home), "fake-pi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	script = []byte(strings.Replace(string(script), "if '--no-tools' not in sys.argv:\n time.sleep(30)\n", "if '--no-tools' not in sys.argv:\n time.sleep(30)\nelse:\n time.sleep(2.5)\n", 1))
+	if err := os.WriteFile(scriptPath, script, 0700); err != nil {
+		t.Fatal(err)
+	}
+	var cfg map[string]any
+	data, err := os.ReadFile(filepath.Join(home, "backends.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg["review_budget"] = "10s"
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), cfg)
+	started := time.Now()
+	mutate(t, bin, repo, home, v, "review", "half-budget-finalization", nil)
+	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
+	if review["status"] != "outstanding-findings" || review["finalization"] != true || time.Since(started) > 10*time.Second {
+		t.Fatalf("finalization did not receive enough time to return a verdict: status=%v finalization=%v elapsed=%s log=%v", review["status"], review["finalization"], time.Since(started), review["log"])
+	}
+}
+
 func TestReviewBudgetForcesFinalization(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `if '--no-tools' not in sys.argv: time.sleep(30)
