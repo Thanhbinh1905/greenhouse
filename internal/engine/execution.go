@@ -718,6 +718,21 @@ func findingUnchangedSinceAccepted(x *Execution, f Finding) bool {
 	return false
 }
 
+func withinAcceptedDelta(x *Execution, candidate string, f Finding) bool {
+	for _, accepted := range x.AcceptedHeads {
+		diff, err := repository.Read(x.Source.Worktree, reviewDiffArgs(accepted, candidate, "--unified=0")...)
+		if err != nil {
+			continue
+		}
+		for _, span := range changedRanges(string(diff))[f.File] {
+			if f.Start >= span[0] && f.End <= span[1] {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func findingBytesMatchAcceptedHead(path, candidate, accepted, file string, start, end int) bool {
 	if start < 1 || end < start {
 		return false
@@ -820,6 +835,9 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 			if f.Start >= 1 && f.End >= f.Start && f.Start >= span[0] && f.End <= span[1] {
 				inside = true
 			}
+		}
+		if !inside && f.TargetIntroduced && f.Start >= 1 && f.End >= f.Start {
+			inside = withinAcceptedDelta(x, v.Head, *f)
 		}
 		if !inside {
 			v.Diagnostics = append(v.Diagnostics, safeMessage(fmt.Sprintf("dropped finding %d: finding range outside changed hunks (%s:%d-%d)", i+1, f.File, f.Start, f.End)))

@@ -544,3 +544,65 @@ func TestReviewRoundClassifiesStructuredZeroExitModelFailure(t *testing.T) {
 		t.Fatalf("successful zero-exit stderr noise classified: %+v", got)
 	}
 }
+
+func TestTargetIntroducedFindingOutsideReviewDiffBlocks(t *testing.T) {
+	_, repo, _ := fixture(t)
+	commit := func(msg string) string {
+		git(t, repo, "add", "-A")
+		git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", msg)
+		return strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	}
+	lines := func(first, last string) []byte {
+		var b strings.Builder
+		for i := 1; i <= 30; i++ {
+			switch i {
+			case 1:
+				b.WriteString(first + "\n")
+			case 30:
+				b.WriteString(last + "\n")
+			default:
+				b.WriteString("line\n")
+			}
+		}
+		return []byte(b.String())
+	}
+	write := func(first, last string) {
+		if err := os.WriteFile(filepath.Join(repo, "sample.txt"), lines(first, last), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("base", "base")
+	commit("base file")
+	git(t, repo, "checkout", "-b", "candidate")
+	write("candidate change", "base")
+	accepted := commit("accepted head")
+	git(t, repo, "checkout", "main")
+	write("base", "target defect")
+	target := commit("target introduces a defect")
+	git(t, repo, "checkout", "candidate")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "merge", "--no-edit", "main")
+	candidate := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	diff := git(t, repo, "diff", target, candidate, "--", "sample.txt")
+	x := &Execution{FindingIdentity: "code-v1", Source: repository.Identity{Worktree: repo}, Rules: InputIdentity{Candidate: candidate}, Paths: []string{"sample.txt"}, Diff: diff, Config: ReviewerConfig{Backend: "pi", Model: "fixture/model"}, AcceptedHeads: []string{accepted}}
+	verdict := func(introduced bool, line int) *Verdict {
+		finding := Finding{Priority: "P1", Origin: "correctness", File: "sample.txt", Start: line, End: line, Explanation: "Defect", Action: "Fix it", Head: candidate, TargetIntroduced: introduced}
+		answer, err := json.Marshal(Verdict{Head: candidate, Verdict: "findings", Coverage: x.Paths, Findings: []Finding{finding}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		result, err := verdictFrom(agentAnswer{Text: string(answer), Provider: "fixture", Model: "model"}, x)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	if got := verdict(true, 30); got.Verdict != "findings" || len(got.Findings) != 1 {
+		t.Fatalf("target-introduced finding outside the review diff must block: %+v", got)
+	}
+	if got := verdict(false, 30); len(got.Findings) != 0 {
+		t.Fatalf("a finding outside the review diff without target_introduced must be dropped: %+v", got)
+	}
+	if got := verdict(true, 15); len(got.Findings) != 0 {
+		t.Fatalf("target_introduced must not widen scope to unchanged lines: %+v", got)
+	}
+}
