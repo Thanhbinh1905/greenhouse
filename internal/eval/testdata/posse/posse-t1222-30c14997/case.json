@@ -1,0 +1,52 @@
+{
+  "version": 1,
+  "id": "posse-t1222-30c14997",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head 30c14997.",
+  "intent": "feat(review): add the Greenhouse host-mode adapter behind a hidden command (Phase 1 G-2)\n\nDone when: A Greenhouse adapter implements the review provider interface from G-1 using Greenhouse host mode (attach, apply, review with a per-round grant, watch, host_result), reachable only through a hidden command, as specified in docs/research/2026-11-13-direction-2-design.md sections 2.2-2.4 and 2.8 (step G-2).; Posse starts the Greenhouse daemon itself, outside every Task cgroup and without Task markers, with GREENHOUSE_HOME=<POSSE_HOME>/greenhouse (mode 0700); a Worker never calls Greenhouse; `posse doctor` reports the daemon protocol range.; Every case of the G0 fault table in section 2.6 is an automated test against the real `greenhouse` binary with a fake reviewer, an isolated POSSE_HOME and an isolated Herdr server, and runs in CI; the adapter survives a daemon restart and a protocol refusal.; No change to existing review, publish or merge behaviour.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-8a3be43e",
+      "file": "internal/greenhouse/protocol.go",
+      "start": 155,
+      "end": 156,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "axi converts every response with outcome \"error\" into a generic error before returning the decoded response. Protocol negotiation refusals therefore never reach response.refusal or Daemon.probe, so a daemon that reports an incompatible protocol range cannot produce ProtocolError or the required persisted range; Ensure instead reports a generic AXI error and the protocol-refusal contract fails."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "30c149978cef41aa0bfd4274e26cb7e6bee0f35a",
+    "target": "7fe21daba6d3da30bbea8523c11609dce2d808e3",
+    "files": [
+      "internal/app/doctor.go",
+      "internal/app/greenhouse.go",
+      "internal/app/service.go",
+      "internal/app/task_containment_linux.go",
+      "internal/app/task_containment_other.go",
+      "internal/e2e/greenhouse_contract_test.go",
+      "internal/greenhouse/daemon.go",
+      "internal/greenhouse/daemon_test.go",
+      "internal/greenhouse/protocol.go",
+      "internal/greenhouse/round.go",
+      "internal/store/greenhouse_verdicts.go",
+      "internal/store/greenhouse_verdicts_test.go",
+      "internal/store/review_provider.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

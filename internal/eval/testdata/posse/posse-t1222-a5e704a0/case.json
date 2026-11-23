@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "id": "posse-t1222-a5e704a0",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head a5e704a0.",
+  "intent": "fix(codex): handle the Codex self-update prompt at launch and make send --interrupt deliver the redirect\n\nDone when: A Codex launch that meets the interactive self-update prompt either suppresses or answers it, or fails with a launch error that names the prompt. It never hangs into prompt_not_delivered. A test with a fake Codex that shows the prompt covers it.; `posse send --interrupt` to a Codex Worker delivers the instruction after the interrupt, or refuses with a clear error when Codex cannot be interrupted. A test covers it.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-48185cfc",
+      "file": "internal/app/herdr.go",
+      "start": 158,
+      "end": 161,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "Normal Codex Worker launches append a dynamic opening prompt such as `Read .../launch.md and follow it.` before this code runs. Because the insertion special case recognizes only the fixed `codexOpeningPrompt`, `-c check_for_update_on_startup=false` is appended after that positional prompt. Codex option parsing can stop at the first positional argument, so the suppression setting may be treated as prompt text or ignored, leaving the self-update prompt enabled on Worker launches."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "a5e704a09fdfe52b7a9a4072fbf2b91836b96908",
+    "target": "beaea66ab6e3d5814e9f827c9ef588c72cc562fb",
+    "files": [
+      "internal/app/herdr.go",
+      "internal/app/interrupt_reasons_test.go",
+      "internal/app/prompt_delivery_test.go",
+      "internal/app/recovery_test.go",
+      "internal/app/send_test.go",
+      "internal/app/tasks.go",
+      "internal/app/tasks_test.go",
+      "internal/e2e/codex_prompt_interrupt_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

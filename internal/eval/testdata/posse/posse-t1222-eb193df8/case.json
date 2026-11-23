@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "id": "posse-t1222-eb193df8",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head eb193df8.",
+  "intent": "fix(pr): settle a Task whose recorded PR/MR merged outside Posse instead of deadlocking merge, teardown and discard\n\nDone when: A Task (repo or workspace Member) whose recorded PR/MR merged on the forge with a head that `posse publish` recorded, or that is an ancestor of the target, settles as merged on the next PR poll. It raises `pr_merged`, and Teardown follows. An E2E test reproduces the clouddbv1 t83 sequence: publish, merge on a fake forge outside Posse, base advances past the head. It asserts the Task settles.; When the merged head cannot be trusted, Posse raises one `pr_merged_ungated` Notice with a recovery step that works. The test runs that step and asserts the Task closes.; `posse merge`, `posse teardown` and `posse teardown --discard` agree on one merge state for a Task. None of them can refuse in a way that leaves no command able to close it. teardown_refused names the Member and commits it considers unmerged.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-61540fd2",
+      "file": "internal/app/merge.go",
+      "start": 539,
+      "end": 551,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "Teardown refreshes PR state only when the Task is in StateDone. If an externally merged PR is still in StateMerging, teardown skips the poll and then reaches the normal state validation, which refuses StateMerging. This leaves a forge-merged Task without teardown as a settling command, contrary to the merge-state contract."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "eb193df8059eb2c966ef712724e67a8400ac3b4e",
+    "target": "46a01b6f66ae069eabdb55512fb5068c6fe49346",
+    "files": [
+      "internal/app/merge.go",
+      "internal/e2e/pr_merged_base_advance_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

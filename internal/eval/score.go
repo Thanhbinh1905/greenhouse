@@ -1,6 +1,9 @@
 package eval
 
-import "fmt"
+import (
+	"fmt"
+	"slices"
+)
 
 // maxSpan is the longest finding range, in lines, that can match an expected
 // finding. Wider ranges do not locate a defect.
@@ -88,6 +91,25 @@ func locates(e Expected, f Finding) bool {
 	return f.File == e.File && f.Origin == e.Origin && f.Rule == e.Rule && f.Start <= e.End && f.End >= e.Start && f.End-f.Start < maxSpan
 }
 
+func locatesCase(k Case, e Expected, f Finding) bool {
+	if k.Source.Kind == "external" {
+		return f.File == e.File && f.Origin == e.Origin && f.Rule == e.Rule
+	}
+	return locates(e, f)
+}
+
+func blocksCase(k Case, f Finding) bool {
+	if blocking(f.Priority) {
+		return true
+	}
+	for _, e := range k.Avoid {
+		if locatesCase(k, e, f) && slices.Contains(e.Priorities, f.Priority) {
+			return true
+		}
+	}
+	return false
+}
+
 // ScoreCase compares the findings of one completed review with the case's
 // ground truth. Location, file, origin and rule only make a finding eligible;
 // credit comes from the case's adjudication records. An eligible finding
@@ -112,8 +134,14 @@ func ScoreCase(k Case, status string, findings []Finding, records []Record) (Cas
 	for n, f := range findings {
 		eligible := map[string]int{}
 		for i, e := range k.Expected {
-			if locates(e, f) {
+			if locatesCase(k, e, f) {
 				eligible[e.ID] = i
+			}
+		}
+		avoided := map[string]Expected{}
+		for _, e := range k.Avoid {
+			if locatesCase(k, e, f) {
+				avoided[e.ID] = e
 			}
 		}
 
@@ -137,7 +165,7 @@ func ScoreCase(k Case, status string, findings []Finding, records []Record) (Cas
 		r, judged := byFinding[n]
 		credit := -1
 		switch {
-		case len(eligible) == 0:
+		case len(eligible) == 0 && len(avoided) == 0:
 			if judged {
 				return s, fmt.Errorf("%s finding %d is not at any expected location but has a record", k.ID, n)
 			}
@@ -147,13 +175,25 @@ func ScoreCase(k Case, status string, findings []Finding, records []Record) (Cas
 			s.Adjudications = append(s.Adjudications, Adjudication{Finding: n, Verdict: "unadjudicated"})
 		default:
 			i, ok := eligible[r.Expected]
+			avoid, avoidedClaim := avoided[r.Expected]
 			switch {
 			case r.FindingDigest != findingDigest(f):
 				return s, fmt.Errorf("%s finding %d changed since it was adjudicated", k.ID, n)
 			case !cites(r.Rationale, f):
 				return s, fmt.Errorf("%s finding %d: rationale does not quote the finding", k.ID, n)
-			case !ok:
+			case !ok && !avoidedClaim:
 				return s, fmt.Errorf("%s finding %d is not at the location of expected %q", k.ID, n, r.Expected)
+			case avoidedClaim:
+				s.Adjudications = append(s.Adjudications, Adjudication{n, avoid.ID, "false-positive", r.Rationale})
+				if r.Verdict == "different-defect" {
+					s.WrongDefect++
+				}
+				s.FalsePositives++
+				s.Unmatched = append(s.Unmatched, f)
+				if blocksCase(k, f) {
+					s.Blocking++
+				}
+				continue
 			case r.Verdict == "detects" && detected[i]:
 				return s, fmt.Errorf("%s finding %d detects %q, already detected; record a duplicate", k.ID, n, r.Expected)
 			case r.Verdict == "duplicate" && !detected[i]:
@@ -181,7 +221,7 @@ func ScoreCase(k Case, status string, findings []Finding, records []Record) (Cas
 			}
 			s.FalsePositives++
 			s.Unmatched = append(s.Unmatched, f)
-			if blocking(f.Priority) {
+			if blocksCase(k, f) {
 				s.Blocking++
 			}
 			for _, n := range k.Noise {

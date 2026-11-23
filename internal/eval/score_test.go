@@ -76,6 +76,42 @@ func TestScoreCaseRejectsUnrelatedOverlappingFindingsSharingIdentifiers(t *testi
 	}
 }
 
+func TestScoreCaseAdjudicatesExternalFindingsByDefect(t *testing.T) {
+	k := Case{
+		ID: "external", Category: "clean", Source: Source{Kind: "external"},
+		Avoid:    []Expected{{ID: "false-claim", File: "preflight.sh", Start: 44, End: 45, Origin: "correctness", Severity: "low", Priorities: []string{"P0", "P1", "P2"}, Defect: "Nested migration paths are not read because the embed pattern includes only migrations/*.sql."}},
+		Expected: []Expected{{ID: "real-bug", File: "preflight.sh", Start: 20, End: 21, Origin: "correctness", Severity: "high", Priorities: []string{"P1"}, Defect: "The validation skips duplicate timestamps."}},
+	}
+	findings := []Finding{{Priority: "P1", Origin: "correctness", File: "preflight.sh", Start: 68, End: 71, Explanation: "Nested migration directories are ignored by the validation."}}
+	r := record(k, findings, 0, "false-claim", "detects")
+	s, err := ScoreCase(k, "outstanding-findings", findings, []Record{r})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Detected != 0 || s.FalsePositives != 1 || s.Blocking != 1 || s.Category != "clean" {
+		t.Fatalf("a semantically matched avoided claim must remain a blocking false positive: %+v", s)
+	}
+	findings[0].Priority = "P2"
+	r = record(k, findings, 0, "false-claim", "detects")
+	s, err = ScoreCase(k, "outstanding-findings", findings, []Record{r})
+	if err != nil || s.Blocking != 1 {
+		t.Fatalf("avoid priorities must set the case's blocking threshold: %+v, %v", s, err)
+	}
+
+	findings[0].Explanation = "The duplicate timestamp check is missing."
+	findings[0].Priority = "P1"
+	r = record(k, findings, 0, "real-bug", "detects")
+	s, err = ScoreCase(k, "outstanding-findings", findings, []Record{r})
+	if err != nil || s.Detected != 1 || s.FalsePositives != 0 {
+		t.Fatalf("a defect found outside its pinned lines must count by adjudication: %+v, %v", s, err)
+	}
+
+	s, err = ScoreCase(k, "outstanding-findings", []Finding{{Priority: "P1", Origin: "correctness", File: "preflight.sh", Start: 68, End: 71}}, nil)
+	if err != nil || s.Unadjudicated != 1 || s.FalsePositives != 1 || s.Blocking != 1 {
+		t.Fatalf("unadjudicated avoid finding on a clean case must still block: %+v, %v", s, err)
+	}
+}
+
 func TestScoreCaseRefusesInconsistentRecords(t *testing.T) {
 	k := bugCase()
 	findings := []Finding{

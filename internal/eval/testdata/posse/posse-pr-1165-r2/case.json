@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "id": "posse-pr-1165-r2",
+  "category": "clean",
+  "description": "Pinned external posse regression case pr-1165, repetition 2.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "276ab52c577224fa08dc87c1c521b8a268bd12b6",
+    "target": "5a6f32bf8bdf16624af0d59da5f9f09194db3f90",
+    "files": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/e2e-main.yml",
+      "docs/ci-test-results.md",
+      "scripts/run-e2e-shard.sh",
+      "scripts/run-race-shard.sh",
+      "scripts/stress-changed-tests.sh",
+      "scripts/test-results.py",
+      "scripts/tests/test_results.py"
+    ],
+    "derivation": "Exact posse head and target from t167. No finding was expected in t167."
+  }
+}

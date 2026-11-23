@@ -122,6 +122,27 @@ Each case directory holds:
 
 On this corpus, `openai/gpt-5.6-luna` through Pi stays the recommended default reviewer. One run of `claude-sonnet-5-5` through the Claude backend matched or beat it on recall and precision at about 20 times the cost, so it is the recommended reviewer `fallback`. `xai` answered `402` (no credits), and `google`, `openrouter` and `meta` had no credentials.
 
+### Real posse PR regression set
+
+[`internal/eval/testdata/posse`](../internal/eval/testdata/posse) pins the posse repository, exact head, exact target, and expected defect statement for each case. `cmd/eval run` clones each repository into its scratch area, fetches the pinned commits, reviews the candidate through Greenhouse AXI and Pi, then adjudicates findings against the defect descriptions.
+
+Run the corpus twice per build from a git worktree at the commit to test; `cmd/eval` builds `./cmd/greenhouse` from the current repository:
+
+```sh
+git worktree add --detach "$TMPDIR/build" <commit>
+go build -o "$TMPDIR/eval" ./cmd/eval
+corpus="$PWD/internal/eval/testdata/posse"
+for pass in 1 2; do
+  (cd "$TMPDIR/build" && "$TMPDIR/eval" run \
+    -corpus "$corpus" \
+    -model openai/gpt-5.6-luna -judge-model openai/gpt-5.6-luna \
+    -parallel 3 -label "posse regression, pass $pass" \
+    -out "$OLDPWD/docs/evidence/review-eval/NN-posse-regression/<commit>/run-$pass")
+done
+```
+
+These runs make paid reviewer and judge calls. The [recorded baseline](evidence/review-eval/13-posse-regression/README.md) includes each run's report and scores. External cases are scored by the root cause described in each finding, not solely by overlap with the expected line range. The `avoid` records capture the false P1 on PR 1146 and the false P0-P2 claim on t1241.
+
 ## Fixer evaluation
 
 `go run ./cmd/eval fix-run` measures selected-finding repair with a real model through the product's one-pass repair path. Like the review evaluation, it is development-only, and `go test ./...` never calls a model.
