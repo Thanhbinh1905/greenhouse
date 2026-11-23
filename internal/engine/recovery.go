@@ -128,14 +128,21 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 					stopErr = fmt.Errorf("review executor limit %s exceeded: %w", executorTimeout(r.Configs[len(r.Configs)-1].Settings), context.DeadlineExceeded)
 				}
 			}
+			budget, budgetErr := time.ParseDuration(x.ReviewBudget)
+			executorLimit := executorTimeout(r.Configs[len(r.Configs)-1].Settings)
+			budgetExpired := budgetErr == nil && budget < executorLimit && errors.Is(stopErr, context.DeadlineExceeded)
+			exitCode := o.Exit
+			if budgetExpired {
+				exitCode, runErr, stopErr = 0, nil, nil
+			}
 			previous := done
-			done = reviewFrom(x, o.Exit, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
+			done = reviewFrom(x, exitCode, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
 			if i == 1 {
 				done.Finalization = true
 				done.Answer = finalReviewAnswer(previous.Answer, done.Answer)
 			}
-			if budget, err := time.ParseDuration(x.ReviewBudget); err == nil && budget < executorTimeout(r.Configs[len(r.Configs)-1].Settings) && errors.Is(stopErr, context.DeadlineExceeded) {
-				done.Status, done.Answer.Reason, done.Answer.Diagnostic = "inconclusive", "review_budget", "review wall-time budget exhausted"
+			if budgetExpired {
+				done = settleReviewBudget(done, nil, budget, executorLimit)
 			}
 		}
 		markUnconfirmed(&done)

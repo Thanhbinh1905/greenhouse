@@ -327,6 +327,46 @@ sys.exit(0)
 	}
 }
 
+func TestReviewBudgetRestartKeepsCompleteVerdict(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	installFake(t, home, `v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'restart','priority':'P2','origin':'correctness','file':b['Paths'][0],'start':1,'end':1,'explanation':'A review finding','action':'Inspect the change','rule':'','head':b['Head']}]}
+print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}), flush=True)
+print(json.dumps({'type':'agent_settled','aborted':False}), flush=True)
+time.sleep(30)
+`)
+	var cfg map[string]any
+	data, err := os.ReadFile(filepath.Join(home, "backends.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		t.Fatal(err)
+	}
+	cfg["review_budget"] = "2s"
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), cfg)
+	v = mutate(t, bin, repo, home, v, "review", "restart-budget-review", nil)
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	statePath := filepath.Join(home, "state.json")
+	stateBeforeReviewCompletion, err := os.ReadFile(statePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	waitReview(t, bin, repo, home)
+	stopDaemonAndWait(t, home)
+	if err := os.WriteFile(statePath, stateBeforeReviewCompletion, 0600); err != nil {
+		t.Fatal(err)
+	}
+	recovered := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+	run := runOf(t, recovered)
+	review := run["review"].(map[string]any)
+	result, _ := review["result"].(map[string]any)
+	if run["status"] != "outstanding-findings" || review["status"] != "outstanding-findings" || result == nil || result["verdict"] != "findings" {
+		t.Fatalf("restarted daemon discarded the budget-expiry verdict: run=%v review=%v", run["status"], review)
+	}
+}
+
 func TestReviewBudgetConfiguration(t *testing.T) {
 	_, _, home := fixture(t)
 	t.Setenv("GREENHOUSE_HOME", home)
