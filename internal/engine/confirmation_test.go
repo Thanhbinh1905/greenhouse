@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func confirmationFake(initial, confirm string) string {
@@ -179,5 +181,44 @@ func TestMarkUnconfirmedKeepsBlockingFindingsBlocking(t *testing.T) {
 	findings := done.Result.Findings
 	if findings[0].Confirmation == nil || findings[0].Confirmation.Status != "unconfirmed" || findings[0].Priority != "P1" || findings[1].Confirmation != nil || findings[2].Confirmation.Status != "confirmed" {
 		t.Fatalf("unexpected findings: %+v", findings)
+	}
+}
+
+func TestRestartDuringConfirmationAdoptsTheVerdictAsUnconfirmed(t *testing.T) {
+	bin, repo, home, v := prepareFixture(t)
+	finding := "verdict([finding('P1','Line one is wrong')])"
+	mode := strings.Replace(confirmationFake(finding, finding), "if 'Independently verify' in b['Intent']:\n", "if 'Independently verify' in b['Intent']:\n open(root+'/confirming','w').close()\n while not os.path.exists(root+'/release'): time.sleep(0.01)\n", 1)
+	installFake(t, home, mode)
+	mutate(t, bin, repo, home, v, "review", "review", nil)
+	root := filepath.Dir(home)
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(root, "confirming")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("confirmation pass did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	pidBytes, err := os.ReadFile(filepath.Join(home, "pid"))
+	var pid int
+	if err != nil || json.Unmarshal(pidBytes, &pid) != nil || pid <= 0 {
+		t.Fatal("invalid fixture daemon identity")
+	}
+	if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "release"), nil, 0600); err != nil {
+		t.Fatal(err)
+	}
+	run := runOf(t, waitLeave(t, bin, repo, home, "recovery-required"))
+	findings, _ := run["findings"].([]any)
+	if run["status"] != "outstanding-findings" || len(findings) != 1 {
+		t.Fatalf("restart did not adopt the verdict: %v", run)
+	}
+	f := findings[0].(map[string]any)
+	if f["priority"] != "P1" || f["confirmation"].(map[string]any)["status"] != "unconfirmed" {
+		t.Fatalf("finding = %v", f)
 	}
 }
