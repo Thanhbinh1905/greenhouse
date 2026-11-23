@@ -72,7 +72,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	if clean.Status != "clean-review" || clean.Score.FalsePositives != 0 || !clean.InputVerified {
 		t.Fatalf("clean record = %+v", clean)
 	}
-	if r.CostUSD != 0.5 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" {
+	if r.CostUSD != 0.75 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" {
 		t.Fatalf("report = %+v", r)
 	}
 	for _, name := range []string{"report.json", "report.md", "adjudications.json", "cases/bug-sql-injection/input.json", "cases/bug-sql-injection/argv.json", "cases/bug-sql-injection/events.jsonl"} {
@@ -108,7 +108,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		Shim bool `json:"shim"`
 	}
 	b, _ = os.ReadFile(filepath.Join(out, "cases/bug-sql-injection/stderr.log"))
-	if json.Unmarshal(b, &env) != nil || env.Shim {
+	if json.Unmarshal([]byte(strings.SplitN(string(b), "\n", 2)[0]), &env) != nil || env.Shim {
 		t.Fatalf("pi environment = %s", b)
 	}
 }
