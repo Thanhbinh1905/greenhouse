@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/engine"
 )
 
 func TestTargetDisplayNamesResolvedBranch(t *testing.T) {
@@ -120,5 +122,23 @@ func TestSetupStepsNameTheResolvedTarget(t *testing.T) {
 	steps := setupSteps(v, []string{"claude"}, "main")
 	if want := "main @ " + v.Run.Target[:7]; steps[2].Text != want {
 		t.Fatalf("target step = %q, want %q", steps[2].Text, want)
+	}
+}
+
+func TestReviewStepFailsOnlyWhenAFindingBlocks(t *testing.T) {
+	for _, tc := range []struct {
+		priority string
+		state    string
+		text     string
+	}{
+		{"P2", stepDone, "1 finding, none blocking"},
+		{"P1", stepFailed, "1 outstanding finding"},
+	} {
+		v := tuiState("outstanding-findings")
+		v.Run.Findings = []engine.Finding{{ID: "f1", Priority: tc.priority, File: "a.go", Start: 1, Explanation: "x", Action: "fix"}}
+		got := reviewStep(v)
+		if got.State != tc.state || !strings.HasPrefix(got.Text, tc.text) {
+			t.Fatalf("%s: state=%v text=%q", tc.priority, got.State, got.Text)
+		}
 	}
 }

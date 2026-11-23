@@ -306,12 +306,23 @@ func reviewStep(v engine.Response) tuiStep {
 		return tuiStep{name, stepFailed, "stopped at " + r.Pipeline.Failed + " · " + budget}
 	case r.Status == "clean-review":
 		return tuiStep{name, stepDone, "clean · " + budget}
+	case r.Status == "outstanding-findings" && !blocks(actionable):
+		return tuiStep{name, stepDone, plural(len(actionable)+len(informational), "finding") + ", none blocking · " + budget}
 	case r.Status == "outstanding-findings":
 		return tuiStep{name, stepFailed, findingCount(len(actionable), len(informational)) + " · " + budget}
 	case r.Status == "unconfigured":
 		return tuiStep{name, stepTodo, "not started · " + budget}
 	}
 	return tuiStep{name, stepWaiting, statusWords(r.Status) + " · " + budget}
+}
+
+func blocks(findings []engine.Finding) bool {
+	for _, f := range findings {
+		if f.Priority == "P0" || f.Priority == "P1" {
+			return true
+		}
+	}
+	return false
 }
 
 func findingCount(actionable, informational int) string {
@@ -396,7 +407,7 @@ func stateNotes(v engine.Response, agents []string, fresh bool) []string {
 	}
 	actionable, _ := engine.Outstanding(r)
 	if r.Status == "outstanding-findings" && len(actionable) > 0 && r.Repair == nil && r.RepairUsed == 0 && !slices.Contains(v.Actions, "repair") && r.Host == nil {
-		notes = append(notes, "Selected repair is unavailable: it needs a trusted fixer.json with checks and findings on changed files.")
+		notes = append(notes, "Repair: add fixer.json to enable (docs/repair.md).")
 	}
 	if x := r.Repair; x != nil && x.Status == "fixed-not-independently-rereviewed" {
 		notes = append(notes, "The fix passed its checks but was not independently reviewed again.")
