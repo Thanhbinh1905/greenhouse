@@ -133,4 +133,4 @@ Budget settlement no longer keeps a clean or findings result while changing its 
 
 ## Risk and rollback
 
-Reserving half the review budget reduces exploration time for small or fast reviews but gives large reviews time to finalize. Verdict normalization only changes outcomes at budget expiry; incomplete results remain non-clean. Roll back with `git revert <commit>` if the larger finalization reserve causes unacceptable loss of review coverage or budget settlement produces a mismatched status.
+Reserving half the review budget reduces exploration time for small or fast reviews but gives large reviews time to finalize. Verdict normalization only changes outcomes at budget expiry; incomplete results remain non-clean. Roll back with `git revert bd4eb9fcf6b1e7e2a12df2f2ce6dce8913e345a6` if the larger finalization reserve causes unacceptable loss of review coverage or budget settlement produces a mismatched status.
