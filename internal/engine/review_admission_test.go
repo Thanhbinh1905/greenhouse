@@ -264,6 +264,30 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	}
 }
 
+func TestBoundedReviewDiffDoesNotExceedLimitWhenMarkingPaths(t *testing.T) {
+	_, repo, _ := fixture(t)
+	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	var names []string
+	for i := 0; i < 500; i++ {
+		name := fmt.Sprintf("file-%03d.txt", i)
+		names = append(names, name)
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(strings.Repeat("x", 8192)+"\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidate := commitReviewFixture(t, repo, "add many bounded diff files")
+	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, names, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diff) > 1024*1024 {
+		t.Fatalf("bounded diff is %d bytes, over the 1 MiB limit", len(diff))
+	}
+	if len(uncovered) == 0 {
+		t.Fatal("paths omitted at the diff limit must be listed as uncovered")
+	}
+}
+
 func TestReviewInputLargeFile(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)

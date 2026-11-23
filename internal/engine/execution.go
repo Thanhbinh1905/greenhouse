@@ -464,30 +464,40 @@ type reviewFile struct {
 }
 
 func boundedReviewDiff(worktree, base, candidate string, names []string, generated []GeneratedPath, uncovered []UncoveredPath) (string, []UncoveredPath, error) {
+	const limit = 1024 * 1024
 	var output strings.Builder
 	for _, name := range names {
-		if slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == name }) {
-			fmt.Fprintf(&output, "diff --git a/%s b/%s\n[uncovered: hunks omitted; see Uncovered]\n", name, name)
+		isGenerated := slices.ContainsFunc(generated, func(g GeneratedPath) bool { return g.Path == name })
+		alreadyUncovered := slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == name })
+		note := "[uncovered: hunks omitted; see Uncovered]"
+		if isGenerated {
+			note = "[generated: hunks omitted; see Generated]"
+		}
+		marker := fmt.Sprintf("diff --git a/%s b/%s\n%s\n", name, name, note)
+		remaining := limit - output.Len()
+		if remaining < len(marker) {
+			if !alreadyUncovered && !isGenerated {
+				uncovered = append(uncovered, UncoveredPath{name, "diff exceeds 1 MiB review limit"})
+			}
 			continue
 		}
-		remaining := 1024*1024 - output.Len()
+		if alreadyUncovered {
+			output.WriteString(marker)
+			continue
+		}
 		args := append([]string{"--literal-pathspecs"}, reviewDiffArgs(base, candidate)...)
-		section, err := repository.ReadBounded(worktree, remaining, append(args, name)...)
-		isGenerated := slices.ContainsFunc(generated, func(g GeneratedPath) bool { return g.Path == name })
+		section, err := repository.ReadBounded(worktree, remaining-len(marker), append(args, name)...)
 		if errors.Is(err, repository.ErrReadLimit) && !isGenerated {
 			uncovered = append(uncovered, UncoveredPath{name, "diff exceeds 1 MiB review limit"})
-			fmt.Fprintf(&output, "diff --git a/%s b/%s\n[uncovered: hunks omitted; see Uncovered]\n", name, name)
+			output.WriteString(marker)
 			continue
 		}
 		if err != nil && !errors.Is(err, repository.ErrReadLimit) {
 			return "", nil, fmt.Errorf("cannot capture diff for %s: %w", name, err)
 		}
 		if errors.Is(err, repository.ErrReadLimit) && isGenerated {
-			fmt.Fprintf(&output, "diff --git a/%s b/%s\n[generated: hunks omitted; see Generated]\n", name, name)
+			output.WriteString(marker)
 			continue
-		}
-		if len(section) > remaining {
-			return "", nil, fmt.Errorf("diff section for %s exceeded remaining bound", name)
 		}
 		output.Write(section)
 	}
