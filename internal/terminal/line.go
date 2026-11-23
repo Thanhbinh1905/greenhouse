@@ -129,7 +129,7 @@ func statePage(v engine.Response, live string, details bool) string {
 		fmt.Fprintln(&page, "Greenhouse | independent review")
 	}
 	fmt.Fprintf(&page, "Events: %s\n", live)
-	fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s / %s\nFixer: %s / %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, s.Settings.ReviewerBackend, s.Settings.ReviewerModel, s.Settings.FixerBackend, s.Settings.FixerModel, r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), engine.SourceSummary(engine.FieldSources(s)))
+	fmt.Fprintf(&page, "Run %s\nStage: %s | %s\nCandidate: %s\nMode: %s | %s | limit %d\nReviewer: %s\nFixer: %s\nBudget: review %d + repair %d = %d of %d\nRules: %s\nSources: %s\n", r.ID, r.Stage, r.Status, r.Candidate, s.Settings.Mode, s.Settings.Preset, s.Settings.Limit, agentLabel(s.Settings.ReviewerBackend, s.Settings.ReviewerModel), agentLabel(s.Settings.FixerBackend, s.Settings.FixerModel), r.ReviewUsed, r.RepairUsed, r.ReviewUsed+r.RepairUsed, s.Settings.Limit, strings.Join(s.Settings.Rules, ", "), engine.SourceSummary(engine.FieldSources(s)))
 	if r.Target != "" {
 		target := targetDisplay(r.Submitted.Worktree, r.Target, repository.SuggestTarget(r.Submitted.Worktree))
 		fmt.Fprintf(&page, "Target: %s\nIntent: %s\n", target, r.Intent)
@@ -226,7 +226,20 @@ func statePage(v engine.Response, live string, details bool) string {
 	}
 	if r.Review != nil {
 		x := r.Review
-		fmt.Fprintf(&page, "Review: %s | %s | %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", x.Status, x.Backend, x.Config.Model, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
+		model := x.Config.Model
+		if x.Result != nil && x.Result.ReportedModel != "" {
+			model = x.Result.ReportedModel
+			if x.Result.ReportedProvider != "" {
+				model = x.Result.ReportedProvider + "/" + model
+			}
+		} else if x.ReportedModel != "" {
+			model = x.ReportedModel
+		}
+		label := x.Status + " | " + x.Backend
+		if model != "" {
+			label += " | " + model
+		}
+		fmt.Fprintf(&page, "Review: %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", label, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
 		if x.Snapshot != nil {
 			fmt.Fprintln(&page, snapshotLine(x.Snapshot))
 		}
