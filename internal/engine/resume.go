@@ -486,12 +486,20 @@ func rerunStage(s *Store, r *Run, actor string) error {
 	return nil
 }
 
-func restartRun(s *Store, r *Run, source repository.Identity, actor string) *Run {
+func restartRun(s *Store, r *Run, source repository.Identity, actor string, edit Request) *Run {
 	settings := r.Configs[len(r.Configs)-1].Settings
 	next := &Run{StartedAt: time.Now().UTC().Format(time.RFC3339), Findings: append([]Finding(nil), r.Findings...), Predecessor: r.ID, ID: opaque(), Input: opaque(), Token: opaque(), Submitted: source, Candidate: source.Head, Status: "unconfigured", Configs: []Snapshot{nextSnapshot(r.Configs[len(r.Configs)-1], settings, "rerun from start of "+r.ID)}, Events: []Event{{Kind: "rerun-from-start", Actor: actor, Reason: "linked successor of " + r.ID}}, Host: r.Host, HostGrants: r.HostGrants}
 	setRunStage(next, "intent")
-	if r.Intent != "" && r.Target != "" {
-		if err := prepareRun(s, next, r.Intent, r.Target); err != nil {
+	intent, target, intentSource := r.Intent, r.Target, r.IntentSource
+	if edit.Intent != "" {
+		intent, intentSource = edit.Intent, edit.IntentSource
+	}
+	if edit.Target != "" {
+		target = edit.Target
+	}
+	if intent != "" && target != "" {
+		next.IntentSource = intentSource
+		if err := prepareRun(s, next, intent, target); err != nil {
 			next.Events = append(next.Events, Event{Kind: "prepare-needed", Actor: "daemon", Reason: err.Error()})
 		}
 	}

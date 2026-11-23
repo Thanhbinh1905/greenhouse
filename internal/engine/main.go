@@ -850,7 +850,10 @@ func handleRequest(s *Store, q Request) Response {
 		if repairHeld(r.Repair) {
 			return fail("repair custody remains unpublished or ambiguous; explicit handback required", r)
 		}
-		r = restartRun(s, r, id, actor)
+		if q.Intent != "" && !ValidText(q.Intent) {
+			return fail("invalid intent", r)
+		}
+		r = restartRun(s, r, id, actor, q)
 		s.Slots[slot] = r.ID
 	} else if q.Op == "review" && r.Host != nil {
 		if err := admitHostReview(r, q.Grant, q.Responses); err != nil {

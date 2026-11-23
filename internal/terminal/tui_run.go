@@ -67,7 +67,36 @@ func inferCommitIntent(worktree, target, head string) (string, string, error) {
 		return "", "", errors.New("no committed changes exist between the target and this branch")
 	}
 	source := "commit messages + branch " + branchName
-	return strings.Join(lines, "; "), source, nil
+	intent, hidden := newestWithin(lines, sessionintent.Limit)
+	if hidden > 0 {
+		source += " (shortened)"
+	}
+	return intent, source, nil
+}
+
+func newestWithin(lines []string, limit int) (string, int) {
+	var out strings.Builder
+	for i, line := range lines {
+		next := line
+		if i > 0 {
+			next = "; " + line
+		}
+		if out.Len()+len(next)+len(omitted(len(lines)-i)) > limit {
+			if i == 0 {
+				return strings.ToValidUTF8(line[:limit-len(omitted(len(lines)-1))], "") + omitted(len(lines)-1), len(lines) - 1
+			}
+			return out.String() + omitted(len(lines)-i), len(lines) - i
+		}
+		out.WriteString(next)
+	}
+	return out.String(), 0
+}
+
+func omitted(n int) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf(" (+%d earlier commits not shown)", n)
 }
 
 func pullRequestBody(worktree, branch string) (string, string, bool) {

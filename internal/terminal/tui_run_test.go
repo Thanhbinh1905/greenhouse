@@ -2,6 +2,7 @@ package terminal
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -9,8 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
+	sessionintent "github.com/Thanhbinh1905/greenhouse/internal/intent"
 )
 
 func TestTargetDisplayNamesResolvedBranch(t *testing.T) {
@@ -195,5 +198,23 @@ func TestGitHubRepositoryParsesRemoteForms(t *testing.T) {
 	}
 	if _, _, ok := githubRepository("https://token@github.com/acme/garden.git"); ok {
 		t.Error("credentialed https remote was accepted")
+	}
+}
+
+func TestInferCommitIntentStaysWithinTheIntentLimit(t *testing.T) {
+	repo := intentRepo(t)
+	for i := 0; i < 400; i++ {
+		gitCommand(t, repo, "commit", "-q", "--allow-empty", "-m", fmt.Sprintf("Change %03d %s", i, strings.Repeat("x", 40)))
+	}
+	intent, source, err := inferCommitIntent(repo, "main", "HEAD")
+	if err != nil || len(intent) > sessionintent.Limit || !engine.ValidText(intent) {
+		t.Fatalf("len=%d err=%v", len(intent), err)
+	}
+	if !strings.HasPrefix(intent, "Change 399 ") || !strings.Contains(intent, "earlier commits not shown)") || strings.Contains(intent, "Improve file handling") || source != "commit messages + branch feature (shortened)" {
+		t.Fatalf("intent=%q... source=%q", intent[:40], source)
+	}
+	long, hidden := newestWithin([]string{strings.Repeat("é", 9000), "older"}, 100)
+	if len(long) > 100 || !utf8.ValidString(long) || hidden != 1 || !strings.HasSuffix(long, "(+1 earlier commits not shown)") {
+		t.Fatalf("single long subject not bounded: len=%d hidden=%d", len(long), hidden)
 	}
 }

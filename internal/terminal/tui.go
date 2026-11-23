@@ -357,6 +357,8 @@ func (m *tuiModel) answered(msg responseMsg) tea.Cmd {
 		}
 	case "repair":
 		m.selected = map[string]bool{}
+	case "rerun-from-start":
+		m.plan.target, m.plan.intent = "", ""
 	}
 	if m.screen != screenSettings {
 		m.home(m.message)
@@ -454,7 +456,18 @@ func (m *tuiModel) submit(label string, q engine.Request) tea.Cmd {
 }
 
 func (m *tuiModel) simple(a tuiAction) tea.Cmd {
-	return m.submit(a.Label, engine.TerminalMutation(m.v, a.Op))
+	return m.submit(a.Label, m.mutation(a.Op))
+}
+
+func (m *tuiModel) mutation(op string) engine.Request {
+	q := engine.TerminalMutation(m.v, op)
+	if op == "rerun-from-start" {
+		q.Intent, q.IntentSource, q.Target = m.plan.intent, m.intentSource, m.plan.target
+		if m.plan.intent == "" {
+			q.IntentSource = ""
+		}
+	}
+	return q
 }
 
 func (m *tuiModel) key(k tea.KeyMsg) tea.Cmd {
@@ -615,7 +628,7 @@ func (m *tuiModel) start(a tuiAction) tea.Cmd {
 	case "help":
 		m.openPage("Help", "help", helpText(m))
 	case "cancel", "new", "rerun-from-start", "migrate", "trust":
-		q := engine.TerminalMutation(m.v, a.Op)
+		q := m.mutation(a.Op)
 		switch a.Op {
 		case "trust":
 			q.Digest, q.Reason = m.v.Repository.Digest, "terminal trust"

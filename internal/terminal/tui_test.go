@@ -364,6 +364,17 @@ func TestSavedIntentCanBeEditedForANewRun(t *testing.T) {
 	}
 }
 
+func TestRerunFromStartCarriesTheEditedIntent(t *testing.T) {
+	v := ready(tuiState("clean-review", "rerun-from-start"))
+	v.Run.Intent = "old intent"
+	m := newTestTUI(v, &recordingClient{}, "pi")
+	m.plan.intent, m.intentSource = "new intent", "edited by you"
+	q := m.mutation("rerun-from-start")
+	if q.Intent != "new intent" || q.IntentSource != "edited by you" {
+		t.Fatalf("rerun-from-start dropped the edited intent: %+v", q)
+	}
+}
+
 func TestRunCancelAndDuplicateEnterSendNothingExtra(t *testing.T) {
 	client := fakeController(firstRun())
 	m := newTestTUI(firstRun(), client, "pi")

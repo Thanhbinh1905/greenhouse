@@ -856,6 +856,9 @@ func (m *tuiModel) homeSteps() []tuiStep {
 	if m.v.Run.Intent != "" && m.intentSource != "" && !strings.HasPrefix(m.v.Run.Intent, sessionintent.CollectedPrefix) {
 		steps[1].Text = m.v.Run.Intent
 	}
+	if m.plan.intent != "" {
+		steps[1].Text = intentSummary(m.plan.intent)
+	}
 	if !slices.Contains(m.v.Actions, "prepare") || len(m.agents) == 0 && m.v.Run.Reviewer == nil {
 		return steps
 	}
