@@ -33,9 +33,9 @@ After the review settles with at least one P0 or P1 finding, Greenhouse runs one
 | `confirmation.status` | Meaning | Effect |
 |---|---|---|
 | `confirmed` | The pass reports a P0 or P1 finding on overlapping lines. `evidence` carries its explanation. | The finding keeps its priority and blocks. |
-| `demoted` | The pass reports a P2 or P3 finding on overlapping lines. | The finding takes that priority and no longer blocks. |
+| `demoted` | The pass covers the finding's file and reports a P2 or P3 finding on overlapping lines. | The finding takes that priority and no longer blocks. |
 | `dropped` | The pass settles, covers the finding's file, and reports no finding on overlapping lines. | The finding leaves `findings` and is listed in `dismissed`. |
-| `unconfirmed` | The pass did not settle (inconclusive, paused or failed to start) or did not cover the finding's file. | The finding keeps its priority and blocks. |
+| `unconfirmed` | The pass did not settle (inconclusive, paused or failed to start) or did not cover the finding's file (listed in `Uncovered` or missing from coverage). | The finding keeps its priority and blocks. |
 
 Overlap means the same file and intersecting line ranges. A confirmation pass cannot raise a finding's priority. When every blocking finding is dropped, the verdict becomes `clean`, or `partial` when paths remain uncovered.
 

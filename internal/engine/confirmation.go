@@ -126,15 +126,17 @@ func confirmFinding(ctx context.Context, x *Execution, dir, tree string, f Findi
 			match = &outcome.Result.Findings[i]
 		}
 	}
-	switch {
-	case match == nil && !slices.Contains(outcome.Result.Coverage, f.File):
+	if match != nil && (match.Priority == "P0" || match.Priority == "P1") {
+		c.Status, c.Evidence = "confirmed", match.Explanation
+		return c, f.Priority, outcome
+	}
+	covered := slices.Contains(outcome.Result.Coverage, f.File) && !slices.ContainsFunc(outcome.Result.Uncovered, func(u UncoveredPath) bool { return u.Path == f.File })
+	if !covered {
 		c.Status, c.Evidence = "unconfirmed", fmt.Sprintf("confirmation pass did not cover %s", f.File)
 		return c, f.Priority, outcome
-	case match == nil:
+	}
+	if match == nil {
 		c.Status, c.Evidence = "dropped", fmt.Sprintf("confirmation pass found no defect at %s:%d-%d", f.File, f.Start, f.End)
-		return c, f.Priority, outcome
-	case match.Priority == "P0" || match.Priority == "P1":
-		c.Status, c.Evidence = "confirmed", match.Explanation
 		return c, f.Priority, outcome
 	}
 	c.Status, c.Evidence = "demoted", match.Explanation
