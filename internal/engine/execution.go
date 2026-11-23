@@ -276,12 +276,9 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		if e != nil {
 			return nil, e
 		}
-		files = slices.DeleteFunc(files, func(file reviewFile) bool {
-			return slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == file.Path })
-		})
 	}
 	for _, g := range generated {
-		if strings.Contains(reviewedDiff, "diff --git a/"+g.Path+" b/"+g.Path+"\n[generated: hunks omitted; see Generated]") {
+		if strings.Contains(reviewedDiff, "diff --git a/"+g.Path+" b/"+g.Path+"\n[generated: hunks omitted; see Generated]") || strings.Contains(reviewedDiff, "diff --git a/"+g.Path+" b/"+g.Path+"\n[uncovered: hunks omitted; see Uncovered]") {
 			continue
 		}
 		if reviewedDiff, e = omitDiffHunks(r.Submitted.Worktree, base, r.Candidate, reviewedDiff, g.Path, "[generated: hunks omitted; see Generated]"); e != nil {
@@ -304,9 +301,6 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		if !slices.Contains(acceptedHeads, acceptance.Candidate) {
 			acceptedHeads = append(acceptedHeads, acceptance.Candidate)
 		}
-	}
-	if len(generated) > 0 {
-		contract += generatedContract
 	}
 	if len(acceptedHeads) > 0 {
 		contract += acceptedHeadContract
@@ -379,11 +373,28 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	isUncovered := func(name string) bool {
 		return slices.ContainsFunc(uncovered, func(u UncoveredPath) bool { return u.Path == name })
 	}
+	var inputFiles []reviewFile
+	var inputSubmodules []reviewSubmodule
+	var inputGenerated []GeneratedPath
 	render := func() ([]byte, error) {
-		covered := slices.DeleteFunc(slices.Clone(names), isUncovered)
+		covered, filteredFiles, filteredSubmodules, filteredGenerated := excludeUncoveredReviewInput(names, files, submodules, generated, uncovered)
+		inputFiles, inputSubmodules, inputGenerated = filteredFiles, filteredSubmodules, filteredGenerated
 		instructions := contract
+		if len(inputGenerated) > 0 {
+			instructions += generatedContract
+		}
 		if len(uncovered) > 0 {
 			instructions += uncoveredContract
+		}
+		changedHunks := changedRanges(string(diff))
+		coveredPaths := make(map[string]bool, len(covered))
+		for _, path := range covered {
+			coveredPaths[path] = true
+		}
+		for path := range changedHunks {
+			if !coveredPaths[path] {
+				delete(changedHunks, path)
+			}
 		}
 		bundle := struct {
 			Intent, Target, Head, Diff string
@@ -401,8 +412,8 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 			AcceptedHeads              []string         `json:",omitempty"`
 			Criteria                   json.RawMessage
 			Contract                   string
-		}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, calls, changedRanges(string(diff)), covered, files, submodules, generated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, priorFindings, acceptedHeads, rules.Bytes(), instructions + resolution}
-		return renderReviewInput(bundle, reviewedDiff, files, submodules)
+		}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, calls, changedHunks, covered, inputFiles, inputSubmodules, inputGenerated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, priorFindings, acceptedHeads, rules.Bytes(), instructions + resolution}
+		return renderReviewInput(bundle, reviewedDiff, inputFiles, inputSubmodules)
 	}
 	input, e := render()
 	if e != nil {
@@ -447,7 +458,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 			}
 		}
 	}
-	if e := checkReviewInput(input, reviewedDiff, files, rules.Bytes(), checked, submodules); e != nil {
+	if e := checkReviewInput(input, reviewedDiff, inputFiles, rules.Bytes(), checked, inputSubmodules); e != nil {
 		return nil, e
 	}
 	current, err := repository.Resolve(r.Submitted.Worktree)
@@ -464,6 +475,39 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 
 type reviewFile struct {
 	Path, Lines string
+}
+
+func excludeUncoveredReviewInput(names []string, files []reviewFile, modules []reviewSubmodule, generated []GeneratedPath, uncovered []UncoveredPath) ([]string, []reviewFile, []reviewSubmodule, []GeneratedPath) {
+	uncoveredPaths := make(map[string]bool, len(uncovered))
+	for _, path := range uncovered {
+		uncoveredPaths[path.Path] = true
+	}
+	isUncovered := func(name string) bool { return uncoveredPaths[name] }
+	paths := slices.DeleteFunc(slices.Clone(names), isUncovered)
+	coveredPaths := make(map[string]bool, len(paths))
+	for _, name := range paths {
+		coveredPaths[name] = true
+	}
+	keptGenerated := slices.DeleteFunc(slices.Clone(generated), func(entry GeneratedPath) bool { return isUncovered(entry.Path) })
+	neededGenerators := map[string]bool{}
+	omittedGenerators := map[string]bool{}
+	for _, entry := range generated {
+		for _, generator := range entry.Generators {
+			if isUncovered(entry.Path) {
+				omittedGenerators[generator] = true
+			} else {
+				neededGenerators[generator] = true
+			}
+		}
+	}
+	files = slices.DeleteFunc(slices.Clone(files), func(file reviewFile) bool {
+		if isUncovered(file.Path) {
+			return true
+		}
+		return !coveredPaths[file.Path] && omittedGenerators[file.Path] && !neededGenerators[file.Path]
+	})
+	modules = slices.DeleteFunc(slices.Clone(modules), func(module reviewSubmodule) bool { return isUncovered(module.Path) })
+	return paths, files, modules, keptGenerated
 }
 
 func boundedReviewDiff(worktree, base, candidate string, names []string, generated []GeneratedPath, uncovered []UncoveredPath) (string, []UncoveredPath, error) {

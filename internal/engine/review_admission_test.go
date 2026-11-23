@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -324,6 +325,51 @@ func TestBoundedReviewDiffDoesNotExceedLimitWhenMarkingPaths(t *testing.T) {
 	if len(uncovered) == 0 {
 		t.Fatal("paths omitted at the diff limit must be listed as uncovered")
 	}
+	for _, path := range uncovered {
+		if path.Reason != "diff_bound" {
+			t.Fatalf("path %s has reason %q, want diff_bound", path.Path, path.Reason)
+		}
+	}
+}
+
+func TestExcludeUncoveredReviewInput(t *testing.T) {
+	names := []string{"covered.txt", "omitted.txt", "covered-generated.txt", "submodule"}
+	files := []reviewFile{{"covered.txt", "covered content"}, {"omitted.txt", "omitted content"}, {"covered-generated.txt", "generated output"}, {"generator.txt", "shared generator"}, {"exclusive-generator.txt", "exclusive generator"}}
+	modules := []reviewSubmodule{{Path: "submodule", Diff: "submodule content"}}
+	generated := []GeneratedPath{{Path: "omitted.txt", Generators: []string{"exclusive-generator.txt"}}, {Path: "covered-generated.txt", Generators: []string{"generator.txt"}}}
+	uncovered := []UncoveredPath{{Path: "omitted.txt", Reason: "diff_bound"}, {Path: "submodule", Reason: "diff_bound"}}
+	paths, filteredFiles, filteredModules, filteredGenerated := excludeUncoveredReviewInput(names, files, modules, generated, uncovered)
+	if !slices.Equal(paths, []string{"covered.txt", "covered-generated.txt"}) {
+		t.Fatalf("review paths: %v", paths)
+	}
+	for _, path := range []string{"covered.txt", "covered-generated.txt", "generator.txt"} {
+		if !slices.ContainsFunc(filteredFiles, func(file reviewFile) bool { return file.Path == path }) {
+			t.Fatalf("review file %s was removed: %+v", path, filteredFiles)
+		}
+	}
+	if slices.ContainsFunc(filteredFiles, func(file reviewFile) bool {
+		return file.Path == "omitted.txt" || file.Path == "exclusive-generator.txt"
+	}) {
+		t.Fatalf("uncovered content remained in reviewer Files: %+v", filteredFiles)
+	}
+	if len(filteredModules) != 0 || len(filteredGenerated) != 1 || filteredGenerated[0].Path != "covered-generated.txt" {
+		t.Fatalf("uncovered metadata remained: submodules=%+v generated=%+v", filteredModules, filteredGenerated)
+	}
+	input, err := renderReviewInput(struct {
+		Paths      []string
+		Files      []reviewFile
+		Submodules []reviewSubmodule
+		Generated  []GeneratedPath
+		Uncovered  []UncoveredPath
+	}{paths, filteredFiles, filteredModules, filteredGenerated, uncovered}, "", filteredFiles, filteredModules)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, content := range []string{"omitted content", "exclusive generator", "submodule content"} {
+		if strings.Contains(string(input), content) {
+			t.Fatalf("uncovered content %q reached reviewer input", content)
+		}
+	}
 }
 
 func TestReviewAdmissionOmitsUncoveredFilesFromReviewerInput(t *testing.T) {
@@ -362,9 +408,12 @@ func TestReviewAdmissionOmitsUncoveredFilesFromReviewerInput(t *testing.T) {
 	}
 	var captured struct {
 		Input struct {
-			Paths     []string
-			Files     []reviewFile
-			Uncovered []UncoveredPath
+			Paths        []string
+			Files        []reviewFile
+			Generated    []GeneratedPath
+			Submodules   []reviewSubmodule
+			ChangedHunks map[string][][2]int
+			Uncovered    []UncoveredPath
 		}
 	}
 	if err := json.Unmarshal(b, &captured); err != nil {
@@ -384,9 +433,29 @@ func TestReviewAdmissionOmitsUncoveredFilesFromReviewerInput(t *testing.T) {
 	if !hasDiffBound {
 		t.Fatalf("diff-bound paths were not listed: %+v", captured.Input.Uncovered)
 	}
+	for _, path := range captured.Input.Paths {
+		if uncovered[path] {
+			t.Fatalf("uncovered path %s was included in reviewer Paths", path)
+		}
+	}
 	for _, file := range captured.Input.Files {
 		if uncovered[file.Path] {
 			t.Fatalf("uncovered path %s was included in reviewer Files", file.Path)
+		}
+	}
+	for _, path := range captured.Input.Generated {
+		if uncovered[path.Path] {
+			t.Fatalf("uncovered path %s was included in reviewer Generated", path.Path)
+		}
+	}
+	for _, module := range captured.Input.Submodules {
+		if uncovered[module.Path] {
+			t.Fatalf("uncovered path %s was included in reviewer Submodules", module.Path)
+		}
+	}
+	for path := range captured.Input.ChangedHunks {
+		if uncovered[path] {
+			t.Fatalf("uncovered path %s was included in reviewer ChangedHunks", path)
 		}
 	}
 }
