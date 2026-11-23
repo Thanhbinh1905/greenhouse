@@ -1,0 +1,69 @@
+{
+  "schema": "greenhouse.eval.adjudications.v1",
+  "judge": {
+    "kind": "model",
+    "model": "openai/gpt-5.6-luna",
+    "backend": "pi --print --mode json --no-session --no-tools",
+    "pi_version": "1.5.2",
+    "prompt": "system: You are an evaluation judge. Decide whether one code review finding identifies one specific planted defect. Judge only the defect named, not the location. Return only the requested JSON.\ninstructions: Input is JSON with \"expected\", the known defect claims for this file (id, kind, file, start, end, defect), and \"finding\", one reviewer finding (file, start, end, priority, explanation, action).\nReturn only this JSON object: {\"expected\":\"\u003cid from expected\u003e\",\"verdict\":\"detects|different-defect\",\"rationale\":\"\u003cone sentence\u003e\"}.\nUse \"detects\" only when the finding describes the same root cause as the named claim. A claim with kind \"avoid\" is a known false-positive claim; matching it identifies a false positive. A finding that describes another root cause is \"different-defect\"; name the closest claim id.\nThe rationale is one sentence that quotes at least 12 consecutive characters of the finding's explanation or action verbatim inside double quotes.",
+    "note": "7 eligible findings, 0 without a valid judge answer; judge cost $0.0039 at Pi catalog prices"
+  },
+  "records": [
+    {
+      "case": "posse-pr-1168-r1",
+      "finding": 1,
+      "finding_digest": "2d19124248fdff6b37f04f3b93d46ce54ab027f4f53dd3924f9b35e697fdefb6",
+      "expected": "validation-summary-latest-disposition",
+      "verdict": "different-defect",
+      "rationale": "The finding describes a distinct head-matching filter bug—\"Findings carried from an earlier review head retain their original finding head\"—rather than the empty-GatedSHA scan selecting an outdated summary head."
+    },
+    {
+      "case": "posse-task-1241-r1",
+      "finding": 0,
+      "finding_digest": "a6568b8b3d309806cf8bf767e9b545ff2df5f7680c0bad9794b60e25e25c345b",
+      "expected": "transitive-dependants-not-cascaded",
+      "verdict": "detects",
+      "rationale": "The finding identifies that \"It does not recursively hold or tear down queued Tasks\" so transitive queued dependants remain uncascaded."
+    },
+    {
+      "case": "posse-task-1241-r2",
+      "finding": 0,
+      "finding_digest": "e4ead9e4af9036afee6fcb86da1835f46555244d659a989ee3e2be9a04995c80",
+      "expected": "cascade-ignores-state-race",
+      "verdict": "different-defect",
+      "rationale": "The finding concerns incorrectly treating satisfied dependencies as affected, not ignoring ErrStateRace or failing to cascade transitively; it identifies a \"spurious `teardown_dependants` Decision\"."
+    },
+    {
+      "case": "posse-t1222-bd2af87f",
+      "finding": 0,
+      "finding_digest": "dac9c0076d731489a480e4125941d1f6e7c5eabf16f501dca45dbe524ee7192d",
+      "expected": "t1222-005930ee",
+      "verdict": "different-defect",
+      "rationale": "The finding alleges that synchronous startup errors block the built-in review, whereas the claim concerns discarded exit status from a detached child; it states, \"Starting the optional parallel Greenhouse process is on the synchronous path\"."
+    },
+    {
+      "case": "posse-t1222-c6403c40",
+      "finding": 0,
+      "finding_digest": "57034d488c9998dbb4347ebd8d5e6c56cea29e2e751875632c78199aba6adf60",
+      "expected": "t1222-57c05255",
+      "verdict": "different-defect",
+      "rationale": "The finding focuses on the unpaired-review case where \"Greenhouse still reviews\" after built-in startup fails, rather than the claimed synchronous Greenhouse error blocking the built-in loop."
+    },
+    {
+      "case": "posse-t1222-c8af1296",
+      "finding": 0,
+      "finding_digest": "12c73ce86fd3e8e38e01599ad2eaf103b2a9926b79df02a1d8a59bc49daf196f",
+      "expected": "t1222-f91a0722",
+      "verdict": "different-defect",
+      "rationale": "The finding describes \"stores the Review Task ID\" and incorrect task identity, not the expected panic from dereferencing missing Findings."
+    },
+    {
+      "case": "posse-t1222-e7d4350a",
+      "finding": 0,
+      "finding_digest": "bc32ed41bd180eb34909501ba0f24c41af4cf996b874bc170119e4b0e18b63c9",
+      "expected": "t1222-29b911a0",
+      "verdict": "detects",
+      "rationale": "The finding identifies that \"no runtime path consumes it\" and explains the same failure to route review_provider through Greenhouse scheduling and merge gating."
+    }
+  ]
+}

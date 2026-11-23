@@ -113,6 +113,101 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	}
 }
 
+func TestRunLiveUsesPinnedExternalRepositoryCommits(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds the greenhouse executable")
+	}
+	dir := t.TempDir()
+	source := filepath.Join(dir, "source")
+	if err := os.MkdirAll(filepath.Join(source, "orders"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := command(source, gitEnv, "git", "init", "-q", "-b", "main"); err != nil {
+		t.Fatal(err)
+	}
+	lines := make([]string, 20)
+	for i := range lines {
+		lines[i] = "// context"
+	}
+	lines[0], lines[18] = "package orders", "// target"
+	if err := os.WriteFile(filepath.Join(source, "orders/orders.go"), []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := command(source, gitEnv, "git", "add", "-A"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := command(source, gitEnv, "git", "commit", "-q", "-m", "target"); err != nil {
+		t.Fatal(err)
+	}
+	target, err := command(source, nil, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "orders/orders.go"), []byte(strings.ReplaceAll(stringMustRead(t, filepath.Join(source, "orders/orders.go")), "// target", "// candidate")), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := command(source, gitEnv, "git", "add", "-A"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := command(source, gitEnv, "git", "commit", "-q", "-m", "candidate"); err != nil {
+		t.Fatal(err)
+	}
+	head, err := command(source, nil, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := command(source, gitEnv, "git", "commit", "--allow-empty", "-q", "-m", "not an ancestor"); err != nil {
+		t.Fatal(err)
+	}
+	laterTarget, err := command(source, nil, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	remote := filepath.Join(dir, "remote.git")
+	if _, err := command(dir, nil, "git", "clone", "-q", "--bare", source, remote); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := buildExternalRepo(filepath.Join(dir, "wrong-ancestor"), Case{ID: "wrong-ancestor", Source: Source{Repo: "file://" + remote, Head: head, Target: laterTarget}}); err == nil {
+		t.Fatal("external source accepted a target that is not an ancestor of its head")
+	}
+	caseDir := filepath.Join(dir, "corpus")
+	if err := os.MkdirAll(filepath.Join(caseDir, "external"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest(t, caseDir, `{"version":1,"revision":1,"cases":["external"]}`)
+	k := Case{Version: 1, ID: "external", Category: "clean", Description: "Pinned external false-positive claim.", Intent: "Review the exact candidate.", Split: "holdout", Stratum: "clean-real-change", Rules: []string{}, Noise: []Noise{}, Expected: []Expected{}, Avoid: []Expected{{ID: "false-claim", File: "orders/orders.go", Start: 19, End: 19, Origin: "correctness", Severity: "low", Priorities: []string{"P1"}, Defect: "The claimed SQL injection is false; the source contains no user-controlled query."}}, Source: Source{Kind: "external", Repo: "file://" + remote, Head: head, Target: target, Files: []string{"orders/orders.go"}, Derivation: "Local Git fixture for exact external commit checkout."}}
+	caseJSON, err := json.Marshal(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(caseDir, "external/case.json"), caseJSON, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	pi := filepath.Join(dir, "pi")
+	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
+	if err := os.WriteFile(pi, []byte(fakePi), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	r, err := runLive(runOptions{Corpus: caseDir, Out: filepath.Join(dir, "out"), Model: "fake/m1", JudgeModel: "fake/judge", Pi: pi, Label: "external", Cases: []string{"external"}, Parallel: 1, Settle: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := r.Cases[0]
+	if rec.Candidate != head || rec.Target != target || !rec.InputVerified || rec.Status != "outstanding-findings" || rec.Score.FalsePositives != 1 || rec.Score.Blocking != 1 || r.Summary.CleanBlocking != 1 {
+		stderr, _ := os.ReadFile(filepath.Join(dir, "out", "cases", "external", "stderr.log"))
+		t.Fatalf("external run did not use the pinned commits and review path: %+v; stderr=%s", rec, stderr)
+	}
+}
+
+func stringMustRead(t *testing.T, path string) string {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
 func TestCompactEventsDropsStreamingDeltas(t *testing.T) {
 	in := "{\"type\":\"message_start\"}\n{\"type\":\"message_update\",\"x\":1}\n{\"type\":\"message_end\"}\nnot json\n"
 	if got := string(compactEvents([]byte(in))); got != "{\"type\":\"message_start\"}\n{\"type\":\"message_end\"}\nnot json\n" {
@@ -201,5 +296,13 @@ func TestRunLiveExcludesScoreAfterCleanupFailure(t *testing.T) {
 	}
 	if r.Summary.Cases != 0 || r.Summary.HighDetected != 0 || r.Summary.BarMet {
 		t.Fatalf("summary credits failed cleanup: %+v", r.Summary)
+	}
+}
+
+func TestRedactRecordKeepsUnsetModelFindingsMarshalable(t *testing.T) {
+	rec := CaseRecord{}
+	redactRecord(&rec, []string{"secret"})
+	if _, err := json.Marshal(rec); err != nil {
+		t.Fatalf("marshal record without model findings: %v", err)
 	}
 }

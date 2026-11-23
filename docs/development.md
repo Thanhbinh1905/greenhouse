@@ -124,47 +124,24 @@ On this corpus, `openai/gpt-5.6-luna` through Pi stays the recommended default r
 
 ### Real posse PR regression set
 
-[`tools/posse_review_regression.json`](../tools/posse_review_regression.json) pins the ten exact PR heads, merge-base targets and expected outcomes from the t167 benchmark. `tools/posse_review_regression.py` runs the cases through the built Greenhouse AXI CLI with reviewer Pi, builtin `unslop` and `no-comments`, and one fresh state home per repetition. It records each exact-head host result as JSON. Runs make paid model calls.
+[`internal/eval/testdata/posse`](../internal/eval/testdata/posse) pins the posse repository, exact head, exact target, and expected defect statement for each case. `cmd/eval run` clones each repository into its scratch area, fetches the pinned commits, reviews the candidate through Greenhouse AXI and Pi, then adjudicates findings against the defect descriptions.
 
-Clone posse and fetch every pinned head and target commit before running; all worktrees, homes and result files must stay in private scratch:
+Run the corpus twice per build from a git worktree at the commit to test; `cmd/eval` builds `./cmd/greenhouse` from the current repository:
 
 ```sh
-git clone https://github.com/Thanhbinh1905/posse.git "$TMPDIR/posse"
-python3 - "$TMPDIR/posse" <<'PY'
-import json, subprocess, sys
-from pathlib import Path
-repo = Path(sys.argv[1])
-cases = json.loads(Path("tools/posse_review_regression.json").read_text())
-for sha in sorted({value for case in cases for value in (case["head"], case["target"])}):
-    subprocess.run(["git", "-C", str(repo), "fetch", "--no-tags", "origin", sha], check=True)
-PY
-go build -o "$TMPDIR/greenhouse" ./cmd/greenhouse
-python3 tools/posse_review_regression.py \
-  --binary "$TMPDIR/greenhouse" --source "$TMPDIR/posse" \
-  --out "$TMPDIR/posse-regression" --runs 2
+git worktree add --detach "$TMPDIR/build" <commit>
+go build -o "$TMPDIR/eval" ./cmd/eval
+corpus="$PWD/internal/eval/testdata/posse"
+for pass in 1 2; do
+  (cd "$TMPDIR/build" && "$TMPDIR/eval" run \
+    -corpus "$corpus" \
+    -model openai/gpt-5.6-luna -judge-model openai/gpt-5.6-luna \
+    -parallel 3 -label "posse regression, pass $pass" \
+    -out "$OLDPWD/docs/evidence/review-eval/NN-posse-regression/<commit>/run-$pass")
+done
 ```
 
-The expected finding checks require the expected priority, path and overlapping candidate line range. PR 1146 checks specifically for the historical P1 at `scripts/preflight.sh:44-45`; PR 1241 rejects P0-P2 findings overlapping `internal/taskplan/plan.go:891-899`. Findings outside those ranges remain in the recorded result. A clean case requires a clean verdict; an inconclusive result is not clean.
-
-The current-main baseline used `9b9ba69` (after t170), two runs per PR, Pi reviewer `openai/gpt-5.6-luna`, default three-minute review budget, and isolated host-mode homes. The 22 reviews cost $1.18476 total, with a median of $0.05359 per review. Results:
-
-| PR | Expected | Run 1 | Run 2 | Match |
-|---:|---|---|---|---:|
-| 1131 | P1 at `plan_blobs.go:94` (#1129) | clean | P2 `queries.sql:370-373` | 0/2 |
-| 1156 | P1 at `greenhouse_watch.go:159` (#1145) | clean | clean | 0/2 |
-| 1168 | P1 at `validation_summary.go:72-93` (#1157) | P1 `review_pass_next_step.go:129-131`, P1 `review_verdict.go:191-192`, P2 `validation_summary.go:101-106` | P1 `validation_summary.go:105-110` | 0/2 |
-| 1146 | no P1 at `preflight.sh:44-45` | clean | P1 `preflight.sh:68-71` | 2/2 at the specified range |
-| 1152 | clean | P1 `review_rounds.go:175-176` | clean | 1/2 |
-| 1159 | clean | P1 `watch_runtime.go:1261-1266` | clean | 1/2 |
-| 1164 | clean | clean | clean | 2/2 |
-| 1165 | clean | P3 `ci-test-results.md:3` | clean | 1/2 |
-| 1167 | clean | inconclusive (`review_budget`) | inconclusive (`review_budget`) | 0/2 |
-| 1158 | clean | P1 `watch_runtime.go:1096-1104` | P2 `watch_runtime.go:1096-1104` | 0/2 |
-| 1241 | no P0-P2 at `internal/taskplan/plan.go:891-899` | P1 `task_dependants.go:137-145` | P1 `task_dependants.go:137-143`, P2 `decisions.go:411-435` | 2/2 at the specified range |
-
-The three intended defects were not detected at their expected locations. PR 1168's finding at `validation_summary.go:105-110` overlaps neither the expected lines nor the recorded t167 defect, so it receives no credit. The specified 1146 false P1 was absent in both runs; the separate P1 at lines 68-71 is outside that expected range. Five of twelve runs on the six clean cases returned clean, and only PR 1164 was clean in both runs. PR 1167 was inconclusive twice.
-
-PR 1241 did not repeat the reported false-positive finding in either run; both runs found other defects outside `internal/taskplan/plan.go:891-899`. There was no prompt or criteria change: the three missed defects remain undetected, and the six clean cases did not stay clean across both runs. The regression set and baseline are updated without changing reviewer behavior.
+These runs make paid reviewer and judge calls. The [recorded baseline](evidence/review-eval/13-posse-regression/README.md) includes both runs, exact inputs, model events, adjudications, and scores. External cases are scored by the root cause described in each finding, not solely by overlap with the expected line range. The `avoid` records capture the false P1 on PR 1146 and the false P0-P2 claim on t1241.
 
 ## Fixer evaluation
 

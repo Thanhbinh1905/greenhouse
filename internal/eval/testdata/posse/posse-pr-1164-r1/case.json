@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "id": "posse-pr-1164-r1",
+  "category": "clean",
+  "description": "Pinned external posse regression case pr-1164, repetition 1.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "1118d0bae50cda38b51efb65a85909695cf65f2f",
+    "target": "48c433722dc88692a38b4d73eb679da94af74300",
+    "files": [
+      "internal/app/worker_tab.go",
+      "internal/app/worker_tab_test.go",
+      "internal/e2e/worker_workspace_worker_test.go"
+    ],
+    "derivation": "Exact posse head and target from t167. No finding was expected in t167."
+  }
+}

@@ -321,6 +321,36 @@ func modelFindings(answer string) json.RawMessage {
 	return v.Findings
 }
 
+func buildExternalRepo(dir string, k Case) (string, string, error) {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o755); err != nil {
+		return "", "", err
+	}
+	if _, err := command("", gitEnv, "git", "clone", "--no-checkout", "--quiet", k.Source.Repo, dir); err != nil {
+		return "", "", err
+	}
+	if _, err := command(dir, gitEnv, "git", "fetch", "--no-tags", "origin", k.Source.Target, k.Source.Head); err != nil {
+		return "", "", err
+	}
+	if _, err := command(dir, gitEnv, "git", "checkout", "--detach", k.Source.Head); err != nil {
+		return "", "", err
+	}
+	if _, err := command(dir, gitEnv, "git", "merge-base", "--is-ancestor", k.Source.Target, k.Source.Head); err != nil {
+		return "", "", fmt.Errorf("external case %s target is not an ancestor of its head: %w", k.ID, err)
+	}
+	for _, e := range append(append([]Expected(nil), k.Expected...), k.Avoid...) {
+		cmd := exec.Command("git", "cat-file", "blob", k.Source.Head+":"+e.File)
+		cmd.Dir = dir
+		body, err := cmd.Output()
+		if err != nil {
+			return "", "", fmt.Errorf("external case %s file %s: %w", k.ID, e.File, err)
+		}
+		if err := checkRange(map[string]string{e.File: string(body)}, e.File, e.Start, e.End); err != nil {
+			return "", "", fmt.Errorf("external case %s: %w", k.ID, err)
+		}
+	}
+	return k.Source.Target, k.Source.Head, nil
+}
+
 func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (rec CaseRecord) {
 	rec = CaseRecord{ID: k.ID}
 	fail := func(err error) CaseRecord {
@@ -336,7 +366,13 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 	if err := os.MkdirAll(capture, 0o755); err != nil {
 		return fail(err)
 	}
-	target, head, err := buildRepo(repo, k)
+	var target, head string
+	var err error
+	if k.Source.Kind == "external" {
+		target, head, err = buildExternalRepo(repo, k)
+	} else {
+		target, head, err = buildRepo(repo, k)
+	}
 	if err != nil {
 		return fail(err)
 	}
@@ -467,7 +503,9 @@ func redactRecord(rec *CaseRecord, secrets []string) {
 		rec.Findings[i].Action = redactText(rec.Findings[i].Action, secrets)
 	}
 	rec.ModelAnswer = redactText(rec.ModelAnswer, secrets)
-	rec.ModelFindings = json.RawMessage(redactText(string(rec.ModelFindings), secrets))
+	if len(rec.ModelFindings) > 0 {
+		rec.ModelFindings = json.RawMessage(redactText(string(rec.ModelFindings), secrets))
+	}
 }
 
 func secretValues() []string {

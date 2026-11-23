@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "posse-pr-1146-r2",
+  "category": "clean",
+  "description": "Pinned external posse regression case pr-1146, repetition 2.",
+  "intent": "Review the original pinned posse change for correctness defects.",
+  "rules": [],
+  "expected": [],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "99e8553182c30774d4e7a343ea07524290e3ae63",
+    "target": "bcfa3f667804ec32e786ccb59eeeff59f175b52f",
+    "files": [
+      "AGENTS.md",
+      "internal/store/migration_versions_test.go",
+      "scripts/preflight.sh"
+    ],
+    "derivation": "Exact posse head and target from t167. Expected defect is documented in issue 68."
+  },
+  "avoid": [
+    {
+      "id": "nested-migration-false-claim",
+      "file": "scripts/preflight.sh",
+      "start": 44,
+      "end": 45,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "low",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "The claim that nested migration SQL files bypass validation is false because internal/store/store.go embeds only migrations/*.sql, so nested files are not applied migrations."
+    }
+  ]
+}
