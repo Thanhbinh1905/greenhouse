@@ -58,7 +58,7 @@ func inferCommitIntent(worktree, target, head string) (string, string, error) {
 	if err != nil {
 		return "", "", err
 	}
-	messages, err := repository.Read(worktree, "log", "--format=%s", base+".."+head, "--")
+	messages, err := repository.Read(worktree, "log", "--format=%s", "--end-of-options", base+".."+head, "--")
 	if err != nil {
 		return "", "", errors.New("cannot read commit messages for this branch")
 	}
