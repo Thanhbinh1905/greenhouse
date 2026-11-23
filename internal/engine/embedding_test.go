@@ -529,6 +529,7 @@ printf '%s\n' 'diff --git a/sample.txt b/sample.txt' '--- a/sample.txt' '+++ b/s
 }
 
 func TestHostReviewMovedTarget(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	git(t, repo, "checkout", "-b", "candidate")

@@ -13,6 +13,7 @@ import (
 )
 
 func TestReviewDropsOnlyOutOfRangeFinding(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `import builtins
 original_print=print
@@ -35,6 +36,7 @@ def print(text):
 }
 
 func TestReviewRecoversMissingFinalInSameSession(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"missing", "invalid"} {
 		t.Run(mode, func(t *testing.T) {
 			bin, repo, home, v := prepareFixture(t)
@@ -68,6 +70,7 @@ assert 'Return your verdict now' in b['Controller']
 }
 
 func TestReviewFinalizationIsBounded(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `if '--no-tools' in sys.argv:
  print('still not a verdict')
@@ -220,6 +223,7 @@ func TestReviewBudgetConfiguration(t *testing.T) {
 }
 
 func TestReviewInputKeepsNumberedHunkContext(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	var lines strings.Builder
 	for i := 1; i <= 2000; i++ {
@@ -275,6 +279,7 @@ sys.exit(0)
 }
 
 func TestReviewWithOnlyOutOfRangeFindingProducesVerdict(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `original_print=print
 def print(text):
@@ -423,6 +428,7 @@ with open(onboarding,'w') as f: f.write('reviewer update')
 }
 
 func TestDeletionReviewAnchorsFindingsAndContextToCandidate(t *testing.T) {
+	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	git(t, repo, "config", "diff.context", "0")
 	var before, after strings.Builder
@@ -531,6 +537,7 @@ sys.exit(0)
 }
 
 func TestFinalReviewAnswerMetadata(t *testing.T) {
+	t.Parallel()
 	first := agentAnswer{Provider: "exploration-provider", Model: "exploration-model", Usage: TokenUsage{Tokens: 12}}
 	for _, final := range []agentAnswer{{}, {Provider: "final-provider", Model: "final-model"}, {Provider: "final-provider"}, {Model: "final-model"}} {
 		got := finalReviewAnswer(first, final)
@@ -578,6 +585,7 @@ func TestReviewToolCallBudgetStopsExploration(t *testing.T) {
 }
 
 func TestLineWatchBoundsPartialLine(t *testing.T) {
+	t.Parallel()
 	output := runner.NewBuffer(32)
 	cancelled := false
 	watch := &lineWatch{w: output, cancel: func() { cancelled = true }}

@@ -9,6 +9,7 @@ import (
 )
 
 func TestHostFailedReviewDiagnostics(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct{ name, mode, reason, message string }{
 		{"crash", "import sys; sys.stderr.write('backend crashed: token=fake-private-value\\n'); sys.exit(1)", "crash", "backend crashed"},
 		{"zero-exit-model", `print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'error','errorMessage':'404 model not found apiKey=fake-private-value','content':[]}})); sys.exit(0)`, "model_mismatch", "404 model not found"},
@@ -43,6 +44,7 @@ func TestHostFailedReviewDiagnostics(t *testing.T) {
 }
 
 func TestHostModelFallback(t *testing.T) {
+	t.Parallel()
 	for _, configured := range []string{"", "explicit-model"} {
 		r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: &Execution{Config: ReviewerConfig{Model: configured}, Result: &Verdict{ReportedModel: "reported-model"}}}
 		want := configured
@@ -56,6 +58,7 @@ func TestHostModelFallback(t *testing.T) {
 }
 
 func TestHostReviewMetadataSurvivesPersistence(t *testing.T) {
+	t.Parallel()
 	r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: &Execution{ID: "review-1"}}
 	want := TokenUsage{InputTokens: 100, OutputTokens: 20, CachedInputTokens: 80, Tokens: 120, CostUSD: 0.5}
 	retainReviewMetadata(r.Review, reviewOutcome{Status: "inconclusive", Answer: agentAnswer{Reason: "model_mismatch", Diagnostic: "model not found", Model: "reported-model", Usage: want}})
@@ -75,6 +78,7 @@ func TestHostReviewMetadataSurvivesPersistence(t *testing.T) {
 }
 
 func TestHostCodexDefaultModelUsage(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
@@ -107,6 +111,7 @@ func TestHostCodexDefaultModelUsage(t *testing.T) {
 }
 
 func TestHostRecoveredStructuredError(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {
@@ -129,6 +134,7 @@ func TestHostRecoveredStructuredError(t *testing.T) {
 }
 
 func TestHostRecoveredCodexError(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review me\n"), 0600); err != nil {

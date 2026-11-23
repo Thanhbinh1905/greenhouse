@@ -156,7 +156,7 @@ func ownsHome(pid int, home, procRoot string) bool {
 	if !found {
 		return false
 	}
-	conn, err := net.DialTimeout("unix", filepath.Join(home, "socket"), 50*time.Millisecond)
+	conn, err := net.DialTimeout("unix", filepath.Join(home, "socket"), 2*time.Second)
 	if err != nil {
 		return false
 	}

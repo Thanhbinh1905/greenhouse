@@ -119,6 +119,7 @@ func reviewSettledWithFindings(run map[string]any) bool {
 }
 
 func TestReviewSettledWithFindings(t *testing.T) {
+	t.Parallel()
 	for name, run := range map[string]map[string]any{
 		"running without findings": {"status": "running"},
 		"settled without findings": {"status": "clean-review", "findings": []any{}},
@@ -312,6 +313,7 @@ func TestReviewCancellationAndMalformedOutput(t *testing.T) {
 	}
 }
 func TestReviewerContractDefinesPrioritiesAndActionability(t *testing.T) {
+	t.Parallel()
 	for priority, definition := range map[string]string{
 		"P0": "data loss, a security compromise, or a crash on a common path",
 		"P1": "wrong behavior under normal use",
@@ -385,6 +387,7 @@ sys.exit(0)
 }
 
 func TestReviewFailureMetadata(t *testing.T) {
+	t.Parallel()
 	for _, c := range []struct {
 		name, backend, stdout, stderr, reason string
 		code                                  int
@@ -407,6 +410,7 @@ func TestReviewFailureMetadata(t *testing.T) {
 }
 
 func TestFailedCodexReviewKeepsReportedModel(t *testing.T) {
+	t.Parallel()
 	_, stderr, _ := recorded(t, "codex", "success")
 	done := reviewFrom(&Execution{Config: ReviewerConfig{Backend: "codex"}}, 1, outputBuffer(nil, 65536), outputBuffer(stderr, 65536), nil, nil)
 	if done.Answer.Model != "gpt-5.6-luna" {
@@ -415,6 +419,7 @@ func TestFailedCodexReviewKeepsReportedModel(t *testing.T) {
 }
 
 func TestNewDiagnosticsPreserveStoppedReviewBehavior(t *testing.T) {
+	t.Parallel()
 	x := &Execution{Config: ReviewerConfig{Backend: "codex"}}
 	for _, c := range []struct {
 		stderr string
@@ -438,6 +443,7 @@ func TestMissingReviewerBeforeLaunchIsDiagnosable(t *testing.T) {
 }
 
 func TestReviewRoundPreservesReportedModelOnInconclusiveReply(t *testing.T) {
+	t.Parallel()
 	_, codexStderr, _ := recorded(t, "codex", "success")
 	for _, c := range []struct{ name, backend, stdout, stderr, model string }{
 		{"incomplete codex", "codex", "", string(codexStderr), "gpt-5.6-luna"},
@@ -460,6 +466,7 @@ func TestReviewRoundPreservesReportedModelOnInconclusiveReply(t *testing.T) {
 }
 
 func TestReviewRoundClassifiesStructuredZeroExitModelFailure(t *testing.T) {
+	t.Parallel()
 	stdout := []byte(`{"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"reported-model","stopReason":"error","errorMessage":"404 model not found","content":[]}}`)
 	x := &Execution{Config: ReviewerConfig{Backend: "pi"}}
 	done := reviewFrom(x, 0, outputBuffer(stdout, 65536), outputBuffer(nil, 65536), nil, nil)

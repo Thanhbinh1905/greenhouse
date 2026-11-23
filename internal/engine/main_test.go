@@ -65,6 +65,7 @@ func TestDaemonSignalShutdownReturnsNil(t *testing.T) {
 }
 
 func TestAutoStartedDaemonDoesNotInheritClientWorkingDirectory(t *testing.T) {
+	t.Parallel()
 	bin, repo, home := fixture(t)
 	clientDir := filepath.Join(filepath.Dir(home), "client")
 	if err := os.Mkdir(clientDir, 0700); err != nil {
