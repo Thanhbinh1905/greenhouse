@@ -93,3 +93,18 @@ func TestNonBlockingFindingsAreNotConfirmed(t *testing.T) {
 		t.Fatalf("calls=%d finding=%v", calls, f)
 	}
 }
+
+func TestConfirmationArgsFollowTheAdmittedExecutionMode(t *testing.T) {
+	config := ReviewerConfig{Backend: BackendClaude, Model: "fixture/model"}
+	schema := verdictSchema(false, false)
+	got, err := confirmationArgs(&Execution{Config: config})
+	if err != nil || Digest(got) != Digest(legacyAgentArgs(config, "reviewer", schema, reviewerPrompt)) {
+		t.Fatalf("legacy execution args = %v, %v", got, err)
+	}
+	config.Native = true
+	want, err := agentArgs(config, "reviewer", schema, reviewerPrompt)
+	got, gotErr := confirmationArgs(&Execution{Config: config})
+	if err != nil || gotErr != nil || Digest(got) != Digest(want) {
+		t.Fatalf("native execution args = %v, %v", got, gotErr)
+	}
+}

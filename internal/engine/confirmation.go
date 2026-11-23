@@ -51,11 +51,19 @@ func confirmationInput(x *Execution, f Finding) ([]byte, error) {
 	return append(append(encoded, "\n\nDiff:\n"...), evidence...), nil
 }
 
+func confirmationArgs(x *Execution) ([]string, error) {
+	schema := verdictSchema(false, false)
+	if !x.Config.Native {
+		return legacyAgentArgs(x.Config, "reviewer", schema, reviewerPrompt), nil
+	}
+	return agentArgs(x.Config, "reviewer", schema, reviewerPrompt)
+}
+
 func confirmBlockingFindings(ctx context.Context, x *Execution, dir, tree string, done reviewOutcome) reviewOutcome {
 	if done.Status != "outstanding-findings" || done.Result == nil || len(blockingFindings(done.Result.Findings)) == 0 {
 		return done
 	}
-	args, err := agentArgs(x.Config, "reviewer", verdictSchema(false, false), reviewerPrompt)
+	args, err := confirmationArgs(x)
 	if err != nil {
 		return done
 	}
