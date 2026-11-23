@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"syscall"
@@ -102,6 +103,7 @@ type Run struct {
 	Inherited      *Inheritance        `json:"inherited,omitempty"`
 	Host           *Host               `json:"host,omitempty"`
 	HostFindings   []Finding           `json:"host_findings,omitempty"`
+	HostHistory    []PriorFinding      `json:"host_history,omitempty"`
 	HostCarried    []CarriedFinding    `json:"host_carried_findings,omitempty"`
 	HostResponses  *Repair             `json:"host_responses,omitempty"`
 	HostGrants     []string            `json:"host_grants,omitempty"`
@@ -1718,6 +1720,19 @@ func finishReview(r *Run, done reviewOutcome) {
 	if done.Result != nil {
 		if r.Host != nil && (status == "clean-review" || status == "outstanding-findings") {
 			r.HostFindings = append([]Finding{}, done.Result.Findings...)
+			for _, finding := range done.Result.Findings {
+				if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == finding.ID }); i >= 0 {
+					r.HostHistory[i].State = "open"
+					r.HostHistory[i].Finding = finding
+				} else {
+					r.HostHistory = append(r.HostHistory, PriorFinding{Finding: finding, State: "open"})
+				}
+			}
+			for _, conflict := range done.Result.Conflicts {
+				if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == conflict.Earlier.ID }); i >= 0 {
+					r.HostHistory[i].State = "conflicted"
+				}
+			}
 		}
 		index := map[string]int{}
 		for i, f := range r.Findings {

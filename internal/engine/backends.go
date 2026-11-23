@@ -519,7 +519,7 @@ func verdictSchema(full, checks bool) string {
 	text := map[string]any{"type": "string"}
 	finding := map[string]any{"type": "object", "additionalProperties": false,
 		"required":   []string{"id", "priority", "origin", "file", "start", "end", "explanation", "action", "rule", "head"},
-		"properties": map[string]any{"id": text, "priority": map[string]any{"type": "string", "enum": []string{"P0", "P1", "P2", "P3"}}, "origin": map[string]any{"type": "string", "enum": []string{"correctness", "policy"}}, "file": text, "start": map[string]any{"type": "integer"}, "end": map[string]any{"type": "integer"}, "explanation": text, "action": text, "rule": text, "head": text}}
+		"properties": map[string]any{"id": text, "priority": map[string]any{"type": "string", "enum": []string{"P0", "P1", "P2", "P3"}}, "origin": map[string]any{"type": "string", "enum": []string{"correctness", "policy"}}, "file": text, "start": map[string]any{"type": "integer"}, "end": map[string]any{"type": "integer"}, "explanation": text, "action": text, "rule": text, "head": text, "conflicts": map[string]any{"type": "array", "items": text}, "target_introduced": map[string]any{"type": "boolean"}}}
 	properties := map[string]any{"head": text, "verdict": map[string]any{"type": "string", "enum": []string{"clean", "findings", "inconclusive"}}, "coverage": map[string]any{"type": "array", "items": text}, "findings": map[string]any{"type": "array", "items": finding}}
 	required := []string{"head", "verdict", "coverage", "findings"}
 	if full {

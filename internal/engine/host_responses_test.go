@@ -158,7 +158,8 @@ if prior:
  assert len(prior)==1
  assert prior[0]['priority']=='P1'
  assert prior[0]['file']=='sample.txt'
- v['verdict']='clean'
+ assert prior[0]['state']=='fixed-by-later-commit'
+ v['findings']=[{'id':'ignored','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Restore the trusted environment value','action':'Restore APP_MODE','rule':'','head':b['Head'],'conflicts':[prior[0]['id']]}]
 else:
  v['findings']=[{'id':'ignored','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Environment values are untrusted','action':'Remove APP_MODE','rule':'','head':b['Head']}]`
 	if !strings.Contains(string(script), defaultAnswer) {
@@ -189,8 +190,20 @@ else:
 	}
 	v = hostSettle(t, bin, repo, home)
 	result := v["host_result"].(map[string]any)
-	if result["verdict"] != "clean" {
-		t.Fatalf("rereview did not use the earlier finding to verify the fix: %v", result)
+	conflicts, _ := result["conflicts"].([]any)
+	findings, _ := result["findings"].([]any)
+	if len(conflicts) != 1 || len(findings) != 0 {
+		t.Fatalf("reversing the earlier fix must be reported as a non-blocking conflict: %v", result)
+	}
+	conflict := conflicts[0].(map[string]any)
+	if conflict["earlier"].(map[string]any)["id"] != first["id"] || conflict["finding"].(map[string]any)["action"] != "Restore APP_MODE" {
+		t.Fatalf("host result omitted the conflict pair: %v", conflict)
+	}
+	run := v["run"].(map[string]any)
+	review := run["review"].(map[string]any)
+	resultFromInspect := review["result"].(map[string]any)
+	if len(resultFromInspect["conflicts"].([]any)) != 1 || run["status"] == "outstanding-findings" {
+		t.Fatalf("inspect did not expose the non-blocking conflict decision: %v", run)
 	}
 	captured, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
 	if err != nil {
@@ -198,13 +211,13 @@ else:
 	}
 	var reviewInput struct {
 		Input struct {
-			PriorFindings []Finding
+			PriorFindings []PriorFinding
 		} `json:"input"`
 	}
 	if err := json.Unmarshal(captured, &reviewInput); err != nil {
 		t.Fatal(err)
 	}
-	if len(reviewInput.Input.PriorFindings) != 1 || reviewInput.Input.PriorFindings[0].ID != first["id"] {
+	if len(reviewInput.Input.PriorFindings) != 1 || reviewInput.Input.PriorFindings[0].ID != first["id"] || reviewInput.Input.PriorFindings[0].State != "fixed-by-later-commit" {
 		t.Fatalf("rereview did not receive the earlier finding: %+v", reviewInput.Input.PriorFindings)
 	}
 }

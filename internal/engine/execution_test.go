@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -116,6 +117,48 @@ func reviewSettledWithFindings(run map[string]any) bool {
 	status := run["status"]
 	findings, ok := run["findings"].([]any)
 	return ok && len(findings) > 0 && status != "running" && status != "cancelling"
+}
+
+func TestFindingBytesMatchAcceptedHead(t *testing.T) {
+	_, repo, _ := fixture(t)
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("accepted code\nother line\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "accepted head")
+	accepted := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("accepted code\nchanged line\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "target merge")
+	candidate := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if !findingBytesMatchAcceptedHead(repo, candidate, accepted, "sample.txt", 1, 1) {
+		t.Fatal("byte-identical finding code did not match the accepted head")
+	}
+	if findingBytesMatchAcceptedHead(repo, candidate, accepted, "sample.txt", 2, 2) {
+		t.Fatal("changed finding code matched the accepted head")
+	}
+	diff := git(t, repo, "diff", "--unified=1", accepted, candidate, "--", "sample.txt")
+	x := &Execution{FindingIdentity: "code-v1", Source: repository.Identity{Worktree: repo}, Rules: InputIdentity{Candidate: candidate}, Paths: []string{"sample.txt"}, Diff: diff, Config: ReviewerConfig{Backend: "pi", Model: "fixture/model"}, AcceptedHeads: []string{accepted}}
+	finding := Finding{Priority: "P1", Origin: "correctness", File: "sample.txt", Start: 1, End: 1, Explanation: "Existing issue", Action: "Fix it", Head: candidate}
+	answer, err := json.Marshal(Verdict{Head: candidate, Verdict: "findings", Coverage: x.Paths, Findings: []Finding{finding}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := verdictFrom(agentAnswer{Text: string(answer), Provider: "fixture", Model: "model"}, x)
+	if err != nil || result.Verdict != "clean" || len(result.Findings) != 0 || len(result.Dismissed) != 1 {
+		t.Fatalf("finding on accepted unchanged code was not suppressed: %+v %v", result, err)
+	}
+	finding.TargetIntroduced = true
+	answer, err = json.Marshal(Verdict{Head: candidate, Verdict: "findings", Coverage: x.Paths, Findings: []Finding{finding}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err = verdictFrom(agentAnswer{Text: string(answer), Provider: "fixture", Model: "model"}, x)
+	if err != nil || result.Verdict != "findings" || len(result.Findings) != 1 {
+		t.Fatalf("target-introduced finding was suppressed: %+v %v", result, err)
+	}
 }
 
 func TestReviewSettledWithFindings(t *testing.T) {

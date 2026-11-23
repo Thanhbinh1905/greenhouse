@@ -33,6 +33,7 @@ type HostResult struct {
 	Dismissed   []Finding         `json:"dismissed_findings,omitempty"`
 	Carried     []CarriedFinding  `json:"carried_findings,omitempty"`
 	Resolutions []ResolutionCheck `json:"resolutions,omitempty"`
+	Conflicts   []FindingConflict `json:"conflicts,omitempty"`
 	Generated   []GeneratedPath   `json:"generated,omitempty"`
 	Uncovered   []UncoveredPath   `json:"uncovered,omitempty"`
 	Rules       string            `json:"rules_digest"`
@@ -155,6 +156,11 @@ func admitHostReview(r *Run, grant string, responses []ResolutionResponse) error
 		if err != nil {
 			return err
 		}
+		for _, answer := range response.Responses {
+			if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == answer.Finding }); i >= 0 {
+				r.HostHistory[i].State = answer.Response
+			}
+		}
 	}
 	previous := r.HostResponses
 	r.HostResponses = response
@@ -234,6 +240,12 @@ func hostSuccessor(r *Run, next *Run, host *Host) {
 	next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 	next.Inherited = &Inheritance{From: r.ID, Review: r.ReviewUsed, Repair: r.RepairUsed}
 	next.HostFindings = append([]Finding(nil), latestHostFindings(r)...)
+	next.HostHistory = append([]PriorFinding(nil), r.HostHistory...)
+	for _, finding := range next.HostFindings {
+		if !slices.ContainsFunc(next.HostHistory, func(prior PriorFinding) bool { return prior.ID == finding.ID }) {
+			next.HostHistory = append(next.HostHistory, PriorFinding{Finding: finding, State: "open"})
+		}
+	}
 	next.HostCarried = make([]CarriedFinding, 0, len(next.HostFindings))
 	next.HostGrants = append([]string(nil), r.HostGrants...)
 }
@@ -256,6 +268,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	if x.Result != nil {
 		v.Verdict, v.Findings = x.Result.Verdict, append([]Finding(nil), x.Result.Findings...)
 		v.Dismissed = append([]Finding(nil), x.Result.Dismissed...)
+		v.Conflicts = append([]FindingConflict(nil), x.Result.Conflicts...)
 		v.Resolutions = x.Result.Resolutions
 	}
 	settled := x.Result != nil && (x.Status == "clean-review" || x.Status == "outstanding-findings")
