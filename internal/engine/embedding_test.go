@@ -528,6 +528,109 @@ printf '%s\n' 'diff --git a/sample.txt b/sample.txt' '--- a/sample.txt' '+++ b/s
 	}
 }
 
+func TestHostAcceptedHeadTargetMergeReview(t *testing.T) {
+	for _, tc := range []struct {
+		name, targetLine string
+		introduced       bool
+	}{
+		{name: "unchanged finding is dismissed", targetLine: "third baseline"},
+		{name: "target-introduced finding remains blocking", targetLine: "target change", introduced: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			bin, repo, home := fixture(t)
+			if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("stable line\nsecond baseline\nthird baseline\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			git(t, repo, "add", "sample.txt")
+			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "base file")
+			t1 := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+			git(t, repo, "checkout", "-b", "candidate")
+			if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("trust = os.Getenv(\"APP_MODE\")\nsecond baseline\nthird baseline\n"), 0600); err != nil {
+				t.Fatal(err)
+			}
+			git(t, repo, "add", "sample.txt")
+			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+			installFake(t, home, "")
+			fake := filepath.Join(filepath.Dir(home), "fake-pi")
+			script, err := os.ReadFile(fake)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defaultAnswer := "v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'model-id','priority':'P2','origin':'policy','file':'sample.txt','start':1,'end':1,'explanation':'Changed prose is redundant','action':'Remove repetition','rule':'unslop/plain-prose','head':b['Head']}]}"
+			answer := `prior=b.get('PriorFindings',[])
+line=1
+introduced=False
+if prior and 'target change' in raw:
+ line=3
+ introduced=True
+f={'id':'ignored','priority':'P1','origin':'correctness','file':'sample.txt','start':line,'end':line,'explanation':'Environment value is unsafe','action':'Remove unsafe trust','rule':'','head':b['Head']}
+if introduced:
+ f['target_introduced']=True
+v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[f]}`
+			if !strings.Contains(string(script), defaultAnswer) {
+				t.Fatal("fake reviewer answer template not found")
+			}
+			if err := os.WriteFile(fake, []byte(strings.Replace(string(script), defaultAnswer, answer, 1)), 0700); err != nil {
+				t.Fatal(err)
+			}
+			v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7"}}`), t1, "-accepted-head")
+			v = hostCall(t, bin, repo, home, v, "review", "accepted-head-review", map[string]any{"grant": "accepted-head-review"})
+			if v["outcome"] != "ok" {
+				t.Fatalf("first review: %v", v)
+			}
+			v = hostSettleWithFindings(t, bin, repo, home)
+			first := v["host_result"].(map[string]any)["findings"].([]any)[0].(map[string]any)
+			if !strings.Contains(strings.Join(stringsOf(v["actions"]), ","), "accept-head") {
+				t.Fatalf("host has no acceptance action for the settled review: %v", v["actions"])
+			}
+			accepted := hostCall(t, bin, repo, home, v, "accept-head", "accept-head", map[string]any{"reason": "Accept reviewed candidate head"})
+			if accepted["outcome"] != "ok" {
+				t.Fatalf("host acceptance: %v", accepted)
+			}
+			acceptedHead := runOf(t, accepted)["candidate"]
+			acceptedRecords, _ := runOf(t, accepted)["host_acceptances"].([]any)
+			if len(acceptedRecords) != 1 || acceptedRecords[0].(map[string]any)["candidate"] != acceptedHead {
+				t.Fatalf("host did not record the accepted head: %v", runOf(t, accepted))
+			}
+			git(t, repo, "checkout", "main")
+			if tc.introduced {
+				if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("stable line\nsecond baseline\n"+tc.targetLine+"\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				git(t, repo, "add", "sample.txt")
+				git(t, repo, "-c", "user.name=Target", "-c", "user.email=target@example.invalid", "commit", "-m", "advance target F")
+			} else {
+				if err := os.WriteFile(filepath.Join(repo, "target-only.txt"), []byte("target advances another file\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				git(t, repo, "add", "target-only.txt")
+				git(t, repo, "-c", "user.name=Target", "-c", "user.email=target@example.invalid", "commit", "-m", "advance target G")
+			}
+			t2 := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+			git(t, repo, "checkout", "candidate")
+			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "merge", "--no-edit", "main")
+			v = hostCall(t, bin, repo, home, accepted, "new", "target-merge-successor", nil)
+			v = hostPrepare(t, bin, repo, home, v, t2, "-target-merge")
+			v = hostCall(t, bin, repo, home, v, "review", "target-merge-review", map[string]any{"grant": "target-merge-review"})
+			if v["outcome"] != "ok" {
+				t.Fatalf("target-merge review: %v", v)
+			}
+			v = hostSettle(t, bin, repo, home)
+			result := v["host_result"].(map[string]any)
+			findings, _ := result["findings"].([]any)
+			if !tc.introduced {
+				dismissed, _ := result["dismissed_findings"].([]any)
+				reasons, _ := result["dismissal_reasons"].(map[string]any)
+				if result["status"] != "clean-review" || len(findings) != 0 || len(dismissed) != 1 || dismissed[0].(map[string]any)["id"] != first["id"] || reasons[first["id"].(string)] != "out of scope: byte-identical finding code since accepted head" || result["accepted_heads"].([]any)[0].(map[string]any)["candidate"] != acceptedHead {
+					t.Fatalf("unchanged accepted code should be dismissed: %v", result)
+				}
+			} else if result["status"] != "outstanding-findings" || len(findings) != 1 || findings[0].(map[string]any)["priority"] != "P1" || findings[0].(map[string]any)["start"] != float64(3) {
+				t.Fatalf("target-introduced finding should block: %v", result)
+			}
+		})
+	}
+}
+
 func TestHostReviewMovedTarget(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)

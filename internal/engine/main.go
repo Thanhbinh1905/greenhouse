@@ -14,6 +14,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,43 +72,45 @@ type Event struct {
 	To     string `json:"to,omitempty"`
 }
 type Run struct {
-	StartedAt      string              `json:"started_at,omitempty"`
-	StageStartedAt string              `json:"stage_started_at,omitempty"`
-	Intent         string              `json:"intent,omitempty"`
-	IntentSource   string              `json:"intent_source,omitempty"`
-	Reviewer       *ReviewerConfig     `json:"reviewer,omitempty"`
-	SelectedDiff   string              `json:"selected_diff,omitempty"`
-	Findings       []Finding           `json:"findings,omitempty"`
-	Review         *Execution          `json:"review,omitempty"`
-	RuleSnapshots  []RuleSnapshot      `json:"rule_snapshots,omitempty"`
-	ID             string              `json:"id"`
-	Input          string              `json:"input"`
-	Token          string              `json:"token"`
-	Submitted      repository.Identity `json:"submitted"`
-	Target         string              `json:"target"`
-	Candidate      string              `json:"candidate"`
-	Stage          string              `json:"stage"`
-	Status         string              `json:"status"`
-	Configs        []Snapshot          `json:"configs"`
-	ReviewUsed     int                 `json:"review_used"`
-	RepairUsed     int                 `json:"repair_used"`
-	Repair         *Repair             `json:"repair,omitempty"`
-	Pipeline       *Pipeline           `json:"pipeline,omitempty"`
-	Events         []Event             `json:"events"`
-	Predecessor    string              `json:"predecessor,omitempty"`
-	Successor      string              `json:"successor,omitempty"`
-	Pause          *BackendPause       `json:"pause,omitempty"`
-	Attempts       []Attempt           `json:"attempts,omitempty"`
-	AutoRetries    int                 `json:"auto_retries,omitempty"`
-	PriorRepairs   []Repair            `json:"prior_repairs,omitempty"`
-	Recovery       *Recovery           `json:"recovery,omitempty"`
-	Recoveries     []Recovery          `json:"recoveries,omitempty"`
-	Inherited      *Inheritance        `json:"inherited,omitempty"`
-	Host           *Host               `json:"host,omitempty"`
-	HostFindings   []Finding           `json:"host_findings,omitempty"`
-	HostCarried    []CarriedFinding    `json:"host_carried_findings,omitempty"`
-	HostResponses  *Repair             `json:"host_responses,omitempty"`
-	HostGrants     []string            `json:"host_grants,omitempty"`
+	StartedAt       string              `json:"started_at,omitempty"`
+	StageStartedAt  string              `json:"stage_started_at,omitempty"`
+	Intent          string              `json:"intent,omitempty"`
+	IntentSource    string              `json:"intent_source,omitempty"`
+	Reviewer        *ReviewerConfig     `json:"reviewer,omitempty"`
+	SelectedDiff    string              `json:"selected_diff,omitempty"`
+	Findings        []Finding           `json:"findings,omitempty"`
+	Review          *Execution          `json:"review,omitempty"`
+	RuleSnapshots   []RuleSnapshot      `json:"rule_snapshots,omitempty"`
+	ID              string              `json:"id"`
+	Input           string              `json:"input"`
+	Token           string              `json:"token"`
+	Submitted       repository.Identity `json:"submitted"`
+	Target          string              `json:"target"`
+	Candidate       string              `json:"candidate"`
+	Stage           string              `json:"stage"`
+	Status          string              `json:"status"`
+	Configs         []Snapshot          `json:"configs"`
+	ReviewUsed      int                 `json:"review_used"`
+	RepairUsed      int                 `json:"repair_used"`
+	Repair          *Repair             `json:"repair,omitempty"`
+	Pipeline        *Pipeline           `json:"pipeline,omitempty"`
+	Events          []Event             `json:"events"`
+	Predecessor     string              `json:"predecessor,omitempty"`
+	Successor       string              `json:"successor,omitempty"`
+	Pause           *BackendPause       `json:"pause,omitempty"`
+	Attempts        []Attempt           `json:"attempts,omitempty"`
+	AutoRetries     int                 `json:"auto_retries,omitempty"`
+	PriorRepairs    []Repair            `json:"prior_repairs,omitempty"`
+	Recovery        *Recovery           `json:"recovery,omitempty"`
+	Recoveries      []Recovery          `json:"recoveries,omitempty"`
+	Inherited       *Inheritance        `json:"inherited,omitempty"`
+	Host            *Host               `json:"host,omitempty"`
+	HostFindings    []Finding           `json:"host_findings,omitempty"`
+	HostAcceptances []HostAcceptance    `json:"host_acceptances,omitempty"`
+	HostHistory     []PriorFinding      `json:"host_history,omitempty"`
+	HostCarried     []CarriedFinding    `json:"host_carried_findings,omitempty"`
+	HostResponses   *Repair             `json:"host_responses,omitempty"`
+	HostGrants      []string            `json:"host_grants,omitempty"`
 
 	ReviewBase       string `json:"review_base,omitempty"`
 	ReviewBaseReason string `json:"review_base_reason,omitempty"`
@@ -714,7 +717,7 @@ func handleRequest(s *Store, q Request) Response {
 		}
 		return view(s, r)
 	}
-	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "migrate" && q.Op != "trust" && q.Op != "recover" {
+	if q.Op != "apply" && q.Op != "save" && q.Op != "new" && q.Op != "resolve-rules" && q.Op != "review" && q.Op != "prepare" && q.Op != "cancel" && q.Op != "repair" && q.Op != "handback" && q.Op != "pipeline" && q.Op != "resolve-conflict" && q.Op != "decide" && q.Op != "accept-head" && q.Op != "resume" && q.Op != "rerun" && q.Op != "rerun-from-start" && q.Op != "cancel-auto-resume" && q.Op != "migrate" && q.Op != "trust" && q.Op != "recover" {
 		return fail("unsupported operation: "+q.Op, r)
 	}
 	if q.Action == "" {
@@ -927,6 +930,10 @@ func handleRequest(s *Store, q Request) Response {
 		}
 		r.Events = append(r.Events, Event{Kind: "resolve-conflict", Actor: "client", Reason: "authorized fixer for target conflict"})
 		r.Token = opaque()
+	} else if q.Op == "accept-head" {
+		if err := acceptHostHead(r, q.Reason); err != nil {
+			return fail(err.Error(), r)
+		}
 	} else if q.Op == "decide" {
 		var d *Decision
 		if r.Pipeline != nil {
@@ -1760,6 +1767,19 @@ func finishReview(r *Run, done reviewOutcome) {
 	if done.Result != nil {
 		if r.Host != nil && (status == "clean-review" || status == "outstanding-findings") {
 			r.HostFindings = append([]Finding{}, done.Result.Findings...)
+			for _, finding := range done.Result.Findings {
+				if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == finding.ID }); i >= 0 {
+					r.HostHistory[i].State = "open"
+					r.HostHistory[i].Finding = finding
+				} else {
+					r.HostHistory = append(r.HostHistory, PriorFinding{Finding: finding, State: "open"})
+				}
+			}
+			for _, conflict := range done.Result.Conflicts {
+				if i := slices.IndexFunc(r.HostHistory, func(prior PriorFinding) bool { return prior.ID == conflict.Earlier.ID }); i >= 0 {
+					r.HostHistory[i].State = "conflicted"
+				}
+			}
 		}
 		index := map[string]int{}
 		for i, f := range r.Findings {
