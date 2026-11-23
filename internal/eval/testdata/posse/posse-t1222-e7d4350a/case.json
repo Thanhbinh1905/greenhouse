@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "id": "posse-t1222-e7d4350a",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head e7d4350a.",
+  "intent": "feat(review): Greenhouse Verdict gate as an opt-in review provider (Phase 1 G-4)\n\nDone when: A config key `review_provider` (`builtin` by default, or `greenhouse`) is settable globally and per Project, and is frozen in each admitted Task's plan. Changing it never moves an admitted Task to another reviewer.; A Task admitted with `greenhouse` follows docs/research/2026-11-13-direction-2-design.md sections 2.2, 2.3 and 2.7: no Review Task, no Private Candidate and no `posse validate` stage. Posse requests a Greenhouse Verdict for the head through the G-2 adapter. Under `full-pipeline` it refuses to push a head without a current passing Verdict (AC-D5). The merge gate requires PR head = gated_sha, a passing Verdict for that head, and green forge CI at that head.; Greenhouse findings reach the author through the existing fix-round flow and count toward the frozen round cap. Re-review after a fix binds the new head. `inconclusive` and a missing Verdict never pass the gate.; A Workspace Project gets one host review per changed Member (design D6), and the gate requires a passing Verdict for every changed Member head.; A Task admitted with `builtin` behaves exactly as today. Every existing review test passes unchanged.; AC-D2 passes as an E2E test with the real `greenhouse` binary and a fake reviewer: a change merges with a Greenhouse Verdict bound to the merged head, and the Lead ran no review command.; Docs (docs/spec.md and the config schema) describe the key, the frozen-per-Task rule, and rollback by setting `review_provider = \"builtin\"`.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-29b911a0",
+      "file": "internal/app/task_plan.go",
+      "start": 130,
+      "end": 130,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "The new review_provider value is frozen into the plan, but the review and merge paths do not consume Plan.ReviewProvider or Member.ReviewProvider. They still select Greenhouse only from the separate frozen review_parallel setting and otherwise create the built-in Review Task and built-in verdict evidence. Consequently, setting review_provider = \"greenhouse\" as documented does not invoke Greenhouse, suppress the built-in Review Task, or make Greenhouse Verdicts satisfy the merge gate."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "e7d4350aa478c028f227abfdc997ca7ecec93b8d",
+    "target": "71c61f94e68fa1ed1802da9fcf600c1b2517bd62",
+    "files": [
+      "docs/spec.md",
+      "internal/app/task_add_member.go",
+      "internal/app/task_plan.go",
+      "internal/app/task_plan_test.go",
+      "internal/config/config.go",
+      "internal/config/review.go",
+      "internal/config/review_provider_test.go",
+      "internal/config/schema.go",
+      "internal/taskplan/plan.go",
+      "internal/taskplan/plan_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

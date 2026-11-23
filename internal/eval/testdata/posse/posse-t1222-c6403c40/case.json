@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "id": "posse-t1222-c6403c40",
+  "category": "bug",
+  "description": "Pinned external posse case t1222 head c6403c40.",
+  "intent": "feat(review): run Greenhouse in parallel with built-in review per Project and compare Verdicts (Phase 1 G-3)\n\nDone when: A Project config key `review_parallel = \"greenhouse\"` (unset by default) makes Posse request a Greenhouse Verdict through the G-2 adapter for each head the built-in loop reviews, and record it in the G-1 Verdict table with `mode = parallel`, as specified in docs/research/2026-11-13-direction-2-design.md sections 2.6 and 2.8 (step G-3).; A Project with the key set and no built-in review (`defaults.review = none`) still gets a parallel Verdict for each PR head it gates. Those rows count toward reliability, inconclusive share, wrong-head and latency, and never toward recall.; Parallel Verdicts and their findings are stored only. They never reach the author, never block or allow Publish or Merge, and a Greenhouse failure or refusal never delays the built-in loop. A failure raises at most one Notice per head.; `posse stats` gains a review comparison that computes every G1 threshold in section 2.6 from stored rows, per Project and in total, with the number of reviewed heads.; The key is frozen in each admitted Task's plan. Unsetting it stops new parallel requests and changes nothing else.; No change to existing review, publish or merge behaviour when the key is unset.",
+  "rules": [],
+  "expected": [
+    {
+      "id": "t1222-57c05255",
+      "file": "internal/app/review_rounds.go",
+      "start": 147,
+      "end": 153,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "high",
+      "priorities": [
+        "P1"
+      ],
+      "defect": "Starting the parallel Greenhouse process is performed synchronously before the built-in Review Round is started, and any error from startParallelGreenhouseReviews is returned immediately. Thus a Greenhouse startup failure, ledger/notice failure, lock error, or owner-file error prevents the built-in review from starting, contrary to the contract that Greenhouse failure or refusal must never delay the built-in loop."
+    },
+    {
+      "id": "t1222-db47db6a",
+      "file": "internal/app/greenhouse.go",
+      "start": 253,
+      "end": 267,
+      "origin": "correctness",
+      "rule": "",
+      "severity": "low",
+      "priorities": [
+        "P2"
+      ],
+      "defect": "A transient adapter error is recorded as a failed request row before retrying, then a later successful retry records a second verdict row. The comparison consequently counts one logical request multiple times and lowers reliability for recoverable failures, even though the request ultimately settled without manual action."
+    }
+  ],
+  "noise": [],
+  "split": "holdout",
+  "stratum": "real-posse-review",
+  "tags": [
+    "Go",
+    "real-posse"
+  ],
+  "source": {
+    "kind": "external",
+    "repo": "https://github.com/Thanhbinh1905/posse.git",
+    "head": "c6403c4003cc3f5ffcd5cee532ebeb38214b2c2d",
+    "target": "d5a89ce298b84bd18d1ee2b71f85e40e56a0c575",
+    "files": [
+      "docs/research/2026-11-13-direction-2-design.md",
+      "docs/spec.md",
+      "internal/app/greenhouse.go",
+      "internal/app/greenhouse_parallel.go",
+      "internal/app/greenhouse_parallel_test.go",
+      "internal/app/project_remove_test.go",
+      "internal/app/review_comparison.go",
+      "internal/app/review_comparison_test.go",
+      "internal/app/review_rounds.go",
+      "internal/app/review_rounds_test.go",
+      "internal/app/stats.go",
+      "internal/app/task_plan.go",
+      "internal/config/config.go",
+      "internal/config/config_test.go",
+      "internal/config/schema.go",
+      "internal/e2e/profile_stats_test.go",
+      "internal/store/greenhouse_requests.go",
+      "internal/store/greenhouse_verdicts.go",
+      "internal/store/greenhouse_verdicts_test.go",
+      "internal/store/migrations/00097_greenhouse_review_requests.sql",
+      "internal/taskplan/plan.go",
+      "internal/taskplan/plan_test.go"
+    ],
+    "derivation": "Greenhouse finding adjudicated TRUE in t1236 against this exact head and target."
+  }
+}

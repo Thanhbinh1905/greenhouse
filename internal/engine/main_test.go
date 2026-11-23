@@ -26,7 +26,7 @@ func TestDaemonSignalShutdownReturnsNil(t *testing.T) {
 			t.Fatal(err)
 		}
 		cmd := exec.Command(os.Args[0], "-test.run=^TestDaemonSignalShutdownReturnsNil$")
-		cmd.Env = append(os.Environ(), helperEnv+"=1", "GREENHOUSE_HOME="+home, "GORACE=atexit_sleep_ms=0")
+		cmd.Env = append(withoutEnv(os.Environ(), "GREENHOUSE_TEST_PARENT_PID"), helperEnv+"=1", "GREENHOUSE_HOME="+home, "GORACE=atexit_sleep_ms=0")
 		if output, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("signal shutdown failed: %v: %s", err, output)
 		}

@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -43,6 +44,7 @@ type Case struct {
 	Intent      string            `json:"intent"`
 	Rules       []string          `json:"rules"`
 	Expected    []Expected        `json:"expected"`
+	Avoid       []Expected        `json:"avoid,omitempty"`
 	Noise       []Noise           `json:"noise"`
 	Base        map[string]string `json:"-"`
 	Head        map[string]string `json:"-"`
@@ -52,6 +54,8 @@ type Source struct {
 	Kind       string   `json:"kind"`
 	Repo       string   `json:"repo,omitempty"`
 	Commit     string   `json:"commit,omitempty"`
+	Head       string   `json:"head,omitempty"`
+	Target     string   `json:"target,omitempty"`
 	License    string   `json:"license,omitempty"`
 	URL        string   `json:"url,omitempty"`
 	Files      []string `json:"files,omitempty"`
@@ -70,7 +74,7 @@ type Allowed struct {
 var strata = map[string]bool{
 	"reversed-bug-fix": true, "injected-defect": true, "clean-real-change": true,
 	"security-sensitive": true, "refactor-only": true, "large-change": true,
-	"tiny-change": true, "cross-file": true, "judgment": true,
+	"tiny-change": true, "cross-file": true, "judgment": true, "real-posse-review": true,
 }
 
 var publicLicenses = map[string]bool{"MIT": true, "Apache-2.0": true, "BSD-2-Clause": true, "BSD-3-Clause": true, "ISC": true}
@@ -96,6 +100,10 @@ func validateMetadata(k Case) error {
 		if s.Kind == "public" && (!publicLicenses[s.License] || !strings.HasPrefix(s.URL, "https://")) {
 			return errors.New("public source requires allowed license and https url")
 		}
+	case "external":
+		if (!strings.HasPrefix(s.Repo, "https://") && !strings.HasPrefix(s.Repo, "file://")) || !commitID.MatchString(s.Head) || !commitID.MatchString(s.Target) || len(s.Files) == 0 {
+			return errors.New("external source requires a repository URL, exact head and target, and files")
+		}
 	default:
 		return fmt.Errorf("unknown source kind %q", s.Kind)
 	}
@@ -103,9 +111,11 @@ func validateMetadata(k Case) error {
 		if name == "" || filepath.IsAbs(name) || filepath.ToSlash(filepath.Clean(name)) != name || name == ".." || strings.HasPrefix(name, "../") {
 			return errors.New("source files must be repository-relative paths")
 		}
-		if _, base := k.Base[name]; !base {
-			if _, head := k.Head[name]; !head {
-				return fmt.Errorf("source file %s absent from case trees", name)
+		if s.Kind != "external" {
+			if _, base := k.Base[name]; !base {
+				if _, head := k.Head[name]; !head {
+					return fmt.Errorf("source file %s absent from case trees", name)
+				}
 			}
 		}
 	}
@@ -240,7 +250,8 @@ func loadCase(dir, id string) (*Case, error) {
 	if k.Head, err = readTree(filepath.Join(dir, "head")); err != nil {
 		return nil, err
 	}
-	changed := false
+	external := k.Source.Kind == "external"
+	changed := external
 	for name, body := range k.Head {
 		if k.Base[name] != body {
 			changed = true
@@ -278,9 +289,16 @@ func loadCase(dir, id string) (*Case, error) {
 	default:
 		return nil, fmt.Errorf("unknown category %q", k.Category)
 	}
+	if len(k.Avoid) > 0 && !external {
+		return nil, errors.New("avoid claims require an external source")
+	}
 	ids := map[string]bool{}
-	for _, e := range k.Expected {
-		if err := checkRange(k.Head, e.File, e.Start, e.End); err != nil {
+	for _, e := range append(append([]Expected(nil), k.Expected...), k.Avoid...) {
+		if external {
+			if e.Start < 1 || e.End < e.Start || !slices.Contains(k.Source.Files, e.File) {
+				return nil, fmt.Errorf("external expectation %s needs a valid range and listed source file", e.ID)
+			}
+		} else if err := checkRange(k.Head, e.File, e.Start, e.End); err != nil {
 			return nil, err
 		}
 		if e.Origin == "policy" && e.Rule == "" || e.Origin == "correctness" && e.Rule != "" || e.Origin != "policy" && e.Origin != "correctness" {

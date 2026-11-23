@@ -62,6 +62,29 @@ func TestLoadCorpusReadsManifestCasesAndTrees(t *testing.T) {
 	}
 }
 
+func TestLoadCorpusLoadsPinnedExternalCases(t *testing.T) {
+	root := t.TempDir()
+	writeManifest(t, root, `{"version":1,"revision":7,"cases":["external"]}`)
+	spec := `{"version":1,"id":"external","category":"clean","description":"Check an external PR.","intent":"Review the pinned candidate.","rules":[],"expected":[],"avoid":[{"id":"false-premise","file":"pkg/review.go","start":40,"end":44,"origin":"correctness","rule":"","severity":"low","priorities":["P1"],"defect":"This code fails because of the claimed condition, but the earlier guard rejects it."}],"noise":[],"split":"holdout","stratum":"clean-real-change","tags":["Go"],"source":{"kind":"external","repo":"https://github.com/example/project.git","head":"` + strings.Repeat("a", 40) + `","target":"` + strings.Repeat("b", 40) + `","files":["pkg/review.go"],"derivation":"Pinned public pull request."}}`
+	if err := os.MkdirAll(filepath.Join(root, "external"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeCase(t, root, "external", spec, nil)
+	c, err := LoadCorpus(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	k := c.Cases[0]
+	if k.Source.Kind != "external" || len(k.Avoid) != 1 || k.Avoid[0].ID != "false-premise" || k.Source.Head != strings.Repeat("a", 40) || k.Source.Target != strings.Repeat("b", 40) {
+		t.Fatalf("external case = %+v", k)
+	}
+	invalid := k
+	invalid.Source.Files = nil
+	if err := validateMetadata(invalid); err == nil || !strings.Contains(err.Error(), "repository URL, exact head and target, and files") {
+		t.Fatalf("external case without source files must be rejected: %v", err)
+	}
+}
+
 func TestLoadCorpusRejectsInvalidGroundTruth(t *testing.T) {
 	tests := []struct {
 		name, spec, want string
