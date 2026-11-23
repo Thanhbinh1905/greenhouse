@@ -264,6 +264,44 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	}
 }
 
+func TestBoundedReviewDiffMarksRemainingPathsAtExactLimit(t *testing.T) {
+	_, repo, _ := fixture(t)
+	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	first := "a-0000000000.txt"
+	marker := fmt.Sprintf("diff --git a/%s b/%s\n[uncovered: hunks omitted; see Uncovered]\n", "b-0000000000.txt", "b-0000000000.txt")
+	if err := os.WriteFile(filepath.Join(repo, first), []byte("x\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	initialHead := commitReviewFixture(t, repo, "add prefix file")
+	initialDiff := git(t, repo, reviewDiffArgs(base, initialHead)...)
+	wantPrefixBytes := 1024*1024 - len(marker)
+	contentBytes := 2 + wantPrefixBytes - len(initialDiff)
+	if err := os.WriteFile(filepath.Join(repo, first), []byte(strings.Repeat("x", contentBytes-1)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	prefixHead := commitReviewFixture(t, repo, "fill diff to marker boundary")
+	prefixDiff := git(t, repo, reviewDiffArgs(base, prefixHead)...)
+	if len(prefixDiff) != wantPrefixBytes {
+		t.Fatalf("prefix diff is %d bytes, want %d", len(prefixDiff), wantPrefixBytes)
+	}
+	for name, content := range map[string]string{"b-0000000000.txt": strings.Repeat("b", 1024) + "\n", "c-0000000000.txt": "c\n"} {
+		if err := os.WriteFile(filepath.Join(repo, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	candidate := commitReviewFixture(t, repo, "add paths after marker boundary")
+	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, []string{first, "b-0000000000.txt", "c-0000000000.txt"}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diff) != 1024*1024 {
+		t.Fatalf("bounded diff is %d bytes, want exactly 1 MiB", len(diff))
+	}
+	if len(uncovered) != 2 || uncovered[0].Path != "b-0000000000.txt" || uncovered[1].Path != "c-0000000000.txt" || uncovered[0].Reason != "diff_bound" || uncovered[1].Reason != "diff_bound" {
+		t.Fatalf("paths after the marker boundary must be uncovered with diff_bound: %+v", uncovered)
+	}
+}
+
 func TestBoundedReviewDiffDoesNotExceedLimitWhenMarkingPaths(t *testing.T) {
 	_, repo, _ := fixture(t)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))

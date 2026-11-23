@@ -466,7 +466,14 @@ type reviewFile struct {
 func boundedReviewDiff(worktree, base, candidate string, names []string, generated []GeneratedPath, uncovered []UncoveredPath) (string, []UncoveredPath, error) {
 	const limit = 1024 * 1024
 	var output strings.Builder
-	for _, name := range names {
+	markUncovered := func(name, reason string) {
+		if i := slices.IndexFunc(uncovered, func(path UncoveredPath) bool { return path.Path == name }); i >= 0 {
+			uncovered[i].Reason = reason
+		} else {
+			uncovered = append(uncovered, UncoveredPath{name, reason})
+		}
+	}
+	for i, name := range names {
 		isGenerated := slices.ContainsFunc(generated, func(g GeneratedPath) bool { return g.Path == name })
 		alreadyUncovered := slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == name })
 		note := "[uncovered: hunks omitted; see Uncovered]"
@@ -475,11 +482,14 @@ func boundedReviewDiff(worktree, base, candidate string, names []string, generat
 		}
 		marker := fmt.Sprintf("diff --git a/%s b/%s\n%s\n", name, name, note)
 		remaining := limit - output.Len()
-		if remaining < len(marker) {
-			if !alreadyUncovered && !isGenerated {
-				uncovered = append(uncovered, UncoveredPath{name, "diff exceeds 1 MiB review limit"})
+		if remaining-len(marker) <= 0 {
+			if remaining >= len(marker) {
+				output.WriteString(marker)
 			}
-			continue
+			for _, omitted := range names[i:] {
+				markUncovered(omitted, "diff_bound")
+			}
+			break
 		}
 		if alreadyUncovered {
 			output.WriteString(marker)
