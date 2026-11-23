@@ -109,7 +109,7 @@ func boundedExcerpt(lines string, limit int) string {
 }
 
 func omitDiffHunks(worktree, base, candidate, diff, path, note string) (string, error) {
-	section, err := repository.Read(worktree, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, candidate, "--", path)
+	section, err := repository.ReadBounded(worktree, reviewDiffLimit, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, candidate, "--", path)
 	if err != nil {
 		return "", err
 	}

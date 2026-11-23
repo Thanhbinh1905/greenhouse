@@ -16,6 +16,14 @@ import (
 type reviewRefusal struct{ Code, Message string }
 
 func (e *reviewRefusal) Error() string { return e.Message }
+func prepareRefusal(err error) error {
+	var refusal *reviewRefusal
+	if errors.As(err, &refusal) {
+		return err
+	}
+	return &reviewRefusal{"prepare_failed", err.Error()}
+}
+
 func refusalResponse(v Response, err error) Response {
 	v.Outcome, v.Error = "refused", err.Error()
 	var refusal *reviewRefusal

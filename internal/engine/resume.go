@@ -419,9 +419,12 @@ func prepareRun(s *Store, r *Run, intent, requested string) error {
 	if err != nil {
 		return err
 	}
-	diff, err := repository.Read(r.Submitted.Worktree, reviewDiffArgs(base, r.Candidate)...)
+	diff, err := repository.ReadBounded(r.Submitted.Worktree, reviewDiffLimit, reviewDiffArgs(base, r.Candidate)...)
+	if errors.Is(err, repository.ErrReadLimit) {
+		return &reviewRefusal{"review_input_too_large", fmt.Sprintf("review diff exceeds %d bytes: %v", reviewDiffLimit, err)}
+	}
 	if err != nil {
-		return errors.New("cannot capture complete bounded diff")
+		return fmt.Errorf("cannot capture review diff: %w", err)
 	}
 	settings := r.Configs[len(r.Configs)-1].Settings
 	cfg, err := trustedAgent(settings.ReviewerBackend, settings.ReviewerModel)

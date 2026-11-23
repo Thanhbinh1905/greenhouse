@@ -167,6 +167,103 @@ func mustJSON(t *testing.T, v any) string {
 	return string(b)
 }
 
+func TestReviewAdmissionOverDiffLimitLeavesLargePathUncovered(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	large := filepath.Join(repo, "docs", "evidence", "large.txt")
+	if err := os.MkdirAll(filepath.Dir(large), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(large, []byte(strings.Repeat("large evidence line\n", 300000)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commitReviewFixture(t, repo, "large and small changes")
+	v := prepareReviewAdmission(t, bin, repo, home, target)
+	scriptPath := filepath.Join(filepath.Dir(home), "fake-pi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scriptText := strings.Replace(string(script), "'verdict':'findings'", "'verdict':'clean'", 1)
+	scriptText = strings.Replace(scriptText, "'findings':[{'id':'model-id','priority':'P2','origin':'policy','file':'sample.txt','start':1,'end':1,'explanation':'Changed prose is redundant','action':'Remove repetition','rule':'unslop/plain-prose','head':b['Head']}]", "'findings':[]", 1)
+	if err := os.WriteFile(scriptPath, []byte(scriptText), 0700); err != nil {
+		t.Fatal(err)
+	}
+	v = mutate(t, bin, repo, home, v, "review", "over-diff-limit", nil)
+	if v["outcome"] != "ok" {
+		t.Fatalf("large diff admission: code=%v error=%v", v["error_code"], v["error"])
+	}
+	v = waitReview(t, bin, repo, home)
+	review := runOf(t, v)["review"].(map[string]any)
+	result := review["result"].(map[string]any)
+	if review["status"] != "partial-review" || result["verdict"] != "partial" {
+		t.Fatalf("large path should settle partial: status=%v verdict=%v", review["status"], result["verdict"])
+	}
+	uncovered := review["uncovered"].([]any)
+	if len(uncovered) != 1 || uncovered[0].(map[string]any)["path"] != "docs/evidence/large.txt" || uncovered[0].(map[string]any)["reason"] == "" {
+		t.Fatalf("large path needs an uncovered reason: %v", uncovered)
+	}
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured struct {
+		Input struct {
+			Paths []string
+			Diff  string
+		}
+	}
+	if err := json.Unmarshal(b, &captured); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(captured.Input.Paths, ",") != "sample.txt" || !strings.Contains(captured.Input.Diff, "[uncovered: hunks omitted; see Uncovered]") {
+		t.Fatalf("review did not retain small path and omit the large path: %+v", captured.Input)
+	}
+}
+
+func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
+	bin, repo, home := fixture(t)
+	if err := os.MkdirAll(filepath.Join(repo, "docs", "evidence"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("docs/evidence/** linguist-generated\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	target := commitReviewFixture(t, repo, "mark evidence generated")
+	if err := os.WriteFile(filepath.Join(repo, "docs", "evidence", "large.txt"), []byte(strings.Repeat("evidence line\n", 300000)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commitReviewFixture(t, repo, "add generated evidence")
+	v := prepareReviewAdmission(t, bin, repo, home, target)
+	v = mutate(t, bin, repo, home, v, "review", "generated-over-diff-limit", nil)
+	if v["outcome"] != "ok" {
+		t.Fatalf("generated diff admission: code=%v error=%v", v["error_code"], v["error"])
+	}
+	_ = waitReview(t, bin, repo, home)
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var captured struct {
+		Input struct {
+			Generated []GeneratedPath
+			Diff      string
+		}
+	}
+	if err := json.Unmarshal(b, &captured); err != nil {
+		t.Fatal(err)
+	}
+	if len(captured.Input.Generated) != 1 || captured.Input.Generated[0].Path != "docs/evidence/large.txt" || captured.Input.Generated[0].Added != 300000 || len(captured.Input.Diff) > 1024*1024 || strings.Contains(captured.Input.Diff, "evidence line") {
+		t.Fatalf("generated evidence was not kept in short form: paths=%+v diff bytes=%d", captured.Input.Generated, len(captured.Input.Diff))
+	}
+}
+
 func TestReviewInputLargeFile(t *testing.T) {
 	t.Parallel()
 	bin, repo, home := fixture(t)
