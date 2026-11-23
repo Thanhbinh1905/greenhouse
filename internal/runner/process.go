@@ -88,13 +88,11 @@ func freezeChildTree(deadline time.Time) ([]int, bool) {
 func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error), signal func(int, syscall.Signal) error) ([]int, bool) {
 	known := make(map[int]byte)
 	stableScans := 0
-	var latest map[int]byte
 	for time.Now().Before(deadline) {
 		descendants, err := scan(os.Getpid())
 		if err != nil {
 			return processIDs(known, false), false
 		}
-		latest = descendants
 		newProcess := false
 		for pid, state := range descendants {
 			if _, seen := known[pid]; !seen {
@@ -113,7 +111,7 @@ func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error
 			stableScans++
 		}
 		if stableScans >= 2 {
-			return processIDs(latest, false), true
+			return processIDs(known, false), true
 		}
 		time.Sleep(time.Millisecond)
 	}

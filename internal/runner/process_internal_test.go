@@ -36,6 +36,34 @@ func TestFreezeChildTreeDoesNotWaitForStoppedState(t *testing.T) {
 	}
 }
 
+func TestFreezeChildTreeReturnsDescendantsSeenBeforeDisappearing(t *testing.T) {
+	const childPID = 2345
+	scans := 0
+	stopped := make(map[int]bool)
+	pids, complete := freezeChildTreeWith(time.Now().Add(100*time.Millisecond), func(int) (map[int]byte, error) {
+		scans++
+		if scans == 1 {
+			return map[int]byte{childPID: 'R'}, nil
+		}
+		return map[int]byte{}, nil
+	}, func(pid int, signal syscall.Signal) error {
+		if signal != syscall.SIGSTOP {
+			t.Fatalf("signal(%d, %v)", pid, signal)
+		}
+		stopped[pid] = true
+		return nil
+	})
+	if !complete {
+		t.Fatalf("freeze did not stabilize: scans=%d pids=%v", scans, pids)
+	}
+	if len(pids) != 1 || pids[0] != childPID {
+		t.Fatalf("freeze omitted previously observed descendant: %v", pids)
+	}
+	if !stopped[childPID] {
+		t.Fatalf("descendant %d was not stopped", childPID)
+	}
+}
+
 func TestFreezeChildTreeReturnsKnownProcessesAtDeadline(t *testing.T) {
 	calls := 0
 	deadline := time.Now().Add(25 * time.Millisecond)
