@@ -134,6 +134,16 @@ func Outstanding(r *Run) (actionable, informational []Finding) {
 	return actionable, informational
 }
 
+func blockingFindings(findings []Finding) []Finding {
+	var blocking []Finding
+	for _, f := range findings {
+		if f.Priority == "P0" || f.Priority == "P1" {
+			blocking = append(blocking, f)
+		}
+	}
+	return blocking
+}
+
 func repairableFindings(r *Run, findings []Finding) []Finding {
 	if _, err := trustedFixer(); err != nil {
 		return nil
@@ -267,6 +277,7 @@ func yoloActor(r *Run) (string, bool) {
 func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 	p := r.Pipeline
 	actionable, _ := Outstanding(r)
+	actionable = blockingFindings(actionable)
 	b := budgetOf(r)
 	reason = fmt.Sprintf("review cap reached (%d/%d: review %d + repair %d); %s", b.Total, b.Limit, b.Review, b.Repair, reason)
 	openDecision(r, st, "needs-decision", Decision{Kind: "cap", Findings: FindingIDs(actionable), Options: capOptions(p), Reason: reason})
@@ -281,6 +292,11 @@ func capDecision(s *Store, r *Run, st *StageResult, reason string) *Step {
 func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 	p := r.Pipeline
 	actionable, _ := Outstanding(r)
+	blocking := blockingFindings(actionable)
+	if len(blocking) == 0 {
+		st.Status, st.Reason = "passed", "no blocking findings remain"
+		return advancePipeline(s, r)
+	}
 	repairable := repairableFindings(r, actionable)
 	b := budgetOf(r)
 	if g := p.FinalFix; g != nil && g.RepairAllowed && g.Repair == 0 && len(repairable) > 0 {
@@ -289,13 +305,13 @@ func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 		}
 	}
 	if b.Total+2 > b.Limit {
-		return capDecision(s, r, st, fmt.Sprintf("%d actionable findings remain and no room for a repair and its rereview", len(actionable)))
+		return capDecision(s, r, st, fmt.Sprintf("%d blocking findings remain and no room for a repair and its rereview", len(blocking)))
 	}
 	options := []string{"repair", "rethink", "discard"}
-	reason := fmt.Sprintf("%d actionable findings await authorization", len(actionable))
+	reason := fmt.Sprintf("%d blocking findings await authorization", len(blocking))
 	if len(repairable) == 0 {
 		options = options[1:]
-		reason = fmt.Sprintf("%d actionable findings need the author: no trusted fixer or no finding in a changed path", len(actionable))
+		reason = fmt.Sprintf("%d blocking findings need the author: no trusted fixer or no blocking finding in a changed path", len(blocking))
 	} else if mode := r.Configs[len(r.Configs)-1].Settings.Mode; mode != "ask" {
 		actor := "auto"
 		if mode == "yolo" {
@@ -312,7 +328,11 @@ func findingsNext(s *Store, r *Run, st *StageResult) *Step {
 			reason = "repair refused: " + err.Error()
 		}
 	}
-	openDecision(r, st, "needs-decision", Decision{Kind: "findings", Findings: FindingIDs(actionable), Options: options, Reason: reason})
+	grouped := blocking
+	if len(repairable) > 0 {
+		grouped = repairable
+	}
+	openDecision(r, st, "needs-decision", Decision{Kind: "findings", Findings: FindingIDs(grouped), Options: options, Reason: reason})
 	return nil
 }
 
@@ -373,6 +393,7 @@ func applyChoice(s *Store, r *Run, d *Decision, a Answer) (*Run, error) {
 		}
 	case "accept-head":
 		actionable, _ := Outstanding(r)
+		actionable = blockingFindings(actionable)
 		review := p.stage("review")
 		in := stageInputs(r, "review")
 		p.Acceptances = append(p.Acceptances, Acceptance{Decision: d.ID, Candidate: r.Candidate, Inputs: in, Config: r.Configs[len(r.Configs)-1].ID, Findings: FindingIDs(actionable), Actor: a.Actor, Reason: a.Reason})

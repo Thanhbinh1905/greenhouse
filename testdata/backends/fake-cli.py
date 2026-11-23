@@ -9,7 +9,7 @@ if args[:2]==["mcp","list"]:
 stdin=sys.stdin.read()
 try:
     with open(root+'/'+backend+'-calls.jsonl','a') as f:
-        f.write(json.dumps({'args':args,'cwd':os.getcwd(),'env':sorted(k for k in os.environ if k.startswith(('CLAUDE','CODEX','PI_','RUST_LOG')))})+'\n')
+        f.write(json.dumps({'args':args,'cwd':os.getcwd(),'env':sorted(k for k in os.environ if k.startswith(('CLAUDE','CODEX','PI_','RUST_LOG'))),'input':stdin})+'\n')
 except OSError:
     pass
 if os.path.exists(root+'/probe-'+backend):

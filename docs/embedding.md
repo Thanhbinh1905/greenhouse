@@ -20,6 +20,10 @@ Host mode needs protocol version 2. See [compatibility](compatibility.md).
 
 Each responsibility has one owner. Greenhouse never pushes, opens a PR, writes the worktree, or creates a reviewer pane in host mode.
 
+## Finding priorities and pipeline decisions
+
+P0 and P1 findings with valid actions are blocking and must be resolved or explicitly accepted before the full pipeline can pass. P2 findings with valid actions are actionable but non-blocking: they remain reported, may be included in a repair round already opened for blocking findings, and do not prevent a clean or passing verdict if left unresolved. P3 findings are informational and do not block or enter repair rounds.
+
 ## Host identity
 
 Every host request carries `host`:
