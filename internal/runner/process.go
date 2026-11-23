@@ -16,6 +16,8 @@ import (
 
 var ErrWriterTreeUnknown = errors.New("writer descendant cleanup could not be verified")
 
+const cancellationFreezeTimeout = 2 * time.Second
+
 func init() {
 	if len(os.Args) > 2 && os.Args[1] == "_run-child" {
 		os.Exit(runChild(os.Args[2:]))
@@ -79,42 +81,43 @@ func processDescendants(root int) (map[int]byte, error) {
 	return descendants, nil
 }
 
-func freezeChildTree() ([]int, bool) {
-	deadline := time.Now().Add(30 * time.Second)
+func freezeChildTree(deadline time.Time) ([]int, bool) {
+	return freezeChildTreeWith(deadline, processDescendants, syscall.Kill)
+}
+
+func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error), signal func(int, syscall.Signal) error) ([]int, bool) {
 	known := make(map[int]byte)
 	stableScans := 0
 	var latest map[int]byte
 	for time.Now().Before(deadline) {
-		descendants, err := processDescendants(os.Getpid())
+		descendants, err := scan(os.Getpid())
 		if err != nil {
-			return processIDs(latest, false), false
+			return processIDs(known, false), false
 		}
 		latest = descendants
 		newProcess := false
-		allStopped := true
 		for pid, state := range descendants {
 			if _, seen := known[pid]; !seen {
 				newProcess = true
 			}
 			known[pid] = state
 			if state != 'T' && state != 't' && state != 'Z' && state != 'X' {
-				allStopped = false
-				if err := syscall.Kill(pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
-					return processIDs(latest, false), false
+				if err := signal(pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
+					return processIDs(known, false), false
 				}
 			}
 		}
-		if newProcess || !allStopped {
+		if newProcess {
 			stableScans = 0
 		} else {
 			stableScans++
 		}
 		if stableScans >= 2 {
-			return processIDs(latest, true), true
+			return processIDs(latest, false), true
 		}
 		time.Sleep(time.Millisecond)
 	}
-	return processIDs(latest, false), false
+	return processIDs(known, false), false
 }
 
 func processIDs(processes map[int]byte, stoppedOnly bool) []int {
@@ -126,6 +129,16 @@ func processIDs(processes map[int]byte, stoppedOnly bool) []int {
 		pids = append(pids, pid)
 	}
 	return pids
+}
+
+func reapExitedChildren() {
+	var status syscall.WaitStatus
+	for {
+		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+		if err != nil || pid <= 0 {
+			return
+		}
+	}
 }
 
 func reapChildTree() bool {
@@ -196,7 +209,7 @@ func RunProcess(ctx context.Context, dir, exe string, args []string, input []byt
 	deadline := strconv.FormatInt(expires.Add(30*time.Second).Unix(), 10)
 	cmd := exec.CommandContext(ctx, self, append([]string{"_run-child", nextExecutor(ctx), deadline, exe}, args...)...)
 	cmd.Dir = dir
-	cmd.WaitDelay = 35 * time.Second
+	cmd.WaitDelay = 5 * time.Second
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
 			return os.ErrProcessDone

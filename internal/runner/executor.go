@@ -204,16 +204,17 @@ func runChild(args []string) (result int) {
 	defer deadline.Stop()
 	var childErr error
 	stopped := false
+	stoppedAt := time.Time{}
 	stopReason := ""
 	select {
 	case childErr = <-done:
 	case sig := <-signals:
-		stopped, stopReason = true, "cancelled"
+		stopped, stoppedAt, stopReason = true, time.Now(), "cancelled"
 		if sig == executorTimeoutSignal {
 			stopReason = "timeout"
 		}
 	case <-deadline.C:
-		stopped, stopReason = true, "timeout"
+		stopped, stoppedAt, stopReason = true, time.Now(), "timeout"
 	}
 	killErr := error(nil)
 	freezeComplete := true
@@ -222,7 +223,8 @@ func runChild(args []string) (result int) {
 		if err := syscall.Kill(child.Process.Pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
 			killErr = err
 		}
-		frozen, freezeComplete = freezeChildTree()
+		cleanupDeadline := stoppedAt.Add(cancellationFreezeTimeout)
+		frozen, freezeComplete = freezeChildTree(cleanupDeadline)
 		if !freezeComplete {
 			if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 				killErr = errors.Join(killErr, err)
@@ -234,9 +236,15 @@ func runChild(args []string) (result int) {
 			}
 		}
 		if !freezeComplete {
+			reapExitedChildren()
 			return 254
 		}
-		childErr = <-done
+		select {
+		case childErr = <-done:
+		case <-time.After(time.Until(cleanupDeadline)):
+			reapExitedChildren()
+			return 254
+		}
 	} else if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
 		killErr = err
 	}

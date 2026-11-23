@@ -93,7 +93,7 @@ Two limits apply to a review:
 
 An explicit cancellation reports `reason: "cancelled"`. The reason is kept in `review.reason`, `host_result.reason` and `attempts[].reason`, including for full-pipeline reviews.
 
-On Linux, cancellation freezes the runner's process descendants with `SIGSTOP` until two scans find no new process. The runner then kills and reaps those processes. The scan stops after 30 seconds; if it cannot freeze the tree, the runner kills known descendants and reports an unknown cleanup outcome.
+On Linux, cancellation freezes the runner's process descendants with `SIGSTOP` until two scans find no new process. The runner then kills and reaps those processes. The scan stops after 2 seconds; if it cannot stabilize the tree, the runner kills the known descendants, reaps those that exited, and reports an unknown cleanup outcome.
 
 The t195 test host had no writable delegated cgroup v2. `/sys/fs/cgroup` was read-only, and its user service had `Delegate=no`. The runner used the freeze-then-kill path.
 
