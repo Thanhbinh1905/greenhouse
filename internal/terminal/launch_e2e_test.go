@@ -121,6 +121,15 @@ func TestLineLaunchExplainsMissingCommit(t *testing.T) {
 }
 
 func TestLineLaunchExplainsMissingAgent(t *testing.T) {
+	for name, pi := range map[string]string{
+		"not installed":      "",
+		"installed no login": "#!/bin/sh\necho 'provider model context'\n",
+	} {
+		t.Run(name, func(t *testing.T) { explainMissingAgent(t, pi) })
+	}
+}
+
+func explainMissingAgent(t *testing.T, pi string) {
 	root := t.TempDir()
 	repo := filepath.Join(root, "repo")
 	home := filepath.Join(root, "home")
@@ -137,6 +146,12 @@ func TestLineLaunchExplainsMissingAgent(t *testing.T) {
 	}
 	if err := os.Symlink(gitPath, filepath.Join(binDir, "git")); err != nil {
 		t.Fatal(err)
+	}
+	if pi != "" {
+		writeTestFile(t, binDir, "pi", pi)
+		if err := os.Chmod(filepath.Join(binDir, "pi"), 0700); err != nil {
+			t.Fatal(err)
+		}
 	}
 	gitTest(t, repo, "init", "-q", "-b", "main")
 	gitTest(t, repo, "config", "user.name", "Test")
@@ -156,7 +171,7 @@ func TestLineLaunchExplainsMissingAgent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("greenhouse: %v\n%s", err, output)
 	}
-	if got, want := strings.TrimSpace(string(output)), "No signed-in coding agent found. Install Pi, Claude Code or Codex and sign in, then run greenhouse again."; got != want {
+	if got, want := strings.TrimSpace(string(output)), "No signed-in coding agent found. Sign in with `pi` then /login, `claude auth login` or `codex login`, then run greenhouse again."; got != want {
 		t.Fatalf("missing-agent guidance = %q, want %q", got, want)
 	}
 	stop := exec.Command(binary, "stop")
@@ -171,6 +186,7 @@ const fakeReviewAgent = `#!/usr/bin/python3
 import json,sys
 if '--list-models' in sys.argv:
  print('provider model context')
+ print('fixture default 1K 1K no no')
  sys.exit(0)
 raw=sys.stdin.read()
 header=raw.split('\n\nDiff:\n',1)[0]

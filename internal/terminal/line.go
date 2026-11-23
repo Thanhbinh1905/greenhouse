@@ -286,9 +286,9 @@ func lineTerminal(h, path string) error {
 	if e = protocolRefusal(v); e != nil {
 		return e
 	}
-	agents := engine.InstalledAgents()
+	agents := engine.SignedInAgents()
 	if slices.Contains(v.Actions, "prepare") && v.Run.Reviewer == nil && len(agents) == 0 {
-		_, _ = fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Install Pi, Claude Code or Codex and sign in, then run greenhouse again.")
+		_, _ = fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Sign in with `pi` then /login, `claude auth login` or `codex login`, then run greenhouse again.")
 		return nil
 	}
 	if initialRunPending(v) && primaryAction(v, agents).ID == "run" {
@@ -482,7 +482,7 @@ func lineTerminal(h, path string) error {
 			q.Op = "resolve-conflict"
 		}
 		if op == "p" {
-			agents := engine.InstalledAgents()
+			agents := engine.SignedInAgents()
 			if len(agents) == 0 {
 				message = "No supported agent installed. Install pi, claude or codex on PATH and use its native login."
 				continue

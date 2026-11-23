@@ -41,7 +41,7 @@ func TestInferCommitIntentUsesSignedInGHCLI(t *testing.T) {
 	gitCommand(t, repo, "remote", "add", "origin", "git@github.com:acme/garden.git")
 	bin := t.TempDir()
 	gh := filepath.Join(bin, "gh")
-	if err := os.WriteFile(gh, []byte("#!/bin/sh\n[ \"$*\" = \"pr view --json body\" ] || exit 2\nprintf '%s\\n' '{\"body\":\"Plan the file handling changes.\"}'\n"), 0700); err != nil {
+	if err := os.WriteFile(gh, []byte("#!/bin/sh\n[ \"$*\" = \"pr view --json body,state\" ] || exit 2\nprintf '%s\\n' '{\"body\":\"Plan the file handling changes.\",\"state\":\"OPEN\"}'\n"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	gitPath, err := exec.LookPath("git")
@@ -163,5 +163,37 @@ func TestInferCommitIntentRejectsOptionLikeTarget(t *testing.T) {
 	}
 	if matches, _ := filepath.Glob(out + "*"); len(matches) > 0 {
 		t.Fatalf("git ran the target as an option and wrote %v", matches)
+	}
+}
+
+func TestInferCommitIntentIgnoresClosedPullRequestFromGHCLI(t *testing.T) {
+	repo := intentRepo(t)
+	gitCommand(t, repo, "remote", "add", "origin", "git@github.com:acme/garden.git")
+	bin := t.TempDir()
+	script := "#!/bin/sh\nprintf '%s\\n' '{\"body\":\"Old merged work.\",\"state\":\"MERGED\"}'\n"
+	if err := os.WriteFile(filepath.Join(bin, "gh"), []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+filepath.Dir(gitPath))
+	t.Setenv("GH_TOKEN", "")
+	t.Setenv("GITHUB_TOKEN", "")
+	intent, source, err := inferCommitIntent(repo, "main", "HEAD")
+	if err != nil || intent != "Improve file handling" || source != "commit messages + branch feature" {
+		t.Fatalf("intent=%q source=%q error=%v", intent, source, err)
+	}
+}
+
+func TestGitHubRepositoryParsesRemoteForms(t *testing.T) {
+	for _, remote := range []string{"git@github.com:acme/garden.git", "https://github.com/acme/garden.git", "ssh://git@github.com/acme/garden.git"} {
+		if owner, repo, ok := githubRepository(remote); !ok || owner != "acme" || repo != "garden" {
+			t.Errorf("%s parsed as %q/%q ok=%t", remote, owner, repo, ok)
+		}
+	}
+	if _, _, ok := githubRepository("https://token@github.com/acme/garden.git"); ok {
+		t.Error("credentialed https remote was accepted")
 	}
 }

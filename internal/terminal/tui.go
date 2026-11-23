@@ -56,9 +56,9 @@ func tuiTerminal(h, path string) error {
 	if v.Run == nil {
 		return errors.New(v.Error)
 	}
-	agents := engine.InstalledAgents()
+	agents := engine.SignedInAgents()
 	if initialRunPending(v) && len(agents) == 0 {
-		_, err := fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Install Pi, Claude Code or Codex and sign in, then run greenhouse again.")
+		_, err := fmt.Fprintln(os.Stdout, "No signed-in coding agent found. Sign in with `pi` then /login, `claude auth login` or `codex login`, then run greenhouse again.")
 		return err
 	}
 	updates := make(chan liveUpdate, 1)
@@ -567,7 +567,7 @@ func (m *tuiModel) homeKey(key string) tea.Cmd {
 		}
 		m.say("Nothing is running that can be cancelled.")
 	case "r":
-		m.agents = engine.InstalledAgents()
+		m.agents = engine.SignedInAgents()
 		client := m.client
 		return func() tea.Msg {
 			v, err := client.send(engine.Request{Version: engine.MaxVersion, Op: "inspect"}, true)

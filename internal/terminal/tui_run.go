@@ -122,7 +122,7 @@ func pullRequestBody(worktree, branch string) (string, string, bool) {
 func ghPullRequestBody(worktree, gh string) (string, bool) {
 	ctx, cancel := context.WithTimeout(context.Background(), 4*time.Second)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, gh, "pr", "view", "--json", "body")
+	cmd := exec.CommandContext(ctx, gh, "pr", "view", "--json", "body,state")
 	cmd.Dir = worktree
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -137,9 +137,10 @@ func ghPullRequestBody(worktree, gh string) (string, bool) {
 		return "", false
 	}
 	var result struct {
-		Body string `json:"body"`
+		Body  string `json:"body"`
+		State string `json:"state"`
 	}
-	if json.Unmarshal(data, &result) != nil {
+	if json.Unmarshal(data, &result) != nil || result.State != "OPEN" {
 		return "", false
 	}
 	body := strings.TrimSpace(result.Body)
@@ -155,7 +156,7 @@ func githubRepository(remote string) (string, string, bool) {
 		remote = strings.TrimPrefix(remote, "git@github.com:")
 	} else {
 		parsed, err := url.Parse(remote)
-		if err != nil || parsed.Host != "github.com" || parsed.User != nil {
+		if err != nil || parsed.Host != "github.com" || parsed.User != nil && (parsed.Scheme != "ssh" || parsed.User.String() != "git") {
 			return "", "", false
 		}
 		remote = strings.TrimPrefix(parsed.Path, "/")
