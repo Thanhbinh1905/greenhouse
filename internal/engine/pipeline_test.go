@@ -39,8 +39,14 @@ if '--list-models' in sys.argv:
     print('openai gpt-5.6-luna 128K')
     sys.exit(0)
 root=os.path.dirname(__file__)
-with open(root+'/review-invocations','a') as f: f.write('review\n')
 b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
+if b['Intent'].startswith('Independently verify'):
+    provider,model=sys.argv[sys.argv.index('--model')+1].split('/',1)
+    v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'x','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample is wrong','action':'Fix the sample','rule':'','head':b['Head']}]}
+    print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':provider,'model':model,'stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}))
+    print(json.dumps({'type':'agent_settled','aborted':False}))
+    sys.exit(0)
+with open(root+'/review-invocations','a') as f: f.write('review\n')
 with open(root+'/review-input.json','w') as f: json.dump(b,f,separators=(',',':'))
 mode=open(root+'/review-mode').read().strip() if os.path.exists(root+'/review-mode') else 'clean'
 v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}
@@ -49,6 +55,9 @@ if mode=='docs-missing':
 if mode=='findings':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample is wrong','action':'Fix the sample','rule':'','head':b['Head']}]
+if mode=='p2':
+    v['verdict']='findings'
+    v['findings']=[{'id':'x','priority':'P2','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample has a workaround edge case','action':'Improve edge case handling','rule':'','head':b['Head']}]
 if mode=='mixed':
     v['verdict']='findings'
     v['findings']=[{'id':'x','priority':p,'origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':e,'action':'Fix the sample','rule':'','head':b['Head']} for p,e in [('P1','Sample is wrong'),('P2','Sample is vague'),('P3','Sample could be shorter')]]

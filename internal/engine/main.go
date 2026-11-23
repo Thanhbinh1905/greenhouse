@@ -1731,6 +1731,7 @@ func finishReview(r *Run, done reviewOutcome) {
 				r.Findings = append(r.Findings, f)
 			}
 		}
+		dismissFindings(r, done.Result.Dismissed)
 		if status == "clean-review" && len(r.Findings) > 0 {
 			r.Status = "outstanding-findings"
 		}

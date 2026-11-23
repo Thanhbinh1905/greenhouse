@@ -20,6 +20,27 @@ Host mode needs protocol version 2. See [compatibility](compatibility.md).
 
 Each responsibility has one owner. Greenhouse never pushes, opens a PR, writes the worktree, or creates a reviewer pane in host mode.
 
+## Finding priorities and pipeline decisions
+
+P0 and P1 findings with valid actions are blocking and must be resolved or explicitly accepted before the full pipeline can pass. P2 findings with valid actions are actionable but non-blocking: they remain reported, may be included in a repair round already opened for blocking findings, and do not prevent a clean or passing verdict if left unresolved. P3 findings are informational and do not block or enter repair rounds.
+
+## Blocking finding confirmation
+
+A single review can report a P0 or P1 finding that a second look would not reproduce. Greenhouse therefore confirms each P0 and P1 finding before it blocks, in every review that gates: host reviews and the full pipeline's reviews. P2 and P3 findings are not confirmed.
+
+After the review settles with at least one P0 or P1 finding, Greenhouse runs one fresh confirmation pass per such finding. The pass receives the same evidence and the reported finding, and sits in the same read-only snapshot. It has its own [review budget](#per-review-budget-and-finalization) and adds its tokens and cost to the review's `usage`. A pass reports one of:
+
+| `confirmation.status` | Meaning | Effect |
+|---|---|---|
+| `confirmed` | The pass reports a P0 or P1 finding on overlapping lines. `evidence` carries its explanation. | The finding keeps its priority and blocks. |
+| `demoted` | The pass covers the finding's file and reports a P2 or P3 finding on overlapping lines. | The finding takes that priority and no longer blocks. |
+| `dropped` | The pass settles, covers the finding's file, and reports no finding on overlapping lines. | The finding leaves `findings` and is listed in `dismissed`. |
+| `unconfirmed` | The pass did not settle (inconclusive, paused or failed to start) or did not cover the finding's file (listed in `Uncovered` or missing from coverage). | The finding keeps its priority and blocks. |
+
+Overlap means the same file and intersecting line ranges. A confirmation pass cannot raise a finding's priority. When every blocking finding is dropped, the verdict becomes `clean`, or `partial` when paths remain uncovered.
+
+Every finding in `findings` that went through a pass carries `confirmation` with `status`, `reported_priority` and `evidence`; `run.review.result` and `host_result` show it. Dropped findings appear in `run.review.result.dismissed` and `host_result.dismissed_findings` with the same object, so a host can audit what Greenhouse discarded. A dropped finding also leaves the run's finding ledger, so it does not block later reviews. If the controller restarts after the review verdict but before its confirmation passes complete, [recovery](recovery.md) adopts the verdict and marks each unconfirmed blocking finding `unconfirmed`; it keeps blocking. A cancelled confirmation pass cancels the review.
+
 ## Host identity
 
 Every host request carries `host`:
@@ -132,9 +153,9 @@ The path stays in `Paths`, so coverage must still include it, and the verdict ca
 A changed file whose hunk windows exceed 64 KiB and that is not generated becomes an uncovered path instead of refusing the review. Greenhouse omits its hunks and content, replaces its `Diff` hunks with `[uncovered: hunks omitted; see Uncovered]`, lists it in the `Uncovered` header, and removes it from `Paths`. The other files are reviewed as usual. When uncovered paths exist:
 
 - a reviewer verdict of `clean` becomes `verdict: "partial"` with `status: "partial-review"`;
-- a `findings` verdict keeps `status: "outstanding-findings"`;
-- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`, for example `hunk windows exceed 65536 bytes` or `not covered by reviewer within budget`.
-- A well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial; a findings verdict retains its findings and outstanding-findings status.
+- a `findings` verdict keeps `status: "outstanding-findings"` when the review finishes within budget;
+- `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`. A path excluded because its hunk windows exceed the input limit or because of the prompt limit keeps that reason; when the review budget expires, every otherwise-unreviewed path has reason `review_budget`;
+- a well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial. A findings verdict retains its findings and outstanding-findings status unless the review budget expires after covering at least one path, in which case it settles as partial.
 
 A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
 

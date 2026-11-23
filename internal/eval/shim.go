@@ -70,7 +70,8 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	finalization := slices.Contains(args, "--no-tools") || slices.Contains(args, "--resume") || slices.Contains(args, "resume")
 	argv, _ := json.Marshal(args)
-	if !finalization {
+	confirmation := bytes.Contains(input, []byte("Independently verify"))
+	if !finalization && !confirmation {
 		if err := os.WriteFile(filepath.Join(cfg.Capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
 			return 2, err
 		}
