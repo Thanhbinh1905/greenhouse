@@ -204,26 +204,46 @@ func runChild(args []string) (result int) {
 	defer deadline.Stop()
 	var childErr error
 	stopped := false
+	stoppedAt := time.Time{}
 	stopReason := ""
 	select {
 	case childErr = <-done:
 	case sig := <-signals:
-		stopped, stopReason = true, "cancelled"
+		stopped, stoppedAt, stopReason = true, time.Now(), "cancelled"
 		if sig == executorTimeoutSignal {
 			stopReason = "timeout"
 		}
 	case <-deadline.C:
-		stopped, stopReason = true, "timeout"
+		stopped, stoppedAt, stopReason = true, time.Now(), "timeout"
 	}
 	killErr := error(nil)
+	freezeComplete := true
+	var frozen []processHandle
 	if stopped {
-		if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		if err := syscall.Kill(child.Process.Pid, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
 			killErr = err
 		}
-		childErr = <-done
-	}
-	if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-		killErr = errors.Join(killErr, err)
+		cleanupDeadline := stoppedAt.Add(cancellationFreezeTimeout)
+		frozen, freezeComplete = freezeChildTree(cleanupDeadline)
+		if !freezeComplete {
+			if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+				killErr = errors.Join(killErr, err)
+			}
+		}
+		ops := systemPIDFDOps()
+		killErr = errors.Join(killErr, killProcessHandles(frozen, ops.signal, ops.close))
+		if !freezeComplete {
+			reapExitedChildren()
+			return 254
+		}
+		select {
+		case childErr = <-done:
+		case <-time.After(time.Until(cleanupDeadline)):
+			reapExitedChildren()
+			return 254
+		}
+	} else if err := syscall.Kill(-child.Process.Pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+		killErr = err
 	}
 	reaped := reapChildTree()
 	code := 0
@@ -236,7 +256,7 @@ func runChild(args []string) (result int) {
 	case childErr != nil:
 		code = 127
 	}
-	if killErr != nil {
+	if killErr != nil || !freezeComplete {
 		return 254
 	}
 	if record != "-" {

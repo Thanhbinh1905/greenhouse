@@ -4,18 +4,22 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 )
 
 var ErrWriterTreeUnknown = errors.New("writer descendant cleanup could not be verified")
+
+const cancellationFreezeTimeout = 2 * time.Second
 
 func init() {
 	if len(os.Args) > 2 && os.Args[1] == "_run-child" {
@@ -23,24 +27,232 @@ func init() {
 	}
 }
 
-func reapChildTree() bool {
-	children := filepath.Join("/proc/self/task", fmt.Sprint(os.Getpid()), "children")
-	deadline := time.Now().Add(3 * time.Second)
-	for time.Now().Before(deadline) {
-		data, err := os.ReadFile(children)
+func processDescendants(root int) (map[int]byte, error) {
+	descendants := make(map[int]byte)
+	queue := []int{root}
+	for len(queue) > 0 {
+		pid := queue[0]
+		queue = queue[1:]
+		tasks := filepath.Join("/proc", strconv.Itoa(pid), "task")
+		threads, err := os.ReadDir(tasks)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		children := make(map[int]struct{})
+		for _, thread := range threads {
+			data, err := os.ReadFile(filepath.Join(tasks, thread.Name(), "children"))
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			for _, field := range strings.Fields(string(data)) {
+				child, err := strconv.Atoi(field)
+				if err != nil {
+					return nil, err
+				}
+				children[child] = struct{}{}
+			}
+		}
+		for child := range children {
+			if _, seen := descendants[child]; seen {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(child), "stat"))
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			end := strings.LastIndexByte(string(data), ')')
+			if end < 0 {
+				return nil, errors.New("invalid process stat")
+			}
+			fields := strings.Fields(string(data[end+1:]))
+			if len(fields) < 1 || len(fields[0]) != 1 {
+				return nil, errors.New("invalid process stat fields")
+			}
+			descendants[child] = fields[0][0]
+			queue = append(queue, child)
+		}
+	}
+	return descendants, nil
+}
+
+type processHandle struct {
+	pid   int
+	pidfd int
+}
+
+type pidfdOperations struct {
+	open   func(int) (int, error)
+	signal func(int, syscall.Signal) error
+	close  func(int) error
+	owned  func(int) bool
+}
+
+func systemPIDFDOps() pidfdOperations {
+	return pidfdOperations{
+		open: func(pid int) (int, error) { return unix.PidfdOpen(pid, 0) },
+		signal: func(pidfd int, signal syscall.Signal) error {
+			return unix.PidfdSendSignal(pidfd, signal, nil, 0)
+		},
+		close: unix.Close,
+		owned: isRunnerDescendant,
+	}
+}
+
+func isRunnerDescendant(pid int) bool {
+	self := os.Getpid()
+	for range 4096 {
+		if pid == self {
+			return true
+		}
+		if pid <= 1 {
+			return false
+		}
+		data, err := os.ReadFile(filepath.Join("/proc", strconv.Itoa(pid), "stat"))
 		if err != nil {
 			return false
 		}
-		pids := strings.Fields(string(data))
-		if len(pids) == 0 {
+		end := strings.LastIndexByte(string(data), ')')
+		if end < 0 {
+			return false
+		}
+		fields := strings.Fields(string(data[end+1:]))
+		if len(fields) < 2 {
+			return false
+		}
+		parent, err := strconv.Atoi(fields[1])
+		if err != nil {
+			return false
+		}
+		pid = parent
+	}
+	return false
+}
+
+func freezeChildTree(deadline time.Time) ([]processHandle, bool) {
+	return freezeChildTreeWith(deadline, processDescendants, systemPIDFDOps())
+}
+
+func freezeChildTreeWith(deadline time.Time, scan func(int) (map[int]byte, error), ops pidfdOperations) ([]processHandle, bool) {
+	known := make(map[int]processHandle)
+	stableScans := 0
+	for time.Now().Before(deadline) {
+		descendants, err := scan(os.Getpid())
+		if err != nil {
+			return processHandles(known), false
+		}
+		newProcess := false
+		for pid, state := range descendants {
+			handle, seen := known[pid]
+			if seen && state != 'Z' && state != 'X' {
+				err := ops.signal(handle.pidfd, 0)
+				if errors.Is(err, syscall.ESRCH) {
+					if closeErr := ops.close(handle.pidfd); closeErr != nil {
+						return processHandles(known), false
+					}
+					delete(known, pid)
+					seen = false
+				} else if err != nil {
+					return processHandles(known), false
+				}
+			}
+			if !seen {
+				pidfd, err := ops.open(pid)
+				if errors.Is(err, syscall.ESRCH) {
+					continue
+				}
+				if err != nil {
+					return processHandles(known), false
+				}
+				if !ops.owned(pid) {
+					if closeErr := ops.close(pidfd); closeErr != nil {
+						return processHandles(known), false
+					}
+					continue
+				}
+				handle = processHandle{pid: pid, pidfd: pidfd}
+				known[pid] = handle
+				newProcess = true
+			}
+			if state != 'T' && state != 't' && state != 'Z' && state != 'X' {
+				if err := ops.signal(handle.pidfd, syscall.SIGSTOP); err != nil && !errors.Is(err, syscall.ESRCH) {
+					return processHandles(known), false
+				}
+			}
+		}
+		if newProcess {
+			stableScans = 0
+		} else {
+			stableScans++
+		}
+		if stableScans >= 2 {
+			return processHandles(known), true
+		}
+		time.Sleep(time.Millisecond)
+	}
+	return processHandles(known), false
+}
+
+func processHandles(processes map[int]processHandle) []processHandle {
+	handles := make([]processHandle, 0, len(processes))
+	for _, handle := range processes {
+		handles = append(handles, handle)
+	}
+	sort.Slice(handles, func(i, j int) bool { return handles[i].pid < handles[j].pid })
+	return handles
+}
+
+func killProcessHandles(handles []processHandle, signal func(int, syscall.Signal) error, closeFD func(int) error) error {
+	var result error
+	for _, handle := range handles {
+		if err := signal(handle.pidfd, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+			result = errors.Join(result, err)
+		}
+		if err := closeFD(handle.pidfd); err != nil {
+			result = errors.Join(result, err)
+		}
+	}
+	return result
+}
+
+func reapExitedChildren() {
+	var status syscall.WaitStatus
+	for {
+		pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+		if err != nil || pid <= 0 {
+			return
+		}
+	}
+}
+
+func reapChildTree() bool {
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		descendants, err := processDescendants(os.Getpid())
+		if err != nil {
+			return false
+		}
+		if len(descendants) == 0 {
+			var status syscall.WaitStatus
+			for {
+				pid, err := syscall.Wait4(-1, &status, syscall.WNOHANG, nil)
+				if err != nil || pid <= 0 {
+					break
+				}
+			}
 			return true
 		}
-		killFailed := false
-		for _, child := range pids {
-			if pid, err := strconv.Atoi(child); err == nil {
-				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
-					killFailed = true
-				}
+		for pid := range descendants {
+			if err := syscall.Kill(pid, syscall.SIGKILL); err != nil && !errors.Is(err, syscall.ESRCH) {
+				return false
 			}
 		}
 		var status syscall.WaitStatus
@@ -50,10 +262,7 @@ func reapChildTree() bool {
 				break
 			}
 		}
-		if killFailed {
-			return false
-		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(time.Millisecond)
 	}
 	return false
 }
