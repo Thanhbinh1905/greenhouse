@@ -40,6 +40,8 @@ type Finding struct {
 	Action      string `json:"action"`
 	Rule        string `json:"rule"`
 	Head        string `json:"head"`
+
+	Confirmation *Confirmation `json:"confirmation,omitempty"`
 }
 type DocAssessment struct {
 	Status string `json:"status"`
@@ -54,6 +56,7 @@ type Verdict struct {
 	Verdict          string            `json:"verdict"`
 	Coverage         []string          `json:"coverage"`
 	Findings         []Finding         `json:"findings"`
+	Dismissed        []Finding         `json:"dismissed,omitempty"`
 	Documentation    *DocAssessment    `json:"documentation,omitempty"`
 	Resolutions      []ResolutionCheck `json:"resolutions,omitempty"`
 }
@@ -514,6 +517,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	}
 	defer repository.RemoveSnapshot(tree)
 	done, confinement := runBoundedReview(ctx, x, dir, tree)
+	done = confirmBlockingFindings(ctx, x, dir, tree, done)
 	done.Confinement = &confinement
 	if e = repository.VerifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; candidate snapshot modified during review: " + e.Error(), Answer: done.Answer, Confinement: &confinement, Snapshot: "modified: " + e.Error()}
