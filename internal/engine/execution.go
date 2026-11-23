@@ -268,6 +268,14 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 			return nil, e
 		}
 	}
+	var acceptedHeads []string
+	if r.Pipeline != nil {
+		for _, acceptance := range r.Pipeline.Acceptances {
+			if !slices.Contains(acceptedHeads, acceptance.Candidate) {
+				acceptedHeads = append(acceptedHeads, acceptance.Candidate)
+			}
+		}
+	}
 	if len(generated) > 0 {
 		contract += generatedContract
 	}
@@ -277,14 +285,6 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	snap, e := repository.SnapshotOf(r.Submitted.Worktree, r.Candidate)
 	if e != nil {
 		return nil, e
-	}
-	var acceptedHeads []string
-	if r.Pipeline != nil {
-		for _, acceptance := range r.Pipeline.Acceptances {
-			if !slices.Contains(acceptedHeads, acceptance.Candidate) {
-				acceptedHeads = append(acceptedHeads, acceptance.Candidate)
-			}
-		}
 	}
 	var responses []ResolutionResponse
 	var checked []reviewResponse
