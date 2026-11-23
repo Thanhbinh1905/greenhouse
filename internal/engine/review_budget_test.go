@@ -190,7 +190,7 @@ func TestReviewBudgetFinalizationKeepsCompleteVerdict(t *testing.T) {
 				coverage = []string{}
 			}
 			done := reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: test.verdict, Coverage: coverage}}
-			got := settleReviewBudget(done, nil, 3*time.Minute, 45*time.Minute)
+			got := settleReviewBudget(done, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
 			if got.Status != test.status || got.Result == nil || got.Result.Verdict != test.verdict || got.Answer.Reason != "" {
 				t.Fatalf("complete verdict at budget expiry: %+v", got)
 			}
@@ -201,7 +201,7 @@ func TestReviewBudgetFinalizationKeepsCompleteVerdict(t *testing.T) {
 func TestSettleReviewBudgetMakesIncompleteVerdictPartial(t *testing.T) {
 	for _, coverage := range [][]string{{"a"}, {}} {
 		done := reviewOutcome{Status: "outstanding-findings", Result: &Verdict{Verdict: "findings", Coverage: coverage, Uncovered: []UncoveredPath{{Path: "b", Reason: "not covered by reviewer within budget"}}}}
-		got := settleReviewBudget(done, nil, 3*time.Minute, 45*time.Minute)
+		got := settleReviewBudget(done, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
 		if got.Status != "partial-review" || got.Result.Verdict != "partial" || got.Result.Uncovered[0].Reason != "review_budget" || got.Answer.Reason != "" {
 			t.Fatalf("coverage=%v incomplete verdict at budget expiry: %+v", coverage, got)
 		}
@@ -209,7 +209,7 @@ func TestSettleReviewBudgetMakesIncompleteVerdictPartial(t *testing.T) {
 }
 
 func TestSettleReviewBudgetClearsMissingVerdict(t *testing.T) {
-	got := settleReviewBudget(reviewOutcome{Status: "running"}, nil, 3*time.Minute, 45*time.Minute)
+	got := settleReviewBudget(reviewOutcome{Status: "running"}, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
 	if got.Status != "inconclusive" || got.Result != nil || got.Answer.Reason != "review_budget" {
 		t.Fatalf("missing result at budget expiry: %+v", got)
 	}
@@ -217,7 +217,7 @@ func TestSettleReviewBudgetClearsMissingVerdict(t *testing.T) {
 
 func TestReviewBudgetWithoutFinalizationKeepsCompleteVerdict(t *testing.T) {
 	for _, verdict := range []string{"clean", "findings"} {
-		done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: verdict, Coverage: []string{"a"}}}, nil, 3*time.Minute, 45*time.Minute)
+		done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: verdict, Coverage: []string{"a"}}}, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
 		want := "clean-review"
 		if verdict == "findings" {
 			want = "outstanding-findings"
@@ -239,7 +239,7 @@ func TestSettleReviewBudgetHostResultNeverDisagrees(t *testing.T) {
 		{"no result", "inconclusive", "", nil},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: test.result}, nil, 3*time.Minute, 45*time.Minute)
+			done := settleReviewBudget(reviewOutcome{Status: "inconclusive", Result: test.result}, reviewOutcome{}, nil, 3*time.Minute, 45*time.Minute)
 			run := &Run{Host: &Host{Name: "host", ID: "test"}, Candidate: "head", Target: "target", Review: &Execution{ID: "review", Status: done.Status, Result: done.Result}}
 			host := hostResult(run, true)
 			if done.Status != test.status || host.Status != test.status || host.Verdict != test.verdict {
@@ -329,10 +329,15 @@ sys.exit(0)
 
 func TestReviewBudgetRestartKeepsCompleteVerdict(t *testing.T) {
 	bin, repo, home, v := prepareFixture(t)
-	installFake(t, home, `v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'restart','priority':'P2','origin':'correctness','file':b['Paths'][0],'start':1,'end':1,'explanation':'A review finding','action':'Inspect the change','rule':'','head':b['Head']}]}
-print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}), flush=True)
-print(json.dumps({'type':'agent_settled','aborted':False}), flush=True)
-time.sleep(30)
+	installFake(t, home, `if '--no-tools' in sys.argv:
+ print('finalization returned no verdict', flush=True)
+ print(json.dumps({'type':'agent_settled','aborted':False}), flush=True)
+ time.sleep(30)
+else:
+ v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'restart','priority':'P2','origin':'correctness','file':b['Paths'][0],'start':1,'end':1,'explanation':'A review finding','action':'Inspect the change','rule':'','head':b['Head']}]}
+ print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'fixture','model':'model','stopReason':'stop','content':[{'type':'text','text':json.dumps(v)}]}}), flush=True)
+ print(json.dumps({'type':'agent_settled','aborted':False}), flush=True)
+ time.sleep(30)
 `)
 	var cfg map[string]any
 	data, err := os.ReadFile(filepath.Join(home, "backends.json"))
@@ -353,7 +358,12 @@ time.sleep(30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	waitReview(t, bin, repo, home)
+	settled := waitReview(t, bin, repo, home)
+	reviewID := runOf(t, settled)["review"].(map[string]any)["id"].(string)
+	executors := runner.ObserveExecutors(reviewID, func() (string, error) { return home, nil })
+	if len(executors) != 2 {
+		t.Fatalf("want exploration and finalization executor records, got %d", len(executors))
+	}
 	stopDaemonAndWait(t, home)
 	if err := os.WriteFile(statePath, stateBeforeReviewCompletion, 0600); err != nil {
 		t.Fatal(err)

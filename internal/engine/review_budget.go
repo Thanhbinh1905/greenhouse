@@ -200,9 +200,12 @@ func (s reviewSession) finalArgs(stdout []byte) ([]string, bool) {
 	return nil, false
 }
 
-func settleReviewBudget(done reviewOutcome, parentErr error, budget, executorLimit time.Duration) reviewOutcome {
+func settleReviewBudget(done, previous reviewOutcome, parentErr error, budget, executorLimit time.Duration) reviewOutcome {
 	if parentErr != nil || budget >= executorLimit {
 		return done
+	}
+	if done.Result == nil && previous.Result != nil {
+		done.Status, done.Result = previous.Status, previous.Result
 	}
 	if done.Result == nil || done.Result.Verdict == "inconclusive" {
 		done.Status, done.Result = "inconclusive", nil
@@ -326,21 +329,18 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 				return first, confinement
 			}
 			final, _ := run(ctx, args, data, 0)
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) && final.Result == nil && first.Result != nil {
-				final.Status, final.Result = first.Status, first.Result
-			}
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
 			if ctx.Err() != nil {
-				final = settleReviewBudget(final, parent.Err(), budget, runner.ProcessTimeout(parent))
+				final = settleReviewBudget(final, first, parent.Err(), budget, runner.ProcessTimeout(parent))
 			}
 			return final, confinement
 		}
 		first.Log += "; finalization unavailable: backend did not report a resumable session"
 	}
 	if ctx.Err() != nil || nearLimit {
-		first = settleReviewBudget(first, parent.Err(), budget, runner.ProcessTimeout(parent))
+		first = settleReviewBudget(first, reviewOutcome{}, parent.Err(), budget, runner.ProcessTimeout(parent))
 	}
 	return first, confinement
 }
