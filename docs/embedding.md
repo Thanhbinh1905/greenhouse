@@ -254,7 +254,7 @@ Complete request:
 }
 ```
 
-The reviewer receives each response with its prior finding through the same `Responses` input and resolution contract used after standalone repairs. Greenhouse does not edit the worktree or require an uncommitted edit for a host's `fixed` claim. The reviewer checks the committed candidate independently.
+The reviewer receives each response with its prior finding through the same `Responses` input and resolution contract used after standalone repairs. Every host rereview also receives earlier findings on overlapping code through `PriorFindings`, even when the host did not send responses. Greenhouse does not edit the worktree or require an uncommitted edit for a host's `fixed` claim. The reviewer checks the committed candidate independently.
 
 A settled `host_result` includes `resolutions` when the review checked responses:
 

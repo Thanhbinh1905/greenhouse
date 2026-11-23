@@ -137,6 +137,78 @@ sys.exit(0)
 	}
 }
 
+func TestHostRereviewReceivesPriorFindingWithoutResponse(t *testing.T) {
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("trust = os.Getenv(\"APP_MODE\")\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "add", "sample.txt")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
+	installFake(t, home, "")
+	scriptPath := filepath.Join(filepath.Dir(home), "fake-pi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defaultAnswer := "v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[{'id':'model-id','priority':'P2','origin':'policy','file':'sample.txt','start':1,'end':1,'explanation':'Changed prose is redundant','action':'Remove repetition','rule':'unslop/plain-prose','head':b['Head']}]}"
+	answer := `prior=b.get('PriorFindings',[])
+v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'],'findings':[]}
+if prior:
+ assert len(prior)==1
+ assert prior[0]['priority']=='P1'
+ assert prior[0]['file']=='sample.txt'
+ v['verdict']='clean'
+else:
+ v['findings']=[{'id':'ignored','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Environment values are untrusted','action':'Remove APP_MODE','rule':'','head':b['Head']}]`
+	if !strings.Contains(string(script), defaultAnswer) {
+		t.Fatal("fake reviewer answer template not found")
+	}
+	if err := os.WriteFile(scriptPath, []byte(strings.Replace(string(script), defaultAnswer, answer, 1)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	v := hostPrepare(t, bin, repo, home, axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7","metadata":{"worker":"author-1"}}}`), target, "-environment")
+	v = hostCall(t, bin, repo, home, v, "review", "environment-review", map[string]any{"grant": "environment-review"})
+	if v["outcome"] != "ok" {
+		t.Fatalf("first review: %v", v)
+	}
+	v = hostSettleWithFindings(t, bin, repo, home)
+	first := v["host_result"].(map[string]any)["findings"].([]any)[0].(map[string]any)
+	if first["priority"] != "P1" {
+		t.Fatalf("first finding: %v", first)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("trust = \"safe\"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "-c", "user.name=Author", "-c", "user.email=author@example.invalid", "commit", "-am", "remove environment trust")
+	v = hostCall(t, bin, repo, home, v, "new", "rereview-successor", nil)
+	v = hostPrepare(t, bin, repo, home, v, target, "-rereview")
+	v = hostCall(t, bin, repo, home, v, "review", "rereview", map[string]any{"grant": "rereview"})
+	if v["outcome"] != "ok" {
+		t.Fatalf("rereview: %v", v)
+	}
+	v = hostSettle(t, bin, repo, home)
+	result := v["host_result"].(map[string]any)
+	if result["verdict"] != "clean" {
+		t.Fatalf("rereview did not use the earlier finding to verify the fix: %v", result)
+	}
+	captured, err := os.ReadFile(filepath.Join(filepath.Dir(home), "captured.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reviewInput struct {
+		Input struct {
+			PriorFindings []Finding
+		} `json:"input"`
+	}
+	if err := json.Unmarshal(captured, &reviewInput); err != nil {
+		t.Fatal(err)
+	}
+	if len(reviewInput.Input.PriorFindings) != 1 || reviewInput.Input.PriorFindings[0].ID != first["id"] {
+		t.Fatalf("rereview did not receive the earlier finding: %+v", reviewInput.Input.PriorFindings)
+	}
+}
+
 func TestHostSuccessorInheritsFindingsFromExistingReview(t *testing.T) {
 	prior := &Run{
 		ID: "prior", Host: &Host{Name: "host", ID: "1"},
