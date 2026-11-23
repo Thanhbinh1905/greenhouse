@@ -107,3 +107,18 @@ func gitCommand(t *testing.T, repo string, args ...string) {
 		t.Fatalf("git %v: %v: %s", args, err, output)
 	}
 }
+
+func TestSetupStepsNameTheResolvedTarget(t *testing.T) {
+	repo := intentRepo(t)
+	commit, err := exec.Command("git", "-C", repo, "rev-parse", "main").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	v := ready(tuiState("running"))
+	v.Run.Submitted.Worktree = repo
+	v.Run.Target = strings.TrimSpace(string(commit))
+	steps := setupSteps(v, []string{"claude"}, "main")
+	if want := "main @ " + v.Run.Target[:7]; steps[2].Text != want {
+		t.Fatalf("target step = %q, want %q", steps[2].Text, want)
+	}
+}
