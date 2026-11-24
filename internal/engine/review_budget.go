@@ -19,6 +19,17 @@ import (
 
 const defaultReviewBudget = 3 * time.Minute
 
+func reviewBudgetForExecution(value string) time.Duration {
+	if budget, err := time.ParseDuration(value); err == nil && budget > 0 {
+		return budget
+	}
+	return defaultReviewBudget
+}
+
+func reviewBudgetExpired(value string, executorLimit time.Duration, stopErr error) bool {
+	return reviewBudgetForExecution(value) < executorLimit && errors.Is(stopErr, context.DeadlineExceeded)
+}
+
 func reviewBudget() (time.Duration, error) {
 	cfg, err := trustedBackends()
 	if err != nil {
@@ -200,6 +211,78 @@ func (s reviewSession) finalArgs(stdout []byte) ([]string, bool) {
 	return nil, false
 }
 
+func settleReviewBudget(done, previous reviewOutcome) reviewOutcome {
+	settled := done
+	best := done.Result
+	if moreCompleteReviewResult(previous.Result, best) {
+		best = previous.Result
+	}
+	if !usableReviewResult(best) {
+		settled.Status, settled.Result = "inconclusive", nil
+		settled.Answer.Reason = "review_budget"
+		settled.Answer.Diagnostic = "review wall-time budget exhausted"
+		return settled
+	}
+	settled.Result = cloneReviewVerdict(best)
+	if settled.Result.Verdict == "partial" || len(settled.Result.Uncovered) > 0 {
+		for i := range settled.Result.Uncovered {
+			if settled.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
+				settled.Result.Uncovered[i].Reason = "review_budget"
+			}
+		}
+		settled.Result.Verdict, settled.Status = "partial", "partial-review"
+	} else {
+		switch settled.Result.Verdict {
+		case "clean":
+			settled.Status = "clean-review"
+		case "findings":
+			settled.Status = "outstanding-findings"
+		default:
+			settled.Status, settled.Result = "inconclusive", nil
+			settled.Answer.Reason = "review_budget"
+			settled.Answer.Diagnostic = "review wall-time budget exhausted"
+			return settled
+		}
+	}
+	settled.Answer.Reason = ""
+	settled.Answer.Diagnostic = ""
+	return settled
+}
+
+func usableReviewResult(result *Verdict) bool {
+	return result != nil && result.Verdict != "inconclusive"
+}
+
+func moreCompleteReviewResult(candidate, current *Verdict) bool {
+	candidateRank, currentRank := reviewResultRank(candidate), reviewResultRank(current)
+	if candidateRank != currentRank {
+		return candidateRank > currentRank
+	}
+	return candidateRank > 0 && len(candidate.Coverage) > len(current.Coverage)
+}
+
+func reviewResultRank(result *Verdict) int {
+	if !usableReviewResult(result) {
+		return 0
+	}
+	if result.Verdict == "partial" || len(result.Uncovered) > 0 {
+		return 1
+	}
+	if result.Verdict == "clean" || result.Verdict == "findings" {
+		return 2
+	}
+	if len(result.Coverage) > 0 {
+		return 1
+	}
+	return 0
+}
+
+func cloneReviewVerdict(result *Verdict) *Verdict {
+	cloned := *result
+	cloned.Uncovered = append([]UncoveredPath(nil), result.Uncovered...)
+	return &cloned
+}
+
 func addUsage(a, b TokenUsage) TokenUsage {
 	return TokenUsage{InputTokens: a.InputTokens + b.InputTokens, OutputTokens: a.OutputTokens + b.OutputTokens, CachedInputTokens: a.CachedInputTokens + b.CachedInputTokens, Tokens: a.Tokens + b.Tokens, CostUSD: a.CostUSD + b.CostUSD}
 }
@@ -227,17 +310,14 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		}
 	}
 	policy, confinement := confinementFor("reviewer", x.Config, []string{s.state, s.temp})
-	budget := defaultReviewBudget
-	if d, err := time.ParseDuration(x.ReviewBudget); err == nil && d > 0 {
-		budget = d
-	}
+	budget := reviewBudgetForExecution(x.ReviewBudget)
 	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 	ctx = runner.WithExecutor(ctx, x.ID, Home)
 	ctx, stop := runner.ProcessContext(ctx)
 	defer stop()
 	deadline, _ := ctx.Deadline()
-	exploration, stopExploring := context.WithDeadline(ctx, time.Now().Add(time.Until(deadline)*4/5))
+	exploration, stopExploring := context.WithDeadline(ctx, time.Now().Add(time.Until(deadline)/2))
 	defer stopExploring()
 	spent := false
 	run := func(turn context.Context, args []string, input []byte, budget int) (reviewOutcome, []byte) {
@@ -289,36 +369,18 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 				return first, confinement
 			}
 			final, _ := run(ctx, args, data, 0)
-			if errors.Is(ctx.Err(), context.DeadlineExceeded) && final.Result == nil && first.Result != nil {
-				final.Status, final.Result = first.Status, first.Result
-			}
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
 			if ctx.Err() != nil && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
-				if final.Result == nil || len(final.Result.Coverage) == 0 {
-					final.Status, final.Result = "inconclusive", nil
-					final.Answer.Reason = "review_budget"
-					final.Answer.Diagnostic = "review wall-time budget exhausted"
-				} else if len(final.Result.Uncovered) > 0 {
-					for i := range final.Result.Uncovered {
-						if final.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
-							final.Result.Uncovered[i].Reason = "review_budget"
-						}
-					}
-					final.Result.Verdict, final.Status = "partial", "partial-review"
-					final.Answer.Reason = ""
-					final.Answer.Diagnostic = ""
-				}
+				final = settleReviewBudget(final, first)
 			}
 			return final, confinement
 		}
 		first.Log += "; finalization unavailable: backend did not report a resumable session"
 	}
 	if (ctx.Err() != nil || nearLimit) && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {
-		first.Status = "inconclusive"
-		first.Answer.Reason = "review_budget"
-		first.Answer.Diagnostic = "review wall-time budget exhausted"
+		first = settleReviewBudget(first, reviewOutcome{})
 	}
 	return first, confinement
 }
@@ -346,6 +408,19 @@ func reviewFinalizationInput(x *Execution, first reviewOutcome, nearLimit bool) 
 			}
 			input[key] = decoded
 		}
+	}
+	if paths, ok := input["Paths"].([]any); ok && len(x.Uncovered) > 0 {
+		excluded := make(map[string]bool, len(x.Uncovered))
+		for _, path := range x.Uncovered {
+			excluded[path.Path] = true
+		}
+		covered := make([]any, 0, len(paths))
+		for _, path := range paths {
+			if name, ok := path.(string); ok && !excluded[name] {
+				covered = append(covered, name)
+			}
+		}
+		input["Paths"] = covered
 	}
 	input["Controller"] = "Return your verdict now. Stop exploring. No further tools or investigation. Use the evidence already gathered in this session and the supplied changed hunks. Return only the required JSON object."
 	if !nearLimit {
