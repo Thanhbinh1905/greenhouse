@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -413,6 +414,28 @@ else:
 	if len(executors) != 2 {
 		t.Fatalf("want exploration and finalization executor records, got %d", len(executors))
 	}
+	var legacyState map[string]any
+	if err := json.Unmarshal(stateBeforeReviewCompletion, &legacyState); err != nil {
+		t.Fatal(err)
+	}
+	legacyRuns := legacyState["runs"].(map[string]any)
+	legacyRecordFound := false
+	for _, value := range legacyRuns {
+		storedRun := value.(map[string]any)
+		storedReview, _ := storedRun["review"].(map[string]any)
+		if storedReview["id"] == reviewID {
+			storedReview["review_budget"] = ""
+			legacyRecordFound = true
+			break
+		}
+	}
+	if !legacyRecordFound {
+		t.Fatalf("review %s not found in recovery snapshot", reviewID)
+	}
+	stateBeforeReviewCompletion, err = json.Marshal(legacyState)
+	if err != nil {
+		t.Fatal(err)
+	}
 	stopDaemonAndWait(t, home)
 	if err := os.WriteFile(statePath, stateBeforeReviewCompletion, 0600); err != nil {
 		t.Fatal(err)
@@ -423,6 +446,27 @@ else:
 	result, _ := review["result"].(map[string]any)
 	if run["status"] != "outstanding-findings" || review["status"] != "outstanding-findings" || result == nil || result["verdict"] != "findings" {
 		t.Fatalf("restarted daemon discarded the budget-expiry verdict: run=%v review=%v", run["status"], review)
+	}
+}
+
+func TestReviewBudgetExpiredUsesLegacyDefaultAndExecutorLimit(t *testing.T) {
+	for _, test := range []struct {
+		name          string
+		budget        string
+		executorLimit time.Duration
+		stopErr       error
+		want          bool
+	}{
+		{"legacy budget shorter than executor", "", 45 * time.Minute, context.DeadlineExceeded, true},
+		{"legacy budget not shorter than executor", "", time.Minute, context.DeadlineExceeded, false},
+		{"explicit budget shorter than executor", "30s", time.Minute, context.DeadlineExceeded, true},
+		{"cancelled without deadline", "", 45 * time.Minute, context.Canceled, false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reviewBudgetExpired(test.budget, test.executorLimit, test.stopErr); got != test.want {
+				t.Fatalf("reviewBudgetExpired(%q, %s, %v) = %t; want %t", test.budget, test.executorLimit, test.stopErr, got, test.want)
+			}
+		})
 	}
 }
 

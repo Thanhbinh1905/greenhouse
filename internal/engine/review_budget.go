@@ -19,6 +19,17 @@ import (
 
 const defaultReviewBudget = 3 * time.Minute
 
+func reviewBudgetForExecution(value string) time.Duration {
+	if budget, err := time.ParseDuration(value); err == nil && budget > 0 {
+		return budget
+	}
+	return defaultReviewBudget
+}
+
+func reviewBudgetExpired(value string, executorLimit time.Duration, stopErr error) bool {
+	return reviewBudgetForExecution(value) < executorLimit && errors.Is(stopErr, context.DeadlineExceeded)
+}
+
 func reviewBudget() (time.Duration, error) {
 	cfg, err := trustedBackends()
 	if err != nil {
@@ -299,10 +310,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		}
 	}
 	policy, confinement := confinementFor("reviewer", x.Config, []string{s.state, s.temp})
-	budget := defaultReviewBudget
-	if d, err := time.ParseDuration(x.ReviewBudget); err == nil && d > 0 {
-		budget = d
-	}
+	budget := reviewBudgetForExecution(x.ReviewBudget)
 	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 	ctx = runner.WithExecutor(ctx, x.ID, Home)

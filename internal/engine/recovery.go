@@ -128,9 +128,8 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 					stopErr = fmt.Errorf("review executor limit %s exceeded: %w", executorTimeout(r.Configs[len(r.Configs)-1].Settings), context.DeadlineExceeded)
 				}
 			}
-			budget, budgetErr := time.ParseDuration(x.ReviewBudget)
 			executorLimit := executorTimeout(r.Configs[len(r.Configs)-1].Settings)
-			budgetExpired := budgetErr == nil && budget < executorLimit && errors.Is(stopErr, context.DeadlineExceeded)
+			budgetExpired := reviewBudgetExpired(x.ReviewBudget, executorLimit, stopErr)
 			exitCode := o.Exit
 			if budgetExpired {
 				exitCode, runErr, stopErr = 0, nil, nil
