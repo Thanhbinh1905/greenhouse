@@ -1814,11 +1814,16 @@ func finishReview(r *Run, done reviewOutcome) {
 				return
 			}
 		}
-		if len(remaining) > 0 && r.ReviewUsed+r.RepairUsed >= settings.Limit {
-			for i := range done.Result.Uncovered {
-				if done.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
-					done.Result.Uncovered[i].Reason = "review_budget"
+		if len(remaining) > 0 {
+			if r.ReviewUsed+r.RepairUsed >= settings.Limit {
+				for i := range done.Result.Uncovered {
+					if done.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
+						done.Result.Uncovered[i].Reason = "review_budget"
+					}
 				}
+			}
+			if settled {
+				done.Result.Verdict, status = "partial", "partial-review"
 			}
 		}
 		if len(r.FollowupPaths) > 0 && (status == "clean-review" || status == "outstanding-findings" || status == "partial-review") {

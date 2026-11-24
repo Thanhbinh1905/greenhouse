@@ -1183,6 +1183,39 @@ func TestFullPipelineFollowsUpOnSkippedReviewPaths(t *testing.T) {
 	}
 }
 
+func TestFullPipelineSettlesPartialWhenBudgetSpentWithFindings(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := pipelineFixture(t, localPlan)
+	root := filepath.Dir(home)
+	scriptPath := filepath.Join(root, "fake-pi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := "v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}"
+	new := "v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'][1:],'findings':[{'id':'model-id','priority':'P2','origin':'correctness','file':b['Paths'][1],'start':1,'end':1,'explanation':'Changed line is incorrect','action':'Correct the line','rule':'','head':b['Head']}],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}"
+	if !strings.Contains(string(script), old) {
+		t.Fatal("reviewer answer template not found")
+	}
+	if err := os.WriteFile(scriptPath, []byte(strings.Replace(string(script), old, new, 1)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Mode: "auto", Preset: "full", Limit: 1, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "fixture/model", FixerBackend: "pi", FixerModel: "fixture/model"}
+	v = mutate(t, bin, repo, home, v, "apply", "one-review-budget", settings)
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "gate_id": v["gate_id"], "expected": v["token"], "action_id": "prepare-partial", "intent": "Review every changed file", "target": runOf(t, v)["target"]}
+	b, _ := json.Marshal(q)
+	v = axi(t, bin, repo, home, string(b))
+	mutate(t, bin, repo, home, v, "pipeline", "partial-budget", nil)
+	run := runOf(t, waitPipeline(t, bin, repo, home))
+	result := run["review"].(map[string]any)["result"].(map[string]any)
+	if result["verdict"] != "partial" || len(result["findings"].([]any)) != 1 {
+		t.Fatalf("review with skipped path and spent budget = %v, want partial keeping its finding", result)
+	}
+	if findings, _ := run["findings"].([]any); len(findings) != 1 {
+		t.Fatalf("partial review dropped its finding from the run: %v", run["findings"])
+	}
+}
+
 func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, localPlan)

@@ -934,6 +934,9 @@ func completeStep(r *Run, o stepOutcome) error {
 						o.Result.Uncovered[i].Reason = "review_budget"
 					}
 				}
+				if o.Status == "clean-review" || o.Status == "outstanding-findings" {
+					o.Result.Verdict, o.Status = "partial", "partial-review"
+				}
 			}
 		}
 		if isFollowup && o.Result != nil {
@@ -977,6 +980,9 @@ func completeStep(r *Run, o stepOutcome) error {
 				st.Status, st.Reason = "needs-decision", fmt.Sprintf("outstanding blocking findings: %d; omission from a review resolves a finding only after a committed repair addressed it", len(blocking))
 			}
 		default:
+			if o.Status == "partial-review" && o.Result != nil && len(o.Result.Findings) > 0 {
+				recordReview(r, x)
+			}
 			st.Status, st.Reason = "failed", "review "+o.Status+"; no automatic retry"
 		}
 	case "repair", "conflict":
