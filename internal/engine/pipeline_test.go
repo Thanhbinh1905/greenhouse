@@ -1171,6 +1171,16 @@ func TestFullPipelineFollowsUpOnSkippedReviewPaths(t *testing.T) {
 	if len(coverage) != 2 {
 		t.Fatalf("merged review coverage = %v, want both changed paths", coverage)
 	}
+	recorded := false
+	reviews, _ := run["pipeline"].(map[string]any)["reviews"].([]any)
+	for _, x := range reviews {
+		if x.(map[string]any)["id"] == review["id"] {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Fatalf("settled follow-up review %v is missing from pipeline reviews %v", review["id"], reviews)
+	}
 }
 
 func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {

@@ -954,6 +954,7 @@ func completeStep(r *Run, o stepOutcome) error {
 			} else {
 				o.Result.Verdict, o.Status = "partial", "partial-review"
 			}
+			p.addReview(x)
 		}
 		switch o.Status {
 		case "clean-review", "outstanding-findings":
