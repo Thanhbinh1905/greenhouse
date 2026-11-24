@@ -265,6 +265,33 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	}
 }
 
+func TestBoundedReviewDiffDoesNotSpendOrdinaryBudgetOnGeneratedSections(t *testing.T) {
+	_, repo, _ := fixture(t)
+	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	generatedPath, ordinaryPath := "a-generated.txt", "z-ordinary.txt"
+	if err := os.WriteFile(filepath.Join(repo, generatedPath), []byte(strings.Repeat("evidence line\n", 67000)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(repo, ordinaryPath), []byte(strings.Repeat("small line\n", 8000)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	candidate := commitReviewFixture(t, repo, "add generated and ordinary changes")
+	fullDiff := git(t, repo, reviewDiffArgs(base, candidate)...)
+	if len(fullDiff) <= 1024*1024 {
+		t.Fatalf("fixture diff is only %d bytes", len(fullDiff))
+	}
+	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, []string{generatedPath, ordinaryPath}, []GeneratedPath{{Path: generatedPath}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == ordinaryPath }) {
+		t.Fatalf("ordinary path was excluded despite the generated marker replacing its section: %+v", uncovered)
+	}
+	if len(diff) > 1024*1024 || !strings.Contains(diff, "diff --git a/"+generatedPath+" b/"+generatedPath+"\n[generated: hunks omitted; see Generated]") || !strings.Contains(diff, "diff --git a/"+ordinaryPath+" b/"+ordinaryPath) {
+		t.Fatalf("bounded diff did not retain the ordinary path: bytes=%d", len(diff))
+	}
+}
+
 func TestBoundedReviewDiffMarksRemainingPathsAtExactLimit(t *testing.T) {
 	_, repo, _ := fixture(t)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))

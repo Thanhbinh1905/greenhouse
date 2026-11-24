@@ -524,7 +524,7 @@ func boundedReviewDiff(worktree, base, candidate string, names []string, generat
 		isGenerated := slices.ContainsFunc(generated, func(g GeneratedPath) bool { return g.Path == name })
 		alreadyUncovered := slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == name })
 		note := "[uncovered: hunks omitted; see Uncovered]"
-		if isGenerated {
+		if isGenerated && !alreadyUncovered {
 			note = "[generated: hunks omitted; see Generated]"
 		}
 		marker := fmt.Sprintf("diff --git a/%s b/%s\n%s\n", name, name, note)
@@ -538,23 +538,19 @@ func boundedReviewDiff(worktree, base, candidate string, names []string, generat
 			}
 			break
 		}
-		if alreadyUncovered {
+		if alreadyUncovered || isGenerated {
 			output.WriteString(marker)
 			continue
 		}
 		args := append([]string{"--literal-pathspecs"}, reviewDiffArgs(base, candidate)...)
 		section, err := repository.ReadBounded(worktree, remaining-len(marker), append(args, name)...)
-		if errors.Is(err, repository.ErrReadLimit) && !isGenerated {
+		if errors.Is(err, repository.ErrReadLimit) {
 			uncovered = append(uncovered, UncoveredPath{name, "diff_bound"})
 			output.WriteString(marker)
 			continue
 		}
-		if err != nil && !errors.Is(err, repository.ErrReadLimit) {
+		if err != nil {
 			return "", nil, fmt.Errorf("cannot capture diff for %s: %w", name, err)
-		}
-		if errors.Is(err, repository.ErrReadLimit) && isGenerated {
-			output.WriteString(marker)
-			continue
 		}
 		output.Write(section)
 	}
