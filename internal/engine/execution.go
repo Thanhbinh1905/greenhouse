@@ -529,25 +529,34 @@ func boundedReviewDiff(worktree, base, candidate string, names []string, generat
 		}
 		marker := fmt.Sprintf("diff --git a/%s b/%s\n%s\n", name, name, note)
 		remaining := limit - output.Len()
-		if remaining-len(marker) <= 0 {
-			if remaining >= len(marker) {
-				output.WriteString(marker)
-			}
+		if remaining <= 0 {
 			for _, omitted := range names[i:] {
 				markUncovered(omitted, "diff_bound")
 			}
 			break
 		}
 		if alreadyUncovered || isGenerated {
+			if remaining < len(marker) {
+				for _, omitted := range names[i:] {
+					markUncovered(omitted, "diff_bound")
+				}
+				break
+			}
 			output.WriteString(marker)
 			continue
 		}
 		args := append([]string{"--literal-pathspecs"}, reviewDiffArgs(base, candidate)...)
-		section, err := repository.ReadBounded(worktree, remaining-len(marker), append(args, name)...)
+		section, err := repository.ReadBounded(worktree, remaining, append(args, name)...)
 		if errors.Is(err, repository.ErrReadLimit) {
-			uncovered = append(uncovered, UncoveredPath{name, "diff_bound"})
-			output.WriteString(marker)
-			continue
+			markUncovered(name, "diff_bound")
+			if remaining >= len(marker) {
+				output.WriteString(marker)
+				continue
+			}
+			for _, omitted := range names[i+1:] {
+				markUncovered(omitted, "diff_bound")
+			}
+			break
 		}
 		if err != nil {
 			return "", nil, fmt.Errorf("cannot capture diff for %s: %w", name, err)

@@ -233,16 +233,20 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("docs/evidence/** linguist-generated\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
-	ordinaryPath := filepath.Join(repo, "b-ordinary.txt")
-	if err := os.WriteFile(ordinaryPath, []byte(strings.Repeat("old line\n", 10000)), 0600); err != nil {
-		t.Fatal(err)
+	ordinaryPaths := []string{"z-ordinary.txt", "z-secondary.txt"}
+	for _, path := range ordinaryPaths {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(strings.Repeat("old line\n", 6000)), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	target := commitReviewFixture(t, repo, "mark evidence generated")
 	if err := os.WriteFile(filepath.Join(repo, "docs", "evidence", "large.txt"), []byte(strings.Repeat("evidence line\n", 69000)), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(ordinaryPath, []byte("new line\n"), 0600); err != nil {
-		t.Fatal(err)
+	for _, path := range ordinaryPaths {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte("new line\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
 		t.Fatal(err)
@@ -272,35 +276,129 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	if len(captured.Input.Generated) != 1 || captured.Input.Generated[0].Path != "docs/evidence/large.txt" || captured.Input.Generated[0].Added != 69000 || len(captured.Input.Diff) > 1024*1024 || strings.Contains(captured.Input.Diff, "evidence line") {
 		t.Fatalf("generated evidence was not kept in short form: paths=%+v diff bytes=%d", captured.Input.Generated, len(captured.Input.Diff))
 	}
-	if !slices.Contains(captured.Input.Paths, "b-ordinary.txt") || slices.ContainsFunc(captured.Input.Uncovered, func(path UncoveredPath) bool { return path.Path == "b-ordinary.txt" }) {
-		t.Fatalf("generated path consumed the ordinary path's diff budget: paths=%v uncovered=%+v", captured.Input.Paths, captured.Input.Uncovered)
+	for _, path := range ordinaryPaths {
+		if !slices.Contains(captured.Input.Paths, path) || slices.ContainsFunc(captured.Input.Uncovered, func(item UncoveredPath) bool { return item.Path == path }) {
+			t.Fatalf("generated path consumed %s's diff budget: paths=%v uncovered=%+v", path, captured.Input.Paths, captured.Input.Uncovered)
+		}
 	}
 }
 
 func TestBoundedReviewDiffDoesNotSpendOrdinaryBudgetOnGeneratedSections(t *testing.T) {
 	_, repo, _ := fixture(t)
 	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
-	generatedPath, ordinaryPath := "a-generated.txt", "z-ordinary.txt"
+	generatedPath := "a-generated.txt"
+	ordinaryPaths := []string{"z-ordinary.txt", "z-secondary.txt"}
 	if err := os.WriteFile(filepath.Join(repo, generatedPath), []byte(strings.Repeat("evidence line\n", 67000)), 0600); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(repo, ordinaryPath), []byte(strings.Repeat("small line\n", 8000)), 0600); err != nil {
-		t.Fatal(err)
+	for _, path := range ordinaryPaths {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(strings.Repeat("small line\n", 8000)), 0600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	candidate := commitReviewFixture(t, repo, "add generated and ordinary changes")
 	fullDiff := git(t, repo, reviewDiffArgs(base, candidate)...)
 	if len(fullDiff) <= 1024*1024 {
 		t.Fatalf("fixture diff is only %d bytes", len(fullDiff))
 	}
-	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, []string{generatedPath, ordinaryPath}, []GeneratedPath{{Path: generatedPath}}, nil)
+	names := append([]string{generatedPath}, ordinaryPaths...)
+	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, names, []GeneratedPath{{Path: generatedPath}}, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if slices.ContainsFunc(uncovered, func(path UncoveredPath) bool { return path.Path == ordinaryPath }) {
-		t.Fatalf("ordinary path was excluded despite the generated marker replacing its section: %+v", uncovered)
+	for _, path := range ordinaryPaths {
+		if slices.ContainsFunc(uncovered, func(item UncoveredPath) bool { return item.Path == path }) {
+			t.Fatalf("ordinary path %s was excluded despite the generated marker replacing its section: %+v", path, uncovered)
+		}
+		if !strings.Contains(diff, "diff --git a/"+path+" b/"+path) {
+			t.Fatalf("bounded diff omitted ordinary path %s", path)
+		}
 	}
-	if len(diff) > 1024*1024 || !strings.Contains(diff, "diff --git a/"+generatedPath+" b/"+generatedPath+"\n[generated: hunks omitted; see Generated]") || !strings.Contains(diff, "diff --git a/"+ordinaryPath+" b/"+ordinaryPath) {
-		t.Fatalf("bounded diff did not retain the ordinary path: bytes=%d", len(diff))
+	if len(diff) > 1024*1024 || !strings.Contains(diff, "diff --git a/"+generatedPath+" b/"+generatedPath+"\n[generated: hunks omitted; see Generated]") {
+		t.Fatalf("bounded diff did not retain generated short form: bytes=%d", len(diff))
+	}
+}
+
+func TestBoundedReviewDiffChargesOrdinarySectionsByRenderedSize(t *testing.T) {
+	_, repo, _ := fixture(t)
+	base := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	prefixPath, ordinaryPath := "a-prefix.txt", "z-ordinary.txt"
+	for path, content := range map[string]string{prefixPath: "p\n", ordinaryPath: "o\n"} {
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	initial := commitReviewFixture(t, repo, "add prefix and ordinary paths")
+	prefixDiff := git(t, repo, append(reviewDiffArgs(base, initial), "--", prefixPath)...)
+	ordinaryDiff := git(t, repo, append(reviewDiffArgs(base, initial), "--", ordinaryPath)...)
+	wantPrefixBytes := 1024*1024 - len(ordinaryDiff)
+	contentBytes := 2 + wantPrefixBytes - len(prefixDiff)
+	if contentBytes < 2 {
+		t.Fatalf("cannot size prefix fixture: content bytes=%d", contentBytes)
+	}
+	if err := os.WriteFile(filepath.Join(repo, prefixPath), []byte(strings.Repeat("p", contentBytes-1)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	candidate := commitReviewFixture(t, repo, "fill budget before ordinary path")
+	prefixDiff = git(t, repo, append(reviewDiffArgs(base, candidate), "--", prefixPath)...)
+	if len(prefixDiff) != wantPrefixBytes {
+		t.Fatalf("prefix diff is %d bytes, want %d", len(prefixDiff), wantPrefixBytes)
+	}
+	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, []string{prefixPath, ordinaryPath}, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diff) != 1024*1024 || len(uncovered) != 0 {
+		t.Fatalf("ordinary section should use the remaining exact budget: diff=%d uncovered=%+v", len(diff), uncovered)
+	}
+}
+
+func TestBoundedReviewDiffUsesRenderedGitlinkSectionSize(t *testing.T) {
+	_, repo, home := fixture(t)
+	sub := filepath.Join(filepath.Dir(home), "budget-submodule")
+	if err := os.Mkdir(sub, 0700); err != nil {
+		t.Fatal(err)
+	}
+	git(t, sub, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte("old submodule code\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	commitReviewFixture(t, sub, "add old submodule content")
+	git(t, repo, "-c", "protocol.file.allow=always", "submodule", "add", "--name", "library", sub, "deps/lib")
+	base := commitReviewFixture(t, repo, "record old gitlink")
+	if err := os.WriteFile(filepath.Join(sub, "code.txt"), []byte("new submodule code\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	newPin := commitReviewFixture(t, sub, "update submodule content")
+	work := filepath.Join(repo, "deps/lib")
+	git(t, work, "fetch", sub, "main")
+	git(t, work, "checkout", newPin)
+	prefixPath, submodulePath := "a-prefix.txt", "deps/lib"
+	if err := os.WriteFile(filepath.Join(repo, prefixPath), []byte("x\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	initial := commitReviewFixture(t, repo, "add prefix and bump gitlink")
+	names := []string{prefixPath, submodulePath}
+	sections := make(map[string]int, len(names))
+	for _, path := range names {
+		args := append(reviewDiffArgs(base, initial), path)
+		sections[path] = len(git(t, repo, args...))
+	}
+	wantPrefix := 1024*1024 - sections[submodulePath]
+	delta := wantPrefix - sections[prefixPath]
+	if delta < 0 {
+		t.Fatalf("prefix fixture already exceeds limit by %d bytes", -delta)
+	}
+	if err := os.WriteFile(filepath.Join(repo, prefixPath), []byte(strings.Repeat("x", delta+1)+"\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	candidate := commitReviewFixture(t, repo, "fill remaining budget")
+	diff, uncovered, err := boundedReviewDiff(repo, base, candidate, names, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(diff) != 1024*1024 || len(uncovered) != 0 {
+		t.Fatalf("gitlink section should use its rendered size: diff=%d uncovered=%+v", len(diff), uncovered)
 	}
 }
 
