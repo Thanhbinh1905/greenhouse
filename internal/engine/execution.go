@@ -93,6 +93,7 @@ type Execution struct {
 	Rules         InputIdentity            `json:"rules"`
 	Diff          string                   `json:"diff"`
 	Paths         []string                 `json:"paths"`
+	AllPaths      []string                 `json:"all_paths,omitempty"`
 	Generated     []GeneratedPath          `json:"generated,omitempty"`
 	Uncovered     []UncoveredPath          `json:"uncovered,omitempty"`
 	Snapshot      *repository.TreeSnapshot `json:"snapshot,omitempty"`
@@ -193,6 +194,10 @@ func pipelineAcceptedHeads(acceptances []Acceptance, candidate, inputs, config s
 }
 
 func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, error) {
+	return reviewExecutionPaths(r, snapshot, full, nil)
+}
+
+func reviewExecutionPaths(r *Run, snapshot *RuleSnapshot, full bool, selected []string) (*Execution, error) {
 	settings := r.Configs[len(r.Configs)-1].Settings
 	cfg, e := trustedAgent(settings.ReviewerBackend, settings.ReviewerModel)
 	if e != nil {
@@ -212,7 +217,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 		}
 		return nil, fmt.Errorf("cannot capture review diff: %w", e)
 	}
-	if !full && string(diff) != r.SelectedDiff {
+	if !full && selected == nil && string(diff) != r.SelectedDiff {
 		return nil, errors.New("selected diff changed; prepare required")
 	}
 	if err := refuseBinaryDiff(string(diff)); err != nil {
@@ -238,6 +243,22 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	}
 	if len(names) == 0 {
 		return nil, errors.New("empty committed diff")
+	}
+	allNames := slices.Clone(names)
+	if selected != nil {
+		if r.Review != nil && len(r.Review.AllPaths) > 0 {
+			allNames = slices.Clone(r.Review.AllPaths)
+		}
+		names = slices.DeleteFunc(names, func(name string) bool { return !slices.Contains(selected, name) })
+		if len(names) == 0 {
+			return nil, errors.New("empty follow-up review paths")
+		}
+		args := reviewDiffArgs(base, r.Candidate)
+		args = append(args, names...)
+		diff, e = repository.ReadBounded(r.Submitted.Worktree, reviewDiffLimit, args...)
+		if e != nil {
+			return nil, fmt.Errorf("cannot capture follow-up review diff: %w", e)
+		}
 	}
 	if snapshot == nil {
 		return nil, errors.New("required rules unresolved")
@@ -470,7 +491,7 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 	if e != nil {
 		return nil, e
 	}
-	return &Execution{ReviewBudget: budget, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{ReviewBudget: budget, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {

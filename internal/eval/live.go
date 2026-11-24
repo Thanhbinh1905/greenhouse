@@ -454,7 +454,9 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 		Args        []string `json:"args"`
 		Input       []byte   `json:"input"`
 		InputDigest string   `json:"input_digest"`
+		AllPaths    []string `json:"all_paths"`
 		Result      *struct {
+			Coverage []string  `json:"coverage"`
 			Findings []Finding `json:"findings"`
 		} `json:"result"`
 	}
@@ -483,8 +485,31 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 	rec.Findings = []Finding{}
 	if x.Result != nil {
 		rec.Findings = x.Result.Findings
+		paths := x.AllPaths
+		if len(paths) == 0 {
+			var input struct {
+				Paths []string `json:"Paths"`
+			}
+			if json.Unmarshal(x.Input, &input) == nil {
+				paths = input.Paths
+			}
+		}
+		if len(paths) > 0 && len(paths) == len(x.Result.Coverage) {
+			covered := map[string]bool{}
+			for _, path := range x.Result.Coverage {
+				covered[path] = true
+			}
+			rec.Score.FullCoverage = len(covered) == len(paths)
+			for _, path := range paths {
+				if !covered[path] {
+					rec.Score.FullCoverage = false
+				}
+			}
+		}
 	}
-	rec.Score, _ = ScoreCase(k, rec.Status, rec.Findings, nil)
+	score, _ := ScoreCase(k, rec.Status, rec.Findings, nil)
+	score.FullCoverage = rec.Score.FullCoverage
+	rec.Score = score
 	return rec
 }
 
@@ -674,6 +699,7 @@ func rescoreReport(r *Report, c *Corpus, a *Adjudications) error {
 			return fmt.Errorf("case %s not in corpus", rec.ID)
 		}
 		score, err := ScoreCase(k, rec.Status, rec.Findings, records[rec.ID])
+		score.FullCoverage = rec.Score.FullCoverage
 		if err != nil {
 			return err
 		}
@@ -726,6 +752,8 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Metric | Value |\n|---|---|\n")
 	fmt.Fprintf(&md, "| High-severity recall | %s (%d/%d) |\n", pct(s.HighRecall), s.HighDetected, s.HighExpected)
 	fmt.Fprintf(&md, "| Recall | %s (%d/%d) |\n", pct(s.Recall), s.Detected, s.Expected)
+	fmt.Fprintf(&md, "| Full-coverage reviews | %s (%d/%d) |\n", pct(s.FullCoverageRate), s.FullCoverageCases, s.Cases)
+	fmt.Fprintf(&md, "| Recall on full-coverage reviews | %s (%d/%d) |\n", pct(s.FullCoverageRecall), s.FullCoverageDetected, s.FullCoverageExpected)
 	fmt.Fprintf(&md, "| Precision | %s (%d/%d) |\n", pct(s.Precision), s.Matched, s.Findings-s.Allowed)
 	fmt.Fprintf(&md, "| Allowed judgment findings (excluded from precision) | %d |\n", s.Allowed)
 	fmt.Fprintf(&md, "| Priority accuracy | %s (%d/%d) |\n", pct(s.PriorityAccuracy), s.PriorityCorrect, s.PriorityJudged)

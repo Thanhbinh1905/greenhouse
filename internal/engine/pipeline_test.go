@@ -1118,6 +1118,104 @@ func TestConflictAbortUnknownOutcomeHoldsCustody(t *testing.T) {
 	assertRecoveryCustody(t, bin, repo, home, done, path)
 }
 
+func TestFullPipelineFollowsUpOnSkippedReviewPaths(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := pipelineFixture(t, localPlan)
+	root := filepath.Dir(home)
+	scriptPath := filepath.Join(root, "fake-pi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := "v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}"
+	new := "count=sum(1 for _ in open(root+'/review-invocations'))\ncoverage=b['Paths'][1:] if count == 1 else b['Paths']\nv={'head':b['Head'],'verdict':'clean','coverage':coverage,'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}"
+	if !strings.Contains(string(script), old) {
+		t.Fatal("reviewer answer template not found")
+	}
+	if err := os.WriteFile(scriptPath, []byte(strings.Replace(string(script), old, new, 1)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Mode: "auto", Preset: "full", Limit: 2, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "fixture/model", FixerBackend: "pi", FixerModel: "fixture/model"}
+	v = mutate(t, bin, repo, home, v, "apply", "two-review-budget", settings)
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "gate_id": v["gate_id"], "expected": v["token"], "action_id": "prepare-followup", "intent": "Review every changed file", "target": runOf(t, v)["target"]}
+	b, _ := json.Marshal(q)
+	v = axi(t, bin, repo, home, string(b))
+	if v["outcome"] != "ok" {
+		t.Fatal(v)
+	}
+	mutate(t, bin, repo, home, v, "pipeline", "coverage-followup", nil)
+	done := waitPipeline(t, bin, repo, home)
+	if got := countLines(t, filepath.Join(root, "review-invocations"))["review"]; got != 2 {
+		t.Fatalf("review passes = %d, want follow-up pass", got)
+	}
+	run := runOf(t, done)
+	if status := run["status"]; status != "locally-ready" {
+		t.Fatalf("pipeline did not settle after complete coverage: %v", done)
+	}
+	input, err := os.ReadFile(filepath.Join(root, "review-input.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var bundle struct {
+		Paths []string `json:"Paths"`
+	}
+	if err := json.Unmarshal(input, &bundle); err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Paths) != 1 {
+		t.Fatalf("follow-up paths = %v, want only the skipped path", bundle.Paths)
+	}
+	review := run["review"].(map[string]any)
+	result := review["result"].(map[string]any)
+	coverage := result["coverage"].([]any)
+	if len(coverage) != 2 {
+		t.Fatalf("merged review coverage = %v, want both changed paths", coverage)
+	}
+	recorded := false
+	reviews, _ := run["pipeline"].(map[string]any)["reviews"].([]any)
+	for _, x := range reviews {
+		if x.(map[string]any)["id"] == review["id"] {
+			recorded = true
+		}
+	}
+	if !recorded {
+		t.Fatalf("settled follow-up review %v is missing from pipeline reviews %v", review["id"], reviews)
+	}
+}
+
+func TestFullPipelineSettlesPartialWhenBudgetSpentWithFindings(t *testing.T) {
+	t.Parallel()
+	bin, repo, home, v := pipelineFixture(t, localPlan)
+	root := filepath.Dir(home)
+	scriptPath := filepath.Join(root, "fake-pi")
+	script, err := os.ReadFile(scriptPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := "v={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}"
+	new := "v={'head':b['Head'],'verdict':'findings','coverage':b['Paths'][1:],'findings':[{'id':'model-id','priority':'P2','origin':'correctness','file':b['Paths'][1],'start':1,'end':1,'explanation':'Changed line is incorrect','action':'Correct the line','rule':'','head':b['Head']}],'documentation':{'status':'not-needed','reason':'no public behavior changed'}}"
+	if !strings.Contains(string(script), old) {
+		t.Fatal("reviewer answer template not found")
+	}
+	if err := os.WriteFile(scriptPath, []byte(strings.Replace(string(script), old, new, 1)), 0700); err != nil {
+		t.Fatal(err)
+	}
+	settings := Settings{Mode: "auto", Preset: "full", Limit: 1, Rules: []string{"unslop"}, ReviewerBackend: "pi", ReviewerModel: "fixture/model", FixerBackend: "pi", FixerModel: "fixture/model"}
+	v = mutate(t, bin, repo, home, v, "apply", "one-review-budget", settings)
+	q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "gate_id": v["gate_id"], "expected": v["token"], "action_id": "prepare-partial", "intent": "Review every changed file", "target": runOf(t, v)["target"]}
+	b, _ := json.Marshal(q)
+	v = axi(t, bin, repo, home, string(b))
+	mutate(t, bin, repo, home, v, "pipeline", "partial-budget", nil)
+	run := runOf(t, waitPipeline(t, bin, repo, home))
+	result := run["review"].(map[string]any)["result"].(map[string]any)
+	if result["verdict"] != "partial" || len(result["findings"].([]any)) != 1 {
+		t.Fatalf("review with skipped path and spent budget = %v, want partial keeping its finding", result)
+	}
+	if findings, _ := run["findings"].([]any); len(findings) != 1 {
+		t.Fatalf("partial review dropped its finding from the run: %v", run["findings"])
+	}
+}
+
 func TestFullPipelineRereviewsRepairThatRestoresTargetTree(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := pipelineFixture(t, localPlan)

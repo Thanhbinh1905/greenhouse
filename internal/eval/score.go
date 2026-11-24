@@ -32,6 +32,7 @@ type Adjudication struct {
 }
 
 type CaseScore struct {
+	FullCoverage    bool           `json:"full_coverage"`
 	Split           string         `json:"split"`
 	Stratum         string         `json:"stratum"`
 	Allowed         int            `json:"allowed"`
@@ -59,30 +60,35 @@ type CaseScore struct {
 }
 
 type Summary struct {
-	Allowed             int            `json:"allowed"`
-	BySplit             map[string]int `json:"by_split"`
-	ByStratum           map[string]int `json:"by_stratum"`
-	Cases               int            `json:"cases"`
-	Inconclusive        int            `json:"inconclusive"`
-	Expected            int            `json:"expected"`
-	Detected            int            `json:"detected"`
-	HighExpected        int            `json:"high_expected"`
-	HighDetected        int            `json:"high_detected"`
-	Findings            int            `json:"findings"`
-	Matched             int            `json:"matched"`
-	FalsePositives      int            `json:"false_positives"`
-	WrongDefect         int            `json:"wrong_defect"`
-	Unadjudicated       int            `json:"unadjudicated"`
-	CleanFalsePositives int            `json:"clean_false_positives"`
-	CleanBlocking       int            `json:"clean_blocking"`
-	NoiseFalsePositives int            `json:"noise_false_positives"`
-	PriorityJudged      int            `json:"priority_judged"`
-	PriorityCorrect     int            `json:"priority_correct"`
-	Recall              *float64       `json:"recall"`
-	HighRecall          *float64       `json:"high_recall"`
-	Precision           *float64       `json:"precision"`
-	PriorityAccuracy    *float64       `json:"priority_accuracy"`
-	BarMet              bool           `json:"bar_met"`
+	FullCoverageCases    int            `json:"full_coverage_cases"`
+	FullCoverageRate     *float64       `json:"full_coverage_rate"`
+	FullCoverageDetected int            `json:"full_coverage_detected"`
+	FullCoverageExpected int            `json:"full_coverage_expected"`
+	FullCoverageRecall   *float64       `json:"full_coverage_recall"`
+	Allowed              int            `json:"allowed"`
+	BySplit              map[string]int `json:"by_split"`
+	ByStratum            map[string]int `json:"by_stratum"`
+	Cases                int            `json:"cases"`
+	Inconclusive         int            `json:"inconclusive"`
+	Expected             int            `json:"expected"`
+	Detected             int            `json:"detected"`
+	HighExpected         int            `json:"high_expected"`
+	HighDetected         int            `json:"high_detected"`
+	Findings             int            `json:"findings"`
+	Matched              int            `json:"matched"`
+	FalsePositives       int            `json:"false_positives"`
+	WrongDefect          int            `json:"wrong_defect"`
+	Unadjudicated        int            `json:"unadjudicated"`
+	CleanFalsePositives  int            `json:"clean_false_positives"`
+	CleanBlocking        int            `json:"clean_blocking"`
+	NoiseFalsePositives  int            `json:"noise_false_positives"`
+	PriorityJudged       int            `json:"priority_judged"`
+	PriorityCorrect      int            `json:"priority_correct"`
+	Recall               *float64       `json:"recall"`
+	HighRecall           *float64       `json:"high_recall"`
+	Precision            *float64       `json:"precision"`
+	PriorityAccuracy     *float64       `json:"priority_accuracy"`
+	BarMet               bool           `json:"bar_met"`
 }
 
 func blocking(priority string) bool { return priority == "P0" || priority == "P1" }
@@ -267,6 +273,11 @@ func Summarize(scores []CaseScore) Summary {
 		}
 		m.Expected += s.Expected
 		m.Detected += s.Detected
+		if s.FullCoverage {
+			m.FullCoverageCases++
+			m.FullCoverageDetected += s.Detected
+			m.FullCoverageExpected += s.Expected
+		}
 		m.HighExpected += s.HighExpected
 		m.HighDetected += s.HighDetected
 		m.Allowed += s.Allowed
@@ -288,6 +299,8 @@ func Summarize(scores []CaseScore) Summary {
 		}
 	}
 	m.Recall = ratio(m.Detected, m.Expected)
+	m.FullCoverageRate = ratio(m.FullCoverageCases, m.Cases)
+	m.FullCoverageRecall = ratio(m.FullCoverageDetected, m.FullCoverageExpected)
 	m.HighRecall = ratio(m.HighDetected, m.HighExpected)
 	m.Precision = ratio(m.Matched, m.Findings-m.Allowed)
 	m.PriorityAccuracy = ratio(m.PriorityCorrect, m.PriorityJudged)

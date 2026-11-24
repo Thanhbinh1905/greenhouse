@@ -72,45 +72,49 @@ type Event struct {
 	To     string `json:"to,omitempty"`
 }
 type Run struct {
-	StartedAt       string              `json:"started_at,omitempty"`
-	StageStartedAt  string              `json:"stage_started_at,omitempty"`
-	Intent          string              `json:"intent,omitempty"`
-	IntentSource    string              `json:"intent_source,omitempty"`
-	Reviewer        *ReviewerConfig     `json:"reviewer,omitempty"`
-	SelectedDiff    string              `json:"selected_diff,omitempty"`
-	Findings        []Finding           `json:"findings,omitempty"`
-	Review          *Execution          `json:"review,omitempty"`
-	RuleSnapshots   []RuleSnapshot      `json:"rule_snapshots,omitempty"`
-	ID              string              `json:"id"`
-	Input           string              `json:"input"`
-	Token           string              `json:"token"`
-	Submitted       repository.Identity `json:"submitted"`
-	Target          string              `json:"target"`
-	Candidate       string              `json:"candidate"`
-	Stage           string              `json:"stage"`
-	Status          string              `json:"status"`
-	Configs         []Snapshot          `json:"configs"`
-	ReviewUsed      int                 `json:"review_used"`
-	RepairUsed      int                 `json:"repair_used"`
-	Repair          *Repair             `json:"repair,omitempty"`
-	Pipeline        *Pipeline           `json:"pipeline,omitempty"`
-	Events          []Event             `json:"events"`
-	Predecessor     string              `json:"predecessor,omitempty"`
-	Successor       string              `json:"successor,omitempty"`
-	Pause           *BackendPause       `json:"pause,omitempty"`
-	Attempts        []Attempt           `json:"attempts,omitempty"`
-	AutoRetries     int                 `json:"auto_retries,omitempty"`
-	PriorRepairs    []Repair            `json:"prior_repairs,omitempty"`
-	Recovery        *Recovery           `json:"recovery,omitempty"`
-	Recoveries      []Recovery          `json:"recoveries,omitempty"`
-	Inherited       *Inheritance        `json:"inherited,omitempty"`
-	Host            *Host               `json:"host,omitempty"`
-	HostFindings    []Finding           `json:"host_findings,omitempty"`
-	HostAcceptances []HostAcceptance    `json:"host_acceptances,omitempty"`
-	HostHistory     []PriorFinding      `json:"host_history,omitempty"`
-	HostCarried     []CarriedFinding    `json:"host_carried_findings,omitempty"`
-	HostResponses   *Repair             `json:"host_responses,omitempty"`
-	HostGrants      []string            `json:"host_grants,omitempty"`
+	StartedAt         string              `json:"started_at,omitempty"`
+	StageStartedAt    string              `json:"stage_started_at,omitempty"`
+	Intent            string              `json:"intent,omitempty"`
+	IntentSource      string              `json:"intent_source,omitempty"`
+	Reviewer          *ReviewerConfig     `json:"reviewer,omitempty"`
+	SelectedDiff      string              `json:"selected_diff,omitempty"`
+	Findings          []Finding           `json:"findings,omitempty"`
+	Review            *Execution          `json:"review,omitempty"`
+	RuleSnapshots     []RuleSnapshot      `json:"rule_snapshots,omitempty"`
+	ID                string              `json:"id"`
+	Input             string              `json:"input"`
+	Token             string              `json:"token"`
+	Submitted         repository.Identity `json:"submitted"`
+	Target            string              `json:"target"`
+	Candidate         string              `json:"candidate"`
+	Stage             string              `json:"stage"`
+	Status            string              `json:"status"`
+	Configs           []Snapshot          `json:"configs"`
+	ReviewUsed        int                 `json:"review_used"`
+	FollowupPaths     []string            `json:"followup_paths,omitempty"`
+	FollowupCoverage  []string            `json:"followup_coverage,omitempty"`
+	FollowupFindings  []Finding           `json:"followup_findings,omitempty"`
+	FollowupUncovered []UncoveredPath     `json:"followup_uncovered,omitempty"`
+	RepairUsed        int                 `json:"repair_used"`
+	Repair            *Repair             `json:"repair,omitempty"`
+	Pipeline          *Pipeline           `json:"pipeline,omitempty"`
+	Events            []Event             `json:"events"`
+	Predecessor       string              `json:"predecessor,omitempty"`
+	Successor         string              `json:"successor,omitempty"`
+	Pause             *BackendPause       `json:"pause,omitempty"`
+	Attempts          []Attempt           `json:"attempts,omitempty"`
+	AutoRetries       int                 `json:"auto_retries,omitempty"`
+	PriorRepairs      []Repair            `json:"prior_repairs,omitempty"`
+	Recovery          *Recovery           `json:"recovery,omitempty"`
+	Recoveries        []Recovery          `json:"recoveries,omitempty"`
+	Inherited         *Inheritance        `json:"inherited,omitempty"`
+	Host              *Host               `json:"host,omitempty"`
+	HostFindings      []Finding           `json:"host_findings,omitempty"`
+	HostAcceptances   []HostAcceptance    `json:"host_acceptances,omitempty"`
+	HostHistory       []PriorFinding      `json:"host_history,omitempty"`
+	HostCarried       []CarriedFinding    `json:"host_carried_findings,omitempty"`
+	HostResponses     *Repair             `json:"host_responses,omitempty"`
+	HostGrants        []string            `json:"host_grants,omitempty"`
 
 	ReviewBase       string `json:"review_base,omitempty"`
 	ReviewBaseReason string `json:"review_base_reason,omitempty"`
@@ -1553,6 +1557,11 @@ func Daemon(h string) (retErr error) {
 			if err := commit(s); err != nil {
 				return err
 			}
+			if r.Status == "running" {
+				if err := launch(); err != nil {
+					return err
+				}
+			}
 			continue
 		case conn, ok := <-connections:
 			if !ok {
@@ -1761,6 +1770,76 @@ func finishReview(r *Run, done reviewOutcome) {
 	id, err := repository.Resolve(r.Submitted.Worktree)
 	if err != nil || id != r.Submitted {
 		status = "stale"
+	}
+	if done.Result == nil && len(r.FollowupPaths) > 0 && status == "inconclusive" {
+		settings := r.Configs[len(r.Configs)-1].Settings
+		if r.ReviewUsed+r.RepairUsed < settings.Limit {
+			if next, err := reviewExecutionPaths(r, effectiveRuleSnapshot(r), false, r.FollowupPaths); err == nil {
+				r.Review = next
+				r.ReviewUsed++
+				r.Status = "running"
+				r.Token = opaque()
+				return
+			}
+		}
+		done.Result = &Verdict{Head: r.Review.Rules.Candidate, Verdict: "partial", Coverage: append([]string(nil), r.FollowupCoverage...), Findings: append([]Finding(nil), r.FollowupFindings...), Uncovered: append([]UncoveredPath(nil), r.FollowupUncovered...)}
+		for _, path := range r.FollowupPaths {
+			done.Result.Uncovered = append(done.Result.Uncovered, UncoveredPath{Path: path, Reason: "review_budget"})
+		}
+		status = "partial-review"
+	}
+	if done.Result != nil {
+		var remaining []string
+		for _, path := range done.Result.Uncovered {
+			if path.Reason == "not covered by reviewer within budget" {
+				remaining = append(remaining, path.Path)
+			}
+		}
+		settings := r.Configs[len(r.Configs)-1].Settings
+		settled := status == "clean-review" || status == "outstanding-findings" || status == "partial-review"
+		if len(remaining) > 0 && r.ReviewUsed+r.RepairUsed < settings.Limit && settled {
+			r.FollowupCoverage = append(r.FollowupCoverage, done.Result.Coverage...)
+			r.FollowupFindings = append(r.FollowupFindings, done.Result.Findings...)
+			for _, path := range done.Result.Uncovered {
+				if path.Reason != "not covered by reviewer within budget" {
+					r.FollowupUncovered = append(r.FollowupUncovered, path)
+				}
+			}
+			r.FollowupPaths = remaining
+			if next, err := reviewExecutionPaths(r, effectiveRuleSnapshot(r), false, remaining); err == nil {
+				r.Review = next
+				r.ReviewUsed++
+				r.Status = "running"
+				r.Token = opaque()
+				return
+			}
+		}
+		if len(remaining) > 0 {
+			if r.ReviewUsed+r.RepairUsed >= settings.Limit {
+				for i := range done.Result.Uncovered {
+					if done.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
+						done.Result.Uncovered[i].Reason = "review_budget"
+					}
+				}
+			}
+			if settled {
+				done.Result.Verdict, status = "partial", "partial-review"
+			}
+		}
+		if len(r.FollowupPaths) > 0 && (status == "clean-review" || status == "outstanding-findings" || status == "partial-review") {
+			done.Result.Coverage = append(r.FollowupCoverage, done.Result.Coverage...)
+			done.Result.Findings = append(r.FollowupFindings, done.Result.Findings...)
+			done.Result.Uncovered = append(r.FollowupUncovered, done.Result.Uncovered...)
+			r.FollowupPaths, r.FollowupCoverage, r.FollowupFindings, r.FollowupUncovered = nil, nil, nil, nil
+			if len(done.Result.Uncovered) == 0 {
+				done.Result.Verdict, status = "clean", "clean-review"
+				if len(done.Result.Findings) > 0 {
+					done.Result.Verdict, status = "findings", "outstanding-findings"
+				}
+			} else {
+				done.Result.Verdict, status = "partial", "partial-review"
+			}
+		}
 	}
 	r.Status, r.Review.Status, r.Review.Log = status, status, done.Log
 	r.Review.Result = done.Result

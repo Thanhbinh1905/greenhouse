@@ -199,12 +199,13 @@ func TestSummarizeComputesRatesAndBar(t *testing.T) {
 		mustScore(t, Case{ID: "clean", Category: "clean"}, "clean-review", nil, nil),
 		mustScore(t, Case{ID: "noise", Category: "noise", Noise: []Noise{{File: "n.go", Start: 1, End: 3}}}, "outstanding-findings", []Finding{{Priority: "P3", Origin: "policy", File: "n.go", Start: 2, End: 2}}, nil),
 	}
+	scores[0].FullCoverage = true
 	m := Summarize(scores)
 	if m.Cases != 3 || m.Expected != 2 || m.Detected != 1 || m.HighExpected != 1 || m.HighDetected != 1 {
 		t.Fatalf("summary counts = %+v", m)
 	}
-	if *m.Recall != 0.5 || *m.HighRecall != 1 || *m.Precision != 1.0/3 || *m.PriorityAccuracy != 1 {
-		t.Fatalf("summary rates = recall %v high %v precision %v priority %v", *m.Recall, *m.HighRecall, *m.Precision, *m.PriorityAccuracy)
+	if *m.Recall != 0.5 || *m.HighRecall != 1 || *m.Precision != 1.0/3 || *m.PriorityAccuracy != 1 || *m.FullCoverageRate != 1.0/3 || *m.FullCoverageRecall != 0.5 {
+		t.Fatalf("summary rates = recall %v high %v precision %v priority %v full coverage %v full recall %v", *m.Recall, *m.HighRecall, *m.Precision, *m.PriorityAccuracy, *m.FullCoverageRate, *m.FullCoverageRecall)
 	}
 	if m.FalsePositives != 2 || m.NoiseFalsePositives != 1 || m.CleanFalsePositives != 0 || m.CleanBlocking != 0 || !m.BarMet {
 		t.Fatalf("summary bar = %+v", m)

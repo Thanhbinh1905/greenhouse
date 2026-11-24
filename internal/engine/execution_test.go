@@ -211,8 +211,10 @@ func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 		name, answer, wantVerdict, wantStatus, wantReason string
 	}{
 		{"clean", `v={"head":b["Head"],"verdict":"clean","coverage":b["Paths"][:-1],"findings":[]}`, "partial", "partial-review", ""},
-		{"findings", `v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"][:-1],"findings":[{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]}`, "findings", "outstanding-findings", ""},
+		{"findings", `v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"][:-1],"findings":[{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]}`, "partial", "partial-review", ""},
+		{"findings-no-budget", `v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"][:-1],"findings":[{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]}`, "partial", "partial-review", ""},
 		{"malformed", `v={"head":b["Head"],"verdict":"unexpected","coverage":b["Paths"][:-1],"findings":[]}`, "", "inconclusive", "invalid_output"},
+		{"follow-up", `count=open(root+"/invocations").read().count("invoked"); coverage=b["Paths"] if count > 1 else b["Paths"][:-1]; findings=[] if count > 1 else [{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]; v={"head":b["Head"],"verdict":"findings" if findings else "clean","coverage":coverage,"findings":findings}`, "findings", "outstanding-findings", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			bin, repo, home := fixture(t)
@@ -239,6 +241,9 @@ func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 				t.Fatal(err)
 			}
 			settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop", "no-comments"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+			if test.name == "findings-no-budget" {
+				settings["limit"] = 1
+			}
 			v = mutate(t, bin, repo, home, v, "apply", "fixture-model", settings)
 			q := map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Review files", "target": target}
 			b, _ := json.Marshal(q)
@@ -261,11 +266,21 @@ func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 			if result["verdict"] != test.wantVerdict {
 				t.Fatalf("verdict = %v, want %s", result["verdict"], test.wantVerdict)
 			}
-			if test.name == "findings" && len(result["findings"].([]any)) == 0 {
+			if test.name == "follow-up" {
+				if got := len(strings.Split(strings.TrimSpace(string(mustRead(t, filepath.Join(filepath.Dir(home), "invocations")))), "\n")); got != 2 {
+					t.Fatalf("review invocation count = %d, want two passes", got)
+				}
+				uncovered, _ := result["uncovered"].([]any)
+				if len(result["coverage"].([]any)) != 2 || len(uncovered) != 0 || len(result["findings"].([]any)) != 1 {
+					t.Fatalf("follow-up did not merge coverage and findings: %v", result)
+				}
+				return
+			}
+			if strings.HasPrefix(test.name, "findings") && len(result["findings"].([]any)) == 0 {
 				t.Fatal("findings verdict lost its findings")
 			}
 			uncovered := result["uncovered"].([]any)
-			if len(uncovered) != 1 || uncovered[0].(map[string]any)["path"] != "sample.txt" || uncovered[0].(map[string]any)["reason"] != "not covered by reviewer within budget" {
+			if len(uncovered) != 1 || uncovered[0].(map[string]any)["path"] != "sample.txt" || uncovered[0].(map[string]any)["reason"] != "review_budget" {
 				t.Fatalf("unexpected uncovered paths: %v", uncovered)
 			}
 		})
