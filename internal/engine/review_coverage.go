@@ -26,7 +26,7 @@ const generatedExcerptLimit = 4 * 1024
 
 const generatedContract = ` Generated lists changed paths that the target branch marks as generated. Their Diff hunks are omitted and Files holds only a bounded excerpt of each, plus the content of each named generator that exists at the candidate. Assess them from the diffstat, excerpt and generators, and include them in coverage.`
 
-const uncoveredContract = ` Uncovered lists changed paths that were not reviewed. Their Diff hunks and Files content are omitted, Paths excludes them, and coverage must not include them. Reasons identify hunk_window, prompt_budget, or review_budget exclusions.`
+const uncoveredContract = ` Uncovered lists changed paths that were not reviewed. Their Diff hunks and Files content are omitted, Paths excludes them, and coverage must not include them. Reasons identify hunk_window, diff_bound, prompt_budget, or review_budget exclusions.`
 
 func pathAttributes(worktree, source string, names []string) (map[string]map[string]string, error) {
 	out, err := repository.Read(worktree, append([]string{"check-attr", "--source=" + source, "-z", "linguist-generated", "greenhouse-generator", "--"}, names...)...)
@@ -109,7 +109,7 @@ func boundedExcerpt(lines string, limit int) string {
 }
 
 func omitDiffHunks(worktree, base, candidate, diff, path, note string) (string, error) {
-	section, err := repository.Read(worktree, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, candidate, "--", path)
+	section, err := repository.ReadBounded(worktree, reviewDiffLimit, "--literal-pathspecs", "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--ignore-submodules=none", "--no-color", "--no-relative", "--src-prefix=a/", "--dst-prefix=b/", "--binary", base, candidate, "--", path)
 	if err != nil {
 		return "", err
 	}

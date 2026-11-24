@@ -842,7 +842,7 @@ func handleRequest(s *Store, q Request) Response {
 			return fail("immutable review intent required before dispatch", r)
 		}
 		if err := prepareRun(s, r, q.Intent, q.Target); err != nil {
-			return fail(err.Error(), r)
+			return refusalResponse(view(s, r), prepareRefusal(err))
 		}
 		r.IntentSource = q.IntentSource
 		if r.Host != nil && len(r.HostFindings) > 0 {
@@ -895,7 +895,7 @@ func handleRequest(s *Store, q Request) Response {
 			settings.Preset = "full"
 			candidate.Configs = append(candidate.Configs, Snapshot{ID: opaque(), Settings: settings, Source: "pipeline intent"})
 			if err := prepareRun(s, &candidate, q.Intent, q.Target); err != nil {
-				return fail(err.Error(), r)
+				return refusalResponse(view(s, r), prepareRefusal(err))
 			}
 			candidate.RuleSnapshots = append(candidate.RuleSnapshots, resolveRules(&candidate))
 			*r = candidate
