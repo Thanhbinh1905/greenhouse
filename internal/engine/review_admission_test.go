@@ -233,8 +233,15 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("docs/evidence/** linguist-generated\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
+	ordinaryPath := filepath.Join(repo, "b-ordinary.txt")
+	if err := os.WriteFile(ordinaryPath, []byte(strings.Repeat("old line\n", 10000)), 0600); err != nil {
+		t.Fatal(err)
+	}
 	target := commitReviewFixture(t, repo, "mark evidence generated")
-	if err := os.WriteFile(filepath.Join(repo, "docs", "evidence", "large.txt"), []byte(strings.Repeat("evidence line\n", 80000)), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(repo, "docs", "evidence", "large.txt"), []byte(strings.Repeat("evidence line\n", 69000)), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(ordinaryPath, []byte("new line\n"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(repo, "sample.txt"), []byte("review this change\n"), 0600); err != nil {
@@ -254,14 +261,19 @@ func TestGeneratedEvidenceOverDiffLimitUsesShortForm(t *testing.T) {
 	var captured struct {
 		Input struct {
 			Generated []GeneratedPath
+			Paths     []string
+			Uncovered []UncoveredPath
 			Diff      string
 		}
 	}
 	if err := json.Unmarshal(b, &captured); err != nil {
 		t.Fatal(err)
 	}
-	if len(captured.Input.Generated) != 1 || captured.Input.Generated[0].Path != "docs/evidence/large.txt" || captured.Input.Generated[0].Added != 80000 || len(captured.Input.Diff) > 1024*1024 || strings.Contains(captured.Input.Diff, "evidence line") {
+	if len(captured.Input.Generated) != 1 || captured.Input.Generated[0].Path != "docs/evidence/large.txt" || captured.Input.Generated[0].Added != 69000 || len(captured.Input.Diff) > 1024*1024 || strings.Contains(captured.Input.Diff, "evidence line") {
 		t.Fatalf("generated evidence was not kept in short form: paths=%+v diff bytes=%d", captured.Input.Generated, len(captured.Input.Diff))
+	}
+	if !slices.Contains(captured.Input.Paths, "b-ordinary.txt") || slices.ContainsFunc(captured.Input.Uncovered, func(path UncoveredPath) bool { return path.Path == "b-ordinary.txt" }) {
+		t.Fatalf("generated path consumed the ordinary path's diff budget: paths=%v uncovered=%+v", captured.Input.Paths, captured.Input.Uncovered)
 	}
 }
 
