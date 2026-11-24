@@ -157,9 +157,9 @@ A changed file whose hunk windows exceed 64 KiB and that is not generated become
 - a reviewer verdict of `clean` becomes `verdict: "partial"` with `status: "partial-review"`;
 - a `findings` verdict keeps `status: "outstanding-findings"` when the review finishes within budget;
 - `run.review.uncovered` and `host_result.uncovered` list each path with its `reason`. A path excluded because its hunk windows exceed the input limit or because of the prompt limit keeps that reason; when the review budget expires, every otherwise-unreviewed path has reason `review_budget`;
-- a well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. A clean verdict becomes partial. A findings verdict retains its findings and outstanding-findings status unless the review budget expires after covering at least one path, in which case it settles as partial.
+- a well-formed reviewer answer that omits coverage for a path adds that path with reason `not covered by reviewer within budget`. Greenhouse retries those paths while review budget remains. If the budget runs out, remaining paths use reason `review_budget` and the verdict is partial.
 
-A `partial` verdict is never clean. The host or the User decides whether to accept it. A full pipeline stops its review stage with `review partial-review; no automatic retry`.
+When a reviewer omits paths, Greenhouse uses another review-budget unit for a follow-up pass limited to those paths. It merges coverage and findings across passes. This applies to standalone reviews and the full pipeline. If the budget runs out before all paths are covered, Greenhouse settles `partial` and marks remaining skipped paths `review_budget`. Paths excluded for another reason, such as `diff_bound` or `prompt exceeds model context`, keep that reason. Greenhouse does not retry those paths.
 
 ### Model context window
 

@@ -61,34 +61,38 @@ type Step struct {
 	Kind  string `json:"kind"`
 }
 type Pipeline struct {
-	Status         string            `json:"status"`
-	Intent         string            `json:"intent,omitempty"`
-	Plan           CommandPlan       `json:"plan"`
-	PullTitle      string            `json:"pull_title,omitempty"`
-	PlanSources    map[string]string `json:"plan_sources"`
-	CommandDigests map[string]string `json:"command_digests"`
-	PlanDigest     string            `json:"plan_digest"`
-	Worktree       string            `json:"worktree,omitempty"`
-	Ref            string            `json:"ref,omitempty"`
-	Stages         []StageResult     `json:"stages"`
-	Failed         string            `json:"failed,omitempty"`
-	Reason         string            `json:"reason,omitempty"`
-	Gate           string            `json:"gate,omitempty"`
-	Conflict       []string          `json:"conflict,omitempty"`
-	RepairUsed     int               `json:"repair_used"`
-	RepairLimit    int               `json:"repair_limit"`
-	Active         *Step             `json:"active,omitempty"`
-	Repairs        []Repair          `json:"repairs,omitempty"`
-	Reviews        []Execution       `json:"reviews,omitempty"`
-	Handback       string            `json:"handback,omitempty"`
-	HandbackError  string            `json:"handback_error,omitempty"`
-	Decisions      []Decision        `json:"decisions,omitempty"`
-	Acceptances    []Acceptance      `json:"acceptances,omitempty"`
-	FinalFix       *FinalFix         `json:"final_fix,omitempty"`
-	Resolutions    []Resolution      `json:"resolutions,omitempty"`
-	Outcome        string            `json:"outcome,omitempty"`
-	LeaseEpoch     int               `json:"lease_epoch,omitempty"`
-	Grants         []Grant           `json:"grants,omitempty"`
+	Status          string            `json:"status"`
+	Intent          string            `json:"intent,omitempty"`
+	Plan            CommandPlan       `json:"plan"`
+	PullTitle       string            `json:"pull_title,omitempty"`
+	PlanSources     map[string]string `json:"plan_sources"`
+	CommandDigests  map[string]string `json:"command_digests"`
+	PlanDigest      string            `json:"plan_digest"`
+	Worktree        string            `json:"worktree,omitempty"`
+	Ref             string            `json:"ref,omitempty"`
+	Stages          []StageResult     `json:"stages"`
+	Failed          string            `json:"failed,omitempty"`
+	Reason          string            `json:"reason,omitempty"`
+	Gate            string            `json:"gate,omitempty"`
+	Conflict        []string          `json:"conflict,omitempty"`
+	RepairUsed      int               `json:"repair_used"`
+	RepairLimit     int               `json:"repair_limit"`
+	Active          *Step             `json:"active,omitempty"`
+	Repairs         []Repair          `json:"repairs,omitempty"`
+	Reviews         []Execution       `json:"reviews,omitempty"`
+	Handback        string            `json:"handback,omitempty"`
+	HandbackError   string            `json:"handback_error,omitempty"`
+	Decisions       []Decision        `json:"decisions,omitempty"`
+	Acceptances     []Acceptance      `json:"acceptances,omitempty"`
+	FinalFix        *FinalFix         `json:"final_fix,omitempty"`
+	Resolutions     []Resolution      `json:"resolutions,omitempty"`
+	Outcome         string            `json:"outcome,omitempty"`
+	ReviewPending   []string          `json:"review_pending,omitempty"`
+	ReviewCoverage  []string          `json:"review_coverage,omitempty"`
+	ReviewFindings  []Finding         `json:"review_findings,omitempty"`
+	ReviewUncovered []UncoveredPath   `json:"review_uncovered,omitempty"`
+	LeaseEpoch      int               `json:"lease_epoch,omitempty"`
+	Grants          []Grant           `json:"grants,omitempty"`
 }
 type stepOutcome struct {
 	Finalization bool
@@ -602,7 +606,7 @@ func advancePipeline(s *Store, r *Run) *Step {
 			if !final && r.ReviewUsed+r.RepairUsed >= settings.Limit {
 				return capDecision(s, r, st, "the candidate needs another independent review")
 			}
-			x, err := reviewExecution(r, effectiveRuleSnapshot(r), true)
+			x, err := reviewExecutionPaths(r, effectiveRuleSnapshot(r), true, p.ReviewPending)
 			if err != nil {
 				park(r, st, "failed", "review admission refused: "+err.Error())
 				return nil
@@ -902,6 +906,54 @@ func completeStep(r *Run, o stepOutcome) error {
 		}
 		if o.Status != "paused" {
 			r.AutoRetries = 0
+		}
+		isFollowup := len(p.ReviewPending) > 0
+		if o.Result != nil {
+			remaining := make([]string, 0, len(o.Result.Uncovered))
+			for _, path := range o.Result.Uncovered {
+				if path.Reason == "not covered by reviewer within budget" {
+					remaining = append(remaining, path.Path)
+				}
+			}
+			settings := r.Configs[len(r.Configs)-1].Settings
+			if len(remaining) > 0 && r.ReviewUsed+r.RepairUsed < settings.Limit {
+				p.ReviewPending = remaining
+				p.ReviewCoverage = append(p.ReviewCoverage, o.Result.Coverage...)
+				p.ReviewFindings = append(p.ReviewFindings, o.Result.Findings...)
+				for _, path := range o.Result.Uncovered {
+					if path.Reason != "not covered by reviewer within budget" {
+						p.ReviewUncovered = append(p.ReviewUncovered, path)
+					}
+				}
+				st.Status, st.Inputs, st.Reason = "pending", "", "review skipped paths in a follow-up pass"
+				return nil
+			}
+			if len(remaining) > 0 {
+				for i := range o.Result.Uncovered {
+					if o.Result.Uncovered[i].Reason == "not covered by reviewer within budget" {
+						o.Result.Uncovered[i].Reason = "review_budget"
+					}
+				}
+			}
+		}
+		if isFollowup && o.Result != nil {
+			o.Result.Coverage = append(p.ReviewCoverage, o.Result.Coverage...)
+			o.Result.Findings = append(p.ReviewFindings, o.Result.Findings...)
+			o.Result.Uncovered = append(p.ReviewUncovered, o.Result.Uncovered...)
+			p.ReviewPending, p.ReviewCoverage, p.ReviewFindings, p.ReviewUncovered = nil, nil, nil, nil
+			if len(o.Result.Uncovered) == 0 {
+				if len(o.Result.Findings) > 0 {
+					o.Result.Verdict = "findings"
+				} else {
+					o.Result.Verdict = "clean"
+				}
+				o.Status = "clean-review"
+				if o.Result.Verdict == "findings" {
+					o.Status = "outstanding-findings"
+				}
+			} else {
+				o.Result.Verdict, o.Status = "partial", "partial-review"
+			}
 		}
 		switch o.Status {
 		case "clean-review", "outstanding-findings":
