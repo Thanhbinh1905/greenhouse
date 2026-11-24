@@ -88,7 +88,7 @@ Any other failure stays an ordinary `inconclusive` review or `fixer-failed` repa
 
 Two limits apply to a review:
 
-- `review_budget` in `backends.json` limits each reviewer attempt; the default is 3 minutes. A review that reaches it ends `inconclusive` with `reason: "review_budget"`. See the [embedding contract](embedding.md) for details.
+- `review_budget` in `backends.json` limits each reviewer attempt; the default is 3 minutes. A complete verdict available at expiry is retained, an incomplete verdict settles as `partial`, and a review with no usable result ends `inconclusive` with `reason: "review_budget"`. See the [embedding contract](embedding.md) for details.
 - [`executor_timeout`](axi.md#executor-timeout) (45 minutes by default) limits the executor. A review that reaches it reports `status: "cancelled"`, `reason: "timeout"` and a diagnostic that names the limit.
 
 An explicit cancellation reports `reason: "cancelled"`. The reason is kept in `review.reason`, `host_result.reason` and `attempts[].reason`, including for full-pipeline reviews.

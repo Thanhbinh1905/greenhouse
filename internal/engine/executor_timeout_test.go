@@ -193,7 +193,7 @@ with open(root+'/executor-deadline','w') as f: f.write(args[3].decode())`)
 		t.Fatal(err)
 	}
 	remaining := time.Unix(deadline, 0).Sub(started)
-	want := defaultReviewBudget*4/5 + 30*time.Second
+	want := defaultReviewBudget/2 + 30*time.Second
 	if remaining < want-time.Second || remaining > want+5*time.Second {
 		t.Fatalf("review budget did not cap the hour executor timeout: got %s, want about %s", remaining, want)
 	}

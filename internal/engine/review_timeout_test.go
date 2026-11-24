@@ -66,7 +66,7 @@ func TestAdoptStoppedPipelineReview(t *testing.T) {
 				Status:   "recovery-required",
 				Configs:  []Snapshot{{Settings: Settings{ExecutorTimeout: "7m"}}},
 				Host:     &Host{Name: "fixture", ID: "restart"},
-				Review:   &Execution{ID: "review", InputDigest: "bound-input", Config: ReviewerConfig{Backend: "pi"}},
+				Review:   &Execution{ID: "review", InputDigest: "bound-input", ReviewBudget: "8m", Config: ReviewerConfig{Backend: "pi"}},
 				Pipeline: &Pipeline{Stages: []StageResult{{Name: "review"}}},
 				Recovery: &Recovery{Kind: "review", Stage: "review", Execution: "review"},
 			}
