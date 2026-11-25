@@ -297,6 +297,9 @@ func hostSuccessor(r *Run, next *Run, host *Host) {
 		return
 	}
 	next.Predecessor, r.Successor = r.ID, next.ID
+	if r.Review != nil && r.Review.Shards != nil {
+		next.PriorShards = r.Review.Shards
+	}
 	next.ReviewUsed, next.RepairUsed = r.ReviewUsed, r.RepairUsed
 	next.Inherited = &Inheritance{From: r.ID, Review: r.ReviewUsed, Repair: r.RepairUsed}
 	next.HostFindings = append([]Finding(nil), latestHostFindings(r)...)

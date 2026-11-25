@@ -55,9 +55,12 @@ With a valid plan of two or more shards:
 
 `run.review.shards` stores the plan and each part's result in the same review record:
 
+- `head`: candidate that produced the shard results.
 - `planner`: `planned`, or why the review ran unsplit, for example `invalid plan: a.go is in no shard`.
 - `shards[]`: `name`, `summary`, `paths`, `status`, `result`, `usage` and the `executions` that reviewed the shard.
 - `boundary`: the boundary pass, with the same fields as a shard.
+
+On rereview, Greenhouse compares the new head with the prior reviewed head. Shards whose paths did not change keep their prior results; changed shards and the boundary pass rerun. New paths are assigned by the planner, with a separate shard as fallback. Reused findings are carried forward with the new reviewed head.
 
 The planner's usage counts in `run.review.usage`. `host_result.shards` lists each shard and the boundary pass with `name`, `summary`, `paths`, `boundary`, `status` and `verdict`. The field is omitted for an unsplit review. A host keeps reading the overall `status`, `verdict` and `findings`.
 
