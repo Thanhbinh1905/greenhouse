@@ -257,6 +257,9 @@ func (m *tuiModel) homeView(w, room int) []string {
 			steps = append(steps, fit("            Source: "+m.intentSource, w))
 		}
 	}
+	for _, line := range shardProgressLines(m.v.Run) {
+		steps = append(steps, fit("          "+line, w))
+	}
 	var progress []string
 	if m.seq != nil {
 		label := runStepLabels[m.seq.step]

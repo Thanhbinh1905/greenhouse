@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/engine"
@@ -143,6 +144,63 @@ func TestReviewStepFailsOnlyWhenAFindingBlocks(t *testing.T) {
 		got := reviewStep(v)
 		if got.State != tc.state || !strings.HasPrefix(got.Text, tc.text) {
 			t.Fatalf("%s: state=%v text=%q", tc.priority, got.State, got.Text)
+		}
+	}
+}
+
+func TestShardProgressTextShowsSettledCountAndBoundary(t *testing.T) {
+	shards := []engine.ReviewShard{
+		{Name: "Accounts", ShardResult: engine.ShardResult{Status: "clean-review", Result: &engine.Verdict{Verdict: "clean"}}},
+		{Name: "Billing", ShardResult: engine.ShardResult{Status: "running"}},
+		{Name: "Reports", ShardResult: engine.ShardResult{Status: "pending"}},
+	}
+	for _, tc := range []struct {
+		settled  int
+		statuses []string
+	}{
+		{0, []string{"pending", "pending", "pending"}},
+		{1, []string{"clean-review", "running", "pending"}},
+		{3, []string{"clean-review", "outstanding-findings", "partial-review"}},
+	} {
+		for i, status := range tc.statuses {
+			shards[i].Status = status
+			shards[i].Result = nil
+		}
+		r := &engine.Run{Review: &engine.Execution{Shards: &engine.ShardReview{Shards: shards,
+			Boundary: &engine.ShardResult{Status: "pending"}}}}
+		got := shardProgressLines(r)
+		want := fmt.Sprintf("Review (%d/3)", tc.settled)
+		if got[0] != want {
+			t.Fatalf("settled=%d: progress = %q, want %q", tc.settled, got[0], want)
+		}
+	}
+	r := &engine.Run{Review: &engine.Execution{Shards: &engine.ShardReview{Shards: shards,
+		Boundary: &engine.ShardResult{Status: "pending"}}}}
+	got := shardProgressLines(r)
+	want := []string{"Review (3/3)", "Accounts · clean", "Billing · findings", "Reports · partial", "Boundary pass · pending"}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("shard progress = %q, want %q", got, want)
+	}
+}
+
+func TestShardProgressRendersInTUIAndLineMode(t *testing.T) {
+	v := tuiState("running")
+	v.Run.Review = &engine.Execution{Shards: &engine.ShardReview{Shards: []engine.ReviewShard{
+		{Name: "Accounts", ShardResult: engine.ShardResult{Status: "clean-review", Result: &engine.Verdict{Verdict: "clean"}}},
+		{Name: "Billing", ShardResult: engine.ShardResult{Status: "running"}},
+		{Name: "Reports", ShardResult: engine.ShardResult{Status: "pending"}},
+	}, Boundary: &engine.ShardResult{Status: "pending"}}}
+	line := statePage(v, "", false)
+	for _, want := range []string{"Review (1/3)", "Accounts · clean", "Billing · running", "Reports · pending", "Boundary pass · pending"} {
+		if !strings.Contains(line, want) {
+			t.Fatalf("line mode lacks %q:\n%s", want, line)
+		}
+	}
+	m := tuiModel{v: v, width: 80, height: 24, fresh: true, now: func() time.Time { return time.Now() }}
+	view := strings.Join(m.homeView(80, 24), "\n")
+	for _, want := range []string{"Review (1/3)", "Accounts · clean", "Boundary pass · pending"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("TUI lacks %q:\n%s", want, view)
 		}
 	}
 }

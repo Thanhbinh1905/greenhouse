@@ -1,0 +1,31 @@
+# sharded-review at 80x24: keys sent and screens captured from a real PTY
+
+## 1. three feature shards and the boundary pass completed
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ 824ff20                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   “Add accounts, billing and reports features in accounts/profile.go  |
+|billing/invoice.go reports/summary.go” · collected from Pi session 77777777     |
+|(2026-11-26 02:43)                                                              |
+|            Source: Pi session 77777777 (2026-11-26 02:43)                      |
+| ✓ Target   main @ 8713d65                                                      |
+| ✓ Rules    unslop, no-comments · loaded                                        |
+| ✓ Review   clean · budget 1 of 4 used                                          |
+|          Review (3/3)                                                          |
+|          Accounts · clean                                                      |
+|          Billing · clean                                                       |
+|          Reports · clean                                                       |
+|          Boundary pass · clean                                                 |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Review complete: clean for this head. a lists further actions.                 |
+|a actions  s settings  e edit intent  ? help  i details  q quit                 |
++--------------------------------------------------------------------------------+
+
+$ keys 'q'

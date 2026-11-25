@@ -278,6 +278,48 @@ func targetDisplay(worktree, commit, preferred string) string {
 	return name + " @ " + targetLabel(commit)
 }
 
+func shardProgressLines(r *engine.Run) []string {
+	if r == nil || r.Review == nil || r.Review.Shards == nil || len(r.Review.Shards.Shards) < 2 {
+		return nil
+	}
+	shards := r.Review.Shards
+	settled := 0
+	lines := make([]string, 0, len(shards.Shards)+2)
+	for _, shard := range shards.Shards {
+		if shard.Status != "" && shard.Status != "pending" && shard.Status != "running" {
+			settled++
+		}
+	}
+	lines = append(lines, fmt.Sprintf("Review (%d/%d)", settled, len(shards.Shards)))
+	for _, shard := range shards.Shards {
+		status := shardStatus(shard.Status, shard.Result)
+		lines = append(lines, shard.Name+" · "+status)
+	}
+	if shards.Boundary != nil {
+		status := shardStatus(shards.Boundary.Status, shards.Boundary.Result)
+		lines = append(lines, "Boundary pass · "+status)
+	}
+	return lines
+}
+
+func shardStatus(status string, result *engine.Verdict) string {
+	if result != nil && result.Verdict != "" {
+		return result.Verdict
+	}
+	switch status {
+	case "":
+		return "pending"
+	case "clean-review":
+		return "clean"
+	case "outstanding-findings":
+		return "findings"
+	case "partial-review":
+		return "partial"
+	default:
+		return status
+	}
+}
+
 func reviewStep(v engine.Response) tuiStep {
 	r := v.Run
 	limit := r.Configs[len(r.Configs)-1].Settings.Limit

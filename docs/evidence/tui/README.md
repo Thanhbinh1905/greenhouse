@@ -17,6 +17,7 @@ Each `walkthrough-*.txt` file is a real PTY session driven by `tools/tui_check.p
 | `walkthrough-settings-decision-100.txt` | 100 x 24 | Settings draft marked with `*`, kept after Esc, Apply and Save with their scopes; Run pipeline with intent collected from a synthetic Claude Code session while another repository's session is ignored; cap decision with a typed reason; daemon stopped (`RECONNECTING`, only views in the actions menu); resync. |
 | `walkthrough-ambiguous-100.txt` | 100 x 24 | Two sessions match equally; Run asks which one and uses the choice. |
 | `walkthrough-moved-head-100.txt` | 100 x 24 | Head moved after opening; Run stops with the controller's refusal and sends nothing else. |
+| `walkthrough-sharded-review-80.txt` | 80 x 24 | Three named shards, settled progress and the boundary pass in the interactive screen. |
 | `color-80.ansi`, `no-color-80.ansi` | 80 x 24 | Raw screen with escape sequences; the `NO_COLOR=1` capture has no SGR sequence. |
 | `walkthrough-term-dumb-80.txt`, `line-mode-piped.txt` | 80 | `TERM=dumb` and piped stdin keep the line client. |
 

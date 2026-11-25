@@ -8,6 +8,8 @@ From a feature branch with committed changes, run `greenhouse`. It starts the fi
 
 Dirty files are excluded from review.
 
+When a review is split into feature shards, the screen and line client show settled progress (for example, `Review (1/3)`), each shard name and status, and the boundary pass. A shard counts as settled when it reaches a terminal status; pending and running shards do not count. One-shard reviews keep the existing display.
+
 After the initial review has started, opening, resizing, navigating and detaching only attach and follow events. Nothing runs and no budget is used.
 
 ### Where the intent comes from

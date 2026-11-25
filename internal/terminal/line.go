@@ -240,6 +240,9 @@ func statePage(v engine.Response, live string, details bool) string {
 			label += " | " + model
 		}
 		fmt.Fprintf(&page, "Review: %s\nInput: %s\nCriteria: %s\nConfig: %s\n%s\n", label, x.InputDigest, x.Rules.Digest, x.ConfigDigest, x.Log)
+		for _, line := range shardProgressLines(r) {
+			fmt.Fprintln(&page, line)
+		}
 		if x.Snapshot != nil {
 			fmt.Fprintln(&page, snapshotLine(x.Snapshot))
 		}
