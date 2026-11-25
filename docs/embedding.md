@@ -41,6 +41,26 @@ Overlap means the same file and intersecting line ranges. A confirmation pass ca
 
 Every finding in `findings` that went through a pass carries `confirmation` with `status`, `reported_priority` and `evidence`; `run.review.result` and `host_result` show it. Dropped findings appear in `run.review.result.dismissed` and `host_result.dismissed_findings` with the same object, so a host can audit what Greenhouse discarded. A dropped finding also leaves the run's finding ledger, so it does not block later reviews. If the controller restarts after the review verdict but before its confirmation passes complete, [recovery](recovery.md) adopts the verdict and marks each unconfirmed blocking finding `unconfirmed`; it keeps blocking. A cancelled confirmation pass cancels the review.
 
+## Feature shards
+
+A review of three or more changed paths starts with a shard planner. The planner is one call to the configured reviewer backend and model, with low effort and no tools. It receives the run intent, the changed paths and their added and removed line counts, and returns named shards, each with a one-line feature summary and its paths. Hosts and users supply no input for this step.
+
+Greenhouse validates the plan: every changed path is in exactly one shard, no shard is empty or unnamed, and there are at most 6 shards. An invalid plan, a planner failure or a one-shard plan runs the review unsplit, exactly as a review of one or two paths does.
+
+With a valid plan of two or more shards:
+
+1. Each shard is reviewed with the normal review input, limited to its paths. The input adds `Shard` with the shard's `Name`, `Summary` and `OtherShards`. The review budget, tool-call budget, `review_passes`, [confirmation](#blocking-finding-confirmation) and follow-up passes for [skipped paths](#generated-and-uncovered-paths) apply to each shard separately. At most 2 shards run at a time.
+2. After every shard settles, a boundary pass reviews the full diff. Its `Shard` carries `Boundary: true` and the shard `Plan`, and it reports only defects in interactions between shards. A cancelled, paused or stale shard skips the boundary pass.
+3. The run gets one verdict. It is `findings` when any shard or the boundary pass has a blocking finding or settles with findings. Otherwise it is inconclusive when any part is inconclusive, then `partial` when any part is partial, then `clean`. A cancelled, paused, unconfigured or stale part settles the whole review that way. Findings, coverage and uncovered paths are merged across parts.
+
+`run.review.shards` stores the plan and each part's result in the same review record:
+
+- `planner`: `planned`, or why the review ran unsplit, for example `invalid plan: a.go is in no shard`.
+- `shards[]`: `name`, `summary`, `paths`, `status`, `result`, `usage` and the `executions` that reviewed the shard.
+- `boundary`: the boundary pass, with the same fields as a shard.
+
+The planner's usage counts in `run.review.usage`. `host_result.shards` lists each shard and the boundary pass with `name`, `summary`, `paths`, `boundary`, `status` and `verdict`. The field is omitted for an unsplit review. A host keeps reading the overall `status`, `verdict` and `findings`.
+
 ## Host identity
 
 Every host request carries `host`:

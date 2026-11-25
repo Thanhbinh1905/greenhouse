@@ -513,7 +513,7 @@ func TestNewDiagnosticsPreserveStoppedReviewBehavior(t *testing.T) {
 func TestMissingReviewerBeforeLaunchIsDiagnosable(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	t.Setenv("GREENHOUSE_HOME", t.TempDir())
-	done := executeReview(context.Background(), &Execution{Config: ReviewerConfig{Backend: "pi", Model: "fixture/model"}})
+	done := executeReview(context.Background(), &Execution{Config: ReviewerConfig{Backend: "pi", Model: "fixture/model"}}, nil)
 	if done.Status != "unconfigured" || done.Answer.Reason != "missing_binary" || done.Answer.Diagnostic == "" {
 		t.Fatalf("missing binary masked: %+v", done)
 	}

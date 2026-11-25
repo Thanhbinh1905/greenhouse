@@ -1177,6 +1177,7 @@ func Daemon(h string) (retErr error) {
 		answer                      agentAnswer
 		snapshot                    string
 		confinement                 *runner.Confinement
+		shards                      *ShardReview
 	}
 	type repairProgress struct {
 		run, id string
@@ -1293,8 +1294,12 @@ func Daemon(h string) (retErr error) {
 			ctx = observeProcesses(ctx, r.ID, logStep, emit)
 			pc, target, candidate, source := *p, r.Target, r.Candidate, r.Submitted
 			var review Execution
+			var shards *shardSource
 			if r.Review != nil {
 				review = *r.Review
+				if step.Kind == "review" {
+					shards = newShardSource(r)
+				}
 				if step.Kind == "delivery" && step.Stage == "pr" && review.Result != nil {
 					pc.addReview(&review)
 				}
@@ -1330,8 +1335,8 @@ func Daemon(h string) (retErr error) {
 						emit(event)
 					}
 				case "review":
-					reviewed := executeReview(ctx, &review)
-					o.Finalization = reviewed.Finalization
+					reviewed := executeReview(ctx, &review, shards)
+					o.Finalization, o.Shards = reviewed.Finalization, reviewed.Shards
 					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot, o.Confinement = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot, reviewed.Confinement
 				case "repair":
 					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
@@ -1412,12 +1417,12 @@ func Daemon(h string) (retErr error) {
 			active[r.ID] = cancel
 			ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 			ctx = observeProcesses(ctx, r.ID, "review", emit)
-			runID, x := r.ID, *r.Review
+			runID, x, shards := r.ID, *r.Review, newShardSource(r)
 			go func() {
-				reviewed := executeReview(ctx, &x)
+				reviewed := executeReview(ctx, &x, shards)
 				cancel()
 				select {
-				case completed <- completion{finalization: reviewed.Finalization, run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement}:
+				case completed <- completion{finalization: reviewed.Finalization, run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement, shards: reviewed.Shards}:
 				case <-stopped:
 				}
 			}()
@@ -1553,7 +1558,7 @@ func Daemon(h string) (retErr error) {
 			}
 			delete(active, r.ID)
 			recordReviewEvidence(r.Review, done.snapshot, done.confinement)
-			finishReview(r, reviewOutcome{Finalization: done.finalization, Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer})
+			finishReview(r, reviewOutcome{Finalization: done.finalization, Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer, Shards: done.shards})
 			if err := commit(s); err != nil {
 				return err
 			}

@@ -58,6 +58,37 @@ type HostResult struct {
 	Usage            TokenUsage `json:"usage"`
 	ReviewBase       string     `json:"review_base,omitempty"`
 	ReviewBaseReason string     `json:"review_base_reason,omitempty"`
+
+	Shards []HostShard `json:"shards,omitempty"`
+}
+
+type HostShard struct {
+	Name     string   `json:"name"`
+	Summary  string   `json:"summary,omitempty"`
+	Paths    []string `json:"paths,omitempty"`
+	Boundary bool     `json:"boundary,omitempty"`
+	Status   string   `json:"status"`
+	Verdict  string   `json:"verdict,omitempty"`
+}
+
+func hostShards(record *ShardReview) []HostShard {
+	if record == nil || len(record.Shards) == 0 {
+		return nil
+	}
+	verdict := func(result *Verdict) string {
+		if result == nil {
+			return ""
+		}
+		return result.Verdict
+	}
+	shards := make([]HostShard, 0, len(record.Shards)+1)
+	for _, shard := range record.Shards {
+		shards = append(shards, HostShard{Name: shard.Name, Summary: shard.Summary, Paths: shard.Paths, Status: shard.Status, Verdict: verdict(shard.Result)})
+	}
+	if b := record.Boundary; b != nil {
+		shards = append(shards, HostShard{Name: "boundary", Boundary: true, Status: b.Status, Verdict: verdict(b.Result)})
+	}
+	return shards
 }
 
 var hostOwned = map[string]string{
@@ -288,6 +319,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, AcceptedHeads: append([]HostAcceptance(nil), r.HostAcceptances...), Head: r.Candidate, Target: r.Target, ReviewBase: x.ReviewBase, ReviewBaseReason: x.ReviewBaseReason, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
 	v.Reason, v.Diagnostic, v.Usage = x.Reason, x.Diagnostic, x.Usage
 	v.Generated, v.Uncovered = x.Generated, x.Uncovered
+	v.Shards = hostShards(x.Shards)
 	v.Carried = append([]CarriedFinding(nil), r.HostCarried...)
 	if v.Model == "" {
 		v.Model = x.ReportedModel

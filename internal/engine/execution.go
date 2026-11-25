@@ -128,6 +128,8 @@ type Execution struct {
 	ReviewPasses    int    `json:"review_passes,omitempty"`
 	ToolCallBudget  int    `json:"tool_call_budget,omitempty"`
 	Finalization    bool   `json:"finalization,omitempty"`
+
+	Shards *ShardReview `json:"shards,omitempty"`
 }
 
 func trustedReviewer() (ReviewerConfig, error) {
@@ -206,6 +208,10 @@ func reviewExecution(r *Run, snapshot *RuleSnapshot, full bool) (*Execution, err
 }
 
 func reviewExecutionPaths(r *Run, snapshot *RuleSnapshot, full bool, selected []string) (*Execution, error) {
+	return reviewExecutionScoped(r, snapshot, full, selected, nil)
+}
+
+func reviewExecutionScoped(r *Run, snapshot *RuleSnapshot, full bool, selected []string, shard *shardContext) (*Execution, error) {
 	settings := r.Configs[len(r.Configs)-1].Settings
 	cfg, e := trustedAgent(settings.ReviewerBackend, settings.ReviewerModel)
 	if e != nil {
@@ -415,6 +421,9 @@ func reviewExecutionPaths(r *Run, snapshot *RuleSnapshot, full bool, selected []
 		if len(uncovered) > 0 {
 			instructions += uncoveredContract
 		}
+		if shard != nil {
+			instructions += shard.contract()
+		}
 		changedHunks := changedRanges(string(diff))
 		coveredPaths := make(map[string]bool, len(covered))
 		for _, path := range covered {
@@ -439,9 +448,10 @@ func reviewExecutionPaths(r *Run, snapshot *RuleSnapshot, full bool, selected []
 			Responses                  []reviewResponse `json:",omitempty"`
 			PriorFindings              []PriorFinding   `json:",omitempty"`
 			AcceptedHeads              []string         `json:",omitempty"`
+			Shard                      *shardContext    `json:",omitempty"`
 			Criteria                   json.RawMessage
 			Contract                   string
-		}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, calls, changedHunks, covered, inputFiles, inputSubmodules, inputGenerated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, priorFindings, acceptedHeads, rules.Bytes(), instructions + resolution}
+		}{r.Intent, r.Target, r.Candidate, reviewedDiff, budget, calls, changedHunks, covered, inputFiles, inputSubmodules, inputGenerated, uncovered, struct{ Commit, Tree, Digest string }{snap.Commit, snap.Tree, snap.Digest}, checked, priorFindings, acceptedHeads, shard, rules.Bytes(), instructions + resolution}
 		return renderReviewInput(bundle, reviewedDiff, inputFiles, inputSubmodules)
 	}
 	input, e := render()
@@ -729,9 +739,17 @@ type reviewOutcome struct {
 	Answer       agentAnswer
 	Snapshot     string
 	Confinement  *runner.Confinement
+	Shards       *ShardReview
 }
 
-func executeReview(ctx context.Context, x *Execution) reviewOutcome {
+func executeReview(ctx context.Context, x *Execution, source *shardSource) reviewOutcome {
+	if source == nil {
+		return executeReviewPasses(ctx, x)
+	}
+	return executeShardedReview(ctx, x, source)
+}
+
+func executeReviewPasses(ctx context.Context, x *Execution) reviewOutcome {
 	passes := x.ReviewPasses
 	if passes < 1 {
 		passes = 1
@@ -1202,6 +1220,7 @@ func diffPath(path string) string {
 func retainReviewMetadata(x *Execution, done reviewOutcome) {
 	x.Finalization = done.Finalization
 	x.Reason, x.Diagnostic, x.ReportedModel, x.Usage = done.Answer.Reason, done.Answer.Diagnostic, done.Answer.Model, done.Answer.Usage
+	x.Shards = done.Shards
 	if x.Reason == "" && (done.Status == "inconclusive" || done.Status == "unconfigured") {
 		x.Reason = "execution_failed"
 		x.Diagnostic = diagnosticExcerpt(done.Log, false)
