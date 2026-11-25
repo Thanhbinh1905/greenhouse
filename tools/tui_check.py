@@ -37,6 +37,10 @@ if any('read,edit,write' in a for a in sys.argv):
 else:
     if os.path.exists(root+'/delay'):
         time.sleep(float(open(root+'/delay').read()))
+    shard=b.get('Shard') or {}
+    if os.path.exists(root+'/sharded') and shard.get('Name')=='Billing':
+        while not os.path.exists(root+'/release-beta'): time.sleep(0.02)
+    if os.path.exists(root+'/sharded') and shard.get('Name')!='Billing': time.sleep(0.5)
     out={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
     if '"documentation"' in b['Contract']:
         out['documentation']={'status':'not-needed','reason':'fixture changes no public behavior'}
@@ -421,8 +425,15 @@ def sharded_review(width):
     f.session("pi", "77777777-sharded", "Add accounts, billing and reports features", files=("accounts/profile.go", "billing/invoice.go", "reports/summary.go"))
     s = Session(f, width, "sharded-review")
     try:
+        text = s.wait(r"Review \(0/3\)")
+        s.capture("planner published three pending feature shards", r"Review \(0/3\)", r"Accounts · pending", r"Billing · pending", r"Reports · pending")
+        text = s.wait(r"Review \(2/3\)")
+        s.capture("accounts and reports settled while billing remains pending", r"Review \(2/3\)", r"Accounts · clean", r"Billing · pending", r"Reports · clean")
+        (f.bin / "release-beta").write_text("release")
+        s.wait(r"Boundary pass · running")
+        s.capture("all shards settled and the boundary pass started", r"Review \(3/3\)", r"Boundary pass · running")
         text = s.wait(r"Boundary pass · clean")
-        s.capture("three feature shards and the boundary pass completed", r"Review \(3/3\)", r"Accounts · clean", r"Billing · clean", r"Reports · clean", r"Boundary pass · clean")
+        s.capture("boundary pass completed", r"Review \(3/3\)", r"Accounts · clean", r"Billing · clean", r"Reports · clean", r"Boundary pass · clean")
         state = f.axi()
         shards = state["run"]["review"]["shards"]
         assert [item["name"] for item in shards["shards"]] == ["Accounts", "Billing", "Reports"], shards

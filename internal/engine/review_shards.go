@@ -81,6 +81,7 @@ func shardPlanSchema() string {
 type shardSource struct {
 	run       Run
 	followups int
+	progress  func(*ShardReview) bool
 }
 
 func newShardSource(r *Run) *shardSource {
@@ -116,7 +117,7 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 		done = executeReviewPasses(ctx, x)
 		done.Shards = &ShardReview{Planner: reason}
 	} else {
-		done = reviewShards(ctx, x, source, plan)
+		done = reviewShards(ctx, x, source, plan, source.progress)
 	}
 	done.Answer.Usage = addUsage(done.Answer.Usage, usage)
 	done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
@@ -288,8 +289,29 @@ func validateShardPlan(plan []shardPlanEntry, paths []string) error {
 	return nil
 }
 
-func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan []shardPlanEntry) reviewOutcome {
-	record := &ShardReview{Planner: "planned", Shards: make([]ReviewShard, len(plan))}
+func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan []shardPlanEntry, progress func(*ShardReview) bool) reviewOutcome {
+	record := &ShardReview{Planner: "planned", Shards: make([]ReviewShard, len(plan)), Boundary: &ShardResult{Status: "pending"}}
+	for i, shard := range plan {
+		record.Shards[i] = ReviewShard{Name: shard.Name, Summary: shard.Summary, Paths: slices.Clone(shard.Paths), ShardResult: ShardResult{Status: "pending"}}
+	}
+	var mu sync.Mutex
+	publish := func() bool {
+		if progress == nil {
+			return true
+		}
+		encoded, err := json.Marshal(record)
+		if err != nil {
+			return false
+		}
+		var snapshot ShardReview
+		if err := json.Unmarshal(encoded, &snapshot); err != nil {
+			return false
+		}
+		return progress(&snapshot)
+	}
+	if !publish() {
+		return reviewOutcome{Status: "cancelled", Log: "shard progress update stopped"}
+	}
 	outcomes := make([]reviewOutcome, len(plan))
 	slots := make(chan struct{}, maxShardConcurrency)
 	var wg sync.WaitGroup
@@ -300,20 +322,33 @@ func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan [
 				others = append(others, other.Name)
 			}
 		}
-		record.Shards[i] = ReviewShard{Name: shard.Name, Summary: shard.Summary, Paths: shard.Paths}
 		wg.Add(1)
 		go func(i int, scope *shardContext, paths []string) {
 			defer wg.Done()
 			slots <- struct{}{}
 			defer func() { <-slots }()
-			outcomes[i], record.Shards[i].ShardResult = reviewShardPart(ctx, x, source, paths, scope)
+			outcome, result := reviewShardPart(ctx, x, source, paths, scope)
+			mu.Lock()
+			outcomes[i], record.Shards[i].ShardResult = outcome, result
+			updated := publish()
+			mu.Unlock()
+			if !updated {
+				return
+			}
 		}(i, &shardContext{Name: shard.Name, Summary: shard.Summary, OtherShards: others}, shard.Paths)
 	}
 	wg.Wait()
 	parts := outcomes
 	if !slices.ContainsFunc(outcomes, haltedReview) {
+		record.Boundary = &ShardResult{Status: "running"}
+		if !publish() {
+			return reviewOutcome{Status: "cancelled", Log: "shard progress update stopped", Shards: record}
+		}
 		boundary, result := reviewShardPart(ctx, x, source, x.Paths, &shardContext{Boundary: true, Plan: plan})
 		record.Boundary = &result
+		if !publish() {
+			return reviewOutcome{Status: "cancelled", Log: "shard progress update stopped", Shards: record}
+		}
 		parts = append(slices.Clone(outcomes), boundary)
 	}
 	done := aggregateShardReview(parts)

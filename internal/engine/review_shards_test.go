@@ -8,10 +8,11 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 const shardFakeReviewer = `#!/usr/bin/python3
-import sys,json,os
+import sys,json,os,time
 if '--list-models' in sys.argv:
  print('provider model context')
  print('fixture model 128K')
@@ -37,6 +38,9 @@ if nl+nl+'Diff:'+nl not in raw:
 b=json.loads(raw.split(nl+nl+'Diff:'+nl,1)[0])
 shard=b.get('Shard') or {}
 kind='boundary' if shard.get('Boundary') else 'shard:'+shard['Name'] if shard.get('Name') else 'whole'
+if 'hold' in mode and shard.get('Name')=='Beta':
+ while not os.path.exists(root+'/release-beta'): time.sleep(0.02)
+if 'hold' in mode and shard.get('Name')!='Beta': time.sleep(0.5)
 if 'confirmation pass' in b['Contract']: kind='confirm:'+kind
 log(kind+' '+','.join(b['Paths']))
 findings=[]
@@ -46,6 +50,41 @@ answer({'head':b['Head'],'verdict':'findings' if findings else 'clean','coverage
 `
 
 func shardFixture(t *testing.T, mode string) (map[string]any, []string, string) {
+	t.Helper()
+	bin, repo, home, v := preparedShardFixture(t, mode)
+	if got := mutate(t, bin, repo, home, v, "review", "review", nil); got["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", got)
+	}
+	run := runOf(t, waitReview(t, bin, repo, home))
+	calls := strings.Split(strings.TrimSpace(string(mustRead(t, filepath.Join(filepath.Dir(home), "shard-calls")))), "\n")
+	slices.Sort(calls)
+	return run, calls, home
+}
+
+func shardsOf(t *testing.T, run map[string]any) map[string]any {
+	t.Helper()
+	review, _ := run["review"].(map[string]any)
+	shards, ok := review["shards"].(map[string]any)
+	if !ok {
+		t.Fatalf("review has no shard record: %v", review)
+	}
+	return shards
+}
+
+func shardStatuses(t *testing.T, shards map[string]any) map[string]string {
+	t.Helper()
+	statuses := map[string]string{}
+	for _, item := range shards["shards"].([]any) {
+		shard := item.(map[string]any)
+		statuses[shard["name"].(string)] = shard["status"].(string)
+	}
+	if boundary, ok := shards["boundary"].(map[string]any); ok {
+		statuses["boundary"] = boundary["status"].(string)
+	}
+	return statuses
+}
+
+func preparedShardFixture(t *testing.T, mode string) (string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
@@ -73,36 +112,63 @@ func shardFixture(t *testing.T, mode string) (map[string]any, []string, string) 
 	b, _ := json.Marshal(map[string]any{"version": 1, "op": "prepare", "run_id": v["run_id"], "input_id": v["input_id"], "expected": v["token"], "gate_id": "none", "action_id": "prepare", "intent": "Add three features: alpha, beta and gamma", "target": target})
 	v = axi(t, bin, repo, home, string(b))
 	v = mutate(t, bin, repo, home, v, "resolve-rules", "rules", nil)
-	if got := mutate(t, bin, repo, home, v, "review", "review", nil); got["outcome"] != "ok" {
-		t.Fatalf("review refused: %v", got)
-	}
-	run := runOf(t, waitReview(t, bin, repo, home))
-	calls := strings.Split(strings.TrimSpace(string(mustRead(t, filepath.Join(root, "shard-calls")))), "\n")
-	slices.Sort(calls)
-	return run, calls, home
+	return bin, repo, home, v
 }
 
-func shardsOf(t *testing.T, run map[string]any) map[string]any {
-	t.Helper()
-	review, _ := run["review"].(map[string]any)
-	shards, ok := review["shards"].(map[string]any)
-	if !ok {
-		t.Fatalf("review has no shard record: %v", review)
+func TestShardProgressPersistsWhileSecondShardIsRunning(t *testing.T) {
+	bin, repo, home, v := preparedShardFixture(t, "hold")
+	initial := watch(t, bin, repo, home, "", 0, 0)
+	stream, sequence := initial["stream"], initial["sequence"]
+	review, _ := json.Marshal(map[string]any{"version": 1, "op": "review", "run_id": v["run_id"], "expected": v["token"], "input_id": v["input_id"], "gate_id": "none", "action_id": "review-shard-progress"})
+	if started := axi(t, bin, repo, home, string(review)); started["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", started)
 	}
-	return shards
-}
+	deadline := time.Now().Add(20 * time.Second)
+	var intermediate map[string]any
+	var statuses map[string]string
+	for time.Now().Before(deadline) {
+		intermediate = watch(t, bin, repo, home, stream, sequence, 2000)
+		sequence = intermediate["sequence"]
+		run := runOf(t, intermediate)
+		if review, _ := run["review"].(map[string]any); review != nil {
+			if shardRecord, _ := review["shards"].(map[string]any); shardRecord != nil {
+				statuses = shardStatuses(t, shardRecord)
+				break
+			}
+		}
+	}
+	if len(statuses) != 4 || statuses["boundary"] != "pending" || statuses["Alpha"] != "pending" || statuses["Beta"] != "pending" || statuses["Gamma"] != "pending" {
+		t.Fatalf("initial shard plan = %v; want three pending shards and a pending boundary pass: %v", statuses, intermediate)
+	}
+	for time.Now().Before(deadline) {
+		intermediate = watch(t, bin, repo, home, stream, sequence, 2000)
+		sequence = intermediate["sequence"]
+		run := runOf(t, intermediate)
+		if review, _ := run["review"].(map[string]any); review != nil {
+			if shardRecord, _ := review["shards"].(map[string]any); shardRecord != nil {
+				statuses = shardStatuses(t, shardRecord)
+			}
+		}
+		if statuses["Alpha"] == "clean-review" && statuses["Gamma"] == "clean-review" && statuses["Beta"] == "pending" {
+			break
+		}
+	}
 
-func shardStatuses(t *testing.T, shards map[string]any) map[string]string {
-	t.Helper()
-	statuses := map[string]string{}
-	for _, item := range shards["shards"].([]any) {
-		shard := item.(map[string]any)
-		statuses[shard["name"].(string)] = shard["status"].(string)
+	if statuses["Alpha"] != "clean-review" || statuses["Gamma"] != "clean-review" || statuses["Beta"] != "pending" {
+		t.Fatalf("intermediate shard states = %v; want Alpha and Gamma settled while Beta remains pending: %v", statuses, intermediate)
 	}
-	if boundary, ok := shards["boundary"].(map[string]any); ok {
-		statuses["boundary"] = boundary["status"].(string)
+	if runOf(t, intermediate)["status"] != "running" {
+		t.Fatalf("overall review settled while Beta was held: %v", intermediate)
 	}
-	return statuses
+	if err := os.WriteFile(filepath.Join(filepath.Dir(home), "release-beta"), []byte("release"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	final := waitReview(t, bin, repo, home)
+	finalStatuses := shardStatuses(t, shardsOf(t, runOf(t, final)))
+	want := map[string]string{"Alpha": "clean-review", "Beta": "clean-review", "Gamma": "clean-review", "boundary": "clean-review"}
+	if !maps.Equal(finalStatuses, want) {
+		t.Fatalf("final shard states = %v, want %v", finalStatuses, want)
+	}
 }
 
 func TestShardedReviewThroughDaemon(t *testing.T) {

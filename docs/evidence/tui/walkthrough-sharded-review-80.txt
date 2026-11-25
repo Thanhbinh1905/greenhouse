@@ -1,15 +1,99 @@
 # sharded-review at 80x24: keys sent and screens captured from a real PTY
 
-## 1. three feature shards and the boundary pass completed
+## 1. planner published three pending feature shards
 +--------------------------------------------------------------------------------+
-|Greenhouse · feature @ 824ff20                           one-pass · auto · live |
+|Greenhouse · feature @ 841013c                           one-pass · auto · live |
 |─────────────────────────────────────────────────────────────────────────────── |
 | ✓ Agent    Pi · native default model                                           |
 | ✓ Intent   “Add accounts, billing and reports features in accounts/profile.go  |
 |billing/invoice.go reports/summary.go” · collected from Pi session 77777777     |
-|(2026-11-26 02:43)                                                              |
-|            Source: Pi session 77777777 (2026-11-26 02:43)                      |
-| ✓ Target   main @ 8713d65                                                      |
+|(2026-11-26 03:08)                                                              |
+|            Source: Pi session 77777777 (2026-11-26 03:08)                      |
+| ✓ Target   main @ 33f06a8                                                      |
+| ✓ Rules    unslop, no-comments · loaded                                        |
+| ⠇ Review   running · budget 1 of 4 used                                        |
+|          Review (0/3)                                                          |
+|          Accounts · pending                                                    |
+|          Billing · pending                                                     |
+|          Reports · pending                                                     |
+|          Boundary pass · pending                                               |
+|                                                                                |
+| ⠇ Independent review · Pi · 0s                                                 |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Work runs in the daemon. x cancels it; q detaches and leaves it running.       |
+|Review started.                                                                 |
+|x cancel  a actions  s settings  ? help  i details  q detach                    |
++--------------------------------------------------------------------------------+
+
+## 2. accounts and reports settled while billing remains pending
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ 841013c                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   “Add accounts, billing and reports features in accounts/profile.go  |
+|billing/invoice.go reports/summary.go” · collected from Pi session 77777777     |
+|(2026-11-26 03:08)                                                              |
+|            Source: Pi session 77777777 (2026-11-26 03:08)                      |
+| ✓ Target   main @ 33f06a8                                                      |
+| ✓ Rules    unslop, no-comments · loaded                                        |
+| ⠹ Review   running · budget 1 of 4 used                                        |
+|          Review (2/3)                                                          |
+|          Accounts · clean                                                      |
+|          Billing · pending                                                     |
+|          Reports · clean                                                       |
+|          Boundary pass · pending                                               |
+|                                                                                |
+| ⠹ Independent review · Pi · 2s                                                 |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Work runs in the daemon. x cancels it; q detaches and leaves it running.       |
+|Review started.                                                                 |
+|x cancel  a actions  s settings  ? help  i details  q detach                    |
++--------------------------------------------------------------------------------+
+
+## 3. all shards settled and the boundary pass started
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ 841013c                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   “Add accounts, billing and reports features in accounts/profile.go  |
+|billing/invoice.go reports/summary.go” · collected from Pi session 77777777     |
+|(2026-11-26 03:08)                                                              |
+|            Source: Pi session 77777777 (2026-11-26 03:08)                      |
+| ✓ Target   main @ 33f06a8                                                      |
+| ✓ Rules    unslop, no-comments · loaded                                        |
+| ⠇ Review   running · budget 1 of 4 used                                        |
+|          Review (3/3)                                                          |
+|          Accounts · clean                                                      |
+|          Billing · clean                                                       |
+|          Reports · clean                                                       |
+|          Boundary pass · running                                               |
+|                                                                                |
+| ⠇ Independent review · Pi · 2s                                                 |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+|                                                                                |
+| Work runs in the daemon. x cancels it; q detaches and leaves it running.       |
+|Review started.                                                                 |
+|x cancel  a actions  s settings  ? help  i details  q detach                    |
++--------------------------------------------------------------------------------+
+
+## 4. boundary pass completed
++--------------------------------------------------------------------------------+
+|Greenhouse · feature @ 841013c                           one-pass · auto · live |
+|─────────────────────────────────────────────────────────────────────────────── |
+| ✓ Agent    Pi · native default model                                           |
+| ✓ Intent   “Add accounts, billing and reports features in accounts/profile.go  |
+|billing/invoice.go reports/summary.go” · collected from Pi session 77777777     |
+|(2026-11-26 03:08)                                                              |
+|            Source: Pi session 77777777 (2026-11-26 03:08)                      |
+| ✓ Target   main @ 33f06a8                                                      |
 | ✓ Rules    unslop, no-comments · loaded                                        |
 | ✓ Review   clean · budget 1 of 4 used                                          |
 |          Review (3/3)                                                          |
