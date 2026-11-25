@@ -371,6 +371,7 @@ type RetryPolicy struct {
 }
 type BackendsConfig struct {
 	ReviewBudget string                     `json:"review_budget,omitempty"`
+	ReviewPasses int                        `json:"review_passes,omitempty"`
 	Claude       *AgentCLI                  `json:"claude,omitempty"`
 	Codex        *AgentCLI                  `json:"codex,omitempty"`
 	Fallback     map[string][]BackendChoice `json:"fallback,omitempty"`
@@ -404,6 +405,9 @@ func trustedBackends() (BackendsConfig, error) {
 		if err != nil || budget <= 0 || budget > time.Hour {
 			return config, errors.New("backends.json: review_budget must be a positive duration at most 1h")
 		}
+	}
+	if config.ReviewPasses < 0 || config.ReviewPasses > 3 {
+		return config, errors.New("backends.json: review_passes must be between 1 and 3 when set")
 	}
 	for role, choices := range config.Fallback {
 		if role != "reviewer" && role != "fixer" || len(choices) > 8 {

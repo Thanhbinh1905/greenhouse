@@ -182,10 +182,12 @@ A backend can still overflow its context while it explores. When pi exits non-ze
 Greenhouse enforces a wall-time budget for each reviewer attempt, including its finalization turn. The default is `3m`. Set `review_budget` in the private per-user `backends.json` to a positive Go duration at most `1h`:
 
 ```json
-{"version": 2, "review_budget": "3m"}
+{"version": 2, "review_budget": "3m", "review_passes": 1}
 ```
 
-The shorter of this budget and `executor_timeout` applies. Reaching `executor_timeout` reports `timeout`; exhausting the shorter review budget reports `review_budget`. The controller reserves the last 50% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
+Set `review_passes` in the same private `backends.json` to run 1-3 independent first passes concurrently; the default is 1, which preserves the existing single-pass behavior. Each pass uses the same input and its own review budget. Greenhouse unions path coverage and findings, collapsing findings in the same file whose line ranges overlap, and sends the merged blocking findings through the existing confirmation step. More passes increase reviewer cost and may increase provider load and latency; parallel execution limits wall-time growth when the backend allows concurrent calls.
+
+The shorter of this budget and `executor_timeout` applies to each pass. Reaching `executor_timeout` reports `timeout`; exhausting the shorter review budget reports `review_budget`. The controller reserves the last 50% for finalization. At that boundary, it stops exploration and resumes the same private native session with a request to return the verdict immediately. Pi and Claude have no read tools during finalization; Codex retains its read-only sandbox and disabled tools. Process termination and reaping can add cleanup time after a deadline.
 
 Each review also has a tool-call budget that scales with the change: 2 plus 1 call per changed path, at least 6 and at most 40. Review input carries it as `ToolCallBudget`. For Pi, the controller counts tool calls in the event stream. At the first turn end after the budget is spent, it stops exploration and runs the finalization turn, and the review log records `tool-call budget N spent`. Claude and Codex receive the budget in their input but are not stopped by it.
 

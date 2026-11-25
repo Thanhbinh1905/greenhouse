@@ -34,6 +34,7 @@ type runOptions struct {
 	Label      string
 	Cases      []string
 	Parallel   int
+	Passes     int
 	Settle     time.Duration
 }
 
@@ -55,6 +56,7 @@ type RunConfig struct {
 	ScoredDigest      string    `json:"scored_corpus_digest"`
 	Cases             []string  `json:"cases"`
 	Parallel          int       `json:"parallel"`
+	ReviewPasses      int       `json:"review_passes"`
 	MaxSpan           int       `json:"max_span"`
 	BarHighRecall     float64   `json:"bar_high_recall"`
 }
@@ -379,6 +381,9 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 	rec.Target, rec.Candidate = target, head
 	executable := o.Pi
 	backends := map[string]any{"version": 2, "writable": map[string][]string{"reviewer": {capture}}}
+	if o.Passes > 0 {
+		backends["review_passes"] = o.Passes
+	}
 	if o.Backend == "claude" {
 		executable = o.Agent
 	}
@@ -614,7 +619,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, ReviewPasses: o.Passes, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	secrets := secretValues()
 	jobs := make(chan int)
@@ -743,7 +748,7 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "- Greenhouse: `%s`, corpus v%d revision %d `%s`\n", r.Config.GreenhouseVersion, r.Config.CorpusVersion, r.Config.CorpusRevision, r.Config.CorpusDigest)
 	fmt.Fprintf(&md, "- Split: `%s`; counts by split: %v; counts by stratum: %v\n", r.Config.Split, s.BySplit, s.ByStratum)
 	fmt.Fprintf(&md, "- Scored with corpus revision %d `%s`\n", r.Config.ScoredRevision, r.Config.ScoredDigest)
-	fmt.Fprintf(&md, "- Started %s, finished %s, parallel %d\n\n", r.Config.Started.Format(time.RFC3339), r.Config.Finished.Format(time.RFC3339), r.Config.Parallel)
+	fmt.Fprintf(&md, "- Started %s, finished %s, parallel %d, review passes %d\n\n", r.Config.Started.Format(time.RFC3339), r.Config.Finished.Format(time.RFC3339), r.Config.Parallel, r.Config.ReviewPasses)
 	bar := "not met"
 	if s.BarMet {
 		bar = "met"

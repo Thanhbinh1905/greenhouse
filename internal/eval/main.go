@@ -238,6 +238,7 @@ func dispatch(sub string, args []string) error {
 		fs.StringVar(&o.Agent, "agent", "", "absolute executable of a non-Pi backend (default: the backend name on PATH)")
 		cases := fs.String("cases", "", "comma-separated case IDs (default: all)")
 		fs.IntVar(&o.Parallel, "parallel", 1, "cases reviewed concurrently")
+		fs.IntVar(&o.Passes, "review-passes", 1, "independent first passes per review")
 		fs.StringVar(&o.JudgeModel, "judge-model", "", "judge model for adjudication records (default: -model)")
 		if err := fs.Parse(args); err != nil {
 			return err
@@ -247,7 +248,7 @@ func dispatch(sub string, args []string) error {
 		if _, err := normalizedSplit(split); err != nil {
 			return err
 		}
-		if o.Model == "" || o.Out == "" || o.Parallel < 1 {
+		if o.Model == "" || o.Out == "" || o.Parallel < 1 || o.Passes < 1 || o.Passes > 3 {
 			return fmt.Errorf("-model, -out and a positive -parallel are required\n%s", usage)
 		}
 		if o.Backend != "pi" && o.Backend != "claude" {
