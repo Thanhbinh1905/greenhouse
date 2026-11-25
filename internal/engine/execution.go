@@ -751,7 +751,7 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 		}(i)
 	}
 	wg.Wait()
-	merged := mergeReviewPasses(outcomes, x.AllPaths)
+	merged := mergeReviewPasses(outcomes, x.Paths)
 	return confirmMergedReview(ctx, x, merged)
 }
 

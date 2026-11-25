@@ -1,6 +1,10 @@
 package engine
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
+)
 
 func TestMergeReviewPassesDeduplicatesOverlappingFindingsAndCoverage(t *testing.T) {
 	passes := []reviewOutcome{
@@ -36,5 +40,38 @@ func TestMergeReviewPassesKeepsSeparateRanges(t *testing.T) {
 	got := mergeReviewPasses(passes, []string{"a.go"})
 	if len(got.Result.Findings) != 2 {
 		t.Fatalf("findings = %#v, want non-overlapping findings retained", got.Result.Findings)
+	}
+}
+
+func TestMergeReviewPassesKeepsRecordsAndEvidence(t *testing.T) {
+	confinement := &runner.Confinement{}
+	passes := []reviewOutcome{
+		{Status: "clean-review", Snapshot: "unchanged", Confinement: confinement, Result: &Verdict{Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{}, ReportedModel: "m", Documentation: &DocAssessment{Status: "documented", Reason: "ok"}, Resolutions: []ResolutionCheck{{Finding: "f1", Check: "confirmed", Reason: "fixed"}}, Dismissed: []Finding{{ID: "d1"}}, DismissalReasons: map[string]string{"d1": "noise"}}},
+		{Status: "clean-review", Snapshot: "unchanged", Result: &Verdict{Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{}, Documentation: &DocAssessment{Status: "missing", Reason: "no docs"}, Resolutions: []ResolutionCheck{{Finding: "f1", Check: "rejected", Reason: "still broken"}}}},
+	}
+	got := mergeReviewPasses(passes, []string{"a.go"})
+	v := got.Result
+	if v.Documentation == nil || v.Documentation.Status != "missing" || len(v.Resolutions) != 1 || v.Resolutions[0].Check != "rejected" || len(v.Dismissed) != 1 || v.DismissalReasons["d1"] != "noise" || v.ReportedModel != "m" {
+		t.Fatalf("records not merged: %#v", v)
+	}
+	if got.Snapshot != "unchanged" || got.Confinement != confinement {
+		t.Fatalf("evidence lost: snapshot %q confinement %v", got.Snapshot, got.Confinement)
+	}
+}
+
+func TestMergeReviewPassesUsesSelectedPathsAndKeepsReasons(t *testing.T) {
+	pass := reviewOutcome{Status: "clean-review", Result: &Verdict{Head: "head", Coverage: []string{"b.go"}, Findings: []Finding{}, Uncovered: []UncoveredPath{{Path: "gen.go", Reason: "generated"}}}}
+	got := mergeReviewPasses([]reviewOutcome{pass, pass}, []string{"b.go", "gen.go"})
+	if len(got.Result.Uncovered) != 1 || got.Result.Uncovered[0].Reason != "generated" {
+		t.Fatalf("uncovered = %#v", got.Result.Uncovered)
+	}
+}
+
+func TestMergeReviewPassesModifiedSnapshotIsInconclusive(t *testing.T) {
+	ok := reviewOutcome{Status: "clean-review", Snapshot: "unchanged", Result: &Verdict{Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{}}}
+	bad := reviewOutcome{Status: "inconclusive", Snapshot: "modified: x"}
+	got := mergeReviewPasses([]reviewOutcome{ok, bad}, []string{"a.go"})
+	if got.Status != "inconclusive" || got.Result != nil || got.Snapshot != "modified: x" {
+		t.Fatalf("got %#v", got)
 	}
 }
