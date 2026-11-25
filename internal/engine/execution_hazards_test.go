@@ -163,7 +163,7 @@ func TestRequiredRulesAndBudgetRefuseDispatch(t *testing.T) {
 
 func waitLeave(t *testing.T, bin, repo, home, leave string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
 	var v map[string]any
 	for time.Now().Before(deadline) {
 		v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)

@@ -34,15 +34,16 @@ func eventsOf(t *testing.T, v map[string]any, kind string) []map[string]any {
 
 func waitStatus(t *testing.T, bin, repo, home string, want ...string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
+	var last map[string]any
 	for time.Now().Before(deadline) {
-		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
-		if has(want, runOf(t, v)["status"].(string)) {
-			return v
+		last = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		if has(want, runOf(t, last)["status"].(string)) {
+			return last
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatalf("run never reached %v: %v", want, axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)["explanation"])
+	t.Fatalf("run never reached %v: last=%v daemon=%s", want, last, daemonDiagnostics(home))
 	return nil
 }
 
@@ -65,7 +66,6 @@ func TestAutoResumeWithBackoffSurvivesDaemonRestart(t *testing.T) {
 		t.Fatalf("unknown reset must schedule a bounded retry: %v %v", pause, v["explanation"])
 	}
 	stopDaemon(t, home)
-	time.Sleep(2500 * time.Millisecond)
 	v = waitStatus(t, bin, repo, home, "clean-review")
 	resumes := eventsOf(t, v, "resume")
 	if len(resumes) != 1 || resumes[0]["actor"] != "auto" || runOf(t, v)["review_used"].(float64) != 1 {
@@ -79,7 +79,7 @@ func TestAutoResumeStopsAfterRetryLimit(t *testing.T) {
 	writeBackends(t, home, map[string]any{"auto_resume": map[string]any{"max_attempts": 1, "base_seconds": 1, "max_seconds": 1}})
 	setModes(t, root, "codex", "rate-limit")
 	mutate(t, bin, repo, home, v, "review", "review-exhaust", nil)
-	deadline := time.Now().Add(20 * time.Second)
+	deadline := testWaitDeadline(t)
 	for time.Now().Before(deadline) {
 		v = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 		if runOf(t, v)["status"] == "paused" && pauseOf(t, v)["auto_resume_at"] == nil {

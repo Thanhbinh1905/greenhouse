@@ -1677,7 +1677,11 @@ func Daemon(h string) (retErr error) {
 	}
 }
 
-func Send(h string, q Request, spawn bool) (v Response, retErr error) {
+func Send(h string, q Request, spawn bool) (Response, error) {
+	return send(h, q, spawn, 0)
+}
+
+func send(h string, q Request, spawn bool, attempt int) (v Response, retErr error) {
 	if q.Op == "stop" {
 		spawn = false
 	}
@@ -1695,14 +1699,29 @@ func Send(h string, q Request, spawn bool) (v Response, retErr error) {
 			return v, x
 		}
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = devNull, devNull, devNull
+		var daemonLog *os.File
+		if path := os.Getenv("GREENHOUSE_TEST_DAEMON_LOG"); path != "" {
+			daemonLog, x = os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0600)
+			if x != nil {
+				_ = devNull.Close()
+				return v, x
+			}
+			cmd.Stdout, cmd.Stderr = daemonLog, daemonLog
+		}
 		cmd.Env = append(os.Environ(), "GREENHOUSE_HOME="+h)
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
 		if x = cmd.Start(); x != nil {
 			_ = devNull.Close()
+			if daemonLog != nil {
+				_ = daemonLog.Close()
+			}
 			return v, x
 		}
 		go func() { _ = cmd.Wait() }() // The daemon's lifecycle is observed through its socket.
 		_ = devNull.Close()
+		if daemonLog != nil {
+			_ = daemonLog.Close()
+		}
 		deadline := time.Now().Add(60 * time.Second)
 		for time.Now().Before(deadline) {
 			c, e = net.DialTimeout("unix", socket, 100*time.Millisecond)
@@ -1726,14 +1745,23 @@ func Send(h string, q Request, spawn bool) (v Response, retErr error) {
 		}
 		return v, fmt.Errorf("daemon unavailable: %w", e)
 	}
-	defer func() { retErr = errors.Join(retErr, c.Close()) }()
-	if err := c.SetDeadline(time.Now().Add(10*time.Second + time.Duration(q.WaitMS)*time.Millisecond)); err != nil {
+	defer func() {
+		if c != nil {
+			retErr = errors.Join(retErr, c.Close())
+		}
+	}()
+	if err := c.SetDeadline(time.Now().Add(clientDeadline(q))); err != nil {
 		return v, err
 	}
 	if e = json.NewEncoder(c).Encode(q); e != nil {
 		return v, e
 	}
 	e = json.NewDecoder(c).Decode(&v)
+	if q.Op == "inspect" && attempt < 10 && (errors.Is(e, io.EOF) || errors.Is(e, io.ErrUnexpectedEOF) || errors.Is(e, syscall.ECONNRESET)) {
+		_ = c.Close()
+		c = nil
+		return send(h, q, spawn, attempt+1)
+	}
 	if e == nil && q.Op == "stop" && checkVersion(q) == nil && v.Outcome == "refused" &&
 		(v.Error == "unsupported operation: stop" || strings.HasPrefix(v.Error, "unsupported protocol version") && (v.Protocol == nil || v.Protocol.Max == 1)) {
 		v.Error = "daemon does not support stop; let its work settle, then stop it with SIGTERM to the PID in GREENHOUSE_HOME/pid after confirming that process is the Greenhouse daemon"
@@ -1743,6 +1771,15 @@ func Send(h string, q Request, spawn bool) (v Response, retErr error) {
 		e = waitDaemonStopped(h, true)
 	}
 	return v, e
+}
+
+func clientDeadline(q Request) time.Duration {
+	if raw := os.Getenv("GREENHOUSE_TEST_CLIENT_TIMEOUT"); raw != "" {
+		if timeout, err := time.ParseDuration(raw); err == nil && timeout > 0 {
+			return timeout
+		}
+	}
+	return 10*time.Second + time.Duration(q.WaitMS)*time.Millisecond
 }
 
 func writeResponse(conn net.Conn, response Response) error {

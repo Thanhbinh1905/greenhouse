@@ -118,8 +118,11 @@ with open(root+'/descendant-ready','w') as f: f.write(str(child.pid))
 	if cancel {
 		want = "cancelled"
 	}
-	if runOf(t, v)["status"] != want || elapsed > 3*time.Second {
-		t.Fatalf("executor waited for inherited pipes: status=%v elapsed=%v", runOf(t, v)["status"], elapsed)
+	if runOf(t, v)["status"] != want {
+		t.Fatalf("executor did not settle after inherited pipes: status=%v elapsed=%v", runOf(t, v)["status"], elapsed)
+	}
+	if _, err := os.Stat(filepath.Join(root, "descendant-finished")); err == nil {
+		t.Fatal("executor returned after the inherited pipe closed")
 	}
 	if runOf(t, v)["review_used"] != float64(1) {
 		t.Fatal("cancel erased consumption")
