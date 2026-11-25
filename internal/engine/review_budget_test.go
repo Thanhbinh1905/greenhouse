@@ -584,7 +584,7 @@ sys.exit(0)
 	}
 }
 
-func TestReviewWithOnlyOutOfRangeFindingProducesVerdict(t *testing.T) {
+func TestReviewClampsFindingPastChangedHunk(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `original_print=print
@@ -592,14 +592,16 @@ def print(text):
  event=json.loads(text)
  if event.get('type')=='message_end':
   verdict=json.loads(event['message']['content'][0]['text'])
-  verdict['findings'][0]['start']=999;verdict['findings'][0]['end']=999
+  verdict['findings'][0]['end']=999
   event['message']['content'][0]['text']=json.dumps(verdict)
  original_print(json.dumps(event))
 `)
 	mutate(t, bin, repo, home, v, "review", "drop-all", nil)
 	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
-	if review["status"] != "clean-review" || !strings.Contains(review["diagnostic"].(string), "outside changed hunks") {
-		t.Fatalf("all rejected: status=%v diagnostic=%v", review["status"], review["diagnostic"])
+	result, _ := review["result"].(map[string]any)
+	findings, _ := result["findings"].([]any)
+	if review["status"] != "outstanding-findings" || len(findings) != 1 || findings[0].(map[string]any)["start"] != float64(1) || findings[0].(map[string]any)["end"] != float64(1) {
+		t.Fatalf("overlapping finding was not clamped and retained: status=%v result=%v", review["status"], result)
 	}
 }
 

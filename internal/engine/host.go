@@ -51,6 +51,8 @@ type HostResult struct {
 	Backend          string            `json:"backend"`
 	Model            string            `json:"model"`
 
+	RejectedFindings []FindingRejection `json:"rejected_findings,omitempty"`
+
 	Reason           string     `json:"reason,omitempty"`
 	Diagnostic       string     `json:"diagnostic,omitempty"`
 	Usage            TokenUsage `json:"usage"`
@@ -295,6 +297,7 @@ func hostResult(r *Run, current bool) *HostResult {
 	}
 	if x.Result != nil {
 		v.Verdict, v.Findings = x.Result.Verdict, append([]Finding(nil), x.Result.Findings...)
+		v.RejectedFindings = append([]FindingRejection(nil), x.Result.RejectedFindings...)
 		v.Dismissed = append([]Finding(nil), x.Result.Dismissed...)
 		v.Conflicts = append([]FindingConflict(nil), x.Result.Conflicts...)
 		v.DismissalReasons = x.Result.DismissalReasons
