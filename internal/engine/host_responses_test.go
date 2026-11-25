@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 )
 
 func TestFailedHostReviewAdmissionDoesNotChangeFindingHistory(t *testing.T) {
@@ -275,6 +277,27 @@ else:
 	}
 	if len(reviewInput.Input.PriorFindings) != 1 || reviewInput.Input.PriorFindings[0].ID != first["id"] || reviewInput.Input.PriorFindings[0].State != "fixed-by-later-commit" {
 		t.Fatalf("rereview did not receive the earlier finding: %+v", reviewInput.Input.PriorFindings)
+	}
+}
+
+func TestCleanHostRereviewSettlesInheritedFindings(t *testing.T) {
+	_, repo, _ := fixture(t)
+	submitted, err := repository.Resolve(repo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior := Finding{ID: "inherited", Priority: "P1", File: "sample.txt", Start: 1, End: 1}
+	r := &Run{
+		Host:      &Host{Name: "host", ID: "1"},
+		Inherited: &Inheritance{From: "prior"},
+		Findings:  []Finding{prior},
+		Submitted: submitted,
+		Configs:   []Snapshot{{Settings: Settings{Limit: 1}}},
+		Review:    &Execution{ID: "review", Status: "running", Result: &Verdict{Verdict: "clean", Coverage: []string{"sample.txt"}}},
+	}
+	finishReview(r, reviewOutcome{Status: "clean-review", Result: r.Review.Result})
+	if r.Status != "clean-review" {
+		t.Fatalf("run status=%q; want clean-review after a clean rereview", r.Status)
 	}
 }
 

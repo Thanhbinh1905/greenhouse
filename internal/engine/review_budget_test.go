@@ -250,6 +250,60 @@ func TestSettleReviewBudgetHostResultNeverDisagrees(t *testing.T) {
 	}
 }
 
+func TestHostResultKeepsInconclusiveStatusWithCarriedFindings(t *testing.T) {
+	run := &Run{
+		Host:      &Host{Name: "host", ID: "test"},
+		Candidate: "head",
+		Target:    "target",
+		Review:    &Execution{Status: "inconclusive"},
+		HostCarried: []CarriedFinding{{
+			Finding: Finding{ID: "inherited", File: "sample.txt", Start: 1, End: 1},
+			Kept:    true,
+		}},
+	}
+	host := hostResult(run, true)
+	if host.Status != "inconclusive" || host.Verdict != "" || len(host.Findings) != 1 {
+		t.Fatalf("host status=%q verdict=%q findings=%v; want inconclusive, no verdict, and carried finding", host.Status, host.Verdict, host.Findings)
+	}
+}
+
+func TestHostResultKeepsPartialStatusWithCarriedFindings(t *testing.T) {
+	run := &Run{
+		Host:      &Host{Name: "host", ID: "test"},
+		Candidate: "head",
+		Target:    "target",
+		Review: &Execution{
+			Status: "partial-review",
+			Result: &Verdict{Verdict: "partial", Uncovered: []UncoveredPath{{Path: "other.txt"}}},
+		},
+		HostCarried: []CarriedFinding{{
+			Finding: Finding{ID: "inherited", File: "sample.txt", Start: 1, End: 1},
+			Kept:    true,
+		}},
+	}
+	host := hostResult(run, true)
+	if host.Status != "partial-review" || host.Verdict != "partial" || len(host.Findings) != 1 {
+		t.Fatalf("host status=%q verdict=%q findings=%v; want partial-review, partial, and carried finding", host.Status, host.Verdict, host.Findings)
+	}
+}
+
+func TestHostResultKeepsPausedStatusWithCarriedFindings(t *testing.T) {
+	run := &Run{
+		Host:      &Host{Name: "host", ID: "test"},
+		Candidate: "head",
+		Target:    "target",
+		Review:    &Execution{Status: "paused"},
+		HostCarried: []CarriedFinding{{
+			Finding: Finding{ID: "inherited", File: "sample.txt", Start: 1, End: 1},
+			Kept:    true,
+		}},
+	}
+	host := hostResult(run, true)
+	if host.Status != "paused" || host.Verdict != "" || len(host.Findings) != 1 {
+		t.Fatalf("host status=%q verdict=%q findings=%v; want paused, no verdict, and carried finding", host.Status, host.Verdict, host.Findings)
+	}
+}
+
 func TestSettleReviewBudgetOutcomeMatrix(t *testing.T) {
 	outcomes := map[string]reviewOutcome{
 		"none":           {},
@@ -547,7 +601,7 @@ sys.exit(0)
 	}
 }
 
-func TestReviewWithOnlyOutOfRangeFindingProducesVerdict(t *testing.T) {
+func TestReviewClampsFindingPastChangedHunk(t *testing.T) {
 	t.Parallel()
 	bin, repo, home, v := prepareFixture(t)
 	installFake(t, home, `original_print=print
@@ -555,14 +609,16 @@ def print(text):
  event=json.loads(text)
  if event.get('type')=='message_end':
   verdict=json.loads(event['message']['content'][0]['text'])
-  verdict['findings'][0]['start']=999;verdict['findings'][0]['end']=999
+  verdict['findings'][0]['end']=999
   event['message']['content'][0]['text']=json.dumps(verdict)
  original_print(json.dumps(event))
 `)
 	mutate(t, bin, repo, home, v, "review", "drop-all", nil)
 	review := runOf(t, waitReview(t, bin, repo, home))["review"].(map[string]any)
-	if review["status"] != "clean-review" || !strings.Contains(review["diagnostic"].(string), "outside changed hunks") {
-		t.Fatalf("all rejected: status=%v diagnostic=%v", review["status"], review["diagnostic"])
+	result, _ := review["result"].(map[string]any)
+	findings, _ := result["findings"].([]any)
+	if review["status"] != "outstanding-findings" || len(findings) != 1 || findings[0].(map[string]any)["start"] != float64(1) || findings[0].(map[string]any)["end"] != float64(1) {
+		t.Fatalf("overlapping finding was not clamped and retained: status=%v result=%v", review["status"], result)
 	}
 }
 

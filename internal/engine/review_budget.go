@@ -347,7 +347,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			result.Answer.Reason = "writer_tree_unknown"
 		}
 		if reason, failed := runner.ConfinementFailed(code, stderr.Bytes()); failed {
-			result.Status = "inconclusive"
+			result.Status, result.Result = "inconclusive", nil
 			result.Log += "; " + reason
 		}
 		if calls != nil && calls.spent.Load() {
@@ -364,7 +364,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		if ok {
 			data, inputErr := reviewFinalizationInput(x, first, stopped)
 			if inputErr != nil {
-				first.Status = "inconclusive"
+				first.Status, first.Result = "inconclusive", nil
 				first.Log += "; finalization input invalid: " + inputErr.Error()
 				return first, confinement
 			}

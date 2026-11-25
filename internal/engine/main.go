@@ -1789,6 +1789,14 @@ func writeResponse(conn net.Conn, response Response) error {
 	return errors.Join(json.NewEncoder(conn).Encode(response), conn.Close())
 }
 
+func settleHostReviewFindings(r *Run, result *Verdict, status string) {
+	if r.Host == nil || r.Inherited == nil || status != "clean-review" && status != "outstanding-findings" {
+		return
+	}
+	r.Findings = append([]Finding(nil), result.Findings...)
+	r.Status = status
+}
+
 func finishReview(r *Run, done reviewOutcome) {
 	retainReviewMetadata(r.Review, done)
 	status := done.Status
@@ -1807,6 +1815,9 @@ func finishReview(r *Run, done reviewOutcome) {
 	id, err := repository.Resolve(r.Submitted.Worktree)
 	if err != nil || id != r.Submitted {
 		status = "stale"
+	}
+	if status == "inconclusive" || status == "cancelled" || status == "stale" {
+		done.Result = nil
 	}
 	if done.Result == nil && len(r.FollowupPaths) > 0 && status == "inconclusive" {
 		settings := r.Configs[len(r.Configs)-1].Settings
@@ -1897,6 +1908,7 @@ func finishReview(r *Run, done reviewOutcome) {
 				}
 			}
 		}
+		settleHostReviewFindings(r, done.Result, status)
 		index := map[string]int{}
 		for i, f := range r.Findings {
 			index[f.ID] = i

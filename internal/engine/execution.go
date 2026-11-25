@@ -57,7 +57,13 @@ type FindingConflict struct {
 	Earlier Finding `json:"earlier"`
 	Finding Finding `json:"finding"`
 }
+type FindingRejection struct {
+	Finding Finding `json:"finding"`
+	Reason  string  `json:"reason"`
+}
 type Verdict struct {
+	RejectedFindings []FindingRejection `json:"rejected_findings,omitempty"`
+
 	Diagnostics      []string          `json:"diagnostics,omitempty"`
 	Uncovered        []UncoveredPath   `json:"uncovered,omitempty"`
 	ReportedProvider string            `json:"reported_provider,omitempty"`
@@ -969,8 +975,22 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 			return nil, errors.New("invalid finding")
 		}
 		inside := false
-		for _, span := range ranges[f.File] {
-			if f.Start >= 1 && f.End >= f.Start && f.Start >= span[0] && f.End <= span[1] {
+		if f.Start >= 1 && f.End >= f.Start {
+			first, last := 0, 0
+			for _, span := range ranges[f.File] {
+				start, end := max(f.Start, span[0]), min(f.End, span[1])
+				if start > end {
+					continue
+				}
+				if first == 0 || start < first {
+					first = start
+				}
+				if end > last {
+					last = end
+				}
+			}
+			if first > 0 {
+				f.Start, f.End = first, last
 				inside = true
 			}
 		}
@@ -978,7 +998,9 @@ func verdictFrom(answer agentAnswer, x *Execution) (*Verdict, error) {
 			inside = withinAcceptedDelta(x, v.Head, *f)
 		}
 		if !inside {
-			v.Diagnostics = append(v.Diagnostics, safeMessage(fmt.Sprintf("dropped finding %d: finding range outside changed hunks (%s:%d-%d)", i+1, f.File, f.Start, f.End)))
+			reason := "finding range outside changed hunks"
+			v.Diagnostics = append(v.Diagnostics, safeMessage(fmt.Sprintf("dropped finding %d: %s (%s:%d-%d)", i+1, reason, f.File, f.Start, f.End)))
+			v.RejectedFindings = append(v.RejectedFindings, FindingRejection{Finding: *f, Reason: reason})
 			continue
 		}
 		switch x.FindingIdentity {

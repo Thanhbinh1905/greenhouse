@@ -43,6 +43,19 @@ func TestHostFailedReviewDiagnostics(t *testing.T) {
 	}
 }
 
+func TestHostResultIncludesRejectedFindings(t *testing.T) {
+	rejected := FindingRejection{Finding: Finding{File: "sample.txt", Start: 20, End: 21}, Reason: "finding range outside changed hunks"}
+	r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: &Execution{ID: "review-1", Result: &Verdict{Verdict: "clean", RejectedFindings: []FindingRejection{rejected}}}}
+	got := hostResult(r, true)
+	if len(got.RejectedFindings) != 1 || got.RejectedFindings[0].Reason != rejected.Reason || got.RejectedFindings[0].Finding.File != rejected.Finding.File || got.RejectedFindings[0].Finding.Start != rejected.Finding.Start || got.RejectedFindings[0].Finding.End != rejected.Finding.End {
+		t.Fatalf("host result omitted rejected finding: %+v", got)
+	}
+	encoded, err := json.Marshal(got)
+	if err != nil || !strings.Contains(string(encoded), `"rejected_findings":[{"finding":`) {
+		t.Fatalf("host JSON omitted rejected findings: %s (%v)", encoded, err)
+	}
+}
+
 func TestHostModelFallback(t *testing.T) {
 	t.Parallel()
 	for _, configured := range []string{"", "explicit-model"} {
