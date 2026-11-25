@@ -287,6 +287,23 @@ func TestHostResultKeepsPartialStatusWithCarriedFindings(t *testing.T) {
 	}
 }
 
+func TestHostResultKeepsPausedStatusWithCarriedFindings(t *testing.T) {
+	run := &Run{
+		Host:      &Host{Name: "host", ID: "test"},
+		Candidate: "head",
+		Target:    "target",
+		Review:    &Execution{Status: "paused"},
+		HostCarried: []CarriedFinding{{
+			Finding: Finding{ID: "inherited", File: "sample.txt", Start: 1, End: 1},
+			Kept:    true,
+		}},
+	}
+	host := hostResult(run, true)
+	if host.Status != "paused" || host.Verdict != "" || len(host.Findings) != 1 {
+		t.Fatalf("host status=%q verdict=%q findings=%v; want paused, no verdict, and carried finding", host.Status, host.Verdict, host.Findings)
+	}
+}
+
 func TestSettleReviewBudgetOutcomeMatrix(t *testing.T) {
 	outcomes := map[string]reviewOutcome{
 		"none":           {},

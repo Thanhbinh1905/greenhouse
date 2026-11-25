@@ -313,7 +313,7 @@ func hostResult(r *Run, current bool) *HostResult {
 		finding := carried.Finding
 		finding.Head = r.Candidate
 		v.Findings = append(v.Findings, finding)
-		if x.Status != "inconclusive" && x.Status != "cancelled" && x.Status != "stale" && x.Status != "partial-review" {
+		if x.Status == "clean-review" || x.Status == "outstanding-findings" {
 			v.Verdict = "findings"
 			v.Status = "outstanding-findings"
 		}
