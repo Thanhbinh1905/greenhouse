@@ -19,6 +19,7 @@ func mergeReviewPasses(passes []reviewOutcome, paths []string) reviewOutcome {
 	coverage := map[string]bool{}
 	findings := []Finding{}
 	var uncovered []UncoveredPath
+	inconclusive := 0
 	for _, pass := range passes {
 		merged.Answer.Usage = addUsage(merged.Answer.Usage, pass.Answer.Usage)
 		merged.Log += fmt.Sprintf("; pass %s: %s", pass.Status, pass.Log)
@@ -40,8 +41,12 @@ func mergeReviewPasses(passes []reviewOutcome, paths []string) reviewOutcome {
 			merged.Result = &Verdict{Head: pass.Result.Head, Findings: []Finding{}, ReportedProvider: pass.Result.ReportedProvider, ReportedModel: pass.Result.ReportedModel}
 		}
 		mergeVerdictRecords(merged.Result, pass.Result)
-		for _, path := range pass.Result.Coverage {
-			coverage[path] = true
+		if pass.Result.Verdict == "inconclusive" {
+			inconclusive++
+		} else {
+			for _, path := range pass.Result.Coverage {
+				coverage[path] = true
+			}
 		}
 		uncovered = append(uncovered, pass.Result.Uncovered...)
 		for _, finding := range pass.Result.Findings {
@@ -77,6 +82,8 @@ func mergeReviewPasses(passes []reviewOutcome, paths []string) reviewOutcome {
 	switch {
 	case len(findings) > 0:
 		merged.Status, merged.Result.Verdict = "outstanding-findings", "findings"
+	case inconclusive == len(passes):
+		merged.Status, merged.Result.Verdict = "inconclusive", "inconclusive"
 	case len(merged.Result.Uncovered) > 0:
 		merged.Status, merged.Result.Verdict = "partial-review", "partial"
 	default:

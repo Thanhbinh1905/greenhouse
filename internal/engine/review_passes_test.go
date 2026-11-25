@@ -96,3 +96,20 @@ func TestMergeReviewPassesDropsUncoveredAnotherPassCovered(t *testing.T) {
 		t.Fatalf("status %s uncovered %#v", got.Status, got.Result.Uncovered)
 	}
 }
+
+func TestMergeReviewPassesAllInconclusiveStaysInconclusive(t *testing.T) {
+	pass := reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: "inconclusive", Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{}}}
+	got := mergeReviewPasses([]reviewOutcome{pass, pass}, []string{"a.go"})
+	if got.Status != "inconclusive" || got.Result.Verdict != "inconclusive" {
+		t.Fatalf("status %s verdict %s, want inconclusive", got.Status, got.Result.Verdict)
+	}
+}
+
+func TestMergeReviewPassesIgnoresCoverageOfInconclusivePass(t *testing.T) {
+	bad := reviewOutcome{Status: "inconclusive", Result: &Verdict{Verdict: "inconclusive", Head: "head", Coverage: []string{"a.go", "b.go"}, Findings: []Finding{}}}
+	good := reviewOutcome{Status: "clean-review", Result: &Verdict{Verdict: "clean", Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{}}}
+	got := mergeReviewPasses([]reviewOutcome{bad, good}, []string{"a.go", "b.go"})
+	if got.Status != "partial-review" || len(got.Result.Uncovered) != 1 || got.Result.Uncovered[0].Path != "b.go" {
+		t.Fatalf("status %s uncovered %#v", got.Status, got.Result.Uncovered)
+	}
+}
