@@ -168,6 +168,33 @@ func mustJSON(t *testing.T, v any) string {
 	return string(b)
 }
 
+func TestVerdictFromKeepsFindingsOverlappingChangedHunks(t *testing.T) {
+	diff := "diff --git a/sample.txt b/sample.txt\n--- a/sample.txt\n+++ b/sample.txt\n@@ -2,3 +2,3 @@\n context\n-old\n+new\n context\n@@ -10,3 +10,3 @@\n context\n-old\n+new\n context\n"
+	x := &Execution{Rules: InputIdentity{Candidate: "candidate"}, Paths: []string{"sample.txt"}, Diff: diff, Config: ReviewerConfig{Backend: "pi", Model: "fixture/model"}}
+	makeAnswer := func(start, end int) agentAnswer {
+		finding := Finding{Priority: "P1", Origin: "correctness", File: "sample.txt", Start: start, End: end, Explanation: "The changed code is incorrect", Action: "Correct it", Head: "candidate"}
+		return agentAnswer{Text: mustJSON(t, map[string]any{"head": "candidate", "verdict": "findings", "coverage": []string{"sample.txt"}, "findings": []Finding{finding}}), Provider: "fixture", Model: "model"}
+	}
+	for _, tc := range []struct {
+		name                           string
+		start, end, wantStart, wantEnd int
+	}{
+		{"extends past hunk", 2, 8, 2, 4},
+		{"spans two hunks", 2, 12, 2, 12},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := verdictFrom(makeAnswer(tc.start, tc.end), x)
+			if err != nil || got.Verdict != "findings" || len(got.Findings) != 1 || got.Findings[0].Start != tc.wantStart || got.Findings[0].End != tc.wantEnd {
+				t.Fatalf("finding was not retained and clamped: err=%v verdict=%+v", err, got)
+			}
+		})
+	}
+	got, err := verdictFrom(makeAnswer(20, 21), x)
+	if err != nil || got.Verdict != "clean" || len(got.Findings) != 0 || len(got.Diagnostics) != 1 || len(got.RejectedFindings) != 1 || got.RejectedFindings[0].Reason != "finding range outside changed hunks" {
+		t.Fatalf("non-overlapping finding was not rejected visibly: err=%v verdict=%+v", err, got)
+	}
+}
+
 func TestReviewAdmissionOverDiffLimitLeavesLargePathUncovered(t *testing.T) {
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))

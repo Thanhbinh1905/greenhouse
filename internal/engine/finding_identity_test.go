@@ -107,8 +107,8 @@ func TestFindingIdentityNormalizationAndDuplicates(t *testing.T) {
 	if len(v.Findings) != 1 || v.Findings[0].ID != want || v.Findings[0].Explanation != first.Explanation || v.Findings[0].Priority != first.Priority {
 		t.Fatalf("duplicate findings: %+v; want first finding with ID %s", v.Findings, want)
 	}
-	second.End = 6
-	if got, err := parse(first, second); err != nil || len(got.Findings) != 1 || len(got.Diagnostics) != 1 {
+	second.Start, second.End = 6, 6
+	if got, err := parse(first, second); err != nil || len(got.Findings) != 1 || len(got.Diagnostics) != 1 || len(got.RejectedFindings) != 1 {
 		t.Fatalf("out-of-range duplicate must be dropped: %+v %v", got, err)
 	}
 	x.FindingIdentity = ""
