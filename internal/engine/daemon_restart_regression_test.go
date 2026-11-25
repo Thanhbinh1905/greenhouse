@@ -2,11 +2,13 @@ package engine
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -54,6 +56,49 @@ func TestSendRetriesInspectAfterDaemonSocketReset(t *testing.T) {
 	got, err := Send(home, Request{Version: 1, Op: "inspect"}, false)
 	if err != nil || got.Outcome != "ok" {
 		t.Fatalf("inspect after daemon restart = %+v, %v", got, err)
+	}
+	if err := <-serveErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSendReturnsErrorWhenInspectRetryCannotRedial(t *testing.T) {
+	home, err := os.MkdirTemp(os.Getenv("TMPDIR"), "s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(home) }()
+	socket := filepath.Join(home, "socket")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	serveErr := make(chan error, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err != nil {
+			serveErr <- err
+			return
+		}
+		var request Request
+		if err := json.NewDecoder(conn).Decode(&request); err != nil {
+			_ = conn.Close()
+			serveErr <- err
+			return
+		}
+		if err := os.Remove(socket); err != nil {
+			_ = conn.Close()
+			serveErr <- err
+			return
+		}
+		_, _ = conn.Write([]byte(`{"outcome":`))
+		serveErr <- conn.Close()
+	}()
+
+	_, err = Send(home, Request{Version: 1, Op: "inspect"}, false)
+	if !errors.Is(err, syscall.ENOENT) {
+		t.Fatalf("inspect retry error = %v, want missing-socket error", err)
 	}
 	if err := <-serveErr; err != nil {
 		t.Fatal(err)
