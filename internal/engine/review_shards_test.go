@@ -174,6 +174,115 @@ func TestShardedReviewThroughDaemon(t *testing.T) {
 	})
 }
 
+func TestShardedHostRereviewReusesUnchangedShardsThroughDaemon(t *testing.T) {
+	t.Parallel()
+	bin, repo, home := fixture(t)
+	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
+	for _, path := range []string{"alpha/a1.txt", "alpha/a2.txt", "beta/b1.txt", "beta/b2.txt", "gamma/g1.txt"} {
+		if err := os.MkdirAll(filepath.Join(repo, filepath.Dir(path)), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(repo, path), []byte(path+" content\n"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	git(t, repo, "add", ".")
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "three features")
+	v := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7","metadata":{"worker":"author-1"}}}`)
+	installFake(t, home, "")
+	root := filepath.Dir(home)
+	if err := os.WriteFile(filepath.Join(root, "fake-pi"), []byte(shardFakeReviewer), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "shard-mode"), []byte("clean"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	settings := map[string]any{"mode": "auto", "preset": "one-pass", "limit": 4, "rules": []string{"unslop"}, "reviewer_backend": "pi", "reviewer_model": "fixture/model", "fixer_backend": "pi", "fixer_model": "fixture/model"}
+	for _, step := range []struct {
+		op    string
+		extra map[string]any
+	}{
+		{"apply", map[string]any{"settings": settings}},
+		{"resolve-rules", nil},
+		{"prepare", map[string]any{"intent": "Add three features: alpha, beta and gamma", "target": target}},
+	} {
+		v = hostCall(t, bin, repo, home, v, step.op, "initial-"+step.op, step.extra)
+		if v["outcome"] != "ok" {
+			t.Fatalf("initial %s: %v", step.op, v)
+		}
+	}
+	if got := hostCall(t, bin, repo, home, v, "review", "initial-review", map[string]any{"grant": "initial-review"}); got["outcome"] != "ok" {
+		t.Fatalf("initial review: %v", got)
+	}
+	v = hostSettle(t, bin, repo, home)
+	if v["host_result"].(map[string]any)["status"] != "clean-review" {
+		t.Fatalf("initial review: %v", v)
+	}
+	if err := os.WriteFile(filepath.Join(repo, "beta/b1.txt"), []byte("fixed beta content\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-am", "fix beta")
+	v = hostCall(t, bin, repo, home, v, "new", "rereview-successor", nil)
+	for _, step := range []struct {
+		op    string
+		extra map[string]any
+	}{
+		{"apply", map[string]any{"settings": settings}},
+		{"resolve-rules", nil},
+		{"prepare", map[string]any{"intent": "Add three features: alpha, beta and gamma", "target": target}},
+	} {
+		v = hostCall(t, bin, repo, home, v, step.op, "rereview-"+step.op, step.extra)
+		if v["outcome"] != "ok" {
+			t.Fatalf("rereview %s: %v", step.op, v)
+		}
+	}
+	if got := hostCall(t, bin, repo, home, v, "review", "rereview", map[string]any{"grant": "rereview"}); got["outcome"] != "ok" {
+		t.Fatalf("rereview: %v", got)
+	}
+	v = hostSettle(t, bin, repo, home)
+	calls := strings.Split(strings.TrimSpace(string(mustRead(t, filepath.Join(root, "shard-calls")))), "\n")
+	counts := map[string]int{}
+	for _, call := range calls {
+		counts[call]++
+	}
+	if counts["shard:Alpha alpha/a1.txt,alpha/a2.txt"] != 1 || counts["shard:Gamma gamma/g1.txt"] != 1 || counts["shard:Beta beta/b1.txt,beta/b2.txt"] != 2 || counts["boundary alpha/a1.txt,alpha/a2.txt,beta/b1.txt,beta/b2.txt,gamma/g1.txt"] != 2 {
+		t.Fatalf("rereview calls = %v; want unchanged Alpha/Gamma reuse, Beta and boundary rerun", calls)
+	}
+	shards := shardsOf(t, runOf(t, v))
+	statuses := shardStatuses(t, shards)
+	if statuses["Alpha"] != "clean-review" || statuses["Beta"] != "clean-review" || statuses["Gamma"] != "clean-review" || statuses["boundary"] != "clean-review" {
+		t.Fatalf("rereview shard statuses = %v", statuses)
+	}
+}
+
+func TestReuseUnchangedReviewShardsAssignsNewPaths(t *testing.T) {
+	t.Parallel()
+	prior := &ShardReview{Planner: "planned", Shards: []ReviewShard{
+		{Name: "Alpha", Summary: "adds alpha", Paths: []string{"a.go"}, ShardResult: ShardResult{Status: "clean-review", Result: &Verdict{Verdict: "clean"}}},
+		{Name: "Beta", Summary: "adds beta", Paths: []string{"b.go"}, ShardResult: ShardResult{Status: "clean-review", Result: &Verdict{Verdict: "clean"}}},
+	}}
+	proposed := []shardPlanEntry{{Name: "Alpha", Summary: "adds alpha and alpha tests", Paths: []string{"a_test.go"}}}
+	plan, reused := reuseUnchangedShards(prior, []string{"a.go", "a_test.go", "b.go"}, []string{"a_test.go"}, proposed)
+	if len(plan) != 2 || !slices.Equal(plan[0].Paths, []string{"a.go", "a_test.go"}) || reused[0] != nil || reused[1] == nil {
+		t.Fatalf("plan/reuse = %+v / %+v, want the new path assigned to Alpha and Beta reused", plan, reused)
+	}
+}
+
+func TestReuseUnchangedReviewShards(t *testing.T) {
+	t.Parallel()
+	prior := &ShardReview{Planner: "planned", Shards: []ReviewShard{
+		{Name: "Alpha", Summary: "adds alpha", Paths: []string{"a.go"}, ShardResult: ShardResult{Status: "clean-review", Result: &Verdict{Verdict: "clean"}}},
+		{Name: "Beta", Summary: "adds beta", Paths: []string{"b.go"}, ShardResult: ShardResult{Status: "clean-review", Result: &Verdict{Verdict: "clean"}}},
+	}}
+	plan, reused := reuseUnchangedShards(prior, []string{"a.go", "b.go"}, []string{"b.go"}, nil)
+	if len(plan) != 2 || plan[0].Name != "Alpha" || plan[1].Name != "Beta" {
+		t.Fatalf("plan = %+v, want the fixed prior plan", plan)
+	}
+	if reused[0] == nil || reused[1] != nil {
+		t.Fatalf("reused = %+v, want Alpha reused and Beta rerun", reused)
+	}
+}
+
 func TestValidateShardPlan(t *testing.T) {
 	t.Parallel()
 	paths := []string{"a.go", "b.go", "c.go"}

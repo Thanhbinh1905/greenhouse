@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
@@ -22,6 +23,7 @@ const (
 
 type ShardReview struct {
 	Planner  string        `json:"planner"`
+	Head     string        `json:"head,omitempty"`
 	Shards   []ReviewShard `json:"shards,omitempty"`
 	Boundary *ShardResult  `json:"boundary,omitempty"`
 }
@@ -81,6 +83,8 @@ func shardPlanSchema() string {
 type shardSource struct {
 	run       Run
 	followups int
+	prior     *ShardReview
+	changed   map[string]bool
 }
 
 func newShardSource(r *Run) *shardSource {
@@ -98,7 +102,45 @@ func newShardSource(r *Run) *shardSource {
 	}
 	settings := r.Configs[len(r.Configs)-1].Settings
 	source.followups = max(settings.Limit-r.ReviewUsed-r.RepairUsed, 0)
+	if r.PriorShards != nil {
+		changed, err := changedSinceHead(r.Submitted.Worktree, r.PriorShards.Head, x.Rules.Candidate)
+		if err == nil {
+			source.prior, source.changed = r.PriorShards, changed
+		}
+	} else if r.Pipeline != nil {
+		for i := len(r.Pipeline.Reviews) - 1; i >= 0; i-- {
+			previous := &r.Pipeline.Reviews[i]
+			if previous.Shards == nil || previous.Status != "clean-review" && previous.Status != "outstanding-findings" && previous.Status != "partial-review" {
+				continue
+			}
+			changed, err := changedSinceHead(r.Submitted.Worktree, previous.Shards.Head, x.Rules.Candidate)
+			if err == nil {
+				source.prior, source.changed = previous.Shards, changed
+			}
+			break
+		}
+	}
 	return source
+}
+
+func changedSinceHead(worktree, previous, current string) (map[string]bool, error) {
+	if previous == "" || current == "" {
+		return nil, errors.New("no earlier candidate")
+	}
+	if previous == current {
+		return map[string]bool{}, nil
+	}
+	output, err := repository.Read(worktree, "diff", "--name-only", "--no-renames", "-z", previous, current)
+	if err != nil {
+		return nil, err
+	}
+	changed := map[string]bool{}
+	for _, path := range strings.Split(string(output), "\x00") {
+		if path != "" {
+			changed[path] = true
+		}
+	}
+	return changed, nil
 }
 
 func (s *shardSource) execution(full bool, paths []string, shard *shardContext) (*Execution, error) {
@@ -107,16 +149,54 @@ func (s *shardSource) execution(full bool, paths []string, shard *shardContext) 
 }
 
 func executeShardedReview(ctx context.Context, x *Execution, source *shardSource) reviewOutcome {
+	if source.prior != nil {
+		allKnown := true
+		for _, path := range x.Paths {
+			found := false
+			for _, shard := range source.prior.Shards {
+				found = found || slices.Contains(shard.Paths, path)
+			}
+			allKnown = allKnown && found
+		}
+		if allKnown {
+			changed := make([]string, 0, len(source.changed))
+			for path := range source.changed {
+				changed = append(changed, path)
+			}
+			if fixed, _ := reuseUnchangedShards(source.prior, x.Paths, changed, nil); len(fixed) > 1 {
+				done := reviewShards(ctx, x, source, fixed)
+				done.Shards.Head = x.Rules.Candidate
+				return done
+			}
+		}
+	}
 	plan, usage, reason := planShards(ctx, x, source.run.Intent)
 	if ctx.Err() != nil {
 		return reviewOutcome{Status: "cancelled", Log: "shard planner stopped: " + reason, Answer: agentAnswer{Reason: "cancelled", Usage: usage, Tokens: usage.Tokens, CostUSD: usage.CostUSD}}
 	}
 	var done reviewOutcome
+	if source.prior != nil && reason != "planned" {
+		changed := make([]string, 0, len(source.changed))
+		for path := range source.changed {
+			changed = append(changed, path)
+		}
+		if fixed, _ := reuseUnchangedShards(source.prior, x.Paths, changed, nil); len(fixed) > 1 {
+			done = reviewShards(ctx, x, source, fixed)
+			done.Shards.Planner = reason
+			done.Answer.Usage = addUsage(done.Answer.Usage, usage)
+			done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
+			done.Shards.Head = x.Rules.Candidate
+			return done
+		}
+	}
 	if len(plan) < 2 {
 		done = executeReviewPasses(ctx, x)
 		done.Shards = &ShardReview{Planner: reason}
 	} else {
 		done = reviewShards(ctx, x, source, plan)
+	}
+	if done.Shards != nil {
+		done.Shards.Head = x.Rules.Candidate
 	}
 	done.Answer.Usage = addUsage(done.Answer.Usage, usage)
 	done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
@@ -288,7 +368,89 @@ func validateShardPlan(plan []shardPlanEntry, paths []string) error {
 	return nil
 }
 
+func reuseUnchangedShards(prior *ShardReview, paths []string, changedPaths []string, proposed []shardPlanEntry) ([]shardPlanEntry, []*ShardResult) {
+	changed := make(map[string]bool, len(changedPaths))
+	for _, path := range changedPaths {
+		changed[path] = true
+	}
+	if prior == nil || prior.Planner != "planned" {
+		return nil, nil
+	}
+	plan := make([]shardPlanEntry, 0, len(prior.Shards)+1)
+	reused := make([]*ShardResult, 0, len(prior.Shards)+1)
+	assigned := map[string]bool{}
+	for i := range prior.Shards {
+		shard := prior.Shards[i]
+		entry := shardPlanEntry{Name: shard.Name, Summary: shard.Summary, Paths: slices.Clone(shard.Paths)}
+		plan = append(plan, entry)
+		unchanged := shard.Status != "" && shard.Result != nil
+		for _, path := range shard.Paths {
+			unchanged = unchanged && slices.Contains(paths, path) && !changed[path]
+			assigned[path] = true
+		}
+		if unchanged {
+			copy := shard.ShardResult
+			reused = append(reused, &copy)
+		} else {
+			reused = append(reused, nil)
+		}
+	}
+	var added []string
+	for _, path := range paths {
+		if !assigned[path] {
+			added = append(added, path)
+		}
+	}
+	if len(added) > 0 {
+		assignedNew := map[string]bool{}
+		for _, shard := range proposed {
+			for _, path := range shard.Paths {
+				if !slices.Contains(added, path) {
+					continue
+				}
+				assignedNew[path] = true
+				if i := slices.IndexFunc(plan, func(existing shardPlanEntry) bool { return existing.Name == shard.Name }); i >= 0 {
+					plan[i].Paths = append(plan[i].Paths, path)
+					reused[i] = nil
+				} else {
+					plan = append(plan, shardPlanEntry{Name: shard.Name, Summary: shard.Summary, Paths: []string{path}})
+					reused = append(reused, nil)
+				}
+			}
+		}
+		var unassigned []string
+		for _, path := range added {
+			if !assignedNew[path] {
+				unassigned = append(unassigned, path)
+			}
+		}
+		if len(unassigned) > 0 {
+			if len(plan) < maxReviewShards {
+				plan = append(plan, shardPlanEntry{Name: "New paths", Summary: "new paths added since the prior review", Paths: unassigned})
+				reused = append(reused, nil)
+			} else {
+				plan[0].Paths = append(plan[0].Paths, unassigned...)
+				reused[0] = nil
+			}
+		}
+	}
+	if validateShardPlan(plan, paths) != nil || len(plan) > maxReviewShards {
+		return nil, nil
+	}
+	return plan, reused
+}
+
 func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan []shardPlanEntry) reviewOutcome {
+	var reused []*ShardResult
+	if source.prior != nil {
+		changed := make([]string, 0, len(source.changed))
+		for path := range source.changed {
+			changed = append(changed, path)
+		}
+		if fixed, results := reuseUnchangedShards(source.prior, x.Paths, changed, plan); len(fixed) > 1 {
+			plan, reused = fixed, results
+		}
+	}
 	record := &ShardReview{Planner: "planned", Shards: make([]ReviewShard, len(plan))}
 	outcomes := make([]reviewOutcome, len(plan))
 	slots := make(chan struct{}, maxShardConcurrency)
@@ -301,6 +463,25 @@ func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan [
 			}
 		}
 		record.Shards[i] = ReviewShard{Name: shard.Name, Summary: shard.Summary, Paths: shard.Paths}
+		if i < len(reused) && reused[i] != nil {
+			record.Shards[i].ShardResult = *reused[i]
+			if record.Shards[i].Result != nil {
+				result := *record.Shards[i].Result
+				result.Coverage = slices.Clone(result.Coverage)
+				result.Uncovered = slices.Clone(result.Uncovered)
+				result.Findings = slices.Clone(result.Findings)
+				result.Dismissed = slices.Clone(result.Dismissed)
+				result.RejectedFindings = slices.Clone(result.RejectedFindings)
+				result.Conflicts = slices.Clone(result.Conflicts)
+				result.Head = x.Rules.Candidate
+				for j := range result.Findings {
+					result.Findings[j].Head = x.Rules.Candidate
+				}
+				record.Shards[i].Result = &result
+			}
+			outcomes[i] = reviewOutcome{Status: reused[i].Status, Result: record.Shards[i].Result, Snapshot: "unchanged"}
+			continue
+		}
 		wg.Add(1)
 		go func(i int, scope *shardContext, paths []string) {
 			defer wg.Done()

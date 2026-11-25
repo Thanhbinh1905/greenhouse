@@ -80,6 +80,7 @@ type Run struct {
 	SelectedDiff      string              `json:"selected_diff,omitempty"`
 	Findings          []Finding           `json:"findings,omitempty"`
 	Review            *Execution          `json:"review,omitempty"`
+	PriorShards       *ShardReview        `json:"prior_shards,omitempty"`
 	RuleSnapshots     []RuleSnapshot      `json:"rule_snapshots,omitempty"`
 	ID                string              `json:"id"`
 	Input             string              `json:"input"`
