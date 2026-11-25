@@ -215,6 +215,7 @@ func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 		{"findings-no-budget", `v={"head":b["Head"],"verdict":"findings","coverage":b["Paths"][:-1],"findings":[{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]}`, "partial", "partial-review", ""},
 		{"malformed", `v={"head":b["Head"],"verdict":"unexpected","coverage":b["Paths"][:-1],"findings":[]}`, "", "inconclusive", "invalid_output"},
 		{"follow-up", `count=open(root+"/invocations").read().count("invoked"); coverage=b["Paths"] if count > 1 else b["Paths"][:-1]; findings=[] if count > 1 else [{"id":"model-id","priority":"P2","origin":"correctness","file":"alpha.txt","start":1,"end":1,"explanation":"Changed line is incorrect","action":"Correct the line","rule":"","head":b["Head"]}]; v={"head":b["Head"],"verdict":"findings" if findings else "clean","coverage":coverage,"findings":findings}`, "findings", "outstanding-findings", ""},
+		{"independent-passes", `count=open(root+"/invocations").read().count("invoked"); coverage=b["Paths"] if count > 1 else b["Paths"][:-1]; findings=[{"id":"model-id","priority":"P2","origin":"policy","file":"sample.txt","start":1,"end":1,"explanation":"Changed prose is redundant","action":"Remove repetition","rule":"unslop/plain-prose","head":b["Head"]}]; v={"head":b["Head"],"verdict":"findings","coverage":coverage,"findings":findings}`, "findings", "outstanding-findings", ""},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			bin, repo, home := fixture(t)
@@ -228,6 +229,9 @@ func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 			git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "candidate")
 			v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 			installFake(t, home, "")
+			if test.name == "independent-passes" {
+				writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": 2})
+			}
 			scriptPath := filepath.Join(filepath.Dir(home), "fake-pi")
 			script, err := os.ReadFile(scriptPath)
 			if err != nil {
@@ -266,13 +270,13 @@ func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 			if result["verdict"] != test.wantVerdict {
 				t.Fatalf("verdict = %v, want %s", result["verdict"], test.wantVerdict)
 			}
-			if test.name == "follow-up" {
+			if test.name == "follow-up" || test.name == "independent-passes" {
 				if got := len(strings.Split(strings.TrimSpace(string(mustRead(t, filepath.Join(filepath.Dir(home), "invocations")))), "\n")); got != 2 {
 					t.Fatalf("review invocation count = %d, want two passes", got)
 				}
 				uncovered, _ := result["uncovered"].([]any)
 				if len(result["coverage"].([]any)) != 2 || len(uncovered) != 0 || len(result["findings"].([]any)) != 1 {
-					t.Fatalf("follow-up did not merge coverage and findings: %v", result)
+					t.Fatalf("passes did not merge coverage and deduplicate findings: %v", result)
 				}
 				return
 			}

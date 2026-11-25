@@ -524,6 +524,34 @@ func TestReviewBudgetExpiredUsesLegacyDefaultAndExecutorLimit(t *testing.T) {
 	}
 }
 
+func TestReviewPassConfiguration(t *testing.T) {
+	_, _, home := fixture(t)
+	t.Setenv("GREENHOUSE_HOME", home)
+	if err := os.MkdirAll(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		value int
+		valid bool
+		want  int
+	}{{0, true, 1}, {1, true, 1}, {2, true, 2}, {3, true, 3}, {-1, false, 0}, {4, false, 0}} {
+		writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": test.value})
+		config, err := trustedBackends()
+		if (err == nil) != test.valid {
+			t.Fatalf("review_passes %d: %v", test.value, err)
+		}
+		if err == nil {
+			got := config.ReviewPasses
+			if got == 0 {
+				got = 1
+			}
+			if got != test.want {
+				t.Fatalf("review_passes %d defaults to %d; want %d", test.value, got, test.want)
+			}
+		}
+	}
+}
+
 func TestReviewBudgetConfiguration(t *testing.T) {
 	_, _, home := fixture(t)
 	t.Setenv("GREENHOUSE_HOME", home)

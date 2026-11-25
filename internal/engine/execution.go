@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
@@ -124,6 +125,7 @@ type Execution struct {
 
 	FindingIdentity string `json:"finding_identity,omitempty"`
 	ReviewBudget    string `json:"review_budget,omitempty"`
+	ReviewPasses    int    `json:"review_passes,omitempty"`
 	ToolCallBudget  int    `json:"tool_call_budget,omitempty"`
 	Finalization    bool   `json:"finalization,omitempty"`
 }
@@ -497,7 +499,15 @@ func reviewExecutionPaths(r *Run, snapshot *RuleSnapshot, full bool, selected []
 	if e != nil {
 		return nil, e
 	}
-	return &Execution{ReviewBudget: budget, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	passConfig, e := trustedBackends()
+	if e != nil {
+		return nil, e
+	}
+	passes := passConfig.ReviewPasses
+	if passes == 0 {
+		passes = 1
+	}
+	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -722,6 +732,30 @@ type reviewOutcome struct {
 }
 
 func executeReview(ctx context.Context, x *Execution) reviewOutcome {
+	passes := x.ReviewPasses
+	if passes < 1 {
+		passes = 1
+	}
+	if passes == 1 {
+		return executeReviewPass(ctx, x, true)
+	}
+	outcomes := make([]reviewOutcome, passes)
+	var wg sync.WaitGroup
+	for i := range outcomes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			pass := *x
+			pass.ID = fmt.Sprintf("%s-pass-%d", x.ID, i+1)
+			outcomes[i] = executeReviewPass(ctx, &pass, false)
+		}(i)
+	}
+	wg.Wait()
+	merged := mergeReviewPasses(outcomes, x.AllPaths)
+	return confirmMergedReview(ctx, x, merged)
+}
+
+func executeReviewPass(ctx context.Context, x *Execution, confirm bool) reviewOutcome {
 	trusted, trustErr := trustedAgent(x.Config.Backend, x.Config.Model)
 	if trustErr != nil {
 		failure := classifyBackend(x.Config.Backend, -1, nil, []byte(trustErr.Error()), time.Now())
@@ -749,7 +783,9 @@ func executeReview(ctx context.Context, x *Execution) reviewOutcome {
 	}
 	defer repository.RemoveSnapshot(tree)
 	done, confinement := runBoundedReview(ctx, x, dir, tree)
-	done = confirmBlockingFindings(ctx, x, dir, tree, done)
+	if confirm {
+		done = confirmBlockingFindings(ctx, x, dir, tree, done)
+	}
 	done.Confinement = &confinement
 	if e = repository.VerifySnapshot(x.Source.Worktree, x.Snapshot, tree); e != nil {
 		return reviewOutcome{Status: "inconclusive", Log: done.Log + "; candidate snapshot modified during review: " + e.Error(), Answer: done.Answer, Confinement: &confinement, Snapshot: "modified: " + e.Error()}
