@@ -45,22 +45,7 @@ func mergeReviewPasses(passes []reviewOutcome, paths []string) reviewOutcome {
 		}
 		uncovered = append(uncovered, pass.Result.Uncovered...)
 		for _, finding := range pass.Result.Findings {
-			duplicate := false
-			for i := range findings {
-				prior := &findings[i]
-				if prior.File == finding.File && prior.Start <= finding.End && finding.Start <= prior.End {
-					start, end := min(prior.Start, finding.Start), max(prior.End, finding.End)
-					if priorityRank(finding.Priority) < priorityRank(prior.Priority) {
-						*prior = finding
-					}
-					prior.Start, prior.End = start, end
-					duplicate = true
-					break
-				}
-			}
-			if !duplicate {
-				findings = append(findings, finding)
-			}
+			findings = addMergedFinding(findings, finding)
 		}
 	}
 	if strings.HasPrefix(merged.Snapshot, "modified") {
@@ -99,6 +84,22 @@ func mergeReviewPasses(passes []reviewOutcome, paths []string) reviewOutcome {
 	}
 	merged.Answer.Tokens, merged.Answer.CostUSD = merged.Answer.Usage.Tokens, merged.Answer.Usage.CostUSD
 	return merged
+}
+
+func addMergedFinding(findings []Finding, finding Finding) []Finding {
+	kept := findings[:0:0]
+	for _, prior := range findings {
+		if prior.File != finding.File || prior.Start > finding.End || finding.Start > prior.End {
+			kept = append(kept, prior)
+			continue
+		}
+		start, end := min(prior.Start, finding.Start), max(prior.End, finding.End)
+		if priorityRank(prior.Priority) <= priorityRank(finding.Priority) {
+			finding = prior
+		}
+		finding.Start, finding.End = start, end
+	}
+	return append(kept, finding)
 }
 
 func mergeVerdictRecords(into, from *Verdict) {

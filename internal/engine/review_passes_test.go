@@ -75,3 +75,24 @@ func TestMergeReviewPassesModifiedSnapshotIsInconclusive(t *testing.T) {
 		t.Fatalf("got %#v", got)
 	}
 }
+
+func TestMergeReviewPassesCollapsesBridgingFinding(t *testing.T) {
+	passes := []reviewOutcome{
+		{Status: "outstanding-findings", Result: &Verdict{Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{{ID: "one", Priority: "P2", File: "a.go", Start: 1, End: 5}, {ID: "two", Priority: "P1", File: "a.go", Start: 10, End: 15}}}},
+		{Status: "outstanding-findings", Result: &Verdict{Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{{ID: "bridge", Priority: "P2", File: "a.go", Start: 4, End: 12}}}},
+	}
+	got := mergeReviewPasses(passes, []string{"a.go"})
+	f := got.Result.Findings
+	if len(f) != 1 || f[0].Start != 1 || f[0].End != 15 || f[0].ID != "two" {
+		t.Fatalf("findings = %#v, want one finding 1-15 keeping the P1", f)
+	}
+}
+
+func TestMergeReviewPassesDropsUncoveredAnotherPassCovered(t *testing.T) {
+	first := reviewOutcome{Status: "partial-review", Result: &Verdict{Head: "head", Coverage: []string{"a.go"}, Findings: []Finding{}, Uncovered: []UncoveredPath{{Path: "b.go", Reason: "not covered by reviewer within budget"}}}}
+	second := reviewOutcome{Status: "clean-review", Result: &Verdict{Head: "head", Coverage: []string{"b.go"}, Findings: []Finding{}}}
+	got := mergeReviewPasses([]reviewOutcome{first, second}, []string{"a.go", "b.go"})
+	if got.Status != "clean-review" || len(got.Result.Uncovered) != 0 {
+		t.Fatalf("status %s uncovered %#v", got.Status, got.Result.Uncovered)
+	}
+}
