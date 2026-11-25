@@ -267,6 +267,26 @@ func TestHostResultKeepsInconclusiveStatusWithCarriedFindings(t *testing.T) {
 	}
 }
 
+func TestHostResultKeepsPartialStatusWithCarriedFindings(t *testing.T) {
+	run := &Run{
+		Host:      &Host{Name: "host", ID: "test"},
+		Candidate: "head",
+		Target:    "target",
+		Review: &Execution{
+			Status: "partial-review",
+			Result: &Verdict{Verdict: "partial", Uncovered: []UncoveredPath{{Path: "other.txt"}}},
+		},
+		HostCarried: []CarriedFinding{{
+			Finding: Finding{ID: "inherited", File: "sample.txt", Start: 1, End: 1},
+			Kept:    true,
+		}},
+	}
+	host := hostResult(run, true)
+	if host.Status != "partial-review" || host.Verdict != "partial" || len(host.Findings) != 1 {
+		t.Fatalf("host status=%q verdict=%q findings=%v; want partial-review, partial, and carried finding", host.Status, host.Verdict, host.Findings)
+	}
+}
+
 func TestSettleReviewBudgetOutcomeMatrix(t *testing.T) {
 	outcomes := map[string]reviewOutcome{
 		"none":           {},
