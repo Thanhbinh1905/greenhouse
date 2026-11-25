@@ -33,7 +33,7 @@ func hostSettle(t *testing.T, bin, repo, home string) map[string]any {
 
 func hostSettleWithFindings(t *testing.T, bin, repo, home string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
 	for time.Now().Before(deadline) {
 		v := hostSettle(t, bin, repo, home)
 		result, _ := v["host_result"].(map[string]any)

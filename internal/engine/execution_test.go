@@ -100,7 +100,7 @@ print(json.dumps({'type':'agent_settled','aborted':False}))
 }
 func waitReview(t *testing.T, bin, repo, home string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
 	for time.Now().Before(deadline) {
 		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 		status := runOf(t, v)["status"]
@@ -194,7 +194,7 @@ func TestReviewSettledWithFindings(t *testing.T) {
 
 func waitReviewWithFindings(t *testing.T, bin, repo, home string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
 	for time.Now().Before(deadline) {
 		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
 		if reviewSettledWithFindings(runOf(t, v)) {

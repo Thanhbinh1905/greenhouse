@@ -92,6 +92,7 @@ func intentRepo(t *testing.T) string {
 	gitCommand(t, repo, "init", "-q", "-b", "main")
 	gitCommand(t, repo, "config", "user.name", "Test")
 	gitCommand(t, repo, "config", "user.email", "test@example.invalid")
+	gitCommand(t, repo, "config", "maintenance.auto", "false")
 	if err := os.WriteFile(filepath.Join(repo, "file.txt"), []byte("base\n"), 0600); err != nil {
 		t.Fatal(err)
 	}

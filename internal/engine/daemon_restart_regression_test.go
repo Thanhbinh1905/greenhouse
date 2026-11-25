@@ -13,6 +13,53 @@ import (
 	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
 
+func TestSendRetriesInspectAfterDaemonSocketReset(t *testing.T) {
+	home, err := os.MkdirTemp(os.Getenv("TMPDIR"), "s")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(home) }()
+	listener, err := net.Listen("unix", filepath.Join(home, "socket"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	serveErr := make(chan error, 1)
+	go func() {
+		first, err := listener.Accept()
+		if err != nil {
+			serveErr <- err
+			return
+		}
+		var request Request
+		if err := json.NewDecoder(first).Decode(&request); err != nil {
+			_ = first.Close()
+			serveErr <- err
+			return
+		}
+		_, _ = first.Write([]byte(`{"outcome":`))
+		_ = first.Close()
+		second, err := listener.Accept()
+		if err != nil {
+			serveErr <- err
+			return
+		}
+		defer func() { _ = second.Close() }()
+		if err := json.NewDecoder(second).Decode(&request); err != nil {
+			serveErr <- err
+			return
+		}
+		serveErr <- json.NewEncoder(second).Encode(Response{Version: 1, Outcome: "ok"})
+	}()
+	got, err := Send(home, Request{Version: 1, Op: "inspect"}, false)
+	if err != nil || got.Outcome != "ok" {
+		t.Fatalf("inspect after daemon restart = %+v, %v", got, err)
+	}
+	if err := <-serveErr; err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestStoppedDaemonCanRestartWithPendingRequest(t *testing.T) {
 	bin, repo, home := fixture(t)
 	axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)

@@ -156,7 +156,7 @@ func TestRepairRunnerStopsDescendants(t *testing.T) {
 	}
 }
 
-func TestRepairRunnerStopsDescendantsOnCancellation(t *testing.T) {
+func TestRepairRunnerCancellationReportsUnverifiedCleanup(t *testing.T) {
 	t.Parallel()
 	root := os.Getenv("TMPDIR")
 	marker := filepath.Join(root, "repair-cancel-marker")
@@ -172,8 +172,15 @@ func TestRepairRunnerStopsDescendantsOnCancellation(t *testing.T) {
 	defer cancel()
 	code, log, runErr := runBounded(ctx, root, script, nil, nil, "")
 	time.Sleep(1200 * time.Millisecond)
-	if _, err := os.Stat(marker); !os.IsNotExist(err) {
-		t.Fatalf("cancelled descendant remained able to write: %v (code=%d log=%s err=%v)", err, code, log, runErr)
+	_, markerErr := os.Stat(marker)
+	if markerErr == nil && !errors.Is(runErr, runner.ErrWriterTreeUnknown) {
+		t.Fatalf("descendant wrote after cleanup was reported complete: code=%d log=%s err=%v", code, log, runErr)
+	}
+	if markerErr != nil && !os.IsNotExist(markerErr) {
+		t.Fatalf("stat descendant marker: %v", markerErr)
+	}
+	if runErr != nil && !errors.Is(runErr, context.DeadlineExceeded) && !errors.Is(runErr, runner.ErrWriterTreeUnknown) {
+		t.Fatalf("cancellation cleanup returned an unexpected result: code=%d log=%s err=%v", code, log, runErr)
 	}
 }
 

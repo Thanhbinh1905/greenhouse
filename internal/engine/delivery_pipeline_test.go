@@ -745,13 +745,15 @@ func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
 	git(t, repo, "worktree", "add", "-q", "-f", same, "main")
 	sameBranch := prepare(same, "same")
 
-	if err := os.WriteFile(filepath.Join(root, "sleep-test"), []byte("2"), 0600); err != nil {
+	blockTest := filepath.Join(root, "block-test")
+	if err := os.WriteFile(blockTest, nil, 0600); err != nil {
 		t.Fatal(err)
 	}
+	defer func() { _ = os.Remove(blockTest) }()
 	if started := mutate(t, bin, repo, home, first, "pipeline", "start", nil); started["outcome"] != "ok" {
 		t.Fatal(started)
 	}
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
 	for time.Now().Before(deadline) && countLines(t, filepath.Join(root, "commands.log"))["test"] == 0 {
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -770,7 +772,9 @@ func TestLinkedWorktreePipelinesDeliverConcurrently(t *testing.T) {
 	if _, err := time.Parse(time.RFC3339, active["started_at"].(string)); err != nil || active["finished_at"] != nil {
 		t.Fatalf("running stage timestamps are invalid: %v", active)
 	}
-	_ = os.Remove(filepath.Join(root, "sleep-test")) // Best-effort test fixture cleanup.
+	if err := os.Remove(blockTest); err != nil {
+		t.Fatal(err)
+	}
 
 	firstDone, secondDone := waitPipeline(t, bin, repo, home), waitPipeline(t, bin, linked, home)
 	for _, done := range []map[string]any{firstDone, secondDone} {

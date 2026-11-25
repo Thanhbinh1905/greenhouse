@@ -77,7 +77,11 @@ import os,sys
 root=os.path.dirname(__file__)
 name=sys.argv[1]
 with open(root+'/commands.log','a') as f: f.write(name+'\n')
-if os.path.exists(root+'/sleep-'+name):
+if os.path.exists(root+'/block-'+name):
+    import time
+    while os.path.exists(root+'/block-'+name):
+        time.sleep(0.01)
+elif os.path.exists(root+'/sleep-'+name):
     import time
     time.sleep(float(open(root+'/sleep-'+name).read()))
 if os.path.exists(root+'/kill-'+name):
@@ -290,15 +294,16 @@ func gateArgv(root, name string) []string { return []string{filepath.Join(root, 
 
 func waitPipeline(t *testing.T, bin, repo, home string) map[string]any {
 	t.Helper()
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := testWaitDeadline(t)
+	var last map[string]any
 	for time.Now().Before(deadline) {
-		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
-		if s := runOf(t, v)["status"]; s != "running" && s != "cancelling" {
-			return v
+		last = axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		if s := runOf(t, last)["status"]; s != "running" && s != "cancelling" {
+			return last
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	t.Fatal("pipeline did not settle")
+	t.Fatalf("pipeline did not settle before the package deadline: last=%v daemon=%s", last, daemonDiagnostics(home))
 	return nil
 }
 

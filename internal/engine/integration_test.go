@@ -1,19 +1,39 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/daemonutil"
 )
+
+func TestTestWaitDeadlineUsesPackageDeadline(t *testing.T) {
+	want, ok := t.Deadline()
+	if !ok {
+		t.Fatal("test runner must provide a package deadline")
+	}
+	if got := testWaitDeadline(t); !got.Equal(want.Add(-5 * time.Second)) {
+		t.Fatalf("wait deadline = %v, want five seconds before package deadline %v", got, want)
+	}
+}
+
+func testWaitDeadline(t *testing.T) time.Time {
+	if deadline, ok := t.Deadline(); ok {
+		return deadline.Add(-5 * time.Second)
+	}
+	return time.Now().Add(30 * time.Second)
+}
 
 func git(t *testing.T, dir string, args ...string) string {
 	t.Helper()
@@ -128,14 +148,21 @@ func fixture(t *testing.T) (string, string, string) {
 	return bin, repo, home
 }
 func axi(t *testing.T, bin, repo, home, request string, env ...string) map[string]any {
+	return axiRetry(t, bin, repo, home, request, env, 0)
+}
+
+func axiRetry(t *testing.T, bin, repo, home, request string, env []string, attempt int) map[string]any {
 	t.Helper()
 	registerDaemonCleanup(t, home)
 	c := exec.Command(bin, "axi")
 	c.Dir = repo
-	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
+	c.Env = append(os.Environ(), "GREENHOUSE_HOME="+home, "HOME="+filepath.Dir(home), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null", "GREENHOUSE_TEST_PROVIDER_KEY=fixture-secret", "GREENHOUSE_TEST_DAEMON_LOG="+filepath.Join(home, "daemon.log"), "PI_CODING_AGENT_DIR="+filepath.Join(filepath.Dir(home), "native-agent"))
 	c.Env = append(c.Env, forgeEnv(t)...)
 	c.Env = append(c.Env, env...)
 	c.Env = append(withoutEnv(c.Env, "GREENHOUSE_TEST_PARENT_PID"), "GREENHOUSE_TEST_PARENT_PID="+fmt.Sprint(os.Getpid()))
+	if timeout := time.Until(testWaitDeadline(t)); timeout > 0 {
+		c.Env = append(withoutEnv(c.Env, "GREENHOUSE_TEST_CLIENT_TIMEOUT"), "GREENHOUSE_TEST_CLIENT_TIMEOUT="+timeout.String())
+	}
 	fixturePath := os.Getenv("PATH")
 	for _, entry := range env {
 		if strings.HasPrefix(entry, "PATH=") {
@@ -149,13 +176,47 @@ func axi(t *testing.T, bin, repo, home, request string, env ...string) map[strin
 	c.Stdin = strings.NewReader(request)
 	b, e := c.CombinedOutput()
 	if e != nil {
-		t.Fatalf("axi: %v %s", e, b)
+		transientInspectError := strings.Contains(request, `"op":"inspect"`) && (strings.Contains(string(b), "connection reset by peer") || strings.Contains(string(b), "daemon unavailable") || strings.Contains(string(b), "unexpected EOF"))
+		if transientInspectError && attempt < 10 && time.Now().Before(testWaitDeadline(t)) {
+			time.Sleep(50 * time.Millisecond)
+			return axiRetry(t, bin, repo, home, request, env, attempt+1)
+		}
+		t.Fatalf("axi: %v %s\ndaemon diagnostics: %s", e, b, daemonDiagnostics(home))
 	}
 	var r map[string]any
 	if e = json.Unmarshal(b, &r); e != nil {
-		t.Fatalf("json %s: %v", b, e)
+		t.Fatalf("json %s: %v\ndaemon diagnostics: %s", b, e, daemonDiagnostics(home))
 	}
 	return r
+}
+
+func daemonDiagnostics(home string) string {
+	pid, _ := os.ReadFile(filepath.Join(home, "pid"))
+	proc, _ := os.ReadFile(filepath.Join("/proc", strings.TrimSpace(string(pid)), "stat"))
+	comm, _ := os.ReadFile(filepath.Join("/proc", strings.TrimSpace(string(pid)), "comm"))
+	environ, _ := os.ReadFile(filepath.Join("/proc", strings.TrimSpace(string(pid)), "environ"))
+	socket, socketErr := os.Stat(filepath.Join(home, "socket"))
+	log, _ := os.ReadFile(filepath.Join(home, "daemon.log"))
+	if len(log) > 256*1024 {
+		log = log[len(log)-256*1024:]
+	}
+	var pidNumber int
+	_, _ = fmt.Sscan(strings.TrimSpace(string(pid)), &pidNumber)
+	if pidNumber > 0 && len(proc) > 0 && strings.TrimSpace(string(comm)) == "greenhouse" && bytes.Contains(environ, []byte("GREENHOUSE_HOME="+home+"\x00")) {
+		_ = syscall.Kill(pidNumber, syscall.SIGQUIT)
+		deadline := time.Now().Add(2 * time.Second)
+		for time.Now().Before(deadline) {
+			if _, err := os.Stat(filepath.Join("/proc", strconv.Itoa(pidNumber))); os.IsNotExist(err) {
+				break
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+		log, _ = os.ReadFile(filepath.Join(home, "daemon.log"))
+		if len(log) > 8192 {
+			log = log[len(log)-8192:]
+		}
+	}
+	return fmt.Sprintf("pid=%s process=%s socket=%v socket_error=%v log=%s", strings.TrimSpace(string(pid)), strings.TrimSpace(string(proc)), socket != nil, socketErr, strings.TrimSpace(string(log)))
 }
 func waitProcessExit(t *testing.T, pid int) {
 	t.Helper()

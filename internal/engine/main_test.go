@@ -13,6 +13,14 @@ import (
 	"time"
 )
 
+func TestClientDeadlineUsesTestPackageBound(t *testing.T) {
+	t.Setenv("GREENHOUSE_TEST_CLIENT_TIMEOUT", "8m")
+	q := Request{WaitMS: 2_000}
+	if got, want := clientDeadline(q), 8*time.Minute; got != want {
+		t.Fatalf("client deadline = %s, want %s", got, want)
+	}
+}
+
 func TestDaemonSignalShutdownReturnsNil(t *testing.T) {
 	const helperEnv = "GREENHOUSE_TEST_SIGNAL_SHUTDOWN"
 	if os.Getenv(helperEnv) != "1" {
