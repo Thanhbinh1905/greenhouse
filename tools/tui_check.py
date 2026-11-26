@@ -25,16 +25,26 @@ if '--list-models' in sys.argv:
     print('native default')
     sys.exit(0)
 b=json.JSONDecoder().raw_decode(sys.stdin.read())[0]
+if 'MaxShards' in b:
+    paths=[entry['Path'] for entry in b['Paths']]
+    groups=[('Accounts',[p for p in paths if p.startswith('accounts/') or p=='sample.txt']),('Billing',[p for p in paths if p.startswith('billing/')]),('Reports',[p for p in paths if p.startswith('reports/')])]
+    print(json.dumps({'type':'message_end','message':{'role':'assistant','provider':'native','model':'default','stopReason':'stop','content':[{'type':'text','text':json.dumps({'shards':[{'name':name,'summary':'Adds '+name.lower(),'paths':files} for name,files in groups]})}]}}))
+    print(json.dumps({'type':'agent_settled','aborted':False}))
+    sys.exit(0)
 if any('read,edit,write' in a for a in sys.argv):
     open('sample.txt','w').write('repaired\\n')
     out={'responses':[{'finding':f['id'],'response':'fixed','reason':'rewrote the selected line'} for f in b.get('Selected') or []]}
 else:
     if os.path.exists(root+'/delay'):
         time.sleep(float(open(root+'/delay').read()))
+    shard=b.get('Shard') or {}
+    if os.path.exists(root+'/sharded') and shard.get('Name')=='Billing':
+        while not os.path.exists(root+'/release-beta'): time.sleep(0.02)
+    if os.path.exists(root+'/sharded') and shard.get('Name')!='Billing': time.sleep(0.5)
     out={'head':b['Head'],'verdict':'clean','coverage':b['Paths'],'findings':[]}
     if '"documentation"' in b['Contract']:
         out['documentation']={'status':'not-needed','reason':'fixture changes no public behavior'}
-    if open('sample.txt').read()!='repaired\\n':
+    if open('sample.txt').read()!='repaired\\n' and not os.path.exists(root+'/sharded'):
         out['verdict']='findings'
         out['findings']=[
             {'id':'wrong-text','priority':'P1','origin':'correctness','file':'sample.txt','start':1,'end':1,'explanation':'Sample text is wrong for the stated intent','action':'Rewrite the line to say repaired','rule':'','head':b['Head']}]
@@ -402,6 +412,38 @@ def settings_decision_reconnect(width):
         f.stop_daemon()
 
 
+def sharded_review(width):
+    f = Fixture("sharded", agents=True)
+    for path in ("accounts/profile.go", "billing/invoice.go", "reports/summary.go"):
+        file = f.repo / path
+        file.parent.mkdir(parents=True, exist_ok=True)
+        file.write_text("package feature\n")
+    (f.repo / "sample.txt").write_text("repaired\n")
+    f.git("add", "accounts", "billing", "reports", "sample.txt")
+    f.git("commit", "-m", "Add accounts, billing and reports features")
+    (f.bin / "sharded").write_text("fixture")
+    f.session("pi", "77777777-sharded", "Add accounts, billing and reports features", files=("accounts/profile.go", "billing/invoice.go", "reports/summary.go"))
+    s = Session(f, width, "sharded-review")
+    try:
+        text = s.wait(r"Review \(0/3\)")
+        s.capture("planner published three pending feature shards", r"Review \(0/3\)", r"Accounts · pending", r"Billing · pending", r"Reports · pending")
+        text = s.wait(r"Review \(2/3\)")
+        s.capture("accounts and reports settled while billing remains pending", r"Review \(2/3\)", r"Accounts · clean", r"Billing · pending", r"Reports · clean")
+        (f.bin / "release-beta").write_text("release")
+        s.wait(r"Boundary pass · running")
+        s.capture("all shards settled and the boundary pass started", r"Review \(3/3\)", r"Boundary pass · running")
+        text = s.wait(r"Boundary pass · clean")
+        s.capture("boundary pass completed", r"Review \(3/3\)", r"Accounts · clean", r"Billing · clean", r"Reports · clean", r"Boundary pass · clean")
+        state = f.axi()
+        shards = state["run"]["review"]["shards"]
+        assert [item["name"] for item in shards["shards"]] == ["Accounts", "Billing", "Reports"], shards
+        assert "Review (3/3)" in text
+        s.keys("q")
+    finally:
+        s.close()
+        f.stop_daemon()
+
+
 def ambiguous_and_moved(width):
     f = Fixture(f"ambiguous-{width}")
     f.session("claude", "44444444-claude", "Claude asked to fix the sample")
@@ -455,14 +497,19 @@ def line_mode():
 try:
     tmux("new-session", "-d", "-s", "server", "sleep 3600")
     tmux("set-option", "-s", "escape-time", "0")
-    for width in (56, 80, 100):
-        no_agent(width)
-    cancel_detach(56)
-    findings_repair(80)
-    settings_decision_reconnect(100)
-    ambiguous_and_moved(100)
-    line_mode()
-    print(f"PASS: TUI at 56, 80 and 100 columns by 24 rows: missing agent, one Run collecting intent from a synthetic agent session with history isolation, no-match question, ambiguity choice, edited intent with Esc, moved head, live progress, resize while running, cancel versus detach and reattach, findings selection, repair and handback, details and help, settings draft with Apply and Save, decision, daemon loss and resync, NO_COLOR, piped stdin and TERM=dumb line mode; fixture {root}")
+    if "--only-sharded" in sys.argv:
+        sharded_review(80)
+        print(f"PASS: three-shard review walkthrough at 80 columns; fixture {root}")
+    else:
+        for width in (56, 80, 100):
+            no_agent(width)
+        cancel_detach(56)
+        findings_repair(80)
+        settings_decision_reconnect(100)
+        ambiguous_and_moved(100)
+        sharded_review(80)
+        line_mode()
+        print(f"PASS: TUI at 56, 80 and 100 columns by 24 rows: missing agent, one Run collecting intent from a synthetic agent session with history isolation, no-match question, ambiguity choice, edited intent with Esc, moved head, live progress, resize while running, cancel versus detach and reattach, findings selection, repair and handback, details and help, settings draft with Apply and Save, decision, daemon loss and resync, three-shard review at 80 columns, NO_COLOR, piped stdin and TERM=dumb line mode; fixture {root}")
 finally:
     try:
         tmux("kill-server", check=False)

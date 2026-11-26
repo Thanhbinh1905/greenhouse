@@ -1185,9 +1185,15 @@ func Daemon(h string) (retErr error) {
 		value   Repair
 		ack     chan bool
 	}
+	type shardProgress struct {
+		run, id string
+		value   *ShardReview
+		ack     chan bool
+	}
 	completed := make(chan completion, 16)
 	repairCompleted := make(chan completion)
 	repairProgresses := make(chan repairProgress)
+	shardProgresses := make(chan shardProgress)
 	connections := make(chan net.Conn)
 	pending := make(chan net.Conn, 64)
 	defer func() {
@@ -1240,6 +1246,22 @@ func Daemon(h string) (retErr error) {
 	}
 	events := newFeed(s)
 	defer events.close()
+	shardCheckpoint := func(runID, id string) func(*ShardReview) bool {
+		return func(value *ShardReview) bool {
+			ack := make(chan bool, 1)
+			select {
+			case shardProgresses <- shardProgress{run: runID, id: id, value: value, ack: ack}:
+			case <-stopped:
+				return false
+			}
+			select {
+			case ok := <-ack:
+				return ok
+			case <-stopped:
+				return false
+			}
+		}
+	}
 	checkpoint := func(runID, id string) func(*Repair) bool {
 		return func(value *Repair) bool {
 			ack := make(chan bool, 1)
@@ -1336,6 +1358,9 @@ func Daemon(h string) (retErr error) {
 						emit(event)
 					}
 				case "review":
+					if shards != nil {
+						shards.progress = shardCheckpoint(o.Run, review.ID)
+					}
 					reviewed := executeReview(ctx, &review, shards)
 					o.Finalization, o.Shards = reviewed.Finalization, reviewed.Shards
 					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot, o.Confinement = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot, reviewed.Confinement
@@ -1419,6 +1444,9 @@ func Daemon(h string) (retErr error) {
 			ctx = runner.WithProcessTimeout(ctx, executorTimeout(r.Configs[len(r.Configs)-1].Settings))
 			ctx = observeProcesses(ctx, r.ID, "review", emit)
 			runID, x, shards := r.ID, *r.Review, newShardSource(r)
+			if shards != nil {
+				shards.progress = shardCheckpoint(runID, x.ID)
+			}
 			go func() {
 				reviewed := executeReview(ctx, &x, shards)
 				cancel()
@@ -1511,6 +1539,18 @@ func Daemon(h string) (retErr error) {
 			r := s.Runs[progress.run]
 			ok := acceptRepairProgress(r, progress.id, progress.value)
 			if ok {
+				if err := commit(s); err != nil {
+					progress.ack <- false
+					return err
+				}
+			}
+			progress.ack <- ok
+			continue
+		case progress := <-shardProgresses:
+			r := s.Runs[progress.run]
+			ok := r != nil && r.Review != nil && r.Review.ID == progress.id && r.Status == "running"
+			if ok {
+				r.Review.Shards = progress.value
 				if err := commit(s); err != nil {
 					progress.ack <- false
 					return err
