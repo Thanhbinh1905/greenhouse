@@ -346,17 +346,17 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		_ = appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
 		stopErr := executorStop(turn)
 		result := reviewFrom(x, code, out, stderr, err, stopErr)
+		if (errors.Is(stopErr, context.DeadlineExceeded) || calls != nil && calls.spent.Load()) && result.Result == nil {
+			if completed := reviewFrom(x, 0, out, stderr, nil, nil); completed.Result != nil {
+				result = completed
+			}
+		}
 		result.Answer.Usage.WallMS = time.Since(started).Milliseconds()
 		model := result.Answer.Model
 		if model == "" {
 			model = x.Config.Model
 		}
 		result.Answer.UsageBreakdown = []UsageBreakdown{{Stage: stage, Backend: x.Config.Backend, Model: model, Usage: result.Answer.Usage}}
-		if (errors.Is(stopErr, context.DeadlineExceeded) || calls != nil && calls.spent.Load()) && result.Result == nil {
-			if completed := reviewFrom(x, 0, out, stderr, nil, nil); completed.Result != nil {
-				result = completed
-			}
-		}
 		if errors.Is(err, runner.ErrWriterTreeUnknown) {
 			result.Answer.Reason = "writer_tree_unknown"
 		}
