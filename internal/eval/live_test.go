@@ -58,7 +58,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	}
 	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
 	out := filepath.Join(dir, "out")
-	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 1, Settle: time.Minute})
+	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 1, ReviewShards: true, Settle: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,7 +72,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	if clean.Status != "clean-review" || clean.Score.FalsePositives != 0 || !clean.InputVerified || clean.ShardCount != 1 {
 		t.Fatalf("clean record = %+v", clean)
 	}
-	if r.CostUSD != 0.75 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" {
+	if r.CostUSD != 0.75 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" || !r.Config.ReviewShards {
 		t.Fatalf("report = %+v", r)
 	}
 	reportMarkdown, err := os.ReadFile(filepath.Join(out, "report.md"))

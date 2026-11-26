@@ -126,6 +126,7 @@ type Execution struct {
 	FindingIdentity string `json:"finding_identity,omitempty"`
 	ReviewBudget    string `json:"review_budget,omitempty"`
 	ReviewPasses    int    `json:"review_passes,omitempty"`
+	ReviewShards    bool   `json:"review_shards,omitempty"`
 	ToolCallBudget  int    `json:"tool_call_budget,omitempty"`
 	Finalization    bool   `json:"finalization,omitempty"`
 
@@ -517,7 +518,7 @@ func reviewExecutionScoped(r *Run, snapshot *RuleSnapshot, full bool, selected [
 	if passes == 0 {
 		passes = 1
 	}
-	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ReviewShards: passConfig.ReviewShards, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {

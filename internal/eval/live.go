@@ -21,21 +21,22 @@ import (
 )
 
 type runOptions struct {
-	cleanup    func(string) error
-	Split      string
-	JudgeModel string
-	Corpus     string
-	Out        string
-	Model      string
-	Pi         string
-	Backend    string
-	Agent      string
-	BaseURL    string
-	Label      string
-	Cases      []string
-	Parallel   int
-	Passes     int
-	Settle     time.Duration
+	cleanup      func(string) error
+	Split        string
+	JudgeModel   string
+	Corpus       string
+	Out          string
+	Model        string
+	Pi           string
+	Backend      string
+	Agent        string
+	BaseURL      string
+	Label        string
+	Cases        []string
+	Parallel     int
+	Passes       int
+	ReviewShards bool
+	Settle       time.Duration
 }
 
 type RunConfig struct {
@@ -57,6 +58,7 @@ type RunConfig struct {
 	Cases             []string  `json:"cases"`
 	Parallel          int       `json:"parallel"`
 	ReviewPasses      int       `json:"review_passes"`
+	ReviewShards      bool      `json:"review_shards,omitempty"`
 	MaxSpan           int       `json:"max_span"`
 	BarHighRecall     float64   `json:"bar_high_recall"`
 }
@@ -394,6 +396,9 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 	if o.Passes > 0 {
 		backends["review_passes"] = o.Passes
 	}
+	if o.ReviewShards {
+		backends["review_shards"] = true
+	}
 	if o.Backend == "claude" {
 		executable = o.Agent
 	}
@@ -630,7 +635,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, ReviewPasses: o.Passes, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, ReviewPasses: o.Passes, ReviewShards: o.ReviewShards, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	secrets := secretValues()
 	jobs := make(chan int)

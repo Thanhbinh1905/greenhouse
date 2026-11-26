@@ -47,7 +47,7 @@ Both files use the same version-2 schema, including `"budget_unit":"rounds"`. A 
 | --- | --- |
 | intent | Loads the prepared intent, the exact target and the command plan. No process runs. |
 | sync | Runs `git merge-base --is-ancestor` and, when needed, `git merge --no-ff` of the target through the command runner. It never rebases. |
-| review | An independent reviewer reviews the exact candidate. A change of three or more paths can be split into [feature shards](embedding.md#feature-shards), each reviewed on its own, followed by a boundary pass. The full contract also returns a documentation assessment. |
+| review | An independent reviewer reviews the exact candidate. When `review_shards` is enabled, a change of three or more paths can be split into [feature shards](embedding.md#feature-shards), each reviewed on its own, followed by a boundary pass. The full contract also returns a documentation assessment. |
 | test, docs, lint | The configured commands run directly in the candidate, never through an agent. |
 | push | The controller probes the configured remote ref, then pushes the exact candidate without force. |
 | PR | The GitHub forge adapter finds an open PR for the configured branch, or creates one. |

@@ -552,6 +552,40 @@ func TestReviewPassConfiguration(t *testing.T) {
 	}
 }
 
+func TestReviewShardConfiguration(t *testing.T) {
+	_, _, home := fixture(t)
+	t.Setenv("GREENHOUSE_HOME", home)
+	if err := os.MkdirAll(home, 0700); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name  string
+		value any
+		want  bool
+		valid bool
+	}{
+		{name: "default", value: nil, want: false, valid: true},
+		{name: "enabled", value: true, want: true, valid: true},
+		{name: "disabled", value: false, want: false, valid: true},
+		{name: "invalid type", value: "true", valid: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			config := map[string]any{}
+			if test.value != nil {
+				config["review_shards"] = test.value
+			}
+			writePrivateJSON(t, filepath.Join(home, "backends.json"), config)
+			got, err := trustedBackends()
+			if (err == nil) != test.valid {
+				t.Fatalf("trustedBackends() error = %v, valid %t", err, test.valid)
+			}
+			if err == nil && got.ReviewShards != test.want {
+				t.Fatalf("ReviewShards = %t, want %t", got.ReviewShards, test.want)
+			}
+		})
+	}
+}
+
 func TestReviewBudgetConfiguration(t *testing.T) {
 	_, _, home := fixture(t)
 	t.Setenv("GREENHOUSE_HOME", home)

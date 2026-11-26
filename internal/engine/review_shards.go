@@ -90,7 +90,7 @@ type shardSource struct {
 
 func newShardSource(r *Run) *shardSource {
 	x := r.Review
-	if x == nil || len(x.Paths) < minShardedPaths || !slices.Equal(x.Paths, x.AllPaths) {
+	if x == nil || !x.ReviewShards || len(x.Paths) < minShardedPaths || !slices.Equal(x.Paths, x.AllPaths) {
 		return nil
 	}
 	b, err := json.Marshal(r)

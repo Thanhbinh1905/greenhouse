@@ -43,7 +43,9 @@ Every finding in `findings` that went through a pass carries `confirmation` with
 
 ## Feature shards
 
-A review of three or more changed paths starts with a shard planner. The planner is one call to the configured reviewer backend and model, with low effort and no tools. It receives the run intent, the changed paths and their added and removed line counts, and returns named shards, each with a one-line feature summary and its paths. Hosts and users supply no input for this step.
+Feature sharding is disabled by default. Set `"review_shards": true` in the private per-user `backends.json` to enable it. Without that setting, reviews make no planner call and store no shard state.
+
+A sharded review of three or more changed paths starts with a shard planner. The planner is one call to the configured reviewer backend and model, with low effort and no tools. It receives the run intent, the changed paths and their added and removed line counts, and returns named shards, each with a one-line feature summary and its paths. Hosts and users supply no input for this step.
 
 Greenhouse validates the plan: every changed path is in exactly one shard, no shard is empty or unnamed, and there are at most 6 shards. An invalid plan, a planner failure or a one-shard plan runs the review unsplit, exactly as a review of one or two paths does.
 
@@ -63,6 +65,8 @@ With a valid plan of two or more shards:
 On rereview, Greenhouse compares the new head with the prior reviewed head. Shards whose paths did not change keep their prior results; changed shards and the boundary pass rerun. New paths are assigned by the planner, with a separate shard as fallback. Reused findings are carried forward with the new reviewed head.
 
 The planner's usage counts in `run.review.usage`. `host_result.shards` lists each shard and the boundary pass with `name`, `summary`, `paths`, `boundary`, `status` and `verdict`. The field is omitted for an unsplit review. A host keeps reading the overall `status`, `verdict` and `findings`.
+
+In the 33-case benchmark, sharded review detected 5/54 expected claims versus 6/54 without sharding. It blocked 8 clean cases per pass on average versus 5.5, and median full-run time rose from 32.7 to 62.2 minutes. Keep sharding disabled unless you accept this trade-off; see [issue 111](https://github.com/Thanhbinh1905/greenhouse/issues/111).
 
 ## Host identity
 
@@ -205,7 +209,7 @@ A backend can still overflow its context while it explores. When pi exits non-ze
 Greenhouse enforces a wall-time budget for each reviewer attempt, including its finalization turn. The default is `3m`. Set `review_budget` in the private per-user `backends.json` to a positive Go duration at most `1h`:
 
 ```json
-{"version": 2, "review_budget": "3m", "review_passes": 1}
+{"version": 2, "review_budget": "3m", "review_passes": 1, "review_shards": false}
 ```
 
 Set `review_passes` in the same private `backends.json` to run 1-3 independent first passes concurrently; the default is 1, which preserves the existing single-pass behavior. Each pass uses the same input and its own review budget. Greenhouse unions path coverage and findings, collapsing findings in the same file whose line ranges overlap, and sends the merged blocking findings through the existing confirmation step. More passes increase reviewer cost and may increase provider load and latency; parallel execution limits wall-time growth when the backend allows concurrent calls.
