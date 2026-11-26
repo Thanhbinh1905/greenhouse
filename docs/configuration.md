@@ -8,7 +8,7 @@ A review needs no configuration file, copied key or executable path. Selected re
 | --- | --- | --- |
 | `fixer.json` | `GREENHOUSE_HOME`, mode 0600 | Fixer identity and trusted checks; see [repair](repair.md#configure-the-fixer). |
 | `pipeline.json` | `GREENHOUSE_HOME`, mode 0600 | The full pipeline command plan; see [full pipeline](pipeline.md#command-plan). |
-| `backends.json` | `GREENHOUSE_HOME`, mode 0600 | Backend `fallback` choices, extra `writable` directories, `review_budget` and the `auto_resume` retry policy; see [agents](agents.md). |
+| `backends.json` | `GREENHOUSE_HOME`, mode 0600 | Backend `fallback` choices, extra `writable` directories, `review_budget`, `review_passes`, `review_shards` and the `auto_resume` retry policy; see [agents](agents.md). |
 | `.greenhouse.json` | repository | Repository override of settings. |
 | `.greenhouse-pipeline.json` | repository | Repository command plan. |
 

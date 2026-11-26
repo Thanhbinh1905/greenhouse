@@ -152,13 +152,14 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 		if strings.HasPrefix(check, "failed") {
 			done = reviewOutcome{Status: "inconclusive", Log: done.Log + "; snapshot check after restart " + check, Answer: done.Answer}
 		}
+		done.InputDigests = map[string]string{x.ID: x.InputDigest}
 		recordReviewEvidence(x, check, nil)
 		r.Status = "running"
 		if r.Pipeline == nil {
 			finishReview(r, done)
 		} else {
 			r.Pipeline.Active = &Step{ID: x.ID, Stage: rec.Stage, Kind: "review"}
-			if completeStep(r, stepOutcome{Run: r.ID, Step: x.ID, Finalization: done.Finalization, Status: done.Status, Log: done.Log, Result: done.Result, Failure: done.Failure, Answer: done.Answer}) != nil {
+			if completeStep(r, stepOutcome{Run: r.ID, Step: x.ID, Finalization: done.Finalization, InputDigests: done.InputDigests, Status: done.Status, Log: done.Log, Result: done.Result, Failure: done.Failure, Answer: done.Answer}) != nil {
 				return false
 			}
 		}

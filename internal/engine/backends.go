@@ -372,6 +372,7 @@ type RetryPolicy struct {
 type BackendsConfig struct {
 	ReviewBudget string                     `json:"review_budget,omitempty"`
 	ReviewPasses int                        `json:"review_passes,omitempty"`
+	ReviewShards bool                       `json:"review_shards,omitempty"`
 	Claude       *AgentCLI                  `json:"claude,omitempty"`
 	Codex        *AgentCLI                  `json:"codex,omitempty"`
 	Fallback     map[string][]BackendChoice `json:"fallback,omitempty"`

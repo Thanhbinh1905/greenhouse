@@ -20,6 +20,48 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+const fakeShardedPi = `#!/usr/bin/python3
+import json, sys, time
+if sys.argv[1:] == ["--version"]:
+    print("0.0.0-fake")
+    sys.exit(0)
+if "--list-models" in sys.argv:
+    print("provider model context")
+    print("fake m1 128K")
+    sys.exit(0)
+data = sys.stdin.read()
+if "\n\nDiff:\n" in data:
+    b = json.loads(data.split("\n\nDiff:\n", 1)[0])
+    answer = {"head": b["Head"], "verdict": "clean", "coverage": b["Paths"], "findings": []}
+else:
+    b = json.loads(data)
+    answer = {"shards": [{"name": x["Path"], "summary": "Review " + x["Path"], "paths": [x["Path"]]} for x in b["Paths"]]}
+time.sleep(0.08)
+usage = {"input": 10, "output": 2, "cacheRead": 0, "cacheWrite": 0, "reasoning": 0, "cost": {"total": 0.01}}
+print(json.dumps({"type": "message_end", "message": {"role": "assistant", "provider": "fake", "model": "m1", "stopReason": "stop", "usage": usage, "content": [{"type": "text", "text": json.dumps(answer)}]}}))
+print(json.dumps({"type": "agent_settled", "aborted": False}))
+`
+
+const fakeFinalizationPi = `#!/usr/bin/python3
+import json, sys
+if sys.argv[1:] == ["--version"]:
+    print("0.0.0-fake")
+    sys.exit(0)
+if "--list-models" in sys.argv:
+    print("provider model context")
+    print("fake m1 128K")
+    sys.exit(0)
+data = sys.stdin.read()
+if "--no-tools" not in sys.argv:
+    answer = "not a verdict"
+else:
+    b = json.loads(data.split("\n\nDiff:\n", 1)[0])
+    answer = json.dumps({"head": b["Head"], "verdict": "clean", "coverage": b["Paths"], "findings": []})
+usage = {"input": 10, "output": 2, "cacheRead": 0, "cacheWrite": 0, "reasoning": 0, "cost": {"total": 0.01}}
+print(json.dumps({"type": "message_end", "message": {"role": "assistant", "provider": "fake", "model": "m1", "stopReason": "stop", "usage": usage, "content": [{"type": "text", "text": answer}]}}))
+print(json.dumps({"type": "agent_settled", "aborted": False}))
+`
+
 const fakePi = `#!/usr/bin/python3
 import json, os, sys
 if sys.argv[1:] == ["--version"]:
@@ -36,7 +78,7 @@ if "--no-tools" in sys.argv:
     v = {"expected": b["expected"][0]["id"], "verdict": "detects", "rationale": 'The finding says "SQL injection" at the query.'}
     print(json.dumps({"type": "message_end", "message": {"role": "assistant", "provider": "fake", "model": "judge", "stopReason": "stop", "usage": {"cost": {"total": 0.01}}, "content": [{"type": "text", "text": json.dumps(v)}]}}))
     sys.exit(0)
-sys.stderr.write(json.dumps({"shim": "GREENHOUSE_EVAL_SHIM" in os.environ}) + "\n")
+sys.stderr.write(json.dumps({"shim": "GREENHOUSE_EVAL_SHIM" in os.environ, "execution_id": "GREENHOUSE_EVAL_EXECUTION_ID" in os.environ}) + "\n")
 findings = []
 if "orders/orders.go" in b["Paths"]:
     findings.append({"id": "x", "priority": "P0", "origin": "correctness", "file": "orders/orders.go", "start": 19, "end": 19,
@@ -58,7 +100,7 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 	}
 	t.Setenv("EVAL_TEST_API_KEY", "sk-test-0123456789")
 	out := filepath.Join(dir, "out")
-	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 1, Settle: time.Minute})
+	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, Label: "fake", JudgeModel: "fake/judge", Cases: []string{"bug-sql-injection", "clean-extract-helper"}, Parallel: 1, ReviewShards: true, Settle: time.Minute})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,14 +108,18 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		t.Fatalf("cases = %+v", r.Cases)
 	}
 	bug, clean := r.Cases[0], r.Cases[1]
-	if bug.Status != "outstanding-findings" || bug.Score.Detected != 1 || bug.Score.PriorityCorrect != 1 || !bug.InputVerified || bug.ReportedModel != "m1" || bug.ThinkingLevel != "medium" {
+	if bug.Status != "outstanding-findings" || bug.Score.Detected != 1 || bug.Score.PriorityCorrect != 1 || !bug.InputVerified || bug.ReportedModel != "m1" || bug.ThinkingLevel != "medium" || bug.ShardCount != 1 {
 		t.Fatalf("bug record = %+v", bug)
 	}
-	if clean.Status != "clean-review" || clean.Score.FalsePositives != 0 || !clean.InputVerified {
+	if clean.Status != "clean-review" || clean.Score.FalsePositives != 0 || !clean.InputVerified || clean.ShardCount != 1 {
 		t.Fatalf("clean record = %+v", clean)
 	}
-	if r.CostUSD != 0.75 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" {
+	if r.CostUSD != 0.75 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" || !r.Config.ReviewShards {
 		t.Fatalf("report = %+v", r)
+	}
+	reportMarkdown, err := os.ReadFile(filepath.Join(out, "report.md"))
+	if err != nil || !strings.Contains(string(reportMarkdown), "| Case | Status | Shards |") {
+		t.Fatalf("report does not include per-case shard counts: %s (%v)", reportMarkdown, err)
 	}
 	for _, name := range []string{"report.json", "report.md", "adjudications.json", "cases/bug-sql-injection/input.json", "cases/bug-sql-injection/argv.json", "cases/bug-sql-injection/events.jsonl"} {
 		b, err := os.ReadFile(filepath.Join(out, name))
@@ -105,11 +151,121 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		t.Fatalf("argv = %s", b)
 	}
 	var env struct {
-		Shim bool `json:"shim"`
+		Shim        bool `json:"shim"`
+		ExecutionID bool `json:"execution_id"`
 	}
 	b, _ = os.ReadFile(filepath.Join(out, "cases/bug-sql-injection/stderr.log"))
-	if json.Unmarshal([]byte(strings.SplitN(string(b), "\n", 2)[0]), &env) != nil || env.Shim {
+	if json.Unmarshal([]byte(strings.SplitN(string(b), "\n", 2)[0]), &env) != nil || env.Shim || env.ExecutionID {
 		t.Fatalf("pi environment = %s", b)
+	}
+}
+
+func TestRunLiveShardedReviewKeepsExecutionCapturesIndependent(t *testing.T) {
+	dir := t.TempDir()
+	corpus := filepath.Join(dir, "corpus")
+	if err := os.MkdirAll(corpus, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeManifest(t, corpus, `{"version":1,"revision":1,"cases":["sharded-capture"]}`)
+	spec := `{"version":1,"id":"sharded-capture","category":"clean","description":"Three independent file changes.","intent":"Review the three-file feature.","split":"holdout","stratum":"clean-real-change","source":{"kind":"synthetic","derivation":"Local capture isolation regression test."},"rules":[],"expected":[],"noise":[]}`
+	files := map[string]string{}
+	for _, name := range []string{"pkg/a.go", "pkg/b.go", "pkg/c.go"} {
+		files["base/"+name] = "package pkg\n\nfunc value() int { return 1 }\n"
+		files["head/"+name] = "package pkg\n\nfunc value() int { return 2 }\n"
+	}
+	writeCase(t, corpus, "sharded-capture", spec, files)
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte(fakeShardedPi), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out")
+	r, err := runLive(runOptions{Corpus: corpus, Out: out, Model: "fake/m1", Pi: pi, Label: "sharded-capture", Cases: []string{"sharded-capture"}, Parallel: 1, Passes: 2, ReviewShards: true, Settle: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := r.Cases[0]
+	if rec.Status != "clean-review" || rec.ShardCount != 3 || !rec.InputVerified || rec.LatencyMillis <= 0 {
+		t.Fatalf("sharded record = %+v", rec)
+	}
+	if len(rec.ModelAnswers) != 9 || rec.ModelAnswer != "" {
+		t.Fatalf("sharded answers were not kept separate: %+v", rec.ModelAnswers)
+	}
+	if rec.Usage.Input != 90 || rec.Usage.Output != 18 || rec.Usage.CostUSD != 0.09 {
+		t.Fatalf("usage did not include separate planner and reviewer events: %+v", rec.Usage)
+	}
+	captures, err := os.ReadDir(filepath.Join(out, "cases", rec.ID, "reviews"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(captures) != 9 {
+		t.Fatalf("got %d execution capture directories, want planner + 2 passes for 3 shards and boundary", len(captures))
+	}
+	for _, capture := range captures {
+		captureDir := filepath.Join(out, "cases", rec.ID, "reviews", capture.Name())
+		for _, name := range []string{"input.json", "argv.json", "events.jsonl", "timing.json"} {
+			if _, err := os.Stat(filepath.Join(captureDir, name)); err != nil {
+				t.Fatalf("capture %s is missing %s: %v", capture.Name(), name, err)
+			}
+		}
+		events, err := os.ReadFile(filepath.Join(captureDir, "events.jsonl"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := parseEvents(events).Usage; got.Input != 10 || got.Output != 2 || got.CostUSD != 0.01 {
+			t.Fatalf("capture %s contains mixed or incomplete events: %+v", capture.Name(), got)
+		}
+	}
+}
+
+func TestReadReportShowsUnknownLegacyShardCount(t *testing.T) {
+	dir := t.TempDir()
+	legacy := `{"config":{},"summary":{},"cases":[{"id":"legacy","status":"clean-review","score":{}}]}`
+	if err := os.WriteFile(filepath.Join(dir, "report.json"), []byte(legacy), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r, err := readReport(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(r.Cases) != 1 || r.Cases[0].ShardCount != 0 {
+		t.Fatalf("legacy report shard count = %+v", r.Cases)
+	}
+	if err := writeReport(dir, r); err != nil {
+		t.Fatal(err)
+	}
+	b, err := os.ReadFile(filepath.Join(dir, "report.md"))
+	if err != nil || !strings.Contains(string(b), "| legacy | clean-review | unknown |") {
+		t.Fatalf("rescored legacy report must show an unknown shard count, not zero: %s (%v)", b, err)
+	}
+}
+
+func TestRunLiveFinalizationPreservesOriginalInputCapture(t *testing.T) {
+	dir := t.TempDir()
+	pi := filepath.Join(dir, "pi")
+	if err := os.WriteFile(pi, []byte(fakeFinalizationPi), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	out := filepath.Join(dir, "out")
+	r, err := runLive(runOptions{Corpus: filepath.Join("testdata", "corpus"), Out: out, Model: "fake/m1", Pi: pi, Label: "finalization-capture", Cases: []string{"bug-sql-injection"}, Parallel: 1, Settle: time.Minute})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := r.Cases[0]
+	if !rec.InputVerified || rec.Status != "clean-review" {
+		t.Fatalf("finalized review record = %+v", rec)
+	}
+	caseDir := filepath.Join(out, "cases", rec.ID)
+	input, err := os.ReadFile(filepath.Join(caseDir, "input.json"))
+	if err != nil || !strings.Contains(string(input), "Diff:") || strings.Contains(string(input), "Controller") {
+		t.Fatalf("capture does not preserve the original reviewer input: %s (%v)", input, err)
+	}
+	argv, err := os.ReadFile(filepath.Join(caseDir, "argv.json"))
+	if err != nil || !strings.Contains(string(argv), "read,grep,find,ls") || strings.Contains(string(argv), "--no-tools") {
+		t.Fatalf("capture does not preserve the original reviewer argv: %s (%v)", argv, err)
+	}
+	events, err := os.ReadFile(filepath.Join(caseDir, "events.jsonl"))
+	if err != nil || strings.Count(string(events), `"type": "message_end"`) != 2 {
+		t.Fatalf("expected separate exploration and finalization events: %s (%v)", events, err)
 	}
 }
 
@@ -208,6 +364,24 @@ func stringMustRead(t *testing.T, path string) string {
 	return string(b)
 }
 
+func TestReviewShardCount(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		review map[string]any
+		want   int
+	}{
+		{name: "single shard fallback", review: map[string]any{}, want: 1},
+		{name: "planned shards", review: map[string]any{"shards": map[string]any{"shards": []any{map[string]any{}, map[string]any{}, map[string]any{}}}}, want: 3},
+		{name: "empty plan fallback", review: map[string]any{"shards": map[string]any{"shards": []any{}}}, want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reviewShardCount(test.review); got != test.want {
+				t.Fatalf("reviewShardCount() = %d, want %d", got, test.want)
+			}
+		})
+	}
+}
+
 func TestCompactEventsDropsStreamingDeltas(t *testing.T) {
 	in := "{\"type\":\"message_start\"}\n{\"type\":\"message_update\",\"x\":1}\n{\"type\":\"message_end\"}\nnot json\n"
 	if got := string(compactEvents([]byte(in))); got != "{\"type\":\"message_start\"}\n{\"type\":\"message_end\"}\nnot json\n" {
@@ -222,7 +396,7 @@ func TestShimRetainsBothReviewTurns(t *testing.T) {
 		t.Fatal(err)
 	}
 	cfg := shimConfig{Pi: pi, Capture: dir}
-	for i, input := range []string{"initial input", "finalization input"} {
+	for i, input := range []string{"initial input", "{\"Controller\":\"Return your verdict now.\"}\n\nDiff:\nchange"} {
 		var args []string
 		if i == 1 {
 			args = []string{"--no-tools"}
@@ -252,7 +426,7 @@ func TestShimCountsTimeBeforeInterruptedTurn(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "timing.json"), data, 0600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := shim(shimConfig{Pi: pi, Capture: dir}, []string{"--no-tools"}, strings.NewReader("final"), io.Discard, io.Discard); err != nil {
+	if _, err := shim(shimConfig{Pi: pi, Capture: dir}, []string{"--no-tools"}, strings.NewReader("{\"Controller\":\"Return your verdict now.\"}\n\nDiff:\nchange"), io.Discard, io.Discard); err != nil {
 		t.Fatal(err)
 	}
 	data, _ = os.ReadFile(filepath.Join(dir, "timing.json"))

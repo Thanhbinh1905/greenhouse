@@ -110,6 +110,7 @@ type Execution struct {
 	Args          []string                 `json:"args"`
 	Input         []byte                   `json:"input"`
 	InputDigest   string                   `json:"input_digest"`
+	InputDigests  map[string]string        `json:"input_digests,omitempty"`
 	Rules         InputIdentity            `json:"rules"`
 	Diff          string                   `json:"diff"`
 	Paths         []string                 `json:"paths"`
@@ -140,6 +141,7 @@ type Execution struct {
 	FindingIdentity string `json:"finding_identity,omitempty"`
 	ReviewBudget    string `json:"review_budget,omitempty"`
 	ReviewPasses    int    `json:"review_passes,omitempty"`
+	ReviewShards    bool   `json:"review_shards,omitempty"`
 	ToolCallBudget  int    `json:"tool_call_budget,omitempty"`
 	Finalization    bool   `json:"finalization,omitempty"`
 
@@ -531,7 +533,7 @@ func reviewExecutionScoped(r *Run, snapshot *RuleSnapshot, full bool, selected [
 	if passes == 0 {
 		passes = 1
 	}
-	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), StartedAt: time.Now(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ReviewShards: passConfig.ReviewShards, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), StartedAt: time.Now(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -744,8 +746,29 @@ func reviewerEnv() []string {
 	return env
 }
 
+func reviewerExecutionEnv(env []string, id string) []string {
+	const shimKey = "GREENHOUSE_EVAL_SHIM="
+	const executionKey = "GREENHOUSE_EVAL_EXECUTION_ID="
+	shim := false
+	filtered := make([]string, 0, len(env)+1)
+	for _, item := range env {
+		if strings.HasPrefix(item, shimKey) {
+			shim = true
+		}
+		if strings.HasPrefix(item, executionKey) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if !shim {
+		return env
+	}
+	return append(filtered, executionKey+id)
+}
+
 type reviewOutcome struct {
 	Finalization bool
+	InputDigests map[string]string
 	Status       string
 	Result       *Verdict
 	Log          string
@@ -1253,8 +1276,22 @@ func diffPath(path string) string {
 	return path
 }
 
+func mergeInputDigests(into, from map[string]string) map[string]string {
+	if len(from) == 0 {
+		return into
+	}
+	if into == nil {
+		into = make(map[string]string, len(from))
+	}
+	for id, digest := range from {
+		into[id] = digest
+	}
+	return into
+}
+
 func retainReviewMetadata(x *Execution, done reviewOutcome) {
 	x.Finalization = done.Finalization
+	x.InputDigests = done.InputDigests
 	x.Reason, x.Diagnostic, x.ReportedModel, x.Usage = done.Answer.Reason, done.Answer.Diagnostic, done.Answer.Model, done.Answer.Usage
 	if x.Usage.CostSource == "" {
 		x.Usage.CostSource = "unknown"

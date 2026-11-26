@@ -18,7 +18,7 @@ const usage = `usage:
   go run ./cmd/eval check [-corpus dir]
   go run ./cmd/eval judge -model provider/id [-pi path] [-parallel n] [-corpus dir] [-split tune|holdout|all] run-dir...
   go run ./cmd/eval rescore [-corpus dir] [-split tune|holdout|all] run-dir...
-  go run ./cmd/eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-split tune|holdout|all] [-parallel n]
+  go run ./cmd/eval run -model provider/id -out dir [-label text] [-pi path] [-judge-model provider/id] [-cases a,b] [-split tune|holdout|all] [-parallel n] [-review-shards]
   go run ./cmd/eval fix-check [-corpus dir]
   go run ./cmd/eval fix-run -out dir [-model provider/id] [-label text] [-pi path] [-price in,out,cache-read,cache-write] [-cases a,b] [-parallel n]`
 
@@ -239,6 +239,7 @@ func dispatch(sub string, args []string) error {
 		cases := fs.String("cases", "", "comma-separated case IDs (default: all)")
 		fs.IntVar(&o.Parallel, "parallel", 1, "cases reviewed concurrently")
 		fs.IntVar(&o.Passes, "review-passes", 1, "independent first passes per review")
+		fs.BoolVar(&o.ReviewShards, "review-shards", false, "enable feature-sharded review")
 		fs.StringVar(&o.JudgeModel, "judge-model", "", "judge model for adjudication records (default: -model)")
 		if err := fs.Parse(args); err != nil {
 			return err

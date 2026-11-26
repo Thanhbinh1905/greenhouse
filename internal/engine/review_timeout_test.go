@@ -115,7 +115,7 @@ func TestAdoptFinalizedTimeoutValidatesInputAndUsage(t *testing.T) {
 		if adopted := adoptRecorded(r, observed); adopted != valid {
 			t.Fatalf("adopted=%t for valid input=%t", adopted, valid)
 		}
-		if valid && (!x.Finalization || x.ReportedModel != "reported" || x.Reason != "timeout" || x.Usage.Tokens != 240 || len(r.Attempts) != 1 || r.Attempts[0].Usage.Tokens != 240 || len(x.UsageBreakdown) != 2 || x.UsageBreakdown[0].Stage != "review" || x.UsageBreakdown[1].Stage != "finalization" || x.UsageBreakdown[0].Usage.Tokens != 120 || x.UsageBreakdown[1].Usage.Tokens != 120) {
+		if valid && (!x.Finalization || x.ReportedModel != "reported" || x.Reason != "timeout" || x.Usage.Tokens != 240 || x.InputDigests["review"] != x.InputDigest || len(r.Attempts) != 1 || r.Attempts[0].Usage.Tokens != 240 || len(x.UsageBreakdown) != 2 || x.UsageBreakdown[0].Stage != "review" || x.UsageBreakdown[1].Stage != "finalization" || x.UsageBreakdown[0].Usage.Tokens != 120 || x.UsageBreakdown[1].Usage.Tokens != 120) {
 			t.Fatalf("finalized timeout lost evidence: finalization=%t reason=%s usage=%+v attempts=%+v", x.Finalization, x.Reason, x.Usage, r.Attempts)
 		}
 	}

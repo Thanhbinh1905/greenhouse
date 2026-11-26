@@ -86,6 +86,10 @@ func shardStatuses(t *testing.T, shards map[string]any) map[string]string {
 }
 
 func preparedShardFixture(t *testing.T, mode string) (string, string, string, map[string]any) {
+	return preparedShardFixtureWithBackends(t, mode, map[string]any{"review_shards": true})
+}
+
+func preparedShardFixtureWithBackends(t *testing.T, mode string, backends map[string]any) (string, string, string, map[string]any) {
 	t.Helper()
 	bin, repo, home := fixture(t)
 	target := strings.TrimSpace(git(t, repo, "rev-parse", "HEAD"))
@@ -101,6 +105,9 @@ func preparedShardFixture(t *testing.T, mode string) (string, string, string, ma
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "three features")
 	v := axi(t, bin, repo, home, `{"version":1,"op":"attach"}`)
 	installFake(t, home, "")
+	if len(backends) > 0 {
+		writePrivateJSON(t, filepath.Join(home, "backends.json"), backends)
+	}
 	root := filepath.Dir(home)
 	if err := os.WriteFile(filepath.Join(root, "fake-pi"), []byte(shardFakeReviewer), 0700); err != nil {
 		t.Fatal(err)
@@ -169,6 +176,26 @@ func TestShardProgressPersistsWhileSecondShardIsRunning(t *testing.T) {
 	want := map[string]string{"Alpha": "clean-review", "Beta": "clean-review", "Gamma": "clean-review", "boundary": "clean-review"}
 	if !maps.Equal(finalStatuses, want) {
 		t.Fatalf("final shard states = %v, want %v", finalStatuses, want)
+	}
+}
+
+func TestShardingIsDisabledByDefaultThroughDaemon(t *testing.T) {
+	bin, repo, home, v := preparedShardFixtureWithBackends(t, "clean", map[string]any{})
+	if got := mutate(t, bin, repo, home, v, "review", "default-review", nil); got["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", got)
+	}
+	run := runOf(t, waitReview(t, bin, repo, home))
+	calls := strings.Split(strings.TrimSpace(string(mustRead(t, filepath.Join(filepath.Dir(home), "shard-calls")))), "\n")
+	wantCalls := []string{"whole alpha/a1.txt,alpha/a2.txt,beta/b1.txt,beta/b2.txt,gamma/g1.txt"}
+	if !slices.Equal(calls, wantCalls) {
+		t.Fatalf("reviewer calls = %q, want a single unsplit review without a planner call", calls)
+	}
+	if run["status"] != "clean-review" {
+		t.Fatalf("status = %v, want clean-review", run["status"])
+	}
+	review := run["review"].(map[string]any)
+	if _, ok := review["shards"]; ok {
+		t.Fatalf("default review recorded shard state: %v", review["shards"])
 	}
 }
 
@@ -255,7 +282,7 @@ func TestShardedReviewThroughDaemon(t *testing.T) {
 
 func TestShardedReviewPassNamesKeepStageAndShardIdentity(t *testing.T) {
 	bin, repo, home, prepared := preparedShardFixture(t, "clean")
-	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": 2})
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": 2, "review_shards": true})
 	if started := mutate(t, bin, repo, home, prepared, "review", "review-shard-passes", nil); started["outcome"] != "ok" {
 		t.Fatalf("review refused: %v", started)
 	}
@@ -293,6 +320,7 @@ func TestShardedHostRereviewReusesUnchangedShardsThroughDaemon(t *testing.T) {
 	git(t, repo, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "three features")
 	v := axi(t, bin, repo, home, `{"version":2,"op":"attach","host":{"name":"fake-host","id":"task-7","metadata":{"worker":"author-1"}}}`)
 	installFake(t, home, "")
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_shards": true})
 	root := filepath.Dir(home)
 	if err := os.WriteFile(filepath.Join(root, "fake-pi"), []byte(shardFakeReviewer), 0700); err != nil {
 		t.Fatal(err)

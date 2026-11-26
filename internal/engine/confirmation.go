@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type Confirmation struct {
@@ -77,6 +79,7 @@ func confirmBlockingFindings(ctx context.Context, x *Execution, dir, tree string
 		pass := *x
 		pass.ID, pass.Full, pass.Responses, pass.Args, pass.Uncovered = fmt.Sprintf("%s-confirm-%d", x.ID, i+1), false, nil, args, slices.Clone(x.Uncovered)
 		confirmation, priority, outcome := confirmFinding(ctx, &pass, filepath.Join(dir, fmt.Sprintf("confirm-%d", i+1)), tree, f)
+		done.InputDigests = mergeInputDigests(done.InputDigests, outcome.InputDigests)
 		done.Answer.Usage = addUsage(done.Answer.Usage, outcome.Answer.Usage)
 		for j := range outcome.Answer.UsageBreakdown {
 			if outcome.Answer.UsageBreakdown[j].Stage == "review" {
@@ -119,7 +122,7 @@ func confirmFinding(ctx context.Context, x *Execution, dir, tree string, f Findi
 		c.Status, c.Evidence = "unconfirmed", "confirmation pass could not start: "+err.Error()
 		return c, f.Priority, reviewOutcome{}
 	}
-	x.Input = input
+	x.Input, x.InputDigest = input, runner.BytesDigest(input)
 	outcome, _ := runBoundedReview(ctx, x, dir, tree)
 	settled := outcome.Result != nil && (outcome.Status == "clean-review" || outcome.Status == "outstanding-findings" || outcome.Status == "partial-review")
 	if !settled {

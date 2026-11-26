@@ -19,6 +19,30 @@ import (
 // daemon passes it through because Greenhouse only strips PI_, GIT_, POSSE_
 // and HERDR_ variables from the reviewer environment.
 const shimEnv = "GREENHOUSE_EVAL_SHIM"
+const executionIDEnv = "GREENHOUSE_EVAL_EXECUTION_ID"
+
+func executionCaptureDirectory(root string) (string, error) {
+	if id := os.Getenv(executionIDEnv); id != "" {
+		if filepath.Base(id) != id || id == "." || id == ".." {
+			return "", fmt.Errorf("invalid review execution ID %q", id)
+		}
+		return filepath.Join(root, "reviews", id), nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	const prefix = "greenhouse-review-"
+	parent := filepath.Base(filepath.Dir(cwd))
+	if filepath.Base(cwd) != "tree" || !strings.HasPrefix(parent, prefix) {
+		return root, nil
+	}
+	id := strings.TrimPrefix(parent, prefix)
+	if id == "" {
+		return root, nil
+	}
+	return filepath.Join(root, "reviews", id), nil
+}
 
 type shimConfig struct {
 	Pi      string          `json:"pi"`
@@ -68,30 +92,36 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	if cfg.Review != nil && slices.Contains(args, "read,grep,find,ls") {
 		return seededReview(cfg.Review, args, input, stdout)
 	}
-	finalization := slices.Contains(args, "--no-tools") || slices.Contains(args, "--resume") || slices.Contains(args, "resume")
+	capture, err := executionCaptureDirectory(cfg.Capture)
+	if err != nil {
+		return 2, err
+	}
+	if err := os.MkdirAll(capture, 0o700); err != nil {
+		return 2, err
+	}
+	finalization := finalizationTurn(args, input)
 	argv, _ := json.Marshal(args)
-	confirmation := bytes.Contains(input, []byte("Independently verify"))
-	if !finalization && !confirmation {
-		if err := os.WriteFile(filepath.Join(cfg.Capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
+	if !finalization {
+		if err := os.WriteFile(filepath.Join(capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
 			return 2, err
 		}
-		if err := os.WriteFile(filepath.Join(cfg.Capture, "input.json"), input, 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(capture, "input.json"), input, 0o600); err != nil {
 			return 2, err
 		}
 	}
 	var env []string
 	for _, v := range os.Environ() {
-		if strings.HasPrefix(v, shimEnv+"=") {
+		if strings.HasPrefix(v, shimEnv+"=") || strings.HasPrefix(v, executionIDEnv+"=") {
 			continue
 		}
 		env = append(env, v)
 	}
-	events, err := os.OpenFile(filepath.Join(cfg.Capture, "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	events, err := os.OpenFile(filepath.Join(capture, "events.jsonl"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 2, err
 	}
 	defer func() { _ = events.Close() }() // Event output close is best-effort after collection.
-	diag, err := os.OpenFile(filepath.Join(cfg.Capture, "stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	diag, err := os.OpenFile(filepath.Join(capture, "stderr.log"), os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 	if err != nil {
 		return 2, err
 	}
@@ -103,7 +133,7 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	cmd.Stderr = io.MultiWriter(stderr, diag)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Pdeathsig: syscall.SIGKILL}
 	var prior shimTiming
-	if b, err := os.ReadFile(filepath.Join(cfg.Capture, "timing.json")); err == nil {
+	if b, err := os.ReadFile(filepath.Join(capture, "timing.json")); err == nil {
 		if err := json.Unmarshal(b, &prior); err != nil {
 			return 2, err
 		}
@@ -113,7 +143,7 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		timing.Start = prior.Start
 	}
 	started, _ := json.Marshal(timing)
-	if err := os.WriteFile(filepath.Join(cfg.Capture, "timing.json"), append(started, '\n'), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(capture, "timing.json"), append(started, '\n'), 0600); err != nil {
 		return 2, err
 	}
 	err = cmd.Run()
@@ -124,7 +154,7 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		timing.ExitCode = cmd.ProcessState.ExitCode()
 	}
 	t, _ := json.Marshal(timing)
-	if err := os.WriteFile(filepath.Join(cfg.Capture, "timing.json"), append(t, '\n'), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(capture, "timing.json"), append(t, '\n'), 0o600); err != nil {
 		return 2, err
 	}
 	var exit *exec.ExitError
@@ -135,6 +165,20 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		return 2, err
 	}
 	return 0, nil
+}
+
+func finalizationTurn(args []string, input []byte) bool {
+	if slices.Contains(args, "--resume") || slices.Contains(args, "resume") {
+		return true
+	}
+	if !slices.Contains(args, "--no-tools") {
+		return false
+	}
+	header, _, _ := bytes.Cut(input, []byte("\n\nDiff:\n"))
+	var metadata struct {
+		Controller string `json:"Controller"`
+	}
+	return json.Unmarshal(header, &metadata) == nil && metadata.Controller != ""
 }
 
 func seededReview(seeded []SeededFinding, args []string, input []byte, stdout io.Writer) (int, error) {

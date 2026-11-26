@@ -21,21 +21,22 @@ import (
 )
 
 type runOptions struct {
-	cleanup    func(string) error
-	Split      string
-	JudgeModel string
-	Corpus     string
-	Out        string
-	Model      string
-	Pi         string
-	Backend    string
-	Agent      string
-	BaseURL    string
-	Label      string
-	Cases      []string
-	Parallel   int
-	Passes     int
-	Settle     time.Duration
+	cleanup      func(string) error
+	Split        string
+	JudgeModel   string
+	Corpus       string
+	Out          string
+	Model        string
+	Pi           string
+	Backend      string
+	Agent        string
+	BaseURL      string
+	Label        string
+	Cases        []string
+	Parallel     int
+	Passes       int
+	ReviewShards bool
+	Settle       time.Duration
 }
 
 type RunConfig struct {
@@ -57,6 +58,7 @@ type RunConfig struct {
 	Cases             []string  `json:"cases"`
 	Parallel          int       `json:"parallel"`
 	ReviewPasses      int       `json:"review_passes"`
+	ReviewShards      bool      `json:"review_shards,omitempty"`
 	MaxSpan           int       `json:"max_span"`
 	BarHighRecall     float64   `json:"bar_high_recall"`
 }
@@ -71,24 +73,26 @@ type Usage struct {
 }
 
 type CaseRecord struct {
-	ID               string          `json:"id"`
-	Target           string          `json:"target"`
-	Candidate        string          `json:"candidate"`
-	Status           string          `json:"status"`
-	Log              string          `json:"log"`
-	Args             []string        `json:"args"`
-	InputDigest      string          `json:"input_digest"`
-	InputVerified    bool            `json:"input_verified"`
-	ReportedProvider string          `json:"reported_provider"`
-	ReportedModel    string          `json:"reported_model"`
-	ThinkingLevel    string          `json:"thinking_level"`
-	Usage            Usage           `json:"usage"`
-	LatencyMillis    int64           `json:"latency_ms"`
-	ModelAnswer      string          `json:"model_answer"`
-	ModelFindings    json.RawMessage `json:"model_findings"`
-	Findings         []Finding       `json:"findings"`
-	Error            string          `json:"error,omitempty"`
-	Score            CaseScore       `json:"score"`
+	ID               string            `json:"id"`
+	Target           string            `json:"target"`
+	Candidate        string            `json:"candidate"`
+	Status           string            `json:"status"`
+	Log              string            `json:"log"`
+	Args             []string          `json:"args"`
+	InputDigest      string            `json:"input_digest"`
+	InputVerified    bool              `json:"input_verified"`
+	ReportedProvider string            `json:"reported_provider"`
+	ReportedModel    string            `json:"reported_model"`
+	ThinkingLevel    string            `json:"thinking_level"`
+	Usage            Usage             `json:"usage"`
+	LatencyMillis    int64             `json:"latency_ms"`
+	ShardCount       int               `json:"shard_count,omitempty"`
+	ModelAnswer      string            `json:"model_answer"`
+	ModelAnswers     map[string]string `json:"model_answers,omitempty"`
+	ModelFindings    json.RawMessage   `json:"model_findings"`
+	Findings         []Finding         `json:"findings"`
+	Error            string            `json:"error,omitempty"`
+	Score            CaseScore         `json:"score"`
 }
 
 type Report struct {
@@ -313,6 +317,15 @@ func compactEvents(b []byte) []byte {
 	return out.Bytes()
 }
 
+func reviewShardCount(review map[string]any) int {
+	shardRecord, _ := review["shards"].(map[string]any)
+	shards, _ := shardRecord["shards"].([]any)
+	if len(shards) == 0 {
+		return 1
+	}
+	return len(shards)
+}
+
 func modelFindings(answer string) json.RawMessage {
 	var v struct {
 		Findings json.RawMessage `json:"findings"`
@@ -384,6 +397,9 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 	if o.Passes > 0 {
 		backends["review_passes"] = o.Passes
 	}
+	if o.ReviewShards {
+		backends["review_shards"] = true
+	}
 	if o.Backend == "claude" {
 		executable = o.Agent
 	}
@@ -453,6 +469,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 		}
 		time.Sleep(time.Second)
 	}
+	rec.ShardCount = reviewShardCount(review)
 	var x struct {
 		Status      string   `json:"status"`
 		Log         string   `json:"log"`
@@ -470,22 +487,79 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 		return fail(err)
 	}
 	rec.Status, rec.Log, rec.Args, rec.InputDigest = x.Status, x.Log, x.Args, x.InputDigest
-	delivered, err := os.ReadFile(filepath.Join(capture, "input.json"))
-	rec.InputVerified = err == nil && bytes.Equal(delivered, x.Input)
-	events, _ := os.ReadFile(filepath.Join(capture, "events.jsonl"))
-	p := parseEvents(events)
-	if o.Backend == "claude" {
-		p = parseClaudeEvents(events)
-	}
-	if err := os.WriteFile(filepath.Join(capture, "events.jsonl"), credentialExpiry.ReplaceAll(compactEvents(events), []byte(`"credential_expires_at":"<redacted>"`)), 0o600); err != nil {
+	captures, err := readReviewCaptures(capture)
+	if err != nil {
 		return fail(err)
 	}
-	rec.ReportedProvider, rec.ReportedModel, rec.ThinkingLevel, rec.Usage = p.Provider, p.Model, p.Thinking, p.Usage
-	rec.ModelAnswer = p.Answer
-	rec.ModelFindings = modelFindings(p.Answer)
-	var timing shimTiming
-	if t, err := os.ReadFile(filepath.Join(capture, "timing.json")); err == nil && json.Unmarshal(t, &timing) == nil {
-		rec.LatencyMillis = timing.Millis
+	rec.InputVerified = reviewCapturesVerified(review, captures, o.Passes, x.Input)
+	var firstStart, lastEnd time.Time
+	for _, item := range captures {
+		if !item.HasTiming {
+			continue
+		}
+		if firstStart.IsZero() || item.Timing.Start.Before(firstStart) {
+			firstStart = item.Timing.Start
+		}
+		if lastEnd.IsZero() || item.Timing.End.After(lastEnd) {
+			lastEnd = item.Timing.End
+		}
+	}
+	if !firstStart.IsZero() && lastEnd.After(firstStart) {
+		rec.LatencyMillis = lastEnd.Sub(firstStart).Milliseconds()
+	}
+	answers := make(map[string]string)
+	for i := range captures {
+		item := &captures[i]
+		item.Events = credentialExpiry.ReplaceAll(compactEvents(item.Events), []byte(`"credential_expires_at":"<redacted>"`))
+		if item.HasEvents {
+			if err := os.WriteFile(filepath.Join(item.Dir, "events.jsonl"), item.Events, 0o600); err != nil {
+				return fail(err)
+			}
+		}
+		p := parseEvents(item.Events)
+		if o.Backend == "claude" {
+			p = parseClaudeEvents(item.Events)
+		}
+		if rec.ReportedProvider == "" && p.Provider != "" {
+			rec.ReportedProvider = p.Provider
+		}
+		if rec.ReportedModel == "" && p.Model != "" {
+			rec.ReportedModel = p.Model
+		}
+		if rec.ThinkingLevel == "" && p.Thinking != "" {
+			rec.ThinkingLevel = p.Thinking
+		}
+		rec.Usage.Input += p.Usage.Input
+		rec.Usage.Output += p.Usage.Output
+		rec.Usage.CacheRead += p.Usage.CacheRead
+		rec.Usage.CacheWrite += p.Usage.CacheWrite
+		rec.Usage.Reasoning += p.Usage.Reasoning
+		rec.Usage.CostUSD += p.Usage.CostUSD
+		if p.Answer != "" {
+			answers[item.ID] = p.Answer
+		}
+	}
+	rec.ModelAnswers = answers
+	if len(answers) == 1 {
+		for _, answer := range answers {
+			rec.ModelAnswer = answer
+		}
+	}
+	rec.ModelFindings = modelFindingsFromAnswers(answers)
+	compatibilityID, _ := review["id"].(string)
+	if o.Passes > 1 {
+		compatibilityID += "-pass-1"
+	}
+	for _, item := range captures {
+		if item.ID != compatibilityID {
+			continue
+		}
+		for _, name := range []string{"input.json", "argv.json", "events.jsonl", "stderr.log", "timing.json"} {
+			if err := copyCaptureFile(filepath.Join(item.Dir, name), filepath.Join(capture, name)); err != nil {
+				return fail(err)
+			}
+		}
+		break
 	}
 	rec.Findings = []Finding{}
 	if x.Result != nil {
@@ -533,6 +607,9 @@ func redactRecord(rec *CaseRecord, secrets []string) {
 		rec.Findings[i].Action = redactText(rec.Findings[i].Action, secrets)
 	}
 	rec.ModelAnswer = redactText(rec.ModelAnswer, secrets)
+	for id, answer := range rec.ModelAnswers {
+		rec.ModelAnswers[id] = redactText(answer, secrets)
+	}
 	if len(rec.ModelFindings) > 0 {
 		rec.ModelFindings = json.RawMessage(redactText(string(rec.ModelFindings), secrets))
 	}
@@ -619,7 +696,7 @@ func runLive(o runOptions) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, ReviewPasses: o.Passes, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
+	r := &Report{Config: RunConfig{Split: split, Label: o.Label, Started: time.Now().UTC(), Model: o.Model, Backend: backend, PiVersion: piVersion, BaseURL: o.BaseURL, GreenhouseVersion: version, GoVersion: runtime.Version(), CorpusVersion: c.Version, CorpusRevision: c.Revision, CorpusDigest: c.Digest, ScoredRevision: c.Revision, ScoredDigest: c.Digest, Parallel: o.Parallel, ReviewPasses: o.Passes, ReviewShards: o.ReviewShards, MaxSpan: maxSpan, BarHighRecall: barHighRecall}}
 	records := make([]CaseRecord, len(cases))
 	secrets := secretValues()
 	jobs := make(chan int)
@@ -769,12 +846,16 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Inconclusive reviews | %d/%d |\n", s.Inconclusive, s.Cases)
 	fmt.Fprintf(&md, "| Cost (%s) | $%.4f |\n", pricing, r.CostUSD)
 	fmt.Fprintf(&md, "| Latency total / mean / max | %.1fs / %.1fs / %.1fs |\n\n", float64(r.LatencyMillis.Total)/1000, float64(r.LatencyMillis.Mean)/1000, float64(r.LatencyMillis.Max)/1000)
-	fmt.Fprintf(&md, "| Case | Status | Detected | False positives | Blocking | Priority | Cost | Latency |\n|---|---|---|---|---|---|---|---|\n")
+	fmt.Fprintf(&md, "| Case | Status | Shards | Detected | False positives | Blocking | Priority | Cost | Latency |\n|---|---|---:|---|---|---|---|---|---|\n")
 	recs := append([]CaseRecord(nil), r.Cases...)
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].ID < recs[j].ID })
 	for _, c := range recs {
-		fmt.Fprintf(&md, "| %s | %s | %d/%d | %d | %d | %d/%d | $%.4f | %.1fs |\n", c.ID, c.Status, c.Score.Detected, c.Score.Expected, c.Score.FalsePositives, c.Score.Blocking, c.Score.PriorityCorrect, c.Score.PriorityJudged, c.Usage.CostUSD, float64(c.LatencyMillis)/1000)
+		shards := "unknown"
+		if c.ShardCount > 0 {
+			shards = fmt.Sprint(c.ShardCount)
+		}
+		fmt.Fprintf(&md, "| %s | %s | %s | %d/%d | %d | %d | %d/%d | $%.4f | %.1fs |\n", c.ID, c.Status, shards, c.Score.Detected, c.Score.Expected, c.Score.FalsePositives, c.Score.Blocking, c.Score.PriorityCorrect, c.Score.PriorityJudged, c.Usage.CostUSD, float64(c.LatencyMillis)/1000)
 	}
-	fmt.Fprintf(&md, "\nPer-case `input.json` holds the exact bytes Greenhouse delivered to the reviewer on stdin, `argv.json` the exact arguments, and `events.jsonl` the reviewer's raw JSON event stream through `%s`.\n", r.Config.Backend)
+	fmt.Fprintf(&md, "\nPer-execution `reviews/<execution-id>/input.json` holds the exact bytes Greenhouse delivered to the reviewer on stdin; `argv.json`, `events.jsonl` and `timing.json` are isolated by reviewer execution through `%s`. Unsplit cases also keep compatibility copies at the case root.\n", r.Config.Backend)
 	return os.WriteFile(filepath.Join(dir, "report.md"), []byte(md.String()), 0o644)
 }
