@@ -79,7 +79,9 @@ func confirmBlockingFindings(ctx context.Context, x *Execution, dir, tree string
 		confirmation, priority, outcome := confirmFinding(ctx, &pass, filepath.Join(dir, fmt.Sprintf("confirm-%d", i+1)), tree, f)
 		done.Answer.Usage = addUsage(done.Answer.Usage, outcome.Answer.Usage)
 		for j := range outcome.Answer.UsageBreakdown {
-			outcome.Answer.UsageBreakdown[j].Stage = "confirmation"
+			if outcome.Answer.UsageBreakdown[j].Stage == "review" {
+				outcome.Answer.UsageBreakdown[j].Stage = "confirmation"
+			}
 		}
 		done.Answer.UsageBreakdown = append(done.Answer.UsageBreakdown, outcome.Answer.UsageBreakdown...)
 		done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD

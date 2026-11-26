@@ -582,14 +582,11 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 	record.Executions = append(record.Executions, part.ID)
 	done := executeReviewPasses(ctx, part)
 	usage := done.Answer.Usage
-	stage := "shard"
+	identity := scope.Name
 	if scope.Boundary {
-		stage = "boundary"
+		identity = "boundary"
 	}
-	for i := range done.Answer.UsageBreakdown {
-		done.Answer.UsageBreakdown[i].Stage = stage
-		done.Answer.UsageBreakdown[i].Name = scope.Name
-	}
+	identifyUsage(done.Answer.UsageBreakdown, identity)
 	breakdown := append([]UsageBreakdown(nil), done.Answer.UsageBreakdown...)
 	rounds := source.followups
 	followed := false
@@ -606,10 +603,13 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 		record.Executions = append(record.Executions, next.ID)
 		follow := executeReviewPasses(ctx, next)
 		usage = addUsage(usage, follow.Answer.Usage)
-		for i := range follow.Answer.UsageBreakdown {
-			follow.Answer.UsageBreakdown[i].Stage = "follow_up"
-			follow.Answer.UsageBreakdown[i].Name = scope.Name
+		identity := "follow_up"
+		if scope.Boundary {
+			identity += "/boundary"
+		} else if scope.Name != "" {
+			identity += "/" + scope.Name
 		}
+		identifyUsage(follow.Answer.UsageBreakdown, identity)
 		breakdown = append(breakdown, follow.Answer.UsageBreakdown...)
 		if haltedReview(follow) {
 			done = follow
@@ -642,6 +642,19 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 	done.Answer.Tokens, done.Answer.CostUSD = usage.Tokens, usage.CostUSD
 	record.Status, record.Result, record.Usage = done.Status, done.Result, usage
 	return done, record
+}
+
+func identifyUsage(breakdown []UsageBreakdown, identity string) {
+	if identity == "" {
+		return
+	}
+	for i := range breakdown {
+		if breakdown[i].Name == "" {
+			breakdown[i].Name = identity
+		} else {
+			breakdown[i].Name = identity + "/" + breakdown[i].Name
+		}
+	}
 }
 
 func budgetUncovered(result *Verdict) []string {

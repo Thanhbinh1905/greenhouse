@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -192,6 +193,18 @@ func TestShardedReviewThroughDaemon(t *testing.T) {
 		if shards["planner"] != "planned" {
 			t.Fatalf("planner = %v, want planned", shards["planner"])
 		}
+		breakdown := run["review"].(map[string]any)["usage_breakdown"].([]any)
+		stages := map[string]string{}
+		for _, value := range breakdown {
+			part := value.(map[string]any)
+			if part["stage"] != "planner" {
+				name, _ := part["name"].(string)
+				stages[name] = part["stage"].(string)
+			}
+		}
+		if !maps.Equal(stages, map[string]string{"Alpha": "review", "Beta": "review", "Gamma": "review", "boundary": "review"}) {
+			t.Fatalf("shard usage lost review stage or identity: %v", breakdown)
+		}
 		result := run["review"].(map[string]any)["result"].(map[string]any)
 		if result["verdict"] != "clean" || len(result["coverage"].([]any)) != 5 {
 			t.Fatalf("aggregate result = %v", result)
@@ -238,6 +251,30 @@ func TestShardedReviewThroughDaemon(t *testing.T) {
 			t.Fatalf("fallback recorded shard results: %v", shards)
 		}
 	})
+}
+
+func TestShardedReviewPassNamesKeepStageAndShardIdentity(t *testing.T) {
+	bin, repo, home, prepared := preparedShardFixture(t, "clean")
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": 2})
+	if started := mutate(t, bin, repo, home, prepared, "review", "review-shard-passes", nil); started["outcome"] != "ok" {
+		t.Fatalf("review refused: %v", started)
+	}
+	run := runOf(t, waitReview(t, bin, repo, home))
+	breakdown := run["review"].(map[string]any)["usage_breakdown"].([]any)
+	stages := map[string]bool{}
+	for _, value := range breakdown {
+		part := value.(map[string]any)
+		name, _ := part["name"].(string)
+		stages[part["stage"].(string)+"/"+name] = true
+	}
+	for _, name := range []string{"Alpha", "Beta", "Gamma", "boundary"} {
+		for pass := 1; pass <= 2; pass++ {
+			key := "pass/" + name + "/" + strconv.Itoa(pass)
+			if !stages[key] {
+				t.Errorf("missing per-pass shard usage %q: %v", key, breakdown)
+			}
+		}
+	}
 }
 
 func TestShardedHostRereviewReusesUnchangedShardsThroughDaemon(t *testing.T) {

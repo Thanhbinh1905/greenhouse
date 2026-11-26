@@ -138,6 +138,9 @@ func adoptRecorded(r *Run, observed []runner.ObservedExecutor) bool {
 			done = reviewFrom(x, exitCode, outputBuffer(o.Stdout, runner.StdoutLimit), outputBuffer(o.Stderr, runner.StderrLimit), runErr, stopErr)
 			if i == 1 {
 				done.Finalization = true
+				for j := range done.Answer.UsageBreakdown {
+					done.Answer.UsageBreakdown[j].Stage = "finalization"
+				}
 				done.Answer = finalReviewAnswer(previous.Answer, done.Answer)
 			}
 			if budgetExpired {

@@ -781,8 +781,15 @@ func executeReviewPasses(ctx context.Context, x *Execution) reviewOutcome {
 			pass.ID = fmt.Sprintf("%s-pass-%d", x.ID, i+1)
 			outcomes[i] = executeReviewPass(ctx, &pass, false)
 			for j := range outcomes[i].Answer.UsageBreakdown {
-				outcomes[i].Answer.UsageBreakdown[j].Stage = "pass"
-				outcomes[i].Answer.UsageBreakdown[j].Name = strconv.Itoa(i + 1)
+				usage := &outcomes[i].Answer.UsageBreakdown[j]
+				if usage.Stage == "review" {
+					usage.Stage = "pass"
+				}
+				pass := strconv.Itoa(i + 1)
+				if usage.Name != "" {
+					pass += "/" + usage.Name
+				}
+				usage.Name = pass
 			}
 		}(i)
 	}
@@ -849,6 +856,11 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err erro
 		usage.Usage.CostSource = "unknown"
 	}
 	usage.CostUSD, usage.Tokens = usage.Usage.CostUSD, usage.Usage.Tokens
+	model := usage.Model
+	if model == "" {
+		model = x.Config.Model
+	}
+	usage.UsageBreakdown = []UsageBreakdown{{Stage: "review", Backend: x.Config.Backend, Model: model, Usage: usage.Usage}}
 	usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 	if contextErr != nil {
 		usage.Reason = "cancelled"
