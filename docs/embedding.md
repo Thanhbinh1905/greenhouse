@@ -123,16 +123,32 @@ Run inspection includes `run.started_at` and `run.stage_started_at` for new runs
     "output_tokens": 20,
     "cached_input_tokens": 0,
     "tokens": 120,
-    "cost_usd": 0.01
-  }
+    "cost_usd": 0.01,
+    "cache_write_tokens": 0,
+    "cost_source": "provider",
+    "model_calls": 1,
+    "wall_ms": 4200
+  },
+  "usage_breakdown": [
+    {"stage": "review", "backend": "pi", "model": "openai/gpt-5.6-luna", "usage": {"input_tokens": 100, "output_tokens": 20, "cached_input_tokens": 0, "tokens": 120, "cost_usd": 0.01, "cache_write_tokens": 0, "cost_source": "provider", "model_calls": 1, "wall_ms": 4200}}
+  ]
 }
 ```
+
+`usage` retains the existing `input_tokens`, `output_tokens`, `cached_input_tokens`, `tokens` and `cost_usd` fields. It adds:
+
+- `cache_write_tokens`: tokens written to cache.
+- `cost_source`: `provider` when the backend reports cost, `estimate` when Greenhouse estimates cost, or `unknown` otherwise.
+- `model_calls`: model invocations, including finalization, confirmation and planner calls.
+- `wall_ms`: elapsed time from review start to settlement.
+
+`usage_breakdown` is omitted when empty. Otherwise, it lists each stage that ran, with `backend`, `model`, its own `usage`, and optional `name`. A sharded review uses the shard name; a pass uses its index. A sharded pass combines both, such as `Alpha/1`; a boundary pass uses `boundary/1`. Stage names are `review`, `finalization`, `follow_up`, `confirmation`, `planner`, `shard`, `boundary` and `pass`. Both `host_result` and `run.review` include these fields for terminal reviews, including failed and inconclusive reviews.
 
 `verdict` is `clean`, `findings`, `inconclusive` or `partial`, and is empty until the review settles. Status and verdict agree: inconclusive has no verdict, clean uses `clean-review`, findings uses `outstanding-findings`, and partial uses `partial-review`. `partial` comes with `status: "partial-review"`; see [generated and uncovered paths](#generated-and-uncovered-paths). `current` is false once the worktree branch or head moved, or the review went stale; a host must not record a verdict whose `current` is false as evidence for any head. Every finding carries the head it was reviewed on. Translate findings by `id`.
 
 For new reviews, the ID is the lowercase SHA-256 hex digest of the JSON array `[origin, file, rule, normalized_code]`. Greenhouse reads lines `start` through `end` (inclusive) from `file` at the reviewed `head`. For each line, it joins `strings.Fields(line)` with one ASCII space, which trims and collapses Unicode whitespace. It drops blank lines and joins the remaining lines with a newline (`\n`). JSON encoding uses Go's `encoding/json.Marshal`. Line numbers, head, explanation, priority, and action are excluded. Shifting lines or rewording explanations preserves the ID; changing normalized code changes it. Findings with the same ID keep the first finding in reviewer order, including its priority and explanation. Stored reviews retain their IDs; executions admitted before this rule retain the legacy identity calculation.
 
-Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports input, output, cached-input, and total tokens, plus cost in USD. Unknown values stay zero; totals retain each backend's accounting.
+Failed or inconclusive reviews include a classified `reason` and a credential-redacted `diagnostic` excerpt, bounded to the last 40 lines and at most 4 KiB, with `[truncated]` when shortened. These fields are omitted when empty. `usage` reports token counts, cache writes, cost source, model-call count and review wall time. `usage_breakdown` identifies the backend, model and consumption for each review stage. The same fields are available in `run.review` and `host_result`; terminal failures retain usage spent before failure.
 
 A review that exceeds the configured executor limit (`executor_timeout`, default `45m`) keeps `status: "cancelled"` and reports `reason: "timeout"`. Its diagnostic names the executor limit. An explicit cancellation reports `reason: "cancelled"`. Standalone and full-pipeline reviews retain the reason in `run.review.reason`, `host_result.reason`, and `run.attempts[].reason`, together with reported model and usage metadata.
 

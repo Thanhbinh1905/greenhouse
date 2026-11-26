@@ -53,6 +53,7 @@ func recordAttempt(r *Run, a Attempt) {
 	}
 	if a.Kind == "review" && r.Review != nil && a.Execution == r.Review.ID {
 		a.Usage = r.Review.Usage
+		a.Tokens, a.CostUSD = a.Usage.Tokens, a.Usage.CostUSD
 		if a.Reason == "" {
 			a.Reason = r.Review.Reason
 		}

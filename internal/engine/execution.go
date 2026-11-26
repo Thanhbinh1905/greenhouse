@@ -85,11 +85,24 @@ type TokenUsage struct {
 	CachedInputTokens int     `json:"cached_input_tokens"`
 	Tokens            int     `json:"tokens"`
 	CostUSD           float64 `json:"cost_usd"`
+	CacheWriteTokens  int     `json:"cache_write_tokens"`
+	CostSource        string  `json:"cost_source"`
+	ModelCalls        int     `json:"model_calls"`
+	WallMS            int64   `json:"wall_ms"`
+}
+
+type UsageBreakdown struct {
+	Stage   string     `json:"stage"`
+	Name    string     `json:"name,omitempty"`
+	Backend string     `json:"backend"`
+	Model   string     `json:"model"`
+	Usage   TokenUsage `json:"usage"`
 }
 
 type Execution struct {
 	Source        repository.Identity      `json:"source"`
 	ID            string                   `json:"id"`
+	StartedAt     time.Time                `json:"started_at,omitempty"`
 	Full          bool                     `json:"full,omitempty"`
 	Backend       string                   `json:"backend"`
 	Config        ReviewerConfig           `json:"config"`
@@ -117,12 +130,13 @@ type Execution struct {
 	Run           string                   `json:"run,omitempty"`
 	Grant         string                   `json:"grant,omitempty"`
 
-	Reason           string     `json:"reason,omitempty"`
-	Diagnostic       string     `json:"diagnostic,omitempty"`
-	ReportedModel    string     `json:"reported_model,omitempty"`
-	Usage            TokenUsage `json:"usage"`
-	ReviewBase       string     `json:"review_base,omitempty"`
-	ReviewBaseReason string     `json:"review_base_reason,omitempty"`
+	Reason           string           `json:"reason,omitempty"`
+	Diagnostic       string           `json:"diagnostic,omitempty"`
+	ReportedModel    string           `json:"reported_model,omitempty"`
+	Usage            TokenUsage       `json:"usage"`
+	UsageBreakdown   []UsageBreakdown `json:"usage_breakdown,omitempty"`
+	ReviewBase       string           `json:"review_base,omitempty"`
+	ReviewBaseReason string           `json:"review_base_reason,omitempty"`
 
 	FindingIdentity string `json:"finding_identity,omitempty"`
 	ReviewBudget    string `json:"review_budget,omitempty"`
@@ -519,7 +533,7 @@ func reviewExecutionScoped(r *Run, snapshot *RuleSnapshot, full bool, selected [
 	if passes == 0 {
 		passes = 1
 	}
-	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ReviewShards: passConfig.ReviewShards, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
+	return &Execution{ReviewBudget: budget, ReviewPasses: passes, ReviewShards: passConfig.ReviewShards, ToolCallBudget: calls, FindingIdentity: "code-v1", ReviewBase: base, ReviewBaseReason: baseReason, Source: r.Submitted, ID: opaque(), StartedAt: time.Now(), Full: full, Backend: executionBackends[settings.ReviewerBackend], Config: cfg, ConfigDigest: reviewerConfigDigest(cfg), Args: args, Input: input, InputDigest: runner.BytesDigest(input), Rules: identity, Diff: string(diff), Paths: names, AllPaths: allNames, Generated: generated, Uncovered: uncovered, Snapshot: snap, Responses: responses, PriorFindings: priorFindings, AcceptedHeads: acceptedHeads, Status: "running", Log: "admitted; redacted output is kept in the bounded transcript log", Run: r.ID}, nil
 }
 
 type reviewFile struct {
@@ -789,6 +803,17 @@ func executeReviewPasses(ctx context.Context, x *Execution) reviewOutcome {
 			pass := *x
 			pass.ID = fmt.Sprintf("%s-pass-%d", x.ID, i+1)
 			outcomes[i] = executeReviewPass(ctx, &pass, false)
+			for j := range outcomes[i].Answer.UsageBreakdown {
+				usage := &outcomes[i].Answer.UsageBreakdown[j]
+				if usage.Stage == "review" {
+					usage.Stage = "pass"
+				}
+				pass := strconv.Itoa(i + 1)
+				if usage.Name != "" {
+					pass += "/" + usage.Name
+				}
+				usage.Name = pass
+			}
 		}(i)
 	}
 	wg.Wait()
@@ -847,7 +872,18 @@ func reviewFrom(x *Execution, exitCode int, out, stderr *runner.Buffer, err erro
 	log := fmt.Sprintf("process completed; exit=%d stdout bytes=%d stderr bytes=%d overflow=%t; raw diagnostics withheld to avoid credential disclosure", exitCode, out.Len(), stderr.Len(), out.Exceeded() || stderr.Exceeded())
 	usage := agentAnswer{Model: backendReportedModel(x.Config.Backend, out.Bytes(), stderr.Bytes())}
 	usage.Usage = agentTokenUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
+	if usage.Usage.ModelCalls == 0 {
+		usage.Usage.ModelCalls = 1
+	}
+	if usage.Usage.CostSource == "" {
+		usage.Usage.CostSource = "unknown"
+	}
 	usage.CostUSD, usage.Tokens = usage.Usage.CostUSD, usage.Usage.Tokens
+	model := usage.Model
+	if model == "" {
+		model = x.Config.Model
+	}
+	usage.UsageBreakdown = []UsageBreakdown{{Stage: "review", Backend: x.Config.Backend, Model: model, Usage: usage.Usage}}
 	usage.Diagnostic = diagnosticExcerpt(backendDiagnostics(out.Bytes(), stderr.Bytes()), out.Exceeded() || stderr.Exceeded())
 	if contextErr != nil {
 		usage.Reason = "cancelled"
@@ -1257,6 +1293,24 @@ func retainReviewMetadata(x *Execution, done reviewOutcome) {
 	x.Finalization = done.Finalization
 	x.InputDigests = done.InputDigests
 	x.Reason, x.Diagnostic, x.ReportedModel, x.Usage = done.Answer.Reason, done.Answer.Diagnostic, done.Answer.Model, done.Answer.Usage
+	if x.Usage.CostSource == "" {
+		x.Usage.CostSource = "unknown"
+	}
+	if !x.StartedAt.IsZero() {
+		x.Usage.WallMS = time.Since(x.StartedAt).Milliseconds()
+	}
+	x.UsageBreakdown = append([]UsageBreakdown(nil), done.Answer.UsageBreakdown...)
+	if len(x.UsageBreakdown) == 0 && x.Usage.ModelCalls > 0 {
+		stage := "review"
+		if done.Finalization {
+			stage = "finalization"
+		}
+		model := x.ReportedModel
+		if model == "" {
+			model = x.Config.Model
+		}
+		x.UsageBreakdown = []UsageBreakdown{{Stage: stage, Backend: x.Config.Backend, Model: model, Usage: x.Usage}}
+	}
 	x.Shards = done.Shards
 	if x.Reason == "" && (done.Status == "inconclusive" || done.Status == "unconfigured") {
 		x.Reason = "execution_failed"

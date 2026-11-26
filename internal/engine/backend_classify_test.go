@@ -122,13 +122,13 @@ func TestBackendTokenBreakdown(t *testing.T) {
 			switch backend {
 			case "claude":
 				stdout, _, _ = recorded(t, backend, "success")
-				want = TokenUsage{InputTokens: 2, OutputTokens: 53, CachedInputTokens: 3382, Tokens: 55, CostUSD: 6.0519999999999997e-05}
+				want = TokenUsage{InputTokens: 2, OutputTokens: 53, CachedInputTokens: 3382, Tokens: 55, CostUSD: 6.0519999999999997e-05, CostSource: "provider", ModelCalls: 1}
 			case "codex":
-				stdout = []byte(`{"type":"turn.completed","usage":{"input_tokens":100,"output_tokens":20,"cached_input_tokens":80}}`)
-				want = TokenUsage{InputTokens: 100, OutputTokens: 20, CachedInputTokens: 80, Tokens: 120}
+				stdout, _, _ = recorded(t, backend, "success")
+				want = TokenUsage{InputTokens: 13395, OutputTokens: 15, Tokens: 13410, ModelCalls: 1}
 			case "pi":
-				stdout = []byte(`{"type":"message_end","message":{"role":"assistant","usage":{"input":10,"output":5,"totalTokens":30,"cost":{"total":0.25}}}}`)
-				want = TokenUsage{InputTokens: 10, OutputTokens: 5, Tokens: 30, CostUSD: 0.25}
+				stdout, _, _ = recorded(t, backend, "usage")
+				want = TokenUsage{InputTokens: 10, OutputTokens: 5, CachedInputTokens: 3, Tokens: 15, CostUSD: 0.25, CacheWriteTokens: 2, CostSource: "provider", ModelCalls: 1}
 			}
 			if got := agentTokenUsage(backend, stdout, nil); got != want {
 				t.Fatalf("usage = %+v, want %+v", got, want)
@@ -163,11 +163,11 @@ func TestStructuredDiagnosticsExcludeReviewContent(t *testing.T) {
 func TestUsageAggregatesTurnsAndClaudeCacheFallback(t *testing.T) {
 	t.Parallel()
 	codex := []byte("{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":10,\"output_tokens\":2,\"cached_input_tokens\":8}}\n{\"type\":\"turn.completed\",\"usage\":{\"input_tokens\":20,\"output_tokens\":3,\"cached_input_tokens\":15}}")
-	if got := agentTokenUsage("codex", codex, nil); got != (TokenUsage{InputTokens: 30, OutputTokens: 5, CachedInputTokens: 23, Tokens: 35}) {
+	if got := agentTokenUsage("codex", codex, nil); got != (TokenUsage{InputTokens: 30, OutputTokens: 5, CachedInputTokens: 23, Tokens: 35, ModelCalls: 2}) {
 		t.Fatalf("multiple turns: %+v", got)
 	}
 	claude := []byte(`{"type":"result","is_error":true,"total_cost_usd":0.25,"usage":{"input_tokens":2,"output_tokens":3,"cache_read_input_tokens":40}}`)
-	if got := agentTokenUsage("claude", claude, nil); got != (TokenUsage{InputTokens: 2, OutputTokens: 3, CachedInputTokens: 40, Tokens: 5, CostUSD: 0.25}) {
+	if got := agentTokenUsage("claude", claude, nil); got != (TokenUsage{InputTokens: 2, OutputTokens: 3, CachedInputTokens: 40, Tokens: 5, CostUSD: 0.25, CostSource: "provider", ModelCalls: 1}) {
 		t.Fatalf("claude fallback: %+v", got)
 	}
 }

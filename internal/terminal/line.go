@@ -156,6 +156,9 @@ func statePage(v engine.Response, live string, details bool) string {
 		}
 		fmt.Fprintln(&page, wrapWords(fmt.Sprintf("Host: %s | grant %s | %s | current %t", engine.HostLabel(&x.Host), x.Grant, outcome, x.Current), terminalWidth()))
 	}
+	if r.Review != nil && r.Review.Status != "running" {
+		fmt.Fprintf(&page, "Review usage: %d tokens | $%.6f | %d ms\n", r.Review.Usage.Tokens, r.Review.Usage.CostUSD, r.Review.Usage.WallMS)
+	}
 	for _, rule := range v.Rules {
 		fmt.Fprintf(&page, "Rule %s | %s | required=%t\nSource: %s\n%s\n", rule.Selection, rule.Status, rule.Required, rule.Source, ruleDigestLine(rule.Digest, terminalWidth()))
 		if rule.Error != "" {

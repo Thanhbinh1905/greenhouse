@@ -53,11 +53,12 @@ type HostResult struct {
 
 	RejectedFindings []FindingRejection `json:"rejected_findings,omitempty"`
 
-	Reason           string     `json:"reason,omitempty"`
-	Diagnostic       string     `json:"diagnostic,omitempty"`
-	Usage            TokenUsage `json:"usage"`
-	ReviewBase       string     `json:"review_base,omitempty"`
-	ReviewBaseReason string     `json:"review_base_reason,omitempty"`
+	Reason           string           `json:"reason,omitempty"`
+	Diagnostic       string           `json:"diagnostic,omitempty"`
+	Usage            TokenUsage       `json:"usage"`
+	UsageBreakdown   []UsageBreakdown `json:"usage_breakdown,omitempty"`
+	ReviewBase       string           `json:"review_base,omitempty"`
+	ReviewBaseReason string           `json:"review_base_reason,omitempty"`
 
 	Shards []HostShard `json:"shards,omitempty"`
 }
@@ -320,7 +321,7 @@ func hostResult(r *Run, current bool) *HostResult {
 		return nil
 	}
 	v := &HostResult{Host: *r.Host, Grant: x.Grant, Review: x.ID, AcceptedHeads: append([]HostAcceptance(nil), r.HostAcceptances...), Head: r.Candidate, Target: r.Target, ReviewBase: x.ReviewBase, ReviewBaseReason: x.ReviewBaseReason, Status: x.Status, Current: current && x.Status != "stale", Findings: []Finding{}, Rules: x.Rules.Digest, Config: x.ConfigDigest, Input: x.InputDigest, Backend: x.Backend, Model: x.Config.Model}
-	v.Reason, v.Diagnostic, v.Usage = x.Reason, x.Diagnostic, x.Usage
+	v.Reason, v.Diagnostic, v.Usage, v.UsageBreakdown = x.Reason, x.Diagnostic, x.Usage, x.UsageBreakdown
 	v.Generated, v.Uncovered = x.Generated, x.Uncovered
 	v.Shards = hostShards(x.Shards)
 	v.Carried = append([]CarriedFinding(nil), r.HostCarried...)

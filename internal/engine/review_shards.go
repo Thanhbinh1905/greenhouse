@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/Thanhbinh1905/greenhouse/internal/repository"
 	"github.com/Thanhbinh1905/greenhouse/internal/runner"
@@ -173,9 +174,19 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 		}
 	}
 	plannerInputs := make(map[string]string)
-	plan, usage, reason := planShards(ctx, x, source.run.Intent, plannerInputs)
+	plan, usage, model, reason := planShards(ctx, x, source.run.Intent, plannerInputs)
+	if usage.CostSource == "" && usage.ModelCalls > 0 {
+		usage.CostSource = "unknown"
+	}
+	if model == "" {
+		model = x.Config.Model
+	}
+	var plannerUsage []UsageBreakdown
+	if usage.ModelCalls > 0 {
+		plannerUsage = []UsageBreakdown{{Stage: "planner", Backend: x.Config.Backend, Model: model, Usage: usage}}
+	}
 	if ctx.Err() != nil {
-		return reviewOutcome{Status: "cancelled", Log: "shard planner stopped: " + reason, Answer: agentAnswer{Reason: "cancelled", Usage: usage, Tokens: usage.Tokens, CostUSD: usage.CostUSD}, InputDigests: plannerInputs}
+		return reviewOutcome{Status: "cancelled", Log: "shard planner stopped: " + reason, Answer: agentAnswer{Reason: "cancelled", Usage: usage, UsageBreakdown: plannerUsage, Tokens: usage.Tokens, CostUSD: usage.CostUSD}, InputDigests: plannerInputs}
 	}
 	var done reviewOutcome
 	if source.prior != nil && reason != "planned" {
@@ -187,6 +198,7 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 			done = reviewShards(ctx, x, source, fixed)
 			done.Shards.Planner = reason
 			done.Answer.Usage = addUsage(done.Answer.Usage, usage)
+			done.Answer.UsageBreakdown = append(done.Answer.UsageBreakdown, plannerUsage...)
 			done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
 			done.InputDigests = mergeInputDigests(done.InputDigests, plannerInputs)
 			done.Shards.Head = x.Rules.Candidate
@@ -204,69 +216,79 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 		done.Shards.Head = x.Rules.Candidate
 	}
 	done.Answer.Usage = addUsage(done.Answer.Usage, usage)
+	done.Answer.UsageBreakdown = append(done.Answer.UsageBreakdown, plannerUsage...)
 	done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
 	return done
 }
 
-func planShards(ctx context.Context, x *Execution, intent string, inputDigests map[string]string) ([]shardPlanEntry, TokenUsage, string) {
+func planShards(ctx context.Context, x *Execution, intent string, inputDigests map[string]string) ([]shardPlanEntry, TokenUsage, string, string) {
 	plan := *x
 	plan.ID = x.ID + "-plan"
 	var err error
 	if plan.Args, err = shardPlannerArgs(x.Config); err != nil {
-		return nil, TokenUsage{}, "planner unavailable: " + err.Error()
+		return nil, TokenUsage{}, "", "planner unavailable: " + err.Error()
 	}
 	if plan.Input, err = shardPlannerInput(x, intent); err != nil {
-		return nil, TokenUsage{}, "planner input invalid: " + err.Error()
+		return nil, TokenUsage{}, "", "planner input invalid: " + err.Error()
 	}
 	dir := reviewDir(plan.ID)
 	if err = os.Mkdir(dir, 0700); err != nil {
-		return nil, TokenUsage{}, "planner directory unavailable"
+		return nil, TokenUsage{}, "", "planner directory unavailable"
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	work := filepath.Join(dir, "tree")
 	if err = os.Mkdir(work, 0700); err != nil {
-		return nil, TokenUsage{}, "planner directory unavailable"
+		return nil, TokenUsage{}, "", "planner directory unavailable"
 	}
 	if err = os.WriteFile(filepath.Join(dir, "schema.json"), []byte(shardPlanSchema()), 0600); err != nil {
-		return nil, TokenUsage{}, "planner schema unavailable"
+		return nil, TokenUsage{}, "", "planner schema unavailable"
 	}
 	s, err := newReviewSession(&plan, dir)
 	if err != nil {
-		return nil, TokenUsage{}, "planner session unavailable: " + err.Error()
+		return nil, TokenUsage{}, "", "planner session unavailable: " + err.Error()
 	}
 	policy, _ := confinementFor("reviewer", x.Config, []string{s.state, s.temp})
 	exe, argv, err := runner.ConfinedCommand(policy, x.Config.Executable, s.args)
 	if err != nil {
-		return nil, TokenUsage{}, "confinement launcher unavailable"
+		return nil, TokenUsage{}, "", "confinement launcher unavailable"
 	}
 	turn, cancel := context.WithTimeout(ctx, reviewBudgetForExecution(x.ReviewBudget))
 	defer cancel()
 	turn = runner.WithExecutor(turn, plan.ID, Home)
 	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
+	started := time.Now()
 	inputDigests[plan.ID] = runner.BytesDigest(plan.Input)
 	code, err := runner.RunProcess(turn, work, exe, argv, plan.Input, reviewerExecutionEnv(s.env, plan.ID), out, stderr)
 	_ = appendTranscript(x.Run, fmt.Sprintf("shard planner %s | %s %s | exit=%d", plan.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // The transcript supplements the stored shard record.
 	usage := agentTokenUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
+	model := backendReportedModel(x.Config.Backend, out.Bytes(), stderr.Bytes())
+	if usage.ModelCalls == 0 {
+		usage.ModelCalls = 1
+	}
+	if usage.CostSource == "" {
+		usage.CostSource = "unknown"
+	}
+	usage.WallMS = time.Since(started).Milliseconds()
 	if err != nil || code != 0 {
-		return nil, usage, fmt.Sprintf("planner failed: exit=%d", code)
+		return nil, usage, model, fmt.Sprintf("planner failed: exit=%d", code)
 	}
 	answer, err := agentReply(&plan, out.Bytes(), stderr.Bytes())
 	if err != nil {
-		return nil, usage, "planner answer invalid: " + err.Error()
+		return nil, usage, model, "planner answer invalid: " + err.Error()
 	}
 	var reply struct {
 		Shards []shardPlanEntry `json:"shards"`
 	}
 	if err = json.Unmarshal([]byte(strings.TrimSpace(answer.Text)), &reply); err != nil {
-		return nil, usage, "planner answer invalid: " + err.Error()
+		return nil, usage, model, "planner answer invalid: " + err.Error()
 	}
 	if err = validateShardPlan(reply.Shards, x.Paths); err != nil {
-		return nil, usage, "invalid plan: " + err.Error()
+		return nil, usage, model, "invalid plan: " + err.Error()
 	}
 	if len(reply.Shards) == 1 {
-		return nil, usage, "one feature"
+		return nil, usage, model, "one feature"
 	}
-	return reply.Shards, usage, "planned"
+	return reply.Shards, usage, model, "planned"
 }
 
 func shardPlannerArgs(cfg ReviewerConfig) ([]string, error) {
@@ -565,6 +587,12 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 	done := executeReviewPasses(ctx, part)
 	usage := done.Answer.Usage
 	inputDigests := done.InputDigests
+	identity := scope.Name
+	if scope.Boundary {
+		identity = "boundary"
+	}
+	identifyUsage(done.Answer.UsageBreakdown, identity)
+	breakdown := append([]UsageBreakdown(nil), done.Answer.UsageBreakdown...)
 	rounds := source.followups
 	followed := false
 	for settledReview(done) && ctx.Err() == nil {
@@ -580,6 +608,14 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 		follow := executeReviewPasses(ctx, next)
 		inputDigests = mergeInputDigests(inputDigests, follow.InputDigests)
 		usage = addUsage(usage, follow.Answer.Usage)
+		identity := "follow_up"
+		if scope.Boundary {
+			identity += "/boundary"
+		} else if scope.Name != "" {
+			identity += "/" + scope.Name
+		}
+		identifyUsage(follow.Answer.UsageBreakdown, identity)
+		breakdown = append(breakdown, follow.Answer.UsageBreakdown...)
 		if haltedReview(follow) {
 			done = follow
 			done.InputDigests = inputDigests
@@ -609,6 +645,7 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 	}
 	done.InputDigests = inputDigests
 	done.Answer.Usage = usage
+	done.Answer.UsageBreakdown = breakdown
 	done.Answer.Tokens, done.Answer.CostUSD = usage.Tokens, usage.CostUSD
 	record.InputDigests = inputDigests
 	record.Executions = record.Executions[:0]
@@ -618,6 +655,19 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 	slices.Sort(record.Executions)
 	record.Status, record.Result, record.Usage = done.Status, done.Result, usage
 	return done, record
+}
+
+func identifyUsage(breakdown []UsageBreakdown, identity string) {
+	if identity == "" {
+		return
+	}
+	for i := range breakdown {
+		if breakdown[i].Name == "" {
+			breakdown[i].Name = identity
+		} else {
+			breakdown[i].Name = identity + "/" + breakdown[i].Name
+		}
+	}
 }
 
 func budgetUncovered(result *Verdict) []string {
@@ -654,6 +704,7 @@ func aggregateShardReview(parts []reviewOutcome) reviewOutcome {
 		logs = append(logs, part.Status)
 		done.InputDigests = mergeInputDigests(done.InputDigests, part.InputDigests)
 		done.Answer.Usage = addUsage(done.Answer.Usage, part.Answer.Usage)
+		done.Answer.UsageBreakdown = append(done.Answer.UsageBreakdown, part.Answer.UsageBreakdown...)
 		done.Finalization = done.Finalization || part.Finalization
 		if done.Answer.Model == "" {
 			done.Answer.Model = part.Answer.Model

@@ -652,6 +652,7 @@ type agentAnswer struct {
 	Thinking              string
 	Reason, Diagnostic    string
 	Usage                 TokenUsage
+	UsageBreakdown        []UsageBreakdown
 	CostUSD               float64
 	Tokens                int
 }
@@ -847,61 +848,88 @@ func agentTokenUsage(backend string, stdout, stderr []byte) TokenUsage {
 	usage := TokenUsage{}
 	jsonLines(stdout, func(event map[string]json.RawMessage) {
 		switch kind := field(event, "type"); {
+		case backend == BackendClaude && kind == "assistant":
+			usage.ModelCalls++
 		case backend == BackendClaude && kind == "result":
 			var result struct {
 				Cost  float64 `json:"total_cost_usd"`
 				Usage map[string]struct {
-					Input  int `json:"inputTokens"`
-					Output int `json:"outputTokens"`
-					Cached int `json:"cacheReadInputTokens"`
+					Input      int `json:"inputTokens"`
+					Output     int `json:"outputTokens"`
+					Cached     int `json:"cacheReadInputTokens"`
+					CacheWrite int `json:"cacheCreationInputTokens"`
 				} `json:"modelUsage"`
 			}
 			_ = json.Unmarshal(mapJSON(event), &result) // Invalid optional events are ignored.
 			usage.CostUSD += result.Cost
+			if _, ok := event["total_cost_usd"]; ok {
+				usage.CostSource = "provider"
+			}
 			for _, model := range result.Usage {
 				usage.InputTokens += model.Input
 				usage.OutputTokens += model.Output
 				usage.CachedInputTokens += model.Cached
+				usage.CacheWriteTokens += model.CacheWrite
 				usage.Tokens += model.Input + model.Output
 			}
 			if len(result.Usage) == 0 {
 				var native struct {
-					Input  int `json:"input_tokens"`
-					Output int `json:"output_tokens"`
-					Cached int `json:"cache_read_input_tokens"`
+					Input      int `json:"input_tokens"`
+					Output     int `json:"output_tokens"`
+					Cached     int `json:"cache_read_input_tokens"`
+					CacheWrite int `json:"cache_creation_input_tokens"`
 				}
 				_ = json.Unmarshal(event["usage"], &native) // Invalid optional usage data contributes zero tokens.
 				usage.InputTokens += native.Input
 				usage.OutputTokens += native.Output
 				usage.CachedInputTokens += native.Cached
+				usage.CacheWriteTokens += native.CacheWrite
 				usage.Tokens += native.Input + native.Output
+			}
+			if usage.ModelCalls == 0 {
+				usage.ModelCalls = 1
 			}
 		case backend == BackendCodex && kind == "turn.completed":
 			var native struct {
-				Input  int `json:"input_tokens"`
-				Output int `json:"output_tokens"`
-				Cached int `json:"cached_input_tokens"`
+				Input      int `json:"input_tokens"`
+				Output     int `json:"output_tokens"`
+				Cached     int `json:"cached_input_tokens"`
+				CacheWrite int `json:"cache_write_input_tokens"`
 			}
 			_ = json.Unmarshal(event["usage"], &native) // Invalid optional usage data contributes zero tokens.
 			usage.InputTokens += native.Input
 			usage.OutputTokens += native.Output
 			usage.CachedInputTokens += native.Cached
+			usage.CacheWriteTokens += native.CacheWrite
 			usage.Tokens += native.Input + native.Output
+			usage.ModelCalls++
 		case (backend == BackendPi || backend == "") && kind == "message_end":
 			var m struct {
 				Role  string `json:"role"`
 				Usage struct {
-					Total  int `json:"totalTokens"`
-					Input  int `json:"input"`
-					Cached int `json:"cacheRead"`
-					Output int `json:"output"`
-					Cost   struct {
+					Total      int `json:"totalTokens"`
+					Input      int `json:"input"`
+					Cached     int `json:"cacheRead"`
+					CacheWrite int `json:"cacheWrite"`
+					Output     int `json:"output"`
+					Cost       struct {
 						Total float64 `json:"total"`
 					} `json:"cost"`
 				} `json:"usage"`
 			}
 			if json.Unmarshal(event["message"], &m) == nil && m.Role == "assistant" {
 				usage.CostUSD += m.Usage.Cost.Total
+				var message map[string]json.RawMessage
+				var nativeUsage map[string]json.RawMessage
+				var cost map[string]json.RawMessage
+				_ = json.Unmarshal(event["message"], &message)
+				_ = json.Unmarshal(message["usage"], &nativeUsage)
+				_ = json.Unmarshal(nativeUsage["cost"], &cost)
+				if _, ok := cost["total"]; ok {
+					usage.CostSource = "provider"
+				}
+				usage.ModelCalls++
+				usage.CacheWriteTokens += m.Usage.CacheWrite
 				usage.Tokens += m.Usage.Total
 				usage.InputTokens += m.Usage.Input
 				usage.CachedInputTokens += m.Usage.Cached

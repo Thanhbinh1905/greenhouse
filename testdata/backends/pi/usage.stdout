@@ -1,0 +1,1 @@
+{"type":"message_end","message":{"role":"assistant","provider":"fixture","model":"recorded","usage":{"input":10,"output":5,"cacheRead":3,"cacheWrite":2,"totalTokens":15,"cost":{"total":0.25}}}}
