@@ -66,14 +66,18 @@ func TestRunLiveDrivesGreenhouseWithoutNetwork(t *testing.T) {
 		t.Fatalf("cases = %+v", r.Cases)
 	}
 	bug, clean := r.Cases[0], r.Cases[1]
-	if bug.Status != "outstanding-findings" || bug.Score.Detected != 1 || bug.Score.PriorityCorrect != 1 || !bug.InputVerified || bug.ReportedModel != "m1" || bug.ThinkingLevel != "medium" {
+	if bug.Status != "outstanding-findings" || bug.Score.Detected != 1 || bug.Score.PriorityCorrect != 1 || !bug.InputVerified || bug.ReportedModel != "m1" || bug.ThinkingLevel != "medium" || bug.ShardCount != 1 {
 		t.Fatalf("bug record = %+v", bug)
 	}
-	if clean.Status != "clean-review" || clean.Score.FalsePositives != 0 || !clean.InputVerified {
+	if clean.Status != "clean-review" || clean.Score.FalsePositives != 0 || !clean.InputVerified || clean.ShardCount != 1 {
 		t.Fatalf("clean record = %+v", clean)
 	}
 	if r.CostUSD != 0.75 || r.Summary.HighDetected != 1 || !r.Summary.BarMet || r.Config.PiVersion == "" || r.Config.CorpusDigest == "" {
 		t.Fatalf("report = %+v", r)
+	}
+	reportMarkdown, err := os.ReadFile(filepath.Join(out, "report.md"))
+	if err != nil || !strings.Contains(string(reportMarkdown), "| Case | Status | Shards |") {
+		t.Fatalf("report does not include per-case shard counts: %s (%v)", reportMarkdown, err)
 	}
 	for _, name := range []string{"report.json", "report.md", "adjudications.json", "cases/bug-sql-injection/input.json", "cases/bug-sql-injection/argv.json", "cases/bug-sql-injection/events.jsonl"} {
 		b, err := os.ReadFile(filepath.Join(out, name))
@@ -206,6 +210,24 @@ func stringMustRead(t *testing.T, path string) string {
 		t.Fatal(err)
 	}
 	return string(b)
+}
+
+func TestReviewShardCount(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		review map[string]any
+		want   int
+	}{
+		{name: "single shard fallback", review: map[string]any{}, want: 1},
+		{name: "planned shards", review: map[string]any{"shards": map[string]any{"shards": []any{map[string]any{}, map[string]any{}, map[string]any{}}}}, want: 3},
+		{name: "empty plan fallback", review: map[string]any{"shards": map[string]any{"shards": []any{}}}, want: 1},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := reviewShardCount(test.review); got != test.want {
+				t.Fatalf("reviewShardCount() = %d, want %d", got, test.want)
+			}
+		})
+	}
 }
 
 func TestCompactEventsDropsStreamingDeltas(t *testing.T) {

@@ -84,6 +84,7 @@ type CaseRecord struct {
 	ThinkingLevel    string          `json:"thinking_level"`
 	Usage            Usage           `json:"usage"`
 	LatencyMillis    int64           `json:"latency_ms"`
+	ShardCount       int             `json:"shard_count"`
 	ModelAnswer      string          `json:"model_answer"`
 	ModelFindings    json.RawMessage `json:"model_findings"`
 	Findings         []Finding       `json:"findings"`
@@ -313,6 +314,15 @@ func compactEvents(b []byte) []byte {
 	return out.Bytes()
 }
 
+func reviewShardCount(review map[string]any) int {
+	shardRecord, _ := review["shards"].(map[string]any)
+	shards, _ := shardRecord["shards"].([]any)
+	if len(shards) == 0 {
+		return 1
+	}
+	return len(shards)
+}
+
 func modelFindings(answer string) json.RawMessage {
 	var v struct {
 		Findings json.RawMessage `json:"findings"`
@@ -453,6 +463,7 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 		}
 		time.Sleep(time.Second)
 	}
+	rec.ShardCount = reviewShardCount(review)
 	var x struct {
 		Status      string   `json:"status"`
 		Log         string   `json:"log"`
@@ -769,11 +780,11 @@ func writeReport(dir string, r *Report) error {
 	fmt.Fprintf(&md, "| Inconclusive reviews | %d/%d |\n", s.Inconclusive, s.Cases)
 	fmt.Fprintf(&md, "| Cost (%s) | $%.4f |\n", pricing, r.CostUSD)
 	fmt.Fprintf(&md, "| Latency total / mean / max | %.1fs / %.1fs / %.1fs |\n\n", float64(r.LatencyMillis.Total)/1000, float64(r.LatencyMillis.Mean)/1000, float64(r.LatencyMillis.Max)/1000)
-	fmt.Fprintf(&md, "| Case | Status | Detected | False positives | Blocking | Priority | Cost | Latency |\n|---|---|---|---|---|---|---|---|\n")
+	fmt.Fprintf(&md, "| Case | Status | Shards | Detected | False positives | Blocking | Priority | Cost | Latency |\n|---|---|---:|---|---|---|---|---|---|\n")
 	recs := append([]CaseRecord(nil), r.Cases...)
 	sort.SliceStable(recs, func(i, j int) bool { return recs[i].ID < recs[j].ID })
 	for _, c := range recs {
-		fmt.Fprintf(&md, "| %s | %s | %d/%d | %d | %d | %d/%d | $%.4f | %.1fs |\n", c.ID, c.Status, c.Score.Detected, c.Score.Expected, c.Score.FalsePositives, c.Score.Blocking, c.Score.PriorityCorrect, c.Score.PriorityJudged, c.Usage.CostUSD, float64(c.LatencyMillis)/1000)
+		fmt.Fprintf(&md, "| %s | %s | %d | %d/%d | %d | %d | %d/%d | $%.4f | %.1fs |\n", c.ID, c.Status, c.ShardCount, c.Score.Detected, c.Score.Expected, c.Score.FalsePositives, c.Score.Blocking, c.Score.PriorityCorrect, c.Score.PriorityJudged, c.Usage.CostUSD, float64(c.LatencyMillis)/1000)
 	}
 	fmt.Fprintf(&md, "\nPer-case `input.json` holds the exact bytes Greenhouse delivered to the reviewer on stdin, `argv.json` the exact arguments, and `events.jsonl` the reviewer's raw JSON event stream through `%s`.\n", r.Config.Backend)
 	return os.WriteFile(filepath.Join(dir, "report.md"), []byte(md.String()), 0o644)
