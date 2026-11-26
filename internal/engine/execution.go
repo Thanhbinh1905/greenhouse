@@ -97,6 +97,7 @@ type Execution struct {
 	Args          []string                 `json:"args"`
 	Input         []byte                   `json:"input"`
 	InputDigest   string                   `json:"input_digest"`
+	InputDigests  map[string]string        `json:"input_digests,omitempty"`
 	Rules         InputIdentity            `json:"rules"`
 	Diff          string                   `json:"diff"`
 	Paths         []string                 `json:"paths"`
@@ -731,8 +732,29 @@ func reviewerEnv() []string {
 	return env
 }
 
+func reviewerExecutionEnv(env []string, id string) []string {
+	const shimKey = "GREENHOUSE_EVAL_SHIM="
+	const executionKey = "GREENHOUSE_EVAL_EXECUTION_ID="
+	shim := false
+	filtered := make([]string, 0, len(env)+1)
+	for _, item := range env {
+		if strings.HasPrefix(item, shimKey) {
+			shim = true
+		}
+		if strings.HasPrefix(item, executionKey) {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+	if !shim {
+		return env
+	}
+	return append(filtered, executionKey+id)
+}
+
 type reviewOutcome struct {
 	Finalization bool
+	InputDigests map[string]string
 	Status       string
 	Result       *Verdict
 	Log          string
@@ -1218,8 +1240,22 @@ func diffPath(path string) string {
 	return path
 }
 
+func mergeInputDigests(into, from map[string]string) map[string]string {
+	if len(from) == 0 {
+		return into
+	}
+	if into == nil {
+		into = make(map[string]string, len(from))
+	}
+	for id, digest := range from {
+		into[id] = digest
+	}
+	return into
+}
+
 func retainReviewMetadata(x *Execution, done reviewOutcome) {
 	x.Finalization = done.Finalization
+	x.InputDigests = done.InputDigests
 	x.Reason, x.Diagnostic, x.ReportedModel, x.Usage = done.Answer.Reason, done.Answer.Diagnostic, done.Answer.Model, done.Answer.Usage
 	x.Shards = done.Shards
 	if x.Reason == "" && (done.Status == "inconclusive" || done.Status == "unconfigured") {

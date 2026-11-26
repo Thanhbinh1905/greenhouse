@@ -3,6 +3,8 @@ package eval
 import (
 	"reflect"
 	"testing"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 func TestExpectedReviewCaptureIDs(t *testing.T) {
@@ -52,9 +54,17 @@ func TestExpectedReviewCaptureIDs(t *testing.T) {
 	}
 }
 
-func TestReviewCapturesVerifiedRequiresEveryExecution(t *testing.T) {
+func TestReviewCapturesVerifiedComparesEveryExecutionInput(t *testing.T) {
+	plannerInput := []byte(`{"Intent":"plan"}`)
+	shardInput := []byte(`{"Paths":["a.go"]}`)
+	boundaryInput := []byte(`{"Paths":["a.go","b.go"]}`)
 	review := map[string]any{
 		"id": "review-1",
+		"input_digests": map[string]any{
+			"review-1-plan": runner.BytesDigest(plannerInput),
+			"shard-1":       runner.BytesDigest(shardInput),
+			"boundary-1":    runner.BytesDigest(boundaryInput),
+		},
 		"shards": map[string]any{
 			"planner":  "planned",
 			"shards":   []any{map[string]any{"executions": []any{"shard-1"}}},
@@ -62,9 +72,38 @@ func TestReviewCapturesVerifiedRequiresEveryExecution(t *testing.T) {
 		},
 	}
 	captures := []reviewCapture{
-		{ID: "review-1-plan", HasInput: true, HasArgv: true, HasEvents: true},
-		{ID: "shard-1", HasInput: true, HasArgv: true, HasEvents: true},
-		{ID: "boundary-1", HasInput: true, HasArgv: true, HasEvents: true},
+		{ID: "review-1-plan", Input: plannerInput, HasInput: true, HasArgv: true, HasEvents: true},
+		{ID: "shard-1", Input: shardInput, HasInput: true, HasArgv: true, HasEvents: true},
+		{ID: "boundary-1", Input: boundaryInput, HasInput: true, HasArgv: true, HasEvents: true},
+	}
+	if !reviewCapturesVerified(review, captures, 1, nil) {
+		t.Fatal("matching per-execution inputs were not verified")
+	}
+	captures[2].Input = shardInput
+	if reviewCapturesVerified(review, captures, 1, nil) {
+		t.Fatal("swapped boundary input was marked verified")
+	}
+}
+
+func TestReviewCapturesVerifiedRequiresEveryExecution(t *testing.T) {
+	plannerInput, shardInput, boundaryInput := []byte("planner"), []byte("shard"), []byte("boundary")
+	review := map[string]any{
+		"id": "review-1",
+		"input_digests": map[string]any{
+			"review-1-plan": runner.BytesDigest(plannerInput),
+			"shard-1":       runner.BytesDigest(shardInput),
+			"boundary-1":    runner.BytesDigest(boundaryInput),
+		},
+		"shards": map[string]any{
+			"planner":  "planned",
+			"shards":   []any{map[string]any{"executions": []any{"shard-1"}}},
+			"boundary": map[string]any{"executions": []any{"boundary-1"}},
+		},
+	}
+	captures := []reviewCapture{
+		{ID: "review-1-plan", Input: plannerInput, HasInput: true, HasArgv: true, HasEvents: true},
+		{ID: "shard-1", Input: shardInput, HasInput: true, HasArgv: true, HasEvents: true},
+		{ID: "boundary-1", Input: boundaryInput, HasInput: true, HasArgv: true, HasEvents: true},
 	}
 	if !reviewCapturesVerified(review, captures, 1, nil) {
 		t.Fatal("complete sharded execution captures were not verified")

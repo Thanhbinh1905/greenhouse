@@ -59,8 +59,10 @@ With a valid plan of two or more shards:
 
 - `head`: candidate that produced the shard results.
 - `planner`: `planned`, or why the review ran unsplit, for example `invalid plan: a.go is in no shard`.
-- `shards[]`: `name`, `summary`, `paths`, `status`, `result`, `usage` and the `executions` that reviewed the shard.
+- `shards[]`: `name`, `summary`, `paths`, `status`, `result`, `usage`, `executions` and per-execution `input_digests`.
 - `boundary`: the boundary pass, with the same fields as a shard.
+
+`run.review.input_digests` maps reviewer execution IDs to SHA-256 digests of their initial stdin. It includes planner, shard, boundary and confirmation executions; a finalization turn retains the initial digest for its execution ID. These digests let evaluators verify each saved input against the execution that received it.
 
 On rereview, Greenhouse compares the new head with the prior reviewed head. Shards whose paths did not change keep their prior results; changed shards and the boundary pass rerun. New paths are assigned by the planner, with a separate shard as fallback. Reused findings are carried forward with the new reviewed head.
 

@@ -334,7 +334,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			calls = &toolCallWatch{w: stdout, budget: budget, cancel: stopTurn}
 			stdout = calls
 		}
-		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stdout, stderr)
+		code, err := runner.RunProcess(turn, tree, exe, argv, input, reviewerExecutionEnv(s.env, x.ID), stdout, stderr)
 		_ = appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
 		stopErr := executorStop(turn)
 		result := reviewFrom(x, code, out, stderr, err, stopErr)
@@ -354,6 +354,11 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			spent = true
 			result.Log += fmt.Sprintf("; tool-call budget %d spent", budget)
 		}
+		digest := x.InputDigest
+		if digest == "" {
+			digest = runner.BytesDigest(input)
+		}
+		result.InputDigests = map[string]string{x.ID: digest}
 		return result, out.Bytes()
 	}
 	first, stdout := run(exploration, s.args, x.Input, x.ToolCallBudget)
@@ -370,6 +375,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			}
 			final, _ := run(ctx, args, data, 0)
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
+			final.InputDigests = mergeInputDigests(first.InputDigests, final.InputDigests)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
 			if ctx.Err() != nil && parent.Err() == nil && budget < runner.ProcessTimeout(parent) {

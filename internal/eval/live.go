@@ -546,12 +546,20 @@ func runCase(o runOptions, bin, shimBin, work string, k Case, capture string) (r
 		}
 	}
 	rec.ModelFindings = modelFindingsFromAnswers(answers)
-	if len(captures) == 1 {
+	compatibilityID, _ := review["id"].(string)
+	if o.Passes > 1 {
+		compatibilityID += "-pass-1"
+	}
+	for _, item := range captures {
+		if item.ID != compatibilityID {
+			continue
+		}
 		for _, name := range []string{"input.json", "argv.json", "events.jsonl", "stderr.log", "timing.json"} {
-			if err := copyCaptureFile(filepath.Join(captures[0].Dir, name), filepath.Join(capture, name)); err != nil {
+			if err := copyCaptureFile(filepath.Join(item.Dir, name), filepath.Join(capture, name)); err != nil {
 				return fail(err)
 			}
 		}
+		break
 	}
 	rec.Findings = []Finding{}
 	if x.Result != nil {

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/Thanhbinh1905/greenhouse/internal/runner"
 )
 
 type reviewCapture struct {
@@ -53,6 +55,14 @@ func readReviewCaptures(root string) ([]reviewCapture, error) {
 }
 
 func expectedReviewCaptureIDs(review map[string]any, passes int) []string {
+	if digests := reviewInputDigests(review); len(digests) > 0 {
+		ids := make([]string, 0, len(digests))
+		for id := range digests {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		return ids
+	}
 	id, _ := review["id"].(string)
 	if id == "" {
 		return nil
@@ -101,21 +111,38 @@ func expectedReviewCaptureIDs(review map[string]any, passes int) []string {
 	return out
 }
 
+func reviewInputDigests(review map[string]any) map[string]string {
+	raw, ok := review["input_digests"].(map[string]any)
+	if !ok || len(raw) == 0 {
+		return nil
+	}
+	digests := make(map[string]string, len(raw))
+	for id, value := range raw {
+		digest, ok := value.(string)
+		if !ok || id == "" || digest == "" {
+			return nil
+		}
+		digests[id] = digest
+	}
+	return digests
+}
+
 func reviewCapturesVerified(review map[string]any, captures []reviewCapture, passes int, input []byte) bool {
-	if len(captures) == 0 {
+	expectedDigests := reviewInputDigests(review)
+	expected := expectedReviewCaptureIDs(review, passes)
+	if len(captures) == 0 || len(expected) == 0 || len(captures) != len(expected) || len(expectedDigests) != len(expected) {
 		return false
 	}
 	byID := make(map[string]reviewCapture, len(captures))
 	for _, capture := range captures {
+		if _, duplicate := byID[capture.ID]; duplicate {
+			return false
+		}
 		byID[capture.ID] = capture
-	}
-	expected := expectedReviewCaptureIDs(review, passes)
-	if len(expected) == 0 {
-		return false
 	}
 	for _, id := range expected {
 		capture, ok := byID[id]
-		if !ok || !capture.HasInput || !capture.HasArgv || !capture.HasEvents {
+		if !ok || !capture.HasInput || !capture.HasArgv || !capture.HasEvents || runner.BytesDigest(capture.Input) != expectedDigests[id] {
 			return false
 		}
 	}

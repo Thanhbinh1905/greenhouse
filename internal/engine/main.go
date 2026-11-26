@@ -1179,6 +1179,7 @@ func Daemon(h string) (retErr error) {
 		snapshot                    string
 		confinement                 *runner.Confinement
 		shards                      *ShardReview
+		inputDigests                map[string]string
 	}
 	type repairProgress struct {
 		run, id string
@@ -1362,7 +1363,7 @@ func Daemon(h string) (retErr error) {
 						shards.progress = shardCheckpoint(o.Run, review.ID)
 					}
 					reviewed := executeReview(ctx, &review, shards)
-					o.Finalization, o.Shards = reviewed.Finalization, reviewed.Shards
+					o.Finalization, o.Shards, o.InputDigests = reviewed.Finalization, reviewed.Shards, reviewed.InputDigests
 					o.Status, o.Result, o.Log, o.Failure, o.Answer, o.Snapshot, o.Confinement = reviewed.Status, reviewed.Result, reviewed.Log, reviewed.Failure, reviewed.Answer, reviewed.Snapshot, reviewed.Confinement
 				case "repair":
 					executeRepair(ctx, &repair, source, checkpoint(o.Run, repair.ID))
@@ -1451,7 +1452,7 @@ func Daemon(h string) (retErr error) {
 				reviewed := executeReview(ctx, &x, shards)
 				cancel()
 				select {
-				case completed <- completion{finalization: reviewed.Finalization, run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement, shards: reviewed.Shards}:
+				case completed <- completion{finalization: reviewed.Finalization, run: runID, execution: x.ID, status: reviewed.Status, log: reviewed.Log, result: reviewed.Result, failure: reviewed.Failure, answer: reviewed.Answer, snapshot: reviewed.Snapshot, confinement: reviewed.Confinement, shards: reviewed.Shards, inputDigests: reviewed.InputDigests}:
 				case <-stopped:
 				}
 			}()
@@ -1599,7 +1600,7 @@ func Daemon(h string) (retErr error) {
 			}
 			delete(active, r.ID)
 			recordReviewEvidence(r.Review, done.snapshot, done.confinement)
-			finishReview(r, reviewOutcome{Finalization: done.finalization, Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer, Shards: done.shards})
+			finishReview(r, reviewOutcome{Finalization: done.finalization, InputDigests: done.inputDigests, Status: done.status, Log: done.log, Result: done.result, Failure: done.failure, Answer: done.answer, Shards: done.shards})
 			if err := commit(s); err != nil {
 				return err
 			}

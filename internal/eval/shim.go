@@ -19,8 +19,15 @@ import (
 // daemon passes it through because Greenhouse only strips PI_, GIT_, POSSE_
 // and HERDR_ variables from the reviewer environment.
 const shimEnv = "GREENHOUSE_EVAL_SHIM"
+const executionIDEnv = "GREENHOUSE_EVAL_EXECUTION_ID"
 
 func executionCaptureDirectory(root string) (string, error) {
+	if id := os.Getenv(executionIDEnv); id != "" {
+		if filepath.Base(id) != id || id == "." || id == ".." {
+			return "", fmt.Errorf("invalid review execution ID %q", id)
+		}
+		return filepath.Join(root, "reviews", id), nil
+	}
 	cwd, err := os.Getwd()
 	if err != nil {
 		return "", err
@@ -92,10 +99,9 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	if err := os.MkdirAll(capture, 0o700); err != nil {
 		return 2, err
 	}
-	confirmation := bytes.Contains(input, []byte("Independently verify"))
-	finalization := slices.Contains(args, "--resume") || slices.Contains(args, "resume") || slices.Contains(args, "--no-tools") && confirmation
+	finalization := finalizationTurn(args, input)
 	argv, _ := json.Marshal(args)
-	if !finalization && !confirmation {
+	if !finalization {
 		if err := os.WriteFile(filepath.Join(capture, "argv.json"), append(argv, '\n'), 0o600); err != nil {
 			return 2, err
 		}
@@ -105,7 +111,7 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 	}
 	var env []string
 	for _, v := range os.Environ() {
-		if strings.HasPrefix(v, shimEnv+"=") {
+		if strings.HasPrefix(v, shimEnv+"=") || strings.HasPrefix(v, executionIDEnv+"=") {
 			continue
 		}
 		env = append(env, v)
@@ -159,6 +165,20 @@ func shim(cfg shimConfig, args []string, stdin io.Reader, stdout, stderr io.Writ
 		return 2, err
 	}
 	return 0, nil
+}
+
+func finalizationTurn(args []string, input []byte) bool {
+	if slices.Contains(args, "--resume") || slices.Contains(args, "resume") {
+		return true
+	}
+	if !slices.Contains(args, "--no-tools") {
+		return false
+	}
+	header, _, _ := bytes.Cut(input, []byte("\n\nDiff:\n"))
+	var metadata struct {
+		Controller string `json:"Controller"`
+	}
+	return json.Unmarshal(header, &metadata) == nil && metadata.Controller != ""
 }
 
 func seededReview(seeded []SeededFinding, args []string, input []byte, stdout io.Writer) (int, error) {

@@ -36,10 +36,11 @@ type ReviewShard struct {
 }
 
 type ShardResult struct {
-	Status     string     `json:"status"`
-	Executions []string   `json:"executions,omitempty"`
-	Result     *Verdict   `json:"result,omitempty"`
-	Usage      TokenUsage `json:"usage"`
+	Status       string            `json:"status"`
+	Executions   []string          `json:"executions,omitempty"`
+	InputDigests map[string]string `json:"input_digests,omitempty"`
+	Result       *Verdict          `json:"result,omitempty"`
+	Usage        TokenUsage        `json:"usage"`
 }
 
 type shardPlanEntry struct {
@@ -171,9 +172,10 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 			}
 		}
 	}
-	plan, usage, reason := planShards(ctx, x, source.run.Intent)
+	plannerInputs := make(map[string]string)
+	plan, usage, reason := planShards(ctx, x, source.run.Intent, plannerInputs)
 	if ctx.Err() != nil {
-		return reviewOutcome{Status: "cancelled", Log: "shard planner stopped: " + reason, Answer: agentAnswer{Reason: "cancelled", Usage: usage, Tokens: usage.Tokens, CostUSD: usage.CostUSD}}
+		return reviewOutcome{Status: "cancelled", Log: "shard planner stopped: " + reason, Answer: agentAnswer{Reason: "cancelled", Usage: usage, Tokens: usage.Tokens, CostUSD: usage.CostUSD}, InputDigests: plannerInputs}
 	}
 	var done reviewOutcome
 	if source.prior != nil && reason != "planned" {
@@ -186,6 +188,7 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 			done.Shards.Planner = reason
 			done.Answer.Usage = addUsage(done.Answer.Usage, usage)
 			done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
+			done.InputDigests = mergeInputDigests(done.InputDigests, plannerInputs)
 			done.Shards.Head = x.Rules.Candidate
 			return done
 		}
@@ -196,6 +199,7 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 	} else {
 		done = reviewShards(ctx, x, source, plan)
 	}
+	done.InputDigests = mergeInputDigests(done.InputDigests, plannerInputs)
 	if done.Shards != nil {
 		done.Shards.Head = x.Rules.Candidate
 	}
@@ -204,7 +208,7 @@ func executeShardedReview(ctx context.Context, x *Execution, source *shardSource
 	return done
 }
 
-func planShards(ctx context.Context, x *Execution, intent string) ([]shardPlanEntry, TokenUsage, string) {
+func planShards(ctx context.Context, x *Execution, intent string, inputDigests map[string]string) ([]shardPlanEntry, TokenUsage, string) {
 	plan := *x
 	plan.ID = x.ID + "-plan"
 	var err error
@@ -239,7 +243,8 @@ func planShards(ctx context.Context, x *Execution, intent string) ([]shardPlanEn
 	defer cancel()
 	turn = runner.WithExecutor(turn, plan.ID, Home)
 	out, stderr := runner.NewBuffer(runner.StdoutLimit), runner.NewBuffer(runner.StderrLimit)
-	code, err := runner.RunProcess(turn, work, exe, argv, plan.Input, s.env, out, stderr)
+	inputDigests[plan.ID] = runner.BytesDigest(plan.Input)
+	code, err := runner.RunProcess(turn, work, exe, argv, plan.Input, reviewerExecutionEnv(s.env, plan.ID), out, stderr)
 	_ = appendTranscript(x.Run, fmt.Sprintf("shard planner %s | %s %s | exit=%d", plan.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // The transcript supplements the stored shard record.
 	usage := agentTokenUsage(x.Config.Backend, out.Bytes(), stderr.Bytes())
 	if err != nil || code != 0 {
@@ -489,7 +494,7 @@ func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan [
 				}
 				record.Shards[i].Result = &result
 			}
-			outcomes[i] = reviewOutcome{Status: reused[i].Status, Result: record.Shards[i].Result, Snapshot: "unchanged"}
+			outcomes[i] = reviewOutcome{Status: reused[i].Status, Result: record.Shards[i].Result, Snapshot: "unchanged", InputDigests: reused[i].InputDigests}
 		}
 	}
 	if !publish() {
@@ -557,9 +562,9 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 		record.Status = done.Status
 		return done, record
 	}
-	record.Executions = append(record.Executions, part.ID)
 	done := executeReviewPasses(ctx, part)
 	usage := done.Answer.Usage
+	inputDigests := done.InputDigests
 	rounds := source.followups
 	followed := false
 	for settledReview(done) && ctx.Err() == nil {
@@ -572,11 +577,12 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 		if err != nil {
 			break
 		}
-		record.Executions = append(record.Executions, next.ID)
 		follow := executeReviewPasses(ctx, next)
+		inputDigests = mergeInputDigests(inputDigests, follow.InputDigests)
 		usage = addUsage(usage, follow.Answer.Usage)
 		if haltedReview(follow) {
 			done = follow
+			done.InputDigests = inputDigests
 			break
 		}
 		if !settledReview(follow) {
@@ -601,8 +607,15 @@ func reviewShardPart(ctx context.Context, x *Execution, source *shardSource, pat
 			done.Result.Verdict, done.Status = "clean", "clean-review"
 		}
 	}
+	done.InputDigests = inputDigests
 	done.Answer.Usage = usage
 	done.Answer.Tokens, done.Answer.CostUSD = usage.Tokens, usage.CostUSD
+	record.InputDigests = inputDigests
+	record.Executions = record.Executions[:0]
+	for id := range inputDigests {
+		record.Executions = append(record.Executions, id)
+	}
+	slices.Sort(record.Executions)
 	record.Status, record.Result, record.Usage = done.Status, done.Result, usage
 	return done, record
 }
@@ -639,6 +652,7 @@ func aggregateShardReview(parts []reviewOutcome) reviewOutcome {
 	for i := range parts {
 		part := &parts[i]
 		logs = append(logs, part.Status)
+		done.InputDigests = mergeInputDigests(done.InputDigests, part.InputDigests)
 		done.Answer.Usage = addUsage(done.Answer.Usage, part.Answer.Usage)
 		done.Finalization = done.Finalization || part.Finalization
 		if done.Answer.Model == "" {
