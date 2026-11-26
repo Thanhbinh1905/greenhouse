@@ -284,7 +284,13 @@ func cloneReviewVerdict(result *Verdict) *Verdict {
 }
 
 func addUsage(a, b TokenUsage) TokenUsage {
-	return TokenUsage{InputTokens: a.InputTokens + b.InputTokens, OutputTokens: a.OutputTokens + b.OutputTokens, CachedInputTokens: a.CachedInputTokens + b.CachedInputTokens, Tokens: a.Tokens + b.Tokens, CostUSD: a.CostUSD + b.CostUSD}
+	source := "unknown"
+	if a.CostSource == "provider" || b.CostSource == "provider" {
+		source = "provider"
+	} else if a.CostSource == "estimate" || b.CostSource == "estimate" {
+		source = "estimate"
+	}
+	return TokenUsage{InputTokens: a.InputTokens + b.InputTokens, OutputTokens: a.OutputTokens + b.OutputTokens, CachedInputTokens: a.CachedInputTokens + b.CachedInputTokens, Tokens: a.Tokens + b.Tokens, CostUSD: a.CostUSD + b.CostUSD, CacheWriteTokens: a.CacheWriteTokens + b.CacheWriteTokens, CostSource: source, ModelCalls: a.ModelCalls + b.ModelCalls, WallMS: a.WallMS + b.WallMS}
 }
 
 func finalReviewAnswer(first, final agentAnswer) agentAnswer {
@@ -295,6 +301,7 @@ func finalReviewAnswer(first, final agentAnswer) agentAnswer {
 		final.Provider = first.Provider
 	}
 	final.Usage = addUsage(first.Usage, final.Usage)
+	final.UsageBreakdown = append(append([]UsageBreakdown(nil), first.UsageBreakdown...), final.UsageBreakdown...)
 	final.Tokens, final.CostUSD = final.Usage.Tokens, final.Usage.CostUSD
 	return final
 }
@@ -320,7 +327,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 	exploration, stopExploring := context.WithDeadline(ctx, time.Now().Add(time.Until(deadline)/2))
 	defer stopExploring()
 	spent := false
-	run := func(turn context.Context, args []string, input []byte, budget int) (reviewOutcome, []byte) {
+	run := func(turn context.Context, args []string, input []byte, budget int, stage string) (reviewOutcome, []byte) {
 		exe, argv, err := runner.ConfinedCommand(policy, x.Config.Executable, args)
 		if err != nil {
 			return reviewOutcome{Status: "inconclusive", Log: "confinement launcher unavailable"}, nil
@@ -334,6 +341,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 			calls = &toolCallWatch{w: stdout, budget: budget, cancel: stopTurn}
 			stdout = calls
 		}
+		started := time.Now()
 		code, err := runner.RunProcess(turn, tree, exe, argv, input, s.env, stdout, stderr)
 		_ = appendTranscript(x.Run, fmt.Sprintf("reviewer %s | %s %s | exit=%d", x.ID, s.backend, x.Config.Model, code), out.Bytes(), stderr.Bytes()) // Transcript capture supplements the authoritative bounded execution record.
 		stopErr := executorStop(turn)
@@ -343,6 +351,12 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 				result = completed
 			}
 		}
+		result.Answer.Usage.WallMS = time.Since(started).Milliseconds()
+		model := result.Answer.Model
+		if model == "" {
+			model = x.Config.Model
+		}
+		result.Answer.UsageBreakdown = []UsageBreakdown{{Stage: stage, Backend: x.Config.Backend, Model: model, Usage: result.Answer.Usage}}
 		if errors.Is(err, runner.ErrWriterTreeUnknown) {
 			result.Answer.Reason = "writer_tree_unknown"
 		}
@@ -356,7 +370,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 		}
 		return result, out.Bytes()
 	}
-	first, stdout := run(exploration, s.args, x.Input, x.ToolCallBudget)
+	first, stdout := run(exploration, s.args, x.Input, x.ToolCallBudget, "review")
 	nearLimit := errors.Is(exploration.Err(), context.DeadlineExceeded) && ctx.Err() == nil
 	stopped := nearLimit || spent
 	if ctx.Err() == nil && first.Answer.Reason != "writer_tree_unknown" && (stopped || first.Answer.Reason == "invalid_output") {
@@ -368,7 +382,7 @@ func runBoundedReview(parent context.Context, x *Execution, dir, tree string) (r
 				first.Log += "; finalization input invalid: " + inputErr.Error()
 				return first, confinement
 			}
-			final, _ := run(ctx, args, data, 0)
+			final, _ := run(ctx, args, data, 0, "finalization")
 			final.Answer = finalReviewAnswer(first.Answer, final.Answer)
 			final.Log = first.Log + "; one finalization turn: " + final.Log
 			final.Finalization = true
