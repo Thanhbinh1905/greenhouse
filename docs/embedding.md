@@ -66,7 +66,7 @@ On rereview, Greenhouse compares the new head with the prior reviewed head. Shar
 
 The planner's usage counts in `run.review.usage`. `host_result.shards` lists each shard and the boundary pass with `name`, `summary`, `paths`, `boundary`, `status` and `verdict`. The field is omitted for an unsplit review. A host keeps reading the overall `status`, `verdict` and `findings`.
 
-In the 33-case benchmark, sharded review detected 5/54 expected claims versus 6/54 without sharding. It blocked 8 clean cases per pass on average versus 5.5, and median full-run time rose from 32.7 to 62.2 minutes. Keep sharding disabled unless you accept this trade-off; see [issue 111](https://github.com/Thanhbinh1905/greenhouse/issues/111).
+The initial 33-case benchmark reported 5/54 expected claims for sharded review versus 6/54 without sharding, with 8 and 7 clean-case blocks in the sharded passes versus 8 and 3 without sharding. Those runs used a shared capture directory for concurrent shard processes, so their per-case captures, usage and timing are not reliable. The merged verdicts still provide the reported claim and blocking counts, but do not treat the old cost or latency comparison as validated. The evaluator now isolates captures by reviewer execution; rerun the benchmark before relying on the full trade-off. Keep sharding disabled meanwhile; see [issue 111](https://github.com/Thanhbinh1905/greenhouse/issues/111).
 
 ## Host identity
 
