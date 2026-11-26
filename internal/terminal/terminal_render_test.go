@@ -28,6 +28,14 @@ func captureTerminal(t *testing.T, draw func()) string {
 	return string(b)
 }
 
+func TestSettledReviewShowsUsageSummary(t *testing.T) {
+	r := &engine.Run{ID: "run", Configs: []engine.Snapshot{{Settings: engine.Settings{Preset: "one-pass"}}}, Review: &engine.Execution{Status: "inconclusive", Usage: engine.TokenUsage{Tokens: 125, CostUSD: 0.0125, WallMS: 4200}}}
+	got := statePage(engine.Response{Run: r}, "", false)
+	if !strings.Contains(got, "Review usage: 125 tokens | $0.012500 | 4200 ms") {
+		t.Fatalf("review usage summary missing: %s", got)
+	}
+}
+
 func TestRuleDigestFitsAtNarrowWidthAndRemainsAvailable(t *testing.T) {
 	digest := strings.Repeat("a", 64)
 	got := ruleDigestLine(digest, 56)

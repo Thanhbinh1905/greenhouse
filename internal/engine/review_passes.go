@@ -22,6 +22,7 @@ func mergeReviewPasses(passes []reviewOutcome, paths []string) reviewOutcome {
 	inconclusive := 0
 	for _, pass := range passes {
 		merged.Answer.Usage = addUsage(merged.Answer.Usage, pass.Answer.Usage)
+		merged.Answer.UsageBreakdown = append(merged.Answer.UsageBreakdown, pass.Answer.UsageBreakdown...)
 		merged.Log += fmt.Sprintf("; pass %s: %s", pass.Status, pass.Log)
 		if pass.Status == "cancelled" || pass.Status == "paused" || pass.Status == "unconfigured" || pass.Status == "stale" {
 			if merged.Status == "inconclusive" {

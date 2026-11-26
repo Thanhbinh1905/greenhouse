@@ -78,6 +78,10 @@ func confirmBlockingFindings(ctx context.Context, x *Execution, dir, tree string
 		pass.ID, pass.Full, pass.Responses, pass.Args, pass.Uncovered = fmt.Sprintf("%s-confirm-%d", x.ID, i+1), false, nil, args, slices.Clone(x.Uncovered)
 		confirmation, priority, outcome := confirmFinding(ctx, &pass, filepath.Join(dir, fmt.Sprintf("confirm-%d", i+1)), tree, f)
 		done.Answer.Usage = addUsage(done.Answer.Usage, outcome.Answer.Usage)
+		for j := range outcome.Answer.UsageBreakdown {
+			outcome.Answer.UsageBreakdown[j].Stage = "confirmation"
+		}
+		done.Answer.UsageBreakdown = append(done.Answer.UsageBreakdown, outcome.Answer.UsageBreakdown...)
 		done.Answer.Tokens, done.Answer.CostUSD = done.Answer.Usage.Tokens, done.Answer.Usage.CostUSD
 		if outcome.Status == "cancelled" {
 			done.Status, done.Result, done.Log = "cancelled", nil, done.Log+"; "+outcome.Log

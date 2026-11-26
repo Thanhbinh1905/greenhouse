@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -39,6 +40,26 @@ func TestHostFailedReviewDiagnostics(t *testing.T) {
 			if strings.Contains(diagnostic, "fake-private-value") {
 				t.Fatalf("credential leaked: %v", result)
 			}
+			usage, _ := result["usage"].(map[string]any)
+			breakdown, _ := result["usage_breakdown"].([]any)
+			if usage["cost_source"] != "unknown" || usage["model_calls"] != float64(1) || usage["wall_ms"] == nil || len(breakdown) != 1 {
+				t.Fatalf("failed review omitted usage metadata: %v", result)
+			}
+			part := breakdown[0].(map[string]any)
+			partUsage := part["usage"].(map[string]any)
+			delete(partUsage, "wall_ms")
+			totalUsage := make(map[string]any, len(usage))
+			for key, value := range usage {
+				totalUsage[key] = value
+			}
+			delete(totalUsage, "wall_ms")
+			if part["stage"] != "review" || !reflect.DeepEqual(partUsage, totalUsage) {
+				t.Fatalf("usage breakdown does not match review total: total=%v breakdown=%v", usage, part)
+			}
+			review := runOf(t, v)["review"].(map[string]any)
+			if review["usage"] == nil || review["usage_breakdown"] == nil {
+				t.Fatalf("failed review omitted run usage metadata: %v", review)
+			}
 		})
 	}
 }
@@ -73,7 +94,7 @@ func TestHostModelFallback(t *testing.T) {
 func TestHostReviewMetadataSurvivesPersistence(t *testing.T) {
 	t.Parallel()
 	r := &Run{Host: &Host{Name: "host", ID: "1"}, Review: &Execution{ID: "review-1"}}
-	want := TokenUsage{InputTokens: 100, OutputTokens: 20, CachedInputTokens: 80, Tokens: 120, CostUSD: 0.5}
+	want := TokenUsage{InputTokens: 100, OutputTokens: 20, CachedInputTokens: 80, Tokens: 120, CostUSD: 0.5, CostSource: "unknown", ModelCalls: 1}
 	retainReviewMetadata(r.Review, reviewOutcome{Status: "inconclusive", Answer: agentAnswer{Reason: "model_mismatch", Diagnostic: "model not found", Model: "reported-model", Usage: want}})
 	recordAttempt(r, Attempt{Execution: "review-1", Kind: "review", Tokens: want.Tokens, CostUSD: want.CostUSD})
 	data, err := json.Marshal(r)

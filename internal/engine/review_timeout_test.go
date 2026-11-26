@@ -48,7 +48,7 @@ func TestTimeoutReviewMetadata(t *testing.T) {
 }
 
 func TestTimeoutPipelineMetadata(t *testing.T) {
-	want := TokenUsage{Tokens: 120, InputTokens: 100, OutputTokens: 20}
+	want := TokenUsage{Tokens: 120, InputTokens: 100, OutputTokens: 20, CostSource: "unknown", ModelCalls: 1}
 	r := &Run{Status: "running", Review: &Execution{ID: "review"}, Pipeline: &Pipeline{Stages: []StageResult{{Name: "review"}}, Active: &Step{ID: "review", Kind: "review", Stage: "review"}}}
 	answer := agentAnswer{Reason: "timeout", Diagnostic: "review executor limit 45m0s exceeded: context deadline exceeded", Model: "reported", Usage: want}
 	if err := completeStep(r, stepOutcome{Step: "review", Status: "cancelled", Answer: answer}); err != nil {
