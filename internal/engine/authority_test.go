@@ -619,8 +619,17 @@ func TestOnePassReviewUpdatesRetainedFindingData(t *testing.T) {
 	q, _ := json.Marshal(map[string]any{"version": 1, "op": "prepare", "run_id": next["run_id"], "input_id": next["input_id"], "expected": next["token"], "gate_id": "none", "action_id": "prepare-next", "intent": "Review sample change", "target": runOf(t, first)["target"]})
 	prepared := axi(t, bin, repo, home, string(q))
 	prepared = mutate(t, bin, repo, home, prepared, "resolve-rules", "rules-next", nil)
-	mutate(t, bin, repo, home, prepared, "review", "second-review", nil)
-	done := waitReviewWithFindings(t, bin, repo, home)
+	started := mutate(t, bin, repo, home, prepared, "review", "second-review", nil)
+	if started["outcome"] != "ok" {
+		t.Fatalf("second review refused: %v", started)
+	}
+	startedRun := runOf(t, started)
+	startedReview, _ := startedRun["review"].(map[string]any)
+	reviewID, _ := startedReview["id"].(string)
+	if reviewID == "" {
+		t.Fatalf("second review has no execution ID: %v", started)
+	}
+	done := waitReviewWithFindingsForID(t, bin, repo, home, reviewID)
 	findings := runOf(t, done)["findings"].([]any)
 	if len(findings) != 1 {
 		t.Fatalf("retained finding count %d, want 1", len(findings))

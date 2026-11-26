@@ -206,6 +206,22 @@ func waitReviewWithFindings(t *testing.T, bin, repo, home string) map[string]any
 	return nil
 }
 
+func waitReviewWithFindingsForID(t *testing.T, bin, repo, home, reviewID string) map[string]any {
+	t.Helper()
+	deadline := testWaitDeadline(t)
+	for time.Now().Before(deadline) {
+		v := axi(t, bin, repo, home, `{"version":1,"op":"inspect"}`)
+		run := runOf(t, v)
+		review, _ := run["review"].(map[string]any)
+		if review["id"] == reviewID && reviewSettledWithFindings(run) {
+			return v
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("requested review did not settle with findings")
+	return nil
+}
+
 func TestReviewMissingCoverageBecomesPartial(t *testing.T) {
 	for _, test := range []struct {
 		name, answer, wantVerdict, wantStatus, wantReason string

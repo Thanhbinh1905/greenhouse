@@ -282,7 +282,7 @@ func TestShardedReviewThroughDaemon(t *testing.T) {
 
 func TestShardedReviewPassNamesKeepStageAndShardIdentity(t *testing.T) {
 	bin, repo, home, prepared := preparedShardFixture(t, "clean")
-	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": 2})
+	writePrivateJSON(t, filepath.Join(home, "backends.json"), map[string]any{"review_passes": 2, "review_shards": true})
 	if started := mutate(t, bin, repo, home, prepared, "review", "review-shard-passes", nil); started["outcome"] != "ok" {
 		t.Fatalf("review refused: %v", started)
 	}
