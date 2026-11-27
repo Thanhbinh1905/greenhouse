@@ -551,7 +551,8 @@ func reviewShards(ctx context.Context, x *Execution, source *shardSource, plan [
 	}
 	wg.Wait()
 	parts := outcomes
-	if !slices.ContainsFunc(outcomes, haltedReview) {
+	allSettled := !slices.ContainsFunc(outcomes, func(outcome reviewOutcome) bool { return !settledReview(outcome) })
+	if allSettled {
 		record.Boundary = &ShardResult{Status: "running"}
 		if !publish() {
 			return reviewOutcome{Status: "cancelled", Log: "shard progress update stopped", Shards: record}

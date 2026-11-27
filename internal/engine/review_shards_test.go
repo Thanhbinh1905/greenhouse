@@ -44,6 +44,9 @@ if 'hold' in mode and shard.get('Name')=='Beta':
 if 'hold' in mode and shard.get('Name')!='Beta': time.sleep(0.5)
 if 'confirmation pass' in b['Contract']: kind='confirm:'+kind
 log(kind+' '+','.join(b['Paths']))
+if 'inconclusive' in mode and shard.get('Name')=='Gamma':
+ answer({'head':b['Head'],'verdict':'inconclusive','coverage':[],'findings':[]})
+ sys.exit(0)
 findings=[]
 if 'finding' in mode and 'beta/b1.txt' in b['Paths'] and not shard.get('Boundary'):
  findings=[{'id':'x','priority':'P1','origin':'correctness','file':'beta/b1.txt','start':1,'end':1,'explanation':'Beta breaks','action':'Fix beta','rule':'','head':b['Head']}]
@@ -201,7 +204,8 @@ func TestShardingIsDisabledByDefaultThroughDaemon(t *testing.T) {
 
 func TestShardedReviewThroughDaemon(t *testing.T) {
 	t.Parallel()
-	wantCalls := []string{"boundary alpha/a1.txt,alpha/a2.txt,beta/b1.txt,beta/b2.txt,gamma/g1.txt", "plan", "shard:Alpha alpha/a1.txt,alpha/a2.txt", "shard:Beta beta/b1.txt,beta/b2.txt", "shard:Gamma gamma/g1.txt"}
+	shardCalls := []string{"plan", "shard:Alpha alpha/a1.txt,alpha/a2.txt", "shard:Beta beta/b1.txt,beta/b2.txt", "shard:Gamma gamma/g1.txt"}
+	wantCalls := append([]string{"boundary alpha/a1.txt,alpha/a2.txt,beta/b1.txt,beta/b2.txt,gamma/g1.txt"}, shardCalls...)
 
 	t.Run("all parts clean", func(t *testing.T) {
 		t.Parallel()
@@ -257,6 +261,20 @@ func TestShardedReviewThroughDaemon(t *testing.T) {
 		findings := run["review"].(map[string]any)["result"].(map[string]any)["findings"].([]any)
 		if len(findings) != 1 || findings[0].(map[string]any)["file"] != "beta/b1.txt" {
 			t.Fatalf("findings = %v, want the beta finding", findings)
+		}
+	})
+
+	t.Run("inconclusive shard skips boundary", func(t *testing.T) {
+		t.Parallel()
+		run, calls, _ := shardFixture(t, "inconclusive")
+		if statuses := shardStatuses(t, shardsOf(t, run)); statuses["Gamma"] != "inconclusive" {
+			t.Fatalf("Gamma status = %q, want inconclusive", statuses["Gamma"])
+		}
+		if run["status"] != "inconclusive" {
+			t.Fatalf("status = %v, want inconclusive", run["status"])
+		}
+		if !slices.Equal(calls, shardCalls) {
+			t.Fatalf("calls after inconclusive Gamma = %q, want %q", calls, shardCalls)
 		}
 	})
 
